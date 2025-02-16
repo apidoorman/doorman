@@ -1,0 +1,24 @@
+# Core dependencies
+redis
+gevent
+greenlet
+pymongo
+bcrypt
+psutil
+python-dotenv
+
+# FastAPI and server
+fastapi==0.95.2
+pydantic==1.10.12
+fastapi-jwt-auth==0.5.0
+uvicorn[standard]
+aiohttp
+
+# Caching
+aiocache
+
+# HTTP client
+requests
+
+# Cryptography
+cryptography

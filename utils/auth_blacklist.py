@@ -1,0 +1,40 @@
+import asyncio
+from datetime import datetime, timedelta
+import heapq
+import asyncio
+
+jwt_blacklist = {}
+
+class TimedHeap:
+    def __init__(self):
+        self.heap = []
+
+    async def push(self, item):
+        expire_time = datetime.now() + self.purge_after
+        heapq.heappush(self.heap, (expire_time, item))
+
+    async def pop(self):
+        await self.purge()
+        if self.heap:
+            return heapq.heappop(self.heap)[1]
+        raise IndexError("pop from an empty priority queue")
+
+    async def purge(self):
+        current_time = datetime.now()
+        while self.heap and self.heap[0][0] < current_time:
+            heapq.heappop(self.heap)
+
+    async def peek(self):
+        await self.purge()
+        if self.heap:
+            return self.heap[0][1]
+        return None
+
+async def purge_expired_tokens():
+    # Iterate over all items in the jwt_blacklist dictionary
+    for key, timed_heap in list(jwt_blacklist.items()):
+        # Call the purge method of each TimedHeap instance
+        await timed_heap.purge()
+        # Optionally, remove the key if the heap is empty to free up memory
+        if not timed_heap.heap:
+            del jwt_blacklist[key]
