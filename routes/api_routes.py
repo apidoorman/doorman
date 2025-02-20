@@ -25,7 +25,8 @@ Request:
 {
     "api_name": "<string>",
     "api_version": "<string>",
-    "api_description": "<string>"
+    "api_description": "<string>",
+    "api_servers": ["<string>"]
 }
 Response:
 {

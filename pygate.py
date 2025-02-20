@@ -42,11 +42,12 @@ PID_FILE = "pygate.pid"
 
 # Initialize FastAPI application
 pygate = FastAPI()
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
 # Middleware
 pygate.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Update this with allowed origins in production
+    allow_origins=origins,  # Update this with allowed origins in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -116,27 +117,27 @@ async def internal_server_error_handler(request, exc):
         "message": "An unexpected error occurred. Please try again later.",
     }
 
-# Functions for controlling the application
 def start():
     if os.path.exists(PID_FILE):
-        print("Pygate is already running!")
+        print("pygate is already running!")
         sys.exit(0)
 
-    # Run process in background
+    # Run process in the background
     if os.name == "nt":
         process = subprocess.Popen([sys.executable, __file__, "run"],
                                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
+                                   stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
     else:
         process = subprocess.Popen([sys.executable, __file__, "run"],
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE,
-                                   preexec_fn=os.setpgrp)
+                                   stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL,
+                                   preexec_fn=os.setsid)
 
+    # Save the PID to a file
     with open(PID_FILE, "w") as f:
         f.write(str(process.pid))
-    print(f"Pygate started with PID {process.pid}.")
+    print(f"pygate started with PID {process.pid}.")
 
 
 def stop():
@@ -152,25 +153,24 @@ def stop():
             subprocess.call(["taskkill", "/F", "/PID", str(pid)])
         else:
             os.killpg(pid, signal.SIGTERM)
-        print(f"Pygate with PID {pid} has been stopped.")
+        print(f"pygate with PID {pid} has been stopped.")
     except ProcessLookupError:
         print("Process already terminated.")
-    
-    os.remove(PID_FILE)
-
+    finally:
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
 
 def run():
-    server_port = int(os.getenv('PORT', 5000))
-    logging.info("Pygate HTTP server started on port " + str(server_port))
+    server_port = int(os.getenv('PORT', 5001))
+    logging.info("pygate server started on port " + str(server_port))
 
     uvicorn.run(
-        "pygate:pygate",  # Points to this file and the `app` instance
+        "pygate:pygate",
         host="0.0.0.0", 
         port=server_port, 
-        reload=True  # Automatically reloads during development
+        reload=True
     )
 
-# Main entry point
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "run":
         run()

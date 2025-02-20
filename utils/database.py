@@ -56,10 +56,12 @@ class Database:
         ])
 
         # TODO: Remove this before merging to master
-        if not self.db.users.find_one({"username": "admin"}):
+        if self.db.users.find_one({"username": "mitch"}):
+            self.db.users.delete_one({"username": "mitch"})
+        if not self.db.users.find_one({"username": "mitch"}):
             self.db.users.insert_one({
-                "username": "admin",
-                "email": "admin@pygate.org",
+                "username": "mitch",
+                "email": "mitch@pypeople.com",
                 "password": password_util.hash_password("password123"),
                 "role": "admin",
                 "groups": ["ALL"]

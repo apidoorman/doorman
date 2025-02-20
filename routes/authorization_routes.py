@@ -44,7 +44,7 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
         )
     try:
         user = await UserService.check_password_return_user(email, password)
-        access_token = create_access_token({"sub": user["email"], "role": user["role"]}, Authorize)
+        access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize)
         response = JSONResponse(content={"message": "You are logged in"}, media_type="application/json")
         Authorize.set_access_cookies(access_token, response)
         return response
