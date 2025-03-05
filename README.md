@@ -9,18 +9,25 @@ One Platform for REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed wit
 - [x] Create proof of concept.
 - [ ] REST gateway implementation (in progress).
 - [ ] Code cleanup and testing.
+- [ ] Add REST capabilties to user documentation.
 - [ ] Version 1.0.0 release.
 - [ ] GraphQL gateway implementation.
 - [ ] Code cleanup and testing.
+- [ ] Add GraphQL capabilties to user documentation.
 - [ ] Version 1.1.0 release.
+- [ ] gRPC gateway implementation.
+- [ ] Code cleanup and testing.
+- [ ] Add gRPC capabilties to user documentation.
+- [ ] Version 1.2.0 release.
 - [ ] Websockets gateway implementation.
 - [ ] Code cleanup and testing.
-- [ ] Version 1.2.0 release.
+- [ ] Add Websockets capabilties to user documentation.
+- [ ] Version 1.3.0 release.
 - [ ] Improve caching.
 - [ ] Add logging.
 - [ ] Enable field encryption.
 - [ ] Refactor codebase.
-- [ ] Create user documentation.
+- [ ] Improve user documentation.
 - [ ] Version 1.3.0 release.
 
 
