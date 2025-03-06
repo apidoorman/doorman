@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# Internal imports
 from utils import password_util
 from utils.database import db
 from services.cache import pygate_cache
@@ -54,10 +53,8 @@ class UserService:
         if UserService.user_collection.find_one({'email': data.get('email')}):
             raise ValueError("Email already exists")
 
-        # Hash the password
         data['password'] = password_util.hash_password(data.get('password'))
         
-        # Create user
         user = UserService.user_collection.insert_one(data)
         pygate_cache.get_cache('user_cache', data.get('username'), user)
         
@@ -93,7 +90,6 @@ class UserService:
         
         UserService.user_collection.update_one({'username': username}, {'$set': update_data})
         
-        # Update cache
         user = UserService.user_collection.find_one({'username': username})
         if '_id' in user:
             del user['_id']

@@ -4,9 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# Internal Imports
-from models.api_model import ApiModel
-
 class EndpointModel:
 
     def __init__ (self, api_name = None, api_version = None, endpoint_method = None, endpoint_uri = None):

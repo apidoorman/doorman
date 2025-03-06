@@ -4,8 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# Start of file
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
@@ -40,47 +38,46 @@ load_dotenv()
 
 PID_FILE = "pygate.pid"
 
-# Initialize FastAPI application
 pygate = FastAPI()
-origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
-# Middleware
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
+methods = os.getenv("ALLOW_METHODS", "GET, POST, PUT, DELETE").split(",")
+headers = os.getenv("ALLOW_HEADERS", "*").split(",")
+https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
+domain = os.getenv("COOKIE_DOMAIN", "localhost");
+
 pygate.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Update this with allowed origins in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=origins,
+    allow_credentials=credentials,
+    allow_methods=[methods],
+    allow_headers=[headers],
 )
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# JWT Configuration
 class Settings(BaseSettings):
     mongo_db_uri: str = os.getenv("MONGO_DB_URI")
 
     authjwt_secret_key: str = os.getenv("JWT_SECRET_KEY")
     authjwt_token_location: set = {"cookies"}
-    authjwt_cookie_secure: bool = False   # Only send cookies over HTTPS
-    authjwt_cookie_domain: str = "localhost"  # Adjust based on your deployment
+    authjwt_cookie_secure: bool = https_only
+    authjwt_cookie_domain: str = domain
     authjwt_cookie_path: str = "/"
-    authjwt_cookie_samesite: str = 'lax'  # Or 'none' if your requirements dictate
+    authjwt_cookie_samesite: str = 'lax'
 
     class Config:
         env_file = ".env"
 
-# AuthJWT requires a configuration function that returns a class with settings
 @AuthJWT.load_config
 def get_config():
     return Settings()
 
-#jwt blacklist purger
 async def automatic_purger(interval_seconds):
     while True:
         await asyncio.sleep(interval_seconds)
-        # Assuming `jwt_blacklist` has a method to purge expired tokens
         purge_expired_tokens()
         logging.info("Expired JWTs purged from blacklist.")
 
@@ -88,7 +85,6 @@ async def automatic_purger(interval_seconds):
 async def startup_event():
     asyncio.create_task(automatic_purger(1800))
 
-# Exception handling for authentication errors
 @pygate.exception_handler(AuthJWTException)
 async def authjwt_exception_handler(request: Request, exc: AuthJWTException):
     return JSONResponse(
@@ -96,10 +92,8 @@ async def authjwt_exception_handler(request: Request, exc: AuthJWTException):
         content={"details": exc.message}
     )
 
-# Initialize cache manager
 cache_manager.init_app(pygate)
 
-# Register routes
 pygate.include_router(gateway_router, prefix="/api", tags=["Gateway"])
 pygate.include_router(authorization_router, prefix="/platform", tags=["Authorization"])
 pygate.include_router(user_router, prefix="/platform/user", tags=["User"])
@@ -109,7 +103,6 @@ pygate.include_router(group_router, prefix="/platform/group", tags=["Group"])
 pygate.include_router(role_router, prefix="/platform/role", tags=["Role"])
 pygate.include_router(subscription_router, prefix="/platform/subscription", tags=["Subscription"])
 
-# Error handling
 @pygate.exception_handler(500)
 async def internal_server_error_handler(request, exc):
     return {
@@ -122,7 +115,6 @@ def start():
         print("pygate is already running!")
         sys.exit(0)
 
-    # Run process in the background
     if os.name == "nt":
         process = subprocess.Popen([sys.executable, __file__, "run"],
                                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
@@ -134,7 +126,6 @@ def start():
                                    stderr=subprocess.DEVNULL,
                                    preexec_fn=os.setsid)
 
-    # Save the PID to a file
     with open(PID_FILE, "w") as f:
         f.write(str(process.pid))
     print(f"pygate started with PID {process.pid}.")
@@ -180,5 +171,3 @@ if __name__ == "__main__":
         start()
     else:
         print("Invalid command. Use 'start', 'stop', or 'run'.")
-
-# End of file
