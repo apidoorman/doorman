@@ -31,10 +31,7 @@ class TimedHeap:
         return None
 
 async def purge_expired_tokens():
-    # Iterate over all items in the jwt_blacklist dictionary
     for key, timed_heap in list(jwt_blacklist.items()):
-        # Call the purge method of each TimedHeap instance
         await timed_heap.purge()
-        # Optionally, remove the key if the heap is empty to free up memory
         if not timed_heap.heap:
             del jwt_blacklist[key]
