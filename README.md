@@ -6,7 +6,7 @@ One Platform for REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed wit
 
 ## Roadmap
 
-- [x] Create MVP (self goal)
+- [x] Create proof of concept.
 - [ ] REST gateway implementation (in progress).
 - [ ] Code cleanup and testing.
 - [ ] Version 1.0.0 release.
