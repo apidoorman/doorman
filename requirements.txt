@@ -9,7 +9,7 @@ python-dotenv
 
 # FastAPI and server
 fastapi==0.95.2
-pydantic==1.10.12
+pydantic>=1.10.13
 fastapi-jwt-auth==0.5.0
 uvicorn[standard]
 aiohttp

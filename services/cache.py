@@ -13,11 +13,8 @@ class PygateCacheManager:
         redis_host = os.getenv("REDIS_HOST")
         redis_port = int(os.getenv("REDIS_PORT"))
         redis_db = int(os.getenv("REDIS_DB"))
-        
-        # Initialize Redis connection
+
         self.redis = redis.StrictRedis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
-        
-        # Prefixes to avoid key collisions
         self.prefixes = {
             'api_cache': 'api_cache:',
             'api_endpoint_cache': 'api_endpoint_cache:',
@@ -29,6 +26,7 @@ class PygateCacheManager:
             'user_cache': 'user_cache:',
             'user_group_cache': 'user_group_cache:',
             'user_role_cache': 'user_role_cache:',
+            'endpoint_load_balancer': 'endpoint_load_balancer:'
         }
 
     def _get_key(self, cache_name, key):

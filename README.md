@@ -1,10 +1,34 @@
-
 # pygate
 
-Bring modern security, governance, and management to your applications. This is your APIs gateway to the world!
+One Platform for REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed with its own set of RESTful APIs. This is your APIs gateway to the world!
 
-Though pygate is currently a side project in development, please feel free to contribute or make suggestions. 
+ [pygate.org](https://pygate.org)
 
+## Roadmap
+
+- [x] Create proof of concept.
+- [ ] REST gateway implementation (in progress).
+- [ ] Code cleanup and testing.
+- [ ] Add REST capabilties to user documentation.
+- [ ] Version 1.0.0 release.
+- [ ] GraphQL gateway implementation.
+- [ ] Code cleanup and testing.
+- [ ] Add GraphQL capabilties to user documentation.
+- [ ] Version 1.1.0 release.
+- [ ] gRPC gateway implementation.
+- [ ] Code cleanup and testing.
+- [ ] Add gRPC capabilties to user documentation.
+- [ ] Version 1.2.0 release.
+- [ ] Websockets gateway implementation.
+- [ ] Code cleanup and testing.
+- [ ] Add Websockets capabilties to user documentation.
+- [ ] Version 1.3.0 release.
+- [ ] Improve caching.
+- [ ] Add logging.
+- [ ] Enable field encryption.
+- [ ] Refactor codebase.
+- [ ] Improve user documentation.
+- [ ] Version 1.4.0 release.
 
 
 

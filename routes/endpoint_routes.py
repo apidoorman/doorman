@@ -4,19 +4,15 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
-# Internal imports
 from services.endpoint_service import EndpointService
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
 
 endpoint_router = APIRouter()
-
-# Start role based endpoints
 
 """
 Create endpoint *platform endpoint.
@@ -70,9 +66,7 @@ async def get_endpoints_by_name_version(request: Request, api_name: str, api_ver
     try:
         endpoints = EndpointService.get_endpoints_by_name_version(api_name, api_version)
         for endpoint in endpoints:
-            endpoint.pop('_id', None)  # Remove '_id' if it exists
+            endpoint.pop('_id', None)
         return JSONResponse(content={"endpoints": endpoints}, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-# End role based endpoints
