@@ -26,6 +26,7 @@ class PygateCacheManager:
             'user_cache': 'user_cache:',
             'user_group_cache': 'user_group_cache:',
             'user_role_cache': 'user_role_cache:',
+            'endpoint_load_balancer': 'endpoint_load_balancer:'
         }
 
     def _get_key(self, cache_name, key):

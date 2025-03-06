@@ -18,7 +18,7 @@ gateway_router = APIRouter()
 @gateway_router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 @whitelist_check()
 @subscription_required()
-async def gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
+async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
 
     request_model = RequestModel(
@@ -30,5 +30,5 @@ async def gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
         identity=Authorize.get_jwt_subject()
     )
     
-    response = GatewayService.gateway(request_model)
+    response = GatewayService.rest_gateway(request_model)
     return JSONResponse(content=response)
