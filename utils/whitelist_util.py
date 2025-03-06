@@ -4,12 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from functools import wraps
 from fastapi import HTTPException, Depends, Request
 from fastapi_jwt_auth import AuthJWT
 
-# Internal imports
 from services.user_service import UserService
 
 def whitelist_check():

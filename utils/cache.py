@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from fastapi import FastAPI
 from aiocache import Cache, caches
 from aiocache.decorators import cached

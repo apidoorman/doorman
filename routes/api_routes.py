@@ -4,12 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
-# Internal imports
 from services.api_service import ApiService
 from utils.auth_util import auth_required
 from utils.whitelist_util import whitelist_check
@@ -17,15 +15,14 @@ from utils.role_util import role_required
 
 api_router = APIRouter()
 
-# Start role based endpoints
-
 """
 Create API *platform endpoint.
 Request:
 {
     "api_name": "<string>",
     "api_version": "<string>",
-    "api_description": "<string>"
+    "api_description": "<string>",
+    "api_servers": ["<string>"]
 }
 Response:
 {
@@ -94,5 +91,3 @@ async def get_all_apis(request: Request, Authorize: AuthJWT = Depends()):
         return JSONResponse(content=apis, status_code=200)
     except ValueError as e:
         return JSONResponse(content={"error": str(e)}, status_code=400)
-    
-# End role based endpoints

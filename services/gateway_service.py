@@ -4,12 +4,9 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 import requests
 
-# Internal imports
 from utils.database import db
-from utils.cache import cache_manager
 from services.cache import pygate_cache
 
 class GatewayService:
@@ -17,7 +14,7 @@ class GatewayService:
     endpoint_collection = db.endpoints
 
     @staticmethod
-    async def gateway(request):
+    async def rest_gateway(request):
         """
         External gateway.
         """
@@ -27,7 +24,9 @@ class GatewayService:
         endpoints = pygate_cache.get_cache('api_endpoint_cache', api.get('api_id')) or GatewayService.endpoint_collection.find({'api_id': api.get('api_id')})
         if not endpoints or request.path not in endpoints:
             raise ValueError("Endpoint does not exists")
-        server = api.get('api_server')[0]
+        server_index = pygate_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
+        server = api.get('api_servers')[server_index]
+        pygate_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api.get('api_servers')))
         url = server + request.path
         response = None
         if request.method == 'GET':

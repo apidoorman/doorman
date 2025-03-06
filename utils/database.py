@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from pymongo import MongoClient, IndexModel, ASCENDING
 from utils import password_util
 from dotenv import load_dotenv
@@ -56,15 +55,16 @@ class Database:
         ])
 
         # TODO: Remove this before merging to master
+        if self.db.users.find_one({"username": "admin"}):
+            self.db.users.delete_one({"username": "admin"})
         if not self.db.users.find_one({"username": "admin"}):
             self.db.users.insert_one({
                 "username": "admin",
                 "email": "admin@pygate.org",
-                "password": password_util.hash_password("password123"),
+                "password": password_util.hash_password("password1"),
                 "role": "admin",
                 "groups": ["ALL"]
             })
-
 
 database = Database()
 
