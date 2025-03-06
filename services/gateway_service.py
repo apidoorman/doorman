@@ -4,12 +4,9 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 import requests
 
-# Internal imports
 from utils.database import db
-from utils.cache import cache_manager
 from services.cache import pygate_cache
 
 class GatewayService:

@@ -4,12 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
-# Internal imports
 from utils.subscription_util import subscription_required
 from utils.whitelist_util import whitelist_check
 from services.gateway_service import GatewayService

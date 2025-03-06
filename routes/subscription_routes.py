@@ -4,19 +4,15 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
-# Internal imports
 from services.subscription_service import SubscriptionService
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
 
 subscription_router = APIRouter()
-
-# Start role-based endpoints
 
 """
 Subscribe to API *platform endpoint.
@@ -91,11 +87,6 @@ async def subscriptions_for_user_by_id(request: Request, user_id: str, Authorize
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-# End role-based endpoints
-
-# Start active user endpoints
-
 """
 Get API Subscriptions for active user *platform endpoint.
 Request:
@@ -115,5 +106,3 @@ async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = 
         return JSONResponse(content={'subscriptions': subscriptions}, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-# End active user endpoint

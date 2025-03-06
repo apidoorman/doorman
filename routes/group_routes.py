@@ -4,19 +4,15 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
-# Internal imports
 from services.group_service import GroupService
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
 
 group_router = APIRouter()
-
-# Start role-based endpoints
 
 """
 Create group *platform endpoint.
@@ -100,5 +96,3 @@ async def get_group(request: Request, group_name: str, Authorize: AuthJWT = Depe
         return JSONResponse(content=group, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-# End role-based endpoints

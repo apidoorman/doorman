@@ -4,20 +4,15 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# External imports
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
-from fastapi_jwt_auth.exceptions import AuthJWTException
 
-# Internal imports
 from services.user_service import UserService
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
 
 user_router = APIRouter()
-
-# Start role based endpoints
 
 """
 Create user *platform endpoint.
@@ -157,11 +152,3 @@ async def get_user_by_email(request: Request, email: str, Authorize: AuthJWT = D
         return JSONResponse(content=user, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi_jwt_auth import AuthJWT
-from fastapi_jwt_auth.exceptions import AuthJWTException
-
-user_router = APIRouter()
-    
-# End role based endpoints
