@@ -6,7 +6,6 @@ One Platform for REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed wit
 
 ## Roadmap
 
-<<<<<<< HEAD
 - [x] Create proof of concept.
 - [ ] REST gateway implementation (in progress).
 - [ ] Code cleanup and testing.
@@ -24,28 +23,12 @@ One Platform for REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed wit
 - [ ] Code cleanup and testing.
 - [ ] Add Websockets capabilties to user documentation.
 - [ ] Version 1.3.0 release.
-=======
-- [x] Create MVP (self goal)
-- [ ] REST gateway implementation (in progress).
-- [ ] Code cleanup and testing.
-- [ ] Version 1.0.0 release.
-- [ ] GraphQL gateway implementation.
-- [ ] Code cleanup and testing.
-- [ ] Version 1.1.0 release.
-- [ ] Websockets gateway implementation.
-- [ ] Code cleanup and testing.
-- [ ] Version 1.2.0 release.
->>>>>>> fae1c0c (README update. Added roadmap and updated project desc.)
 - [ ] Improve caching.
 - [ ] Add logging.
 - [ ] Enable field encryption.
 - [ ] Refactor codebase.
-<<<<<<< HEAD
 - [ ] Improve user documentation.
-=======
-- [ ] Create user documentation.
->>>>>>> fae1c0c (README update. Added roadmap and updated project desc.)
-- [ ] Version 1.3.0 release.
+- [ ] Version 1.4.0 release.
 
 
 
