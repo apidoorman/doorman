@@ -6,6 +6,7 @@ pymongo
 bcrypt
 psutil
 python-dotenv
+email-validator
 
 # FastAPI and server
 fastapi==0.95.2
