@@ -4,16 +4,16 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from fastapi_jwt_auth import AuthJWT
 
 from services.api_service import ApiService
 from utils.auth_util import auth_required
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
+from models.api_model import ApiModel
 
-api_router = APIRouter()
+api_router = APIRouter() 
 
 """
 Create API *platform endpoint.
@@ -22,7 +22,8 @@ Request:
     "api_name": "<string>",
     "api_version": "<string>",
     "api_description": "<string>",
-    "api_servers": ["<string>"]
+    "api_servers": ["<string>"],
+    "api_type": "<string>"
 }
 Response:
 {
@@ -30,13 +31,12 @@ Response:
 }
 """
 @api_router.post("")
+@auth_required()
 @whitelist_check()
 @role_required(("admin", "dev", "platform"))
-async def create_api(request: Request, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+async def create_api(api_data: ApiModel):
     try:
-        api_data = await request.json()
-        ApiService.create_api(api_data)
+        await ApiService.create_api(api_data)
         return JSONResponse(content={'message': 'API created successfully'}, status_code=201)
     except ValueError as e:
         return JSONResponse(content={"error": str(e)}, status_code=400)
@@ -55,10 +55,10 @@ Response:
 }
 """
 @api_router.get("/{api_name}/{api_version}")
+@auth_required()
 @whitelist_check()
 @role_required(("admin", "dev", "platform"))
-async def get_api_by_name_version(request: Request, api_name: str, api_version: str, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+async def get_api_by_name_version(api_name: str, api_version: str):
     try:
         api = ApiService.get_api_by_name_version(api_name, api_version)
         del api['_id']
@@ -83,7 +83,7 @@ Response:
 @auth_required()
 @whitelist_check()
 @role_required(("admin", "dev", "platform"))
-async def get_all_apis(request: Request, Authorize: AuthJWT = Depends()):
+async def get_all_apis():
     try:
         apis = await ApiService.get_apis()
         for api in apis:

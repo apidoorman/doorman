@@ -16,7 +16,6 @@ import uvicorn
 import asyncio
 
 from utils.cache import cache_manager
-from utils.auth_util import jwt_blacklist
 from utils.auth_blacklist import purge_expired_tokens
 
 from routes.authorization_routes import authorization_router
@@ -45,7 +44,7 @@ credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
 methods = os.getenv("ALLOW_METHODS", "GET, POST, PUT, DELETE").split(",")
 headers = os.getenv("ALLOW_HEADERS", "*").split(",")
 https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
-domain = os.getenv("COOKIE_DOMAIN", "localhost");
+domain = os.getenv("COOKIE_DOMAIN", "localhost")
 
 pygate.add_middleware(
     CORSMiddleware,
@@ -86,7 +85,7 @@ async def startup_event():
     asyncio.create_task(automatic_purger(1800))
 
 @pygate.exception_handler(AuthJWTException)
-async def authjwt_exception_handler(request: Request, exc: AuthJWTException):
+async def authjwt_exception_handler(exc: AuthJWTException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"details": exc.message}
@@ -104,7 +103,7 @@ pygate.include_router(role_router, prefix="/platform/role", tags=["Role"])
 pygate.include_router(subscription_router, prefix="/platform/subscription", tags=["Subscription"])
 
 @pygate.exception_handler(500)
-async def internal_server_error_handler(request, exc):
+async def internal_server_error_handler():
     return {
         "error": "Internal Server Error",
         "message": "An unexpected error occurred. Please try again later.",
@@ -157,17 +156,18 @@ def run():
 
     uvicorn.run(
         "pygate:pygate",
-        host="0.0.0.0", 
-        port=server_port, 
-        reload=True
+        host="0.0.0.0",
+        port=server_port,
+        reload=True, 
+        reload_excludes="venv"
     )
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "run":
-        run()
-    elif len(sys.argv) > 1 and sys.argv[1] == "stop":
+    if len(sys.argv) > 1 and sys.argv[1] == "stop":
         stop()
     elif len(sys.argv) > 1 and sys.argv[1] == "start":
         start()
+    elif len(sys.argv) > 1 and sys.argv[1] == "run":
+        run()
     else:
-        print("Invalid command. Use 'start', 'stop', or 'run'.")
+        print("Invalid command. Use 'start' or 'stop'.")

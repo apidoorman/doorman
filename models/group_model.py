@@ -4,17 +4,14 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-class GroupModel:
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-    def __init__ (self, group_name = None, group_description = None, api_access = None):
-        self.group_name = group_name
-        self.group_description = group_description
-        self.api_access = api_access
+class GroupModel(BaseModel):
+    
+    group_name: str = Field(..., min_length=1, max_length=50)
+    group_description: Optional[str] = Field(None, min_length=1, max_length=255)
+    api_access: List[str] = Field(default_factory=list)
 
-    def validate_endpoint_creation(self):
-        missing = []
-        if not self.group_name: missing.append("group_name")
-        if not self.group_description: missing.append("group_description")
-        if not self.api_access: missing.append("api_access")
-        if missing:
-            raise ValueError(f"Missing required field(s): {', '.join(missing)}")
+    class Config:
+        arbitrary_types_allowed = True

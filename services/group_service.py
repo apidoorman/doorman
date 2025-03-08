@@ -7,19 +7,20 @@ See https://github.com/pypeople-dev/pygate for more information
 from utils.database import db
 from utils.cache import cache_manager
 from services.cache import pygate_cache
+from models.group_model import GroupModel
 
 class GroupService:
     group_collection = db.group
 
     @staticmethod
-    async def create_group(data):
+    async def create_group(data: GroupModel):
         """
         Onboard a group to the platform.
         """
-        if pygate_cache.get_cache('group_cache', data.get('group_name')) or GroupService.group_collection.find_one({'group_name': data.get('group_name')}):
+        if pygate_cache.get_cache('group_cache', data.group_name) or GroupService.group_collection.find_one({'group_name': data.group_name}):
             raise ValueError("Group already exists")
         group = GroupService.group_collection.insert_one(data)
-        pygate_cache.set_cache('group_cache', data.get('group_name'), group)
+        pygate_cache.set_cache('group_cache', data.group_name, group)
 
     @staticmethod
     @cache_manager.cached(ttl=300)
