@@ -9,8 +9,10 @@ from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
 from services.user_service import UserService
+from utils.auth_util import auth_required
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
+from models.user_model import UserModel
 
 user_router = APIRouter()
 
@@ -38,11 +40,10 @@ Response:
 }
 """
 @user_router.post("/")
+@auth_required()
 @role_required(["admin", "dev", "platform"])
-async def create_user(request: Request, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+async def create_user(user_data: UserModel):
     try:
-        user_data = await request.json()
         new_user = await UserService.create_user(user_data)
         return JSONResponse(content={"message": "User created successfully", "user_details": new_user}, status_code=201)
     except ValueError as e:
@@ -66,9 +67,10 @@ Response:
 }
 """
 @user_router.put("/{user_id}")
+@auth_required()
 @whitelist_check()
 @role_required(["admin", "dev", "platform"])
-async def update_user(user_id: str, request: Request, Authorize: AuthJWT = Depends()):
+async def update_user(user_id: str, request: Request):
     try:
         update_data = await request.json()
         updated_user = await UserService.update_user(user_id, update_data)
@@ -89,9 +91,10 @@ Response:
 }
 """
 @user_router.put("/{user_id}/update-password")
+@auth_required()
 @whitelist_check()
 @role_required(["admin", "dev", "platform"])
-async def update_user_password(user_id: str, request: Request, Authorize: AuthJWT = Depends()):
+async def update_user_password(user_id: str, request: Request):
     try:
         data = await request.json()
         current_password = data.get('current_password')
@@ -120,9 +123,10 @@ Response:
 }
 """
 @user_router.get("/{username}")
+@auth_required()
 @whitelist_check()
 @role_required(["admin", "dev", "platform"])
-async def get_user_by_username(request: Request, username: str, Authorize: AuthJWT = Depends()):
+async def get_user_by_username(username: str):
     try:
         user = await UserService.get_user_by_username(username)
         return JSONResponse(content=user, status_code=200)
@@ -144,9 +148,10 @@ Response:
 }
 """
 @user_router.get("/email/{email}")
+@auth_required()
 @whitelist_check()
 @role_required(["admin", "dev", "platform"])
-async def get_user_by_email(request: Request, email: str, Authorize: AuthJWT = Depends()):
+async def get_user_by_email(email: str):
     try:
         user = await UserService.get_user_by_email(email)
         return JSONResponse(content=user, status_code=200)

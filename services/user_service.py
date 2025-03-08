@@ -7,6 +7,8 @@ See https://github.com/pypeople-dev/pygate for more information
 from utils import password_util
 from utils.database import db
 from services.cache import pygate_cache
+from models.user_model import UserModel
+
 import logging
 
 class UserService:
@@ -43,24 +45,24 @@ class UserService:
             raise
 
     @staticmethod
-    async def create_user(data):
+    async def create_user(data: UserModel):
         """
         Create a new user.
         """
-        if UserService.user_collection.find_one({'username': data.get('username')}):
+        if UserService.user_collection.find_one({'username': data.username}):
             raise ValueError("Username already exists")
         
-        if UserService.user_collection.find_one({'email': data.get('email')}):
+        if UserService.user_collection.find_one({'email': data.email}):
             raise ValueError("Email already exists")
 
-        data['password'] = password_util.hash_password(data.get('password'))
+        data['password'] = password_util.hash_password(data.password)
         
         user = UserService.user_collection.insert_one(data)
-        pygate_cache.get_cache('user_cache', data.get('username'), user)
+        pygate_cache.get_cache('user_cache', data.username, user)
         
         return {
-            'username': data.get('username'),
-            'email': data.get('email')
+            'username': data.username,
+            'email': data.email
         }
 
     @staticmethod

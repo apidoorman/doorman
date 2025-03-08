@@ -4,19 +4,16 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-class EndpointModel:
+from pydantic import BaseModel, Field
+from typing import Optional
 
-    def __init__ (self, api_name = None, api_version = None, endpoint_method = None, endpoint_uri = None):
-        self.api_name = api_name
-        self.api_version = api_version
-        self.endpoint_method = endpoint_method
-        self.endpoint_uri = endpoint_uri
+class EndpointModel(BaseModel):
+    
+    api_name: str = Field(..., min_length=1, max_length=50)
+    api_version: str = Field(..., min_length=1, max_length=10)
+    endpoint_method: str = Field(...) 
+    endpoint_uri: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = Field(..., min_length=1, max_length=255)
 
-    def validate_endpoint_creation(self):
-        missing = []
-        if not self.api_name: missing.append("api_name")
-        if not self.api_version: missing.append("api_version")
-        if not self.endpoint_method: missing.append("endpoint_method")
-        if not self.endpoint_uri: missing.append("endpoint_uri")
-        if missing:
-            raise ValueError(f"Missing required field(s): {', '.join(missing)}")
+    class Config:
+        arbitrary_types_allowed = True

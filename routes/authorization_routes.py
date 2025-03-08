@@ -4,7 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter, Request, FastAPI, Depends, HTTPException, Response
+from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
@@ -63,7 +63,7 @@ Response:
 """
 @authorization_router.get("/authorization/status")
 @auth_required()
-async def status(request: Request, Authorize: AuthJWT = Depends()):
+async def status():
     try:
         return JSONResponse(content={"status": "authorized"}, status_code=200)
     except Exception as e:
@@ -76,10 +76,10 @@ Request:
 }
 Response:
 {
-    "message": "You are logged out"
+    "message": "Your token has been invalidated"
 }
 """
-@authorization_router.post("/authorization/logout")
+@authorization_router.post("/authorization/invalidate")
 @auth_required()
 async def logout(response: Response, Authorize: AuthJWT = Depends()):
     try:
@@ -90,7 +90,7 @@ async def logout(response: Response, Authorize: AuthJWT = Depends()):
         if user not in jwt_blacklist:
             jwt_blacklist[user] = TimedHeap()
         jwt_blacklist[user].push(jwt_id)
-        return JSONResponse(content={"message": "You are logged out"}, status_code=200)
+        return JSONResponse(content={"message": "Your token has been invalidated"}, status_code=200)
     except AuthJWTException as e:
         logging.error(f"Logout failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})

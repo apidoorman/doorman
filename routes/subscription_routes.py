@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
 from services.subscription_service import SubscriptionService
+from utils.auth_util import auth_required
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
 
@@ -28,10 +29,10 @@ Response:
 }
 """
 @subscription_router.post("/subscribe")
+@auth_required()
 @whitelist_check()
 @role_required(("admin", "dev", "platform"))
-async def subscribe_api(request: Request, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+async def subscribe_api(request: Request):
     try:
         data = await request.json()
         SubscriptionService.subscribe(data)
@@ -54,10 +55,10 @@ Response:
 }
 """
 @subscription_router.post("/unsubscribe")
+@auth_required()
 @whitelist_check()
 @role_required(("admin", "dev", "platform"))
-async def unsubscribe_api(request: Request, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+async def unsubscribe_api(request: Request):
     try:
         data = await request.json()
         SubscriptionService.unsubscribe(data)
@@ -77,10 +78,10 @@ Response:
 }
 """
 @subscription_router.get("/subscriptions/{user_id}")
+@auth_required()
 @whitelist_check()
 @role_required(("admin", "dev", "platform"))
-async def subscriptions_for_user_by_id(request: Request, user_id: str, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+async def subscriptions_for_user_by_id(user_id: str):
     try:
         subscriptions = SubscriptionService.get_user_subscriptions(user_id)
         return JSONResponse(content={'subscriptions': subscriptions}, status_code=200)
@@ -98,8 +99,8 @@ Response:
 }
 """
 @subscription_router.get("/subscriptions")
-async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+@auth_required()
+async def subscriptions_for_current_user(Authorize: AuthJWT = Depends()):
     try:
         username = Authorize.get_jwt_subject()
         subscriptions = SubscriptionService.get_user_subscriptions(username)
