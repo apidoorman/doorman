@@ -31,11 +31,11 @@ Response:
 }
 """
 @api_router.post("")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def create_api(api_data: ApiModel):
     try:
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
         await ApiService.create_api(api_data)
         return JSONResponse(content={'message': 'API created successfully'}, status_code=201)
     except ValueError as e:
@@ -55,13 +55,13 @@ Response:
 }
 """
 @api_router.get("/{api_name}/{api_version}")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def get_api_by_name_version(api_name: str, api_version: str):
     try:
-        api = ApiService.get_api_by_name_version(api_name, api_version)
-        del api['_id']
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        api = await ApiService.get_api_by_name_version(api_name, api_version)
+        if api.get('_id'): del api['_id']
         return JSONResponse(content=api, status_code=200)
     except ValueError as e:
         return JSONResponse(content={"error": str(e)}, status_code=400)
@@ -80,14 +80,12 @@ Response:
 }
 """
 @api_router.get("/all")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
-async def get_all_apis():
+async def get_all_apis(page: int = 1, page_size: int = 10):
     try:
-        apis = await ApiService.get_apis()
-        for api in apis:
-            del api['_id']
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        apis = await ApiService.get_apis(page, page_size)
         return JSONResponse(content=apis, status_code=200)
     except ValueError as e:
         return JSONResponse(content={"error": str(e)}, status_code=400)

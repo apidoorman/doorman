@@ -1,15 +1,10 @@
-"""
-The contents of this file are property of pygate.org
-Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
-"""
+from pydantic import BaseModel
+from typing import Dict, Optional
 
-class RequestModel:
-
-    def __init__ (self, method = None, path = None, headers = None, json = None, args = None, user = None):
-        self.method = method
-        self.path = path
-        self.headers = headers
-        self.json = json
-        self.args = args
-        self.user = user
+class RequestModel(BaseModel):
+    method: str
+    path: str
+    headers: Dict[str, str]
+    query_params: Dict[str, str]
+    identity: Optional[str] = None
+    body: Optional[str] = None

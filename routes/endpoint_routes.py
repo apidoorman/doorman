@@ -31,12 +31,12 @@ Response:
 }
 """
 @endpoint_router.post("")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def create_endpoint(endpoint_data: EndpointModel, Authorize: AuthJWT = Depends()):
     try:
-        EndpointService.create_endpoint(endpoint_data)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        await EndpointService.create_endpoint(endpoint_data)
         return JSONResponse(content={'message': 'Endpoint created successfully'}, status_code=201)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -60,14 +60,12 @@ Response:
 }
 """
 @endpoint_router.get("/api/{api_name}/{api_version}")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
-async def get_endpoints_by_name_version(request: Request, api_name: str, api_version: str, Authorize: AuthJWT = Depends()):
+async def get_endpoints_by_name_version(api_name: str, api_version: str, Authorize: AuthJWT = Depends()):
     try:
-        endpoints = EndpointService.get_endpoints_by_name_version(api_name, api_version)
-        for endpoint in endpoints:
-            endpoint.pop('_id', None)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        endpoints = await EndpointService.get_endpoints_by_name_version(api_name, api_version)
         return JSONResponse(content={"endpoints": endpoints}, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

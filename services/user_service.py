@@ -55,15 +55,12 @@ class UserService:
         if UserService.user_collection.find_one({'email': data.email}):
             raise ValueError("Email already exists")
 
-        data['password'] = password_util.hash_password(data.password)
-        
-        user = UserService.user_collection.insert_one(data)
-        pygate_cache.get_cache('user_cache', data.username, user)
-        
-        return {
-            'username': data.username,
-            'email': data.email
-        }
+        data.password = password_util.hash_password(data.password)
+
+        data_dict = data.dict()
+        user = UserService.user_collection.insert_one(data_dict)
+        data_dict['_id'] = str(user.inserted_id)
+        pygate_cache.set_cache('user_cache', data.username, data_dict)
 
     @staticmethod
     async def check_password_return_user(email, password):
