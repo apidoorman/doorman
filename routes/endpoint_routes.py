@@ -31,12 +31,12 @@ Response:
 }
 """
 @endpoint_router.post("")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def create_endpoint(endpoint_data: EndpointModel, Authorize: AuthJWT = Depends()):
     try:
-        EndpointService.create_endpoint(endpoint_data)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        await EndpointService.create_endpoint(endpoint_data)
         return JSONResponse(content={'message': 'Endpoint created successfully'}, status_code=201)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

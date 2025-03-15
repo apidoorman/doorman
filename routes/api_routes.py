@@ -31,11 +31,11 @@ Response:
 }
 """
 @api_router.post("")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def create_api(api_data: ApiModel):
     try:
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
         await ApiService.create_api(api_data)
         return JSONResponse(content={'message': 'API created successfully'}, status_code=201)
     except ValueError as e:

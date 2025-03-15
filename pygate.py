@@ -4,7 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
@@ -38,7 +38,6 @@ load_dotenv()
 PID_FILE = "pygate.pid"
 
 pygate = FastAPI()
-
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
 methods = os.getenv("ALLOW_METHODS", "GET, POST, PUT, DELETE").split(",")
@@ -50,8 +49,8 @@ pygate.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=credentials,
-    allow_methods=[methods],
-    allow_headers=[headers],
+    allow_methods=methods,
+    allow_headers=headers,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

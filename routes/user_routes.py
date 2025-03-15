@@ -39,13 +39,13 @@ Response:
     }
 }
 """
-@user_router.post("/")
-@auth_required()
-@role_required(["admin", "dev", "platform"])
-async def create_user(user_data: UserModel):
+@user_router.post("")
+async def create_user(user_data: UserModel, Authorize: AuthJWT = Depends()):
     try:
+        auth_required()
+        role_required(["admin", "dev", "platform"])
         new_user = await UserService.create_user(user_data)
-        return JSONResponse(content={"message": "User created successfully", "user_details": new_user}, status_code=201)
+        return JSONResponse(content={"message": "User created successfully"}, status_code=201)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
