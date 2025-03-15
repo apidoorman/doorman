@@ -68,3 +68,20 @@ class EndpointService:
         if '_id' in endpoint:
             del endpoint['_id']
         return endpoint
+    
+    @staticmethod
+    @cache_manager.cached(ttl=300)
+    async def get_endpoints_by_name_version(api_name, api_version):
+        """
+        Get all endpoints by API name and version.
+        """
+        cursor = EndpointService.endpoint_collection.find({
+            'api_name': api_name,
+            'api_version': api_version
+        })
+        endpoints = cursor.to_list(length=None)
+        for endpoint in endpoints:
+            if '_id' in endpoint: del endpoint['_id']
+        if not endpoints:
+            raise ValueError("API has no endpoints")
+        return endpoints

@@ -89,6 +89,22 @@ class TestPygate(unittest.TestCase):
         response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"))
         self.assertEqual(response.status_code, 200)
 
+    def test_06_get_api(self):
+        response = requests.get(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
+                                headers={"Authorization": f"Bearer {TestPygate.token}"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_07_get_all_apis(self):
+        response = requests.get(f"{self.base_url}/platform/api/all",
+                                headers={"Authorization": f"Bearer {TestPygate.token}"},
+                                params={"page": 1, "page_size": 10})
+        self.assertEqual(response.status_code, 200)
+
+    def test_07_api_endpoints(self):
+        response = requests.get(f"{self.base_url}/platform/endpoint/api/" + TestPygate.api_name + "/v1",
+                                headers={"Authorization": f"Bearer {TestPygate.token}"}) 
+        self.assertEqual(response.status_code, 200)
+
 def suite():
     test_suite = unittest.TestSuite()
     test_suite.addTest(TestPygate("test_01_auth_calls"))
@@ -96,6 +112,9 @@ def suite():
     test_suite.addTest(TestPygate("test_03_onboard_api"))
     test_suite.addTest(TestPygate("test_04_onboard_endpoint"))
     test_suite.addTest(TestPygate("test_05_gateway_call"))
+    test_suite.addTest(TestPygate("test_06_get_api"))
+    test_suite.addTest(TestPygate("test_07_get_all_apis"))
+    test_suite.addTest(TestPygate("test_07_api_endpoints"))
     return test_suite
 
 if __name__ == '__main__':
