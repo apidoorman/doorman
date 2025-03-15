@@ -9,6 +9,7 @@ class TestPygate(unittest.TestCase):
     token = None
     api_name = None
     endpoint_path = None
+    group_name = None
 
     @classmethod
     def setUpClass(cls):
@@ -100,9 +101,30 @@ class TestPygate(unittest.TestCase):
                                 params={"page": 1, "page_size": 10})
         self.assertEqual(response.status_code, 200)
 
-    def test_07_api_endpoints(self):
+    def test_08_api_endpoints(self):
         response = requests.get(f"{self.base_url}/platform/endpoint/api/" + TestPygate.api_name + "/v1",
                                 headers={"Authorization": f"Bearer {TestPygate.token}"}) 
+        self.assertEqual(response.status_code, 200)
+
+    def test_09_create_group(self):
+        TestPygate.group_name = "testgroup" + str(time.time())
+        response = requests.post(f"{self.base_url}/platform/group", 
+                                 headers={"Authorization": f"Bearer {TestPygate.token}"},
+                                    json={
+                                        "group_name": TestPygate.group_name, 
+                                        "group_description": "Test group"
+                                    })
+        
+        self.assertEqual(response.status_code, 201)
+
+    def test_10_get_groups(self):
+        response = requests.get(f"{self.base_url}/platform/group/all",
+                                headers={"Authorization": f"Bearer {TestPygate.token}"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_11_get_group(self):
+        response = requests.get(f"{self.base_url}/platform/group/" + TestPygate.group_name,
+                                headers={"Authorization": f"Bearer {TestPygate.token}"})
         self.assertEqual(response.status_code, 200)
 
 def suite():
@@ -114,7 +136,10 @@ def suite():
     test_suite.addTest(TestPygate("test_05_gateway_call"))
     test_suite.addTest(TestPygate("test_06_get_api"))
     test_suite.addTest(TestPygate("test_07_get_all_apis"))
-    test_suite.addTest(TestPygate("test_07_api_endpoints"))
+    test_suite.addTest(TestPygate("test_08_api_endpoints"))
+    test_suite.addTest(TestPygate("test_09_create_group"))
+    test_suite.addTest(TestPygate("test_10_get_groups"))
+    test_suite.addTest(TestPygate("test_11_get_group"))
     return test_suite
 
 if __name__ == '__main__':

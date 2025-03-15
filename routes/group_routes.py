@@ -29,12 +29,12 @@ Response:
 }
 """
 @group_router.post("")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def create_group(api_data: GroupModel):
     try:
-        GroupService.create_group(api_data)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        await GroupService.create_group(api_data)
         return JSONResponse(content={'message': 'Group created successfully'}, status_code=201)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -56,15 +56,13 @@ Response:
     ]
 }
 """
-@group_router.get("")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
-async def get_groups():
+@group_router.get("/all")
+async def get_groups(page: int = 1, page_size: int = 10):
     try:
-        groups = GroupService.get_groups()
-        for group in groups:
-            group.pop('_id', None)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        groups = await GroupService.get_groups(page, page_size)
         return JSONResponse(content=groups, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -86,13 +84,12 @@ Response:
 }
 """
 @group_router.get("/{group_name}")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def get_group(group_name: str):
     try:
-        group = GroupService.get_group(group_name)
-        group.pop('_id', None)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        group = await GroupService.get_group(group_name)
         return JSONResponse(content=group, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
