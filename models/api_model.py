@@ -9,13 +9,13 @@ from typing import List, Optional
 
 class ApiModel(BaseModel): 
     
-    api_id:  str
     api_name: str = Field(..., min_length=1, max_length=25)
     api_version: str = Field(..., min_length=1, max_length=2)
+    api_description: str = Field(None, min_length=1, max_length=127)
+    api_servers: List[str] = Field(default_factory=list)
+    api_type: str = None
     
-    api_description: Optional[str] = Field(None, min_length=1, max_length=127)
-    api_servers: Optional[List[str]] = Field(default_factory=list)
-    api_type: Optional[str] = None
+    api_id: Optional[str] = None
     api_path: Optional[str] = None
 
     class Config:

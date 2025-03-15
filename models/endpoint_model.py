@@ -13,7 +13,10 @@ class EndpointModel(BaseModel):
     api_version: str = Field(..., min_length=1, max_length=10)
     endpoint_method: str = Field(...) 
     endpoint_uri: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = Field(..., min_length=1, max_length=255)
+
+    api_id: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = Field(None, min_length=1, max_length=255)
+    endpoint_id: Optional[str] = Field(None, min_length=1, max_length=255)
 
     class Config:
         arbitrary_types_allowed = True

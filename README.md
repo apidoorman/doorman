@@ -2,25 +2,25 @@
 
 One Platform for REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed with its own set of RESTful APIs. This is your APIs gateway to the world!
 
- [pygate.org](https://pygate.org)
+🔗 [pygate.org](https://pygate.org)
 
-## Roadmap
+No onboarding and no specialized Go or C expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
 
-- [x] Create proof of concept.
-- [ ] REST gateway implementation (in progress).
-- [ ] Code cleanup and testing.
+## MVP Roadmap 🚀
+- [ ] REST gateway implementation (in progress ⏳).
+- [ ] Code optimization and testing.
 - [ ] Add REST capabilties to user documentation.
 - [ ] Version 1.0.0 release.
 - [ ] GraphQL gateway implementation.
-- [ ] Code cleanup and testing.
+- [ ] Code optimization and testing.
 - [ ] Add GraphQL capabilties to user documentation.
 - [ ] Version 1.1.0 release.
 - [ ] gRPC gateway implementation.
-- [ ] Code cleanup and testing.
+- [ ] Code optimization and testing.
 - [ ] Add gRPC capabilties to user documentation.
 - [ ] Version 1.2.0 release.
 - [ ] Websockets gateway implementation.
-- [ ] Code cleanup and testing.
+- [ ] Code optimization and testing.
 - [ ] Add Websockets capabilties to user documentation.
 - [ ] Version 1.3.0 release.
 - [ ] Improve caching.
@@ -52,6 +52,12 @@ Stop pygate
     
 ```bash
   python pygate.py stop
+```
+
+Run pygate in console
+    
+```bash
+  python pygate.py run
 ```
 
 
