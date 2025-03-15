@@ -52,8 +52,15 @@ class ApiService:
 
     @staticmethod
     @cache_manager.cached(ttl=300)
-    async def get_apis():
+    async def get_apis(page, page_size):
         """
-        Get all APIs that a user has access to.
+        Get all APIs that a user has access to with pagination.
         """
-        return list(ApiService.api_collection.find())
+        skip = (page - 1) * page_size
+        cursor = ApiService.api_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
+        apis = cursor.to_list(length=None)
+        for api in apis:
+            if api.get('_id'): del api['_id']
+        if not apis:
+            raise ValueError("No APIs found")
+        return apis
