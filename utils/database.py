@@ -33,7 +33,7 @@ class Database:
 
         self.db.endpoints.create_indexes([
             IndexModel([("api_id", ASCENDING)], unique=True),
-            IndexModel([("api_name", ASCENDING), ("version", ASCENDING)]),
+            IndexModel([("api_name", ASCENDING), ("version", ASCENDING)], unique=True),
             IndexModel([("api_name", ASCENDING), ("version", ASCENDING), ("path", ASCENDING)], unique=True)
         ])
 

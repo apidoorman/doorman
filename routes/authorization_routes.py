@@ -43,7 +43,7 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
     try:
         user = await UserService.check_password_return_user(email, password)
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize)
-        response = JSONResponse(content={"message": "You are logged in"}, media_type="application/json")
+        response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
         Authorize.set_access_cookies(access_token, response)
         return response
     except ValueError as e:
@@ -62,12 +62,14 @@ Response:
 }
 """
 @authorization_router.get("/authorization/status")
-@auth_required()
-async def status():
+async def status(Authorize: AuthJWT = Depends()):
     try:
+        auth_required()
         return JSONResponse(content={"status": "authorized"}, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
+    except ValueError as e:
+        return JSONResponse(content={"error": str(e)}, status_code=400)
         
 """
 Logout endpoint
@@ -80,13 +82,12 @@ Response:
 }
 """
 @authorization_router.post("/authorization/invalidate")
-@auth_required()
 async def logout(response: Response, Authorize: AuthJWT = Depends()):
     try:
+        auth_required()
         jwt_id = Authorize.get_raw_jwt()['jti']
         user = Authorize.get_jwt_subject()
         Authorize.unset_jwt_cookies(response)
-        # Add JWT ID to blacklist
         if user not in jwt_blacklist:
             jwt_blacklist[user] = TimedHeap()
         jwt_blacklist[user].push(jwt_id)
@@ -94,3 +95,9 @@ async def logout(response: Response, Authorize: AuthJWT = Depends()):
     except AuthJWTException as e:
         logging.error(f"Logout failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})
+    except ValueError as e:
+        return JSONResponse(content={"error": str(e)}, status_code=400)
+    
+@authorization_router.api_route("/status", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def rest_gateway():
+    return JSONResponse(content={"message": "Gateway is online"}, status_code=200)

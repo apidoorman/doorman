@@ -17,17 +17,21 @@ from models.request_model import RequestModel
 gateway_router = APIRouter()
 
 @gateway_router.api_route("/rest/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-@auth_required()
-@whitelist_check()
-@subscription_required()
 async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
-    request_model = RequestModel(
-        method=request.method,
-        path=path,
-        headers=dict(request.headers),
-        body=await request.json() if request.method in ["POST", "PUT", "PATCH"] else None,
-        query_params=dict(request.query_params),
-        identity=Authorize.get_jwt_subject()
-    )
-    response = GatewayService.rest_gateway(request_model)
-    return JSONResponse(content=response)
+    try:
+        auth_required()
+        whitelist_check()
+        subscription_required()
+
+        request_model = RequestModel(
+            method=request.method,
+            path=path,
+            headers=dict(request.headers),
+            body=await request.json() if request.method in ["POST", "PUT", "PATCH"] else None,
+            query_params=dict(request.query_params),
+            identity=Authorize.get_jwt_subject()
+        )
+
+        return await GatewayService.rest_gateway(request_model)
+    except ValueError as e:
+        return JSONResponse(content={"error": str(e)}, status_code=400)

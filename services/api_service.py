@@ -19,12 +19,22 @@ class ApiService:
         """
         Onboard an API to the platform.
         """
-        if pygate_cache.get_cache('api_cache', f"{data.api_name}/{data.api_version}") or ApiService.api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version}):
+        cache_key = f"{data.api_name}/{data.api_version}"
+
+        if pygate_cache.get_cache('api_cache', cache_key) or ApiService.api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version}):
             raise ValueError("API already exists for the requested name and version")
-        data.api_path = f"/{data.get('api_name')}/{data.get('api_version')}"
+
+        data.api_path = f"/{data.api_name}/{data.api_version}"
         data.api_id = str(uuid.uuid4())
-        api = ApiService.api_collection.insert_one(data)
-        pygate_cache.set_cache('api_cache', f"{data.api_name}/{data.api_version}", api)
+
+        api_dict = data.dict()
+        insert_result = ApiService.api_collection.insert_one(api_dict)
+
+        if not insert_result.acknowledged:
+            raise ValueError("Database error: Unable to insert endpoint")
+        
+        api_dict['_id'] = str(insert_result.inserted_id)
+        pygate_cache.set_cache('api_cache', data.api_id, api_dict)
         pygate_cache.set_cache('api_id_cache', data.api_path, data.api_id)
 
     @staticmethod
@@ -42,8 +52,15 @@ class ApiService:
 
     @staticmethod
     @cache_manager.cached(ttl=300)
-    async def get_apis():
+    async def get_apis(page, page_size):
         """
-        Get all APIs that a user has access to.
+        Get all APIs that a user has access to with pagination.
         """
-        return list(ApiService.api_collection.find())
+        skip = (page - 1) * page_size
+        cursor = ApiService.api_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
+        apis = cursor.to_list(length=None)
+        for api in apis:
+            if api.get('_id'): del api['_id']
+        if not apis:
+            raise ValueError("No APIs found")
+        return apis
