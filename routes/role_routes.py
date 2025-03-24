@@ -33,12 +33,12 @@ Response:
 }
 """
 @role_router.post("")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def create_role(api_data: RoleModel):
     try:
-        RoleService.create_role(api_data)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        await RoleService.create_role(api_data)
         return JSONResponse(content={'message': 'Role created successfully'}, status_code=201)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -64,15 +64,13 @@ Response:
     ]
 }
 """
-@role_router.get("")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
-async def get_roles():
+@role_router.get("/all")
+async def get_roles(page: int = 1, page_size: int = 10):
     try:
-        roles = RoleService.get_roles()
-        for role in roles:
-            role.pop('_id', None)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        roles = await RoleService.get_roles(page, page_size)
         return JSONResponse(content=roles, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -97,13 +95,12 @@ Response:
 }
 """
 @role_router.get("/{role_name}")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
 async def get_role(role_name: str):
     try:
-        role = RoleService.get_role(role_name)
-        role.pop('_id', None)
+        auth_required()
+        whitelist_check()
+        role_required(("admin", "dev", "platform"))
+        role = await RoleService.get_role(role_name)
         return JSONResponse(content=role, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

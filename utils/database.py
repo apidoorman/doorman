@@ -47,7 +47,7 @@ class Database:
         ])
 
         self.db.roles.create_indexes([
-            IndexModel([("user_role", ASCENDING)], unique=True)
+            IndexModel([("role_name", ASCENDING)], unique=True)
         ])
 
         self.db.subscriptions.create_indexes([

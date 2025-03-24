@@ -68,7 +68,7 @@ The contents of this repository are property of pygate.org.
 
 Review the Apache License 2.0 for valid authorization of use.
 
-See https://github.com/pypeople-dev/pygate for more information.
+[View License - Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 
 
