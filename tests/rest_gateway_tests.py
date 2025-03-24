@@ -10,6 +10,7 @@ class TestPygate(unittest.TestCase):
     api_name = None
     endpoint_path = None
     group_name = None
+    role_name = None
 
     @classmethod
     def setUpClass(cls):
@@ -127,6 +128,31 @@ class TestPygate(unittest.TestCase):
                                 headers={"Authorization": f"Bearer {TestPygate.token}"})
         self.assertEqual(response.status_code, 200)
 
+    def test_12_create_role(self):
+        TestPygate.role_name = "testrole" + str(time.time())
+        response = requests.post(f"{self.base_url}/platform/role", 
+                                 headers={"Authorization": f"Bearer {TestPygate.token}"},
+                                    json={
+                                        "role_name": TestPygate.role_name,
+                                        "role_description": "Test role",
+                                        "manage_users": False,
+                                        "manage_apis": False,
+                                        "manage_endpoints": False,
+                                        "manage_groups": False,
+                                        "manage_roles": False
+                                    })
+        self.assertEqual(response.status_code, 201)
+
+    def test_13_get_roles(self):
+        response = requests.get(f"{self.base_url}/platform/role/all",
+                                headers={"Authorization": f"Bearer {TestPygate.token}"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_14_get_role(self):
+        response = requests.get(f"{self.base_url}/platform/role/" + TestPygate.role_name,
+                                headers={"Authorization": f"Bearer {TestPygate.token}"})
+        self.assertEqual(response.status_code, 200)
+
 def suite():
     test_suite = unittest.TestSuite()
     test_suite.addTest(TestPygate("test_01_auth_calls"))
@@ -140,6 +166,9 @@ def suite():
     test_suite.addTest(TestPygate("test_09_create_group"))
     test_suite.addTest(TestPygate("test_10_get_groups"))
     test_suite.addTest(TestPygate("test_11_get_group"))
+    test_suite.addTest(TestPygate("test_12_create_role"))
+    test_suite.addTest(TestPygate("test_13_get_roles"))
+    test_suite.addTest(TestPygate("test_14_get_role"))
     return test_suite
 
 if __name__ == '__main__':

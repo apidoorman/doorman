@@ -8,6 +8,7 @@ from utils.database import db
 from utils.cache import cache_manager
 from services.cache import pygate_cache
 from models.group_model import GroupModel
+from pymongo.errors import DuplicateKeyError
 
 class GroupService:
     group_collection = db.group
@@ -17,10 +18,13 @@ class GroupService:
         """
         Onboard a group to the platform.
         """
-        if pygate_cache.get_cache('group_cache', data.group_name) or GroupService.group_collection.find_one({'group_name': data.group_name}):
+        if pygate_cache.get_cache('group_cache', data.group_name):
             raise ValueError("Group already exists")
         group_dict = data.dict()
-        insert_result = GroupService.group_collection.insert_one(group_dict)
+        try:
+            insert_result = GroupService.group_collection.insert_one(group_dict)
+        except DuplicateKeyError as e:
+            raise ValueError("Group already exists") from e
         if not insert_result.acknowledged:
             raise ValueError("Database error: Unable to insert group")
         group_dict['_id'] = str(insert_result.inserted_id)
@@ -43,7 +47,7 @@ class GroupService:
         Get all groups.
         """
         skip = (page - 1) * page_size
-        cursor = GroupService.group_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
+        cursor = GroupService.group_collection.find().sort('group_name', 1).skip(skip).limit(page_size)
         groups = cursor.to_list(length=None)
         for group in groups:
             if group.get('_id'): del group['_id']
