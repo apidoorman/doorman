@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+from datetime import timedelta
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
@@ -65,6 +66,10 @@ class Settings(BaseSettings):
     authjwt_cookie_domain: str = domain
     authjwt_cookie_path: str = "/"
     authjwt_cookie_samesite: str = 'lax'
+    authjwt_cookie_csrf_protect: bool = False
+
+    authjwt_access_token_expires: timedelta = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRES_MINUTES", 15)))
+    authjwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", 30)))
 
     class Config:
         env_file = ".env"

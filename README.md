@@ -34,12 +34,34 @@ No onboarding and no specialized Go or C expertise required. Just a simple, cost
 
 ## Installation
 
-Ensure you have a MongoDB server and redis running (locally for now).
+Ensure you have a MongoDB server and redis running.
 
 Install requirements
 
 ```bash
   pip install -r requirements.txt
+```
+
+Set environment variables
+```bash
+MONGO_DB_URI=mongodb://localhost:27017/pygate
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+
+JWT_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+ALLOWED_ORIGINS=http://localhost:5001
+ALLOW_CREDENTIALS=true
+ALLOW_METHODS=GET,POST,PUT,DELETE
+ALLOW_HEADERS=*
+
+PORT=5001
+HTTPS_ONLY=False
+COOKIE_DOMAIN=localhost
+
+PID_FILE=pygate.pid
 ```
 
 Start pygate
@@ -68,7 +90,7 @@ The contents of this repository are property of pygate.org.
 
 Review the Apache License 2.0 for valid authorization of use.
 
-See https://github.com/pypeople-dev/pygate for more information.
+[View License - Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 
 

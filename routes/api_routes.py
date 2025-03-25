@@ -4,11 +4,12 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from services.api_service import ApiService
 from utils.auth_util import auth_required
+from utils.subscription_util import subscription_required
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
 from models.api_model import ApiModel
@@ -30,12 +31,12 @@ Response:
     "message": "API created successfully"
 }
 """
-@api_router.post("")
+@api_router.post("",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def create_api(api_data: ApiModel):
     try:
-        auth_required()
-        whitelist_check()
-        role_required(("admin", "dev", "platform"))
         await ApiService.create_api(api_data)
         return JSONResponse(content={'message': 'API created successfully'}, status_code=201)
     except ValueError as e:
@@ -54,12 +55,12 @@ Response:
     "api_path": "<string>"
 }
 """
-@api_router.get("/{api_name}/{api_version}")
+@api_router.get("/{api_name}/{api_version}",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def get_api_by_name_version(api_name: str, api_version: str):
     try:
-        auth_required()
-        whitelist_check()
-        role_required(("admin", "dev", "platform"))
         api = await ApiService.get_api_by_name_version(api_name, api_version)
         if api.get('_id'): del api['_id']
         return JSONResponse(content=api, status_code=200)
@@ -79,12 +80,12 @@ Response:
     "api_path": "<string>"
 }
 """
-@api_router.get("/all")
+@api_router.get("/all",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def get_all_apis(page: int = 1, page_size: int = 10):
     try:
-        auth_required()
-        whitelist_check()
-        role_required(("admin", "dev", "platform"))
         apis = await ApiService.get_apis(page, page_size)
         return JSONResponse(content=apis, status_code=200)
     except ValueError as e:
