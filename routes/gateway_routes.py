@@ -16,13 +16,17 @@ from models.request_model import RequestModel
 
 gateway_router = APIRouter()
 
-@gateway_router.api_route("/rest/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
+@gateway_router.api_route(
+    "/rest/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    dependencies=[
+        Depends(auth_required),
+        Depends(subscription_required)
+    ]
+)
+async def rest_gateway(path: str, request: Request, 
+                       Authorize: AuthJWT = Depends()):
     try:
-        auth_required()
-        whitelist_check()
-        subscription_required()
-
         request_model = RequestModel(
             method=request.method,
             path=path,

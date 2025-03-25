@@ -4,7 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from services.group_service import GroupService
@@ -28,12 +28,12 @@ Response:
     "message": "Group created successfully"
 }
 """
-@group_router.post("")
+@group_router.post("",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def create_group(api_data: GroupModel):
     try:
-        auth_required()
-        whitelist_check()
-        role_required(("admin", "dev", "platform"))
         await GroupService.create_group(api_data)
         return JSONResponse(content={'message': 'Group created successfully'}, status_code=201)
     except ValueError as e:
@@ -56,12 +56,12 @@ Response:
     ]
 }
 """
-@group_router.get("/all")
+@group_router.get("/all",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def get_groups(page: int = 1, page_size: int = 10):
     try:
-        auth_required()
-        whitelist_check()
-        role_required(("admin", "dev", "platform"))
         groups = await GroupService.get_groups(page, page_size)
         return JSONResponse(content=groups, status_code=200)
     except ValueError as e:
@@ -83,12 +83,12 @@ Response:
     ]
 }
 """
-@group_router.get("/{group_name}")
+@group_router.get("/{group_name}",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def get_group(group_name: str):
     try:
-        auth_required()
-        whitelist_check()
-        role_required(("admin", "dev", "platform"))
         group = await GroupService.get_group(group_name)
         return JSONResponse(content=group, status_code=200)
     except ValueError as e:

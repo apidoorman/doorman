@@ -1,19 +1,27 @@
 import json
 import random
-import unittest
 import time
 import requests
+import pytest
+import asyncio
 
-class TestPygate(unittest.TestCase):
+class TestPygate:
     base_url = "http://localhost:3002"
     token = None
     api_name = None
     endpoint_path = None
     group_name = None
     role_name = None
+    username = None
+    email = None
+    password = None
 
-    @classmethod
-    def setUpClass(cls):
+    @staticmethod
+    def getAccessCookies():
+        return {"access_token_cookie": TestPygate.token}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def setup_class(cls):
         for _ in range(5):
             try:
                 response = requests.get(f"{cls.base_url}/platform/status")
@@ -27,150 +35,212 @@ class TestPygate(unittest.TestCase):
             print("Failed to connect to the server after multiple attempts")
             raise RuntimeError("pygate is not running")
 
-    def test_01_auth_calls(self):
+    @pytest.mark.asyncio
+    @pytest.mark.order(1)
+    async def test_auth_calls(self):
         response = requests.post(f"{self.base_url}/platform/authorization", 
-                                 json={"email": "admin@pygate.org", "password": "password1"})
-        self.assertEqual(response.status_code, 200)
+                                json={"email": "admin@pygate.org", "password": "password1"})
+        assert response.status_code == 200
 
         TestPygate.token = response.json().get('access_token') 
-        self.assertIsNotNone(TestPygate.token)
+        assert TestPygate.token is not None
 
         response = requests.get(f"{self.base_url}/platform/authorization/status",
-                                headers={"Authorization": f"Bearer {TestPygate.token}"})
-        self.assertEqual(response.status_code, 200)
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
 
-    def test_02_create_user(self):
-        if not TestPygate.token:
-            self.fail("Auth token is missing")
-
+    @pytest.mark.asyncio
+    @pytest.mark.order(2)
+    async def test_create_user(self):
+        TestPygate.username = "newuser" + str(time.time())
+        TestPygate.email = "newuser" + str(time.time()) + "@pygate.org"
+        TestPygate.password = "newpass"
         response = requests.post(f"{self.base_url}/platform/user", 
-                                 headers={"Authorization": f"Bearer {TestPygate.token}"},
+                                 cookies=TestPygate.getAccessCookies(),
                                  json={
-                                     "username": "newuser" + str(time.time()), 
-                                     "email": "newuser" + str(time.time()) + "@pygate.org", 
-                                     "password": "newpass", 
-                                     "role": "user"
+                                     "username": TestPygate.username, 
+                                     "email": TestPygate.email, 
+                                     "password": TestPygate.password, 
+                                     "role": "admin",
+                                     "groups": ["ALL"]
                                  })
-        self.assertEqual(response.status_code, 201)
+        assert response.status_code == 201
 
-    def test_03_onboard_api(self):
-        """Step 3: Onboard an API"""
-        if not TestPygate.token:
-            self.fail("Auth token is missing")
+    @pytest.mark.asyncio
+    @pytest.mark.order(3)
+    async def test_create_group(self):
+        TestPygate.group_name = "testgroup" + str(time.time())
+        response = requests.post(f"{self.base_url}/platform/group", 
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "group_name": TestPygate.group_name, 
+                                    "group_description": "Test group"
+                                })
+        assert response.status_code == 201
 
+    @pytest.mark.asyncio
+    @pytest.mark.order(4)
+    async def test_get_groups(self):
+        response = requests.get(f"{self.base_url}/platform/group/all",
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(5)
+    async def test_get_group(self):
+        response = requests.get(f"{self.base_url}/platform/group/" + TestPygate.group_name,
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(6)
+    async def test_create_role(self):
+        TestPygate.role_name = "testrole" + str(time.time())
+        response = requests.post(f"{self.base_url}/platform/role", 
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "role_name": TestPygate.role_name,
+                                    "role_description": "Test role",
+                                    "manage_users": False,
+                                    "manage_apis": False,
+                                    "manage_endpoints": False,
+                                    "manage_groups": False,
+                                    "manage_roles": False
+                                })
+        assert response.status_code == 201
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(7)
+    async def test_get_roles(self):
+        response = requests.get(f"{self.base_url}/platform/role/all",
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(8)
+    async def test_get_role(self):
+        response = requests.get(f"{self.base_url}/platform/role/" + TestPygate.role_name,
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(9)
+    async def test_onboard_api(self):
         TestPygate.api_name = "test" + "".join(random.sample("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 8))
-        
         response = requests.post(f"{self.base_url}/platform/api", 
-                                 headers={"Authorization": f"Bearer {TestPygate.token}"},
+                                 cookies=TestPygate.getAccessCookies(),
                                  json={
                                      "api_name": TestPygate.api_name,
                                      "api_version": "v1", 
                                      "api_description": "Test API", 
                                      "api_servers": ["https://fake-json-api.mock.beeceptor.com/"], 
+                                     "api_allowed_roles": [TestPygate.role_name],
+                                     "api_allowed_groups": [TestPygate.group_name],
                                      "api_type": "REST"
                                  })
-        self.assertEqual(response.status_code, 201)
+        assert response.status_code == 201
 
-    def test_04_onboard_endpoint(self):
-        if not TestPygate.token:
-            self.fail("Auth token is missing")
+    @pytest.mark.asyncio
+    @pytest.mark.order(10)
+    async def test_onboard_endpoint(self):
 
         TestPygate.endpoint_path = "/users"
 
         response = requests.post(f"{self.base_url}/platform/endpoint", 
-                                 headers={"Authorization": f"Bearer {TestPygate.token}"},
+                                 cookies=TestPygate.getAccessCookies(),
                                  json={
                                      "api_name": TestPygate.api_name,
                                      "api_version": "v1", 
                                      "endpoint_uri": TestPygate.endpoint_path,
                                      "endpoint_method": "GET"
                                  })
-        self.assertEqual(response.status_code, 201)
+        assert response.status_code == 201
 
-    def test_05_gateway_call(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"))
-        self.assertEqual(response.status_code, 200)
+    @pytest.mark.asyncio
+    @pytest.mark.order(11)
+    async def test_subscribe(self):
+        response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
+                                 cookies=TestPygate.getAccessCookies(),
+                                    json={
+                                        "username": TestPygate.username, 
+                                        "api_name": TestPygate.api_name, 
+                                        "api_version": "v1"
+                                    })
+        assert response.status_code == 200
 
-    def test_06_get_api(self):
+    @pytest.mark.asyncio
+    @pytest.mark.order(12)
+    async def test_re_auth_calls(self):
+        response = requests.post(f"{self.base_url}/platform/authorization", 
+                                 json={"email": TestPygate.email, "password": TestPygate.password})
+        assert response.status_code == 200
+
+        TestPygate.token = response.json().get('access_token') 
+        assert TestPygate.token is not None
+
+        response = requests.get(f"{self.base_url}/platform/authorization/status",
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(13)
+    async def test_gateway_call(self):
+        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(14)
+    async def test_unsubscribe(self):
+        response = requests.post(f"{self.base_url}/platform/subscription/unsubscribe", 
+                                    cookies=TestPygate.getAccessCookies(),
+                                    json={
+                                        "username": TestPygate.username, 
+                                        "api_name": TestPygate.api_name, 
+                                        "api_version": "v1"
+                                    })
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(15)
+    async def test_re_gateway_call(self):
+        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(16)
+    async def test_get_api(self):
         response = requests.get(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
-                                headers={"Authorization": f"Bearer {TestPygate.token}"})
-        self.assertEqual(response.status_code, 200)
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
 
-    def test_07_get_all_apis(self):
+    @pytest.mark.asyncio
+    @pytest.mark.order(17)
+    async def test_get_all_apis(self):
         response = requests.get(f"{self.base_url}/platform/api/all",
-                                headers={"Authorization": f"Bearer {TestPygate.token}"},
+                                cookies=TestPygate.getAccessCookies(),
                                 params={"page": 1, "page_size": 10})
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
 
-    def test_08_api_endpoints(self):
+    @pytest.mark.asyncio
+    @pytest.mark.order(18)
+    async def test_api_endpoints(self):
         response = requests.get(f"{self.base_url}/platform/endpoint/api/" + TestPygate.api_name + "/v1",
-                                headers={"Authorization": f"Bearer {TestPygate.token}"}) 
-        self.assertEqual(response.status_code, 200)
+                                cookies=TestPygate.getAccessCookies()) 
+        assert response.status_code == 200
 
-    def test_09_create_group(self):
-        TestPygate.group_name = "testgroup" + str(time.time())
-        response = requests.post(f"{self.base_url}/platform/group", 
-                                 headers={"Authorization": f"Bearer {TestPygate.token}"},
+    @pytest.mark.asyncio
+    @pytest.mark.order(19)
+    async def test_re_subscribe(self):
+        response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
+                                 cookies=TestPygate.getAccessCookies(),
                                     json={
-                                        "group_name": TestPygate.group_name, 
-                                        "group_description": "Test group"
+                                        "username": TestPygate.username, 
+                                        "api_name": TestPygate.api_name, 
+                                        "api_version": "v1"
                                     })
-        
-        self.assertEqual(response.status_code, 201)
-
-    def test_10_get_groups(self):
-        response = requests.get(f"{self.base_url}/platform/group/all",
-                                headers={"Authorization": f"Bearer {TestPygate.token}"})
-        self.assertEqual(response.status_code, 200)
-
-    def test_11_get_group(self):
-        response = requests.get(f"{self.base_url}/platform/group/" + TestPygate.group_name,
-                                headers={"Authorization": f"Bearer {TestPygate.token}"})
-        self.assertEqual(response.status_code, 200)
-
-    def test_12_create_role(self):
-        TestPygate.role_name = "testrole" + str(time.time())
-        response = requests.post(f"{self.base_url}/platform/role", 
-                                 headers={"Authorization": f"Bearer {TestPygate.token}"},
-                                    json={
-                                        "role_name": TestPygate.role_name,
-                                        "role_description": "Test role",
-                                        "manage_users": False,
-                                        "manage_apis": False,
-                                        "manage_endpoints": False,
-                                        "manage_groups": False,
-                                        "manage_roles": False
-                                    })
-        self.assertEqual(response.status_code, 201)
-
-    def test_13_get_roles(self):
-        response = requests.get(f"{self.base_url}/platform/role/all",
-                                headers={"Authorization": f"Bearer {TestPygate.token}"})
-        self.assertEqual(response.status_code, 200)
-
-    def test_14_get_role(self):
-        response = requests.get(f"{self.base_url}/platform/role/" + TestPygate.role_name,
-                                headers={"Authorization": f"Bearer {TestPygate.token}"})
-        self.assertEqual(response.status_code, 200)
-
-def suite():
-    test_suite = unittest.TestSuite()
-    test_suite.addTest(TestPygate("test_01_auth_calls"))
-    test_suite.addTest(TestPygate("test_02_create_user"))
-    test_suite.addTest(TestPygate("test_03_onboard_api"))
-    test_suite.addTest(TestPygate("test_04_onboard_endpoint"))
-    test_suite.addTest(TestPygate("test_05_gateway_call"))
-    test_suite.addTest(TestPygate("test_06_get_api"))
-    test_suite.addTest(TestPygate("test_07_get_all_apis"))
-    test_suite.addTest(TestPygate("test_08_api_endpoints"))
-    test_suite.addTest(TestPygate("test_09_create_group"))
-    test_suite.addTest(TestPygate("test_10_get_groups"))
-    test_suite.addTest(TestPygate("test_11_get_group"))
-    test_suite.addTest(TestPygate("test_12_create_role"))
-    test_suite.addTest(TestPygate("test_13_get_roles"))
-    test_suite.addTest(TestPygate("test_14_get_role"))
-    return test_suite
+        assert response.status_code == 200
 
 if __name__ == '__main__':
-    runner = unittest.TextTestRunner()
-    runner.run(suite())
+    pytest.main()
