@@ -42,7 +42,7 @@ Response:
 @user_router.post("")
 async def create_user(user_data: UserModel, Authorize: AuthJWT = Depends()):
     try:
-        auth_required()
+        
         role_required(["admin", "dev", "platform"])
         new_user = await UserService.create_user(user_data)
         return JSONResponse(content={"message": "User created successfully"}, status_code=201)
@@ -67,8 +67,7 @@ Response:
 }
 """
 @user_router.put("/{user_id}")
-@auth_required()
-@whitelist_check()
+
 @role_required(["admin", "dev", "platform"])
 async def update_user(user_id: str, request: Request):
     try:
@@ -91,8 +90,7 @@ Response:
 }
 """
 @user_router.put("/{user_id}/update-password")
-@auth_required()
-@whitelist_check()
+
 @role_required(["admin", "dev", "platform"])
 async def update_user_password(user_id: str, request: Request):
     try:
@@ -123,8 +121,7 @@ Response:
 }
 """
 @user_router.get("/{username}")
-@auth_required()
-@whitelist_check()
+
 @role_required(["admin", "dev", "platform"])
 async def get_user_by_username(username: str):
     try:
@@ -148,8 +145,7 @@ Response:
 }
 """
 @user_router.get("/email/{email}")
-@auth_required()
-@whitelist_check()
+
 @role_required(["admin", "dev", "platform"])
 async def get_user_by_email(email: str):
     try:

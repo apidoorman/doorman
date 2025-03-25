@@ -61,10 +61,12 @@ Response:
 {
 }
 """
-@authorization_router.get("/authorization/status")
-async def status(Authorize: AuthJWT = Depends()):
+@authorization_router.get("/authorization/status",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def status():
     try:
-        auth_required()
         return JSONResponse(content={"status": "authorized"}, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -81,10 +83,12 @@ Response:
     "message": "Your token has been invalidated"
 }
 """
-@authorization_router.post("/authorization/invalidate")
+@authorization_router.post("/authorization/invalidate",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def logout(response: Response, Authorize: AuthJWT = Depends()):
     try:
-        auth_required()
         jwt_id = Authorize.get_raw_jwt()['jti']
         user = Authorize.get_jwt_subject()
         Authorize.unset_jwt_cookies(response)

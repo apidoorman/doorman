@@ -12,6 +12,7 @@ import logging
 
 from utils.database import db
 from services.cache import pygate_cache
+import uuid
 
 class GatewayService:
     logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
@@ -25,9 +26,12 @@ class GatewayService:
         """
         External gateway.
         """
+        request_id = uuid.uuid4()
         start_time = time.time() * 1000
         gateway_end_time = None
         backend_start_time = None
+        response = None
+        GatewayService.logger.info(f"REST | {request_id} | Resource: {request.path}")
         try:
             match = re.match(r"([^/]+/v\d+)", request.path)
             api_name_version = '/' + match.group(1) if match else ""
@@ -66,12 +70,14 @@ class GatewayService:
                 return JSONResponse("Endpoint does not exists in backend service", status_code=404)
             return JSONResponse(content=response_content, status_code=response.status_code)
         except Exception as e:
-            GatewayService.logger.error(f"Error in rest_gateway: {str(e)}")
+            GatewayService.logger.error(f"REST | {request_id} | Error in rest_gateway: {str(e)}")
             return {"error": str(e)}
         finally:
             end_time = time.time() * 1000
+            response.headers['X-Request-Id'] = request_id
             if gateway_end_time:
-                GatewayService.logger.info(f"Gateway Time: {gateway_end_time - start_time}ms")
+                GatewayService.logger.info(f"REST | {request_id} | Gateway Time: {gateway_end_time - start_time}ms")
             if backend_start_time:
-                GatewayService.logger.info(f"Backend Time: {end_time - backend_start_time}ms")
-            GatewayService.logger.info(f"Total Time: {end_time - start_time}ms")
+                GatewayService.logger.info(f"REST | {request_id} | Backend Time: {end_time - backend_start_time}ms")
+            GatewayService.logger.info(f"REST | {request_id} | Total Time: {end_time - start_time}ms")
+            GatewayService.logger.info(f"REST | {request_id} | Status Code: {response.status_code}")

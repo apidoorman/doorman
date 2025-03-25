@@ -12,6 +12,8 @@ class ApiModel(BaseModel):
     api_name: str = Field(..., min_length=1, max_length=25)
     api_version: str = Field(..., min_length=1, max_length=2)
     api_description: str = Field(None, min_length=1, max_length=127)
+    api_allowed_roles: List[str] = Field(default_factory=list)
+    api_allowed_groups: List[str] = Field(default_factory=list)
     api_servers: List[str] = Field(default_factory=list)
     api_type: str = None
     
