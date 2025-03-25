@@ -9,8 +9,14 @@ from utils.cache import cache_manager
 from services.cache import pygate_cache
 from services.api_service import ApiService
 
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger("pygate.gateway")
+
 class SubscriptionService:
     subscriptions_collection = db.subscriptions
+    api_collection = db.apis
 
     @staticmethod
     @cache_manager.cached(ttl=300)
@@ -18,7 +24,10 @@ class SubscriptionService:
         """
         Check if an API exists.
         """
-        return pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}") or ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}") or ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+        if api and '_id' in api:
+            del api['_id']
+        return api
 
     @staticmethod
     @cache_manager.cached(ttl=300)
@@ -38,44 +47,43 @@ class SubscriptionService:
         """
         Subscribe to an API.
         """
-        username = data.get('username')
-        api_name = data.get('api_name')
-        api_version = data.get('api_version')
-        
-        if not await SubscriptionService.api_exists(api_name, api_version):
+        if not SubscriptionService.api_exists(data.api_name, data.api_version):
             raise ValueError("API does not exist")
-            
-        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', username) or SubscriptionService.subscriptions_collection.find_one({'username': username})
+        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', data.username) or SubscriptionService.subscriptions_collection.find_one({'username': data.username})
         if user_subscriptions is None:
             user_subscriptions = {
-                'username': username,
-                'apis': []
+                'username': data.username,
+                'apis': [f"{data.api_name}/{data.api_version}"]
             }
             SubscriptionService.subscriptions_collection.insert_one(user_subscriptions)
-        elif 'apis' in user_subscriptions and f"{api_name}/{api_version}" in user_subscriptions['apis']:
+        elif 'apis' in user_subscriptions and f"{data.api_name}/{data.api_version}" in user_subscriptions['apis']:
             raise ValueError("User is already subscribed to the API")
-            
-        updated_subscriptions = SubscriptionService.subscriptions_collection.update_one(
-            {'username': username},
-            {'$push': {'apis': f"{api_name}/{api_version}"}}
-        )
-        pygate_cache.set_cache('user_subscription_cache', username, updated_subscriptions)
-
+        else:
+            SubscriptionService.subscriptions_collection.update_one(
+                {'username': data.username},
+                {'$push': {'apis': f"{data.api_name}/{data.api_version}"}}
+            )
+        user_subscriptions = SubscriptionService.subscriptions_collection.find_one({'username': data.username})
+        if user_subscriptions and '_id' in user_subscriptions:
+            del user_subscriptions['_id']
+        pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        
     @staticmethod
     async def unsubscribe(data):
         """
         Unsubscribe from an API.
         """
-        username = data.get('username')
-        api_name = data.get('api_name')
-        api_version = data.get('api_version')
-        if not SubscriptionService.api_exists(api_name, api_version):
+        if not await SubscriptionService.api_exists(data.api_name, data.api_version):
             raise ValueError("API does not exist")
-        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', username) or SubscriptionService.subscriptions_collection.find_one({'username': username})
-        if not user_subscriptions.contains(
-                f"""{api_name}/{api_version}"""):
-            raise ValueError("User is already not subscribed to the API")
-        updated_subscriptions = SubscriptionService.subscriptions_collection.update_one(
-            {'username': username},
-            {'$pull': {'apis': f"""{api_name}/{api_version}"""}})
-        pygate_cache.get_cache('user_subscription_cache', username, updated_subscriptions)
+        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', data.username) or SubscriptionService.subscriptions_collection.find_one({'username': data.username})
+        if not user_subscriptions or f"{data.api_name}/{data.api_version}" not in user_subscriptions.get('apis', []):
+            raise ValueError("User is not subscribed to the API")
+        user_subscriptions['apis'].remove(f"{data.api_name}/{data.api_version}")
+        update_result = SubscriptionService.subscriptions_collection.update_one(
+            {'username': data.username},
+            {'$set': {'apis': user_subscriptions.get('apis', [])}}
+        )
+        user_subscriptions = SubscriptionService.subscriptions_collection.find_one({'username': data.username})
+        if user_subscriptions and '_id' in user_subscriptions:
+            del user_subscriptions['_id']
+        pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)

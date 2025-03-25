@@ -12,6 +12,7 @@ from services.subscription_service import SubscriptionService
 from utils.auth_util import auth_required
 from utils.whitelist_util import whitelist_check
 from utils.role_util import role_required
+from models.subscribe_model import SubscribeModel
 
 subscription_router = APIRouter()
 
@@ -28,14 +29,13 @@ Response:
     "message": "Successfully subscribed to the API"
 }
 """
-@subscription_router.post("/subscribe")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
-async def subscribe_api(request: Request):
+@subscription_router.post("/subscribe",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def subscribe_api(api_data: SubscribeModel):
     try:
-        data = await request.json()
-        SubscriptionService.subscribe(data)
+        await SubscriptionService.subscribe(api_data)
         return JSONResponse(content={'message': 'Successfully subscribed to the API'}, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -54,14 +54,13 @@ Response:
     "message": "Successfully unsubscribed from the API"
 }
 """
-@subscription_router.post("/unsubscribe")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
-async def unsubscribe_api(request: Request):
+@subscription_router.post("/unsubscribe",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def unsubscribe_api(api_data: SubscribeModel):
     try:
-        data = await request.json()
-        SubscriptionService.unsubscribe(data)
+        await SubscriptionService.unsubscribe(api_data)
         return JSONResponse(content={'message': 'Successfully unsubscribed from the API'}, status_code=200)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -77,10 +76,10 @@ Response:
     "subscriptions": []
 }
 """
-@subscription_router.get("/subscriptions/{user_id}")
-@auth_required()
-@whitelist_check()
-@role_required(("admin", "dev", "platform"))
+@subscription_router.get("/subscriptions/{user_id}",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def subscriptions_for_user_by_id(user_id: str):
     try:
         subscriptions = SubscriptionService.get_user_subscriptions(user_id)
@@ -98,8 +97,10 @@ Response:
     "subscriptions": []
 }
 """
-@subscription_router.get("/subscriptions")
-@auth_required()
+@subscription_router.get("/subscriptions",
+    dependencies=[
+        Depends(auth_required)
+    ])
 async def subscriptions_for_current_user(Authorize: AuthJWT = Depends()):
     try:
         username = Authorize.get_jwt_subject()

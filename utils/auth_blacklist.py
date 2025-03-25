@@ -1,13 +1,13 @@
 import asyncio
 from datetime import datetime, timedelta
 import heapq
-import asyncio
 
 jwt_blacklist = {}
 
 class TimedHeap:
-    def __init__(self):
+    def __init__(self, purge_after=timedelta(hours=1)):
         self.heap = []
+        self.purge_after = purge_after
 
     async def push(self, item):
         expire_time = datetime.now() + self.purge_after
