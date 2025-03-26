@@ -242,5 +242,59 @@ class TestPygate:
                                     })
         assert response.status_code == 200
 
+    @pytest.mark.asyncio
+    @pytest.mark.order(20)
+    async def test_update_user(self):
+        TestPygate.email  = "newuser" + str(time.time()) + "@pygate.org"
+        response = requests.put(f"{self.base_url}/platform/user/" + TestPygate.username,
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "email": TestPygate.email,
+                                    "role": "admin",
+                                    "groups": ["ALL", "ALL_UPDATED"]
+                                })
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(21)
+    async def test_update_password(self):
+        new_password = "newpass123"
+        response = requests.put(f"{self.base_url}/platform/user/" + TestPygate.username + "/update-password",
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "old_password": TestPygate.password,
+                                    "new_password": new_password
+                                })
+        TestPygate.password = new_password
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(22)
+    async def test_re_auth_calls(self):
+        response = requests.post(f"{self.base_url}/platform/authorization", 
+                                 json={"email": TestPygate.email, "password": TestPygate.password})
+        assert response.status_code == 200
+
+        TestPygate.token = response.json().get('access_token') 
+        assert TestPygate.token is not None
+
+        response = requests.get(f"{self.base_url}/platform/authorization/status",
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(23)
+    async def test_get_user(self):
+        response = requests.get(f"{self.base_url}/platform/user/" + TestPygate.username,
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+    
+    @pytest.mark.asyncio
+    @pytest.mark.order(24)
+    async def test_get_user_by_email(self):
+        response = requests.get(f"{self.base_url}/platform/user/email/" + TestPygate.email,
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
 if __name__ == '__main__':
     pytest.main()
