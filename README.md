@@ -4,31 +4,37 @@ One Platform for REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed wit
 
 🔗 [pygate.org](https://pygate.org)
 
-No onboarding and no specialized Go or C expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
+No specialized Go or C expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
 
 ## MVP Roadmap 🚀
-- [ ] REST gateway implementation (in progress ⏳).
-- [ ] Code optimization and testing.
-- [ ] Add REST capabilties to user documentation.
-- [ ] Version 1.0.0 release.
-- [ ] GraphQL gateway implementation.
-- [ ] Code optimization and testing.
-- [ ] Add GraphQL capabilties to user documentation.
-- [ ] Version 1.1.0 release.
-- [ ] gRPC gateway implementation.
-- [ ] Code optimization and testing.
-- [ ] Add gRPC capabilties to user documentation.
-- [ ] Version 1.2.0 release.
-- [ ] Websockets gateway implementation.
-- [ ] Code optimization and testing.
-- [ ] Add Websockets capabilties to user documentation.
-- [ ] Version 1.3.0 release.
-- [ ] Improve caching.
-- [ ] Add logging.
-- [ ] Enable field encryption.
-- [ ] Refactor codebase.
-- [ ] Improve user documentation.
-- [ ] Version 1.4.0 release.
+- [x]  Gateway authorization.
+- [x]  Basic user management.
+- [x]  API subscriptions.
+- [ ]  User roles and groups (in progress ⏳).
+- [ ]  REST gateway implementation (in progress ⏳).
+- [ ]  User rate limiting.
+- [ ]  User throttling.
+- [ ]  Code optimization and testing.
+- [ ]  Add REST capabilties to user documentation.
+- [ ]  Version 1.0.0 release.
+- [ ]  GraphQL gateway implementation.
+- [ ]  Code optimization and testing.
+- [ ]  Add GraphQL capabilties to user documentation.
+- [ ]  Version 1.1.0 release.
+- [ ]  gRPC gateway implementation.
+- [ ]  Code optimization and testing.
+- [ ]  Add gRPC capabilties to user documentation.
+- [ ]  Version 1.2.0 release.
+- [ ]  Websockets gateway implementation.
+- [ ]  Code optimization and testing.
+- [ ]  Add Websockets capabilties to user documentation.
+- [ ]  Version 1.3.0 release.
+- [ ]  Improve caching.
+- [ ]  Add logging.
+- [ ]  Enable field encryption.
+- [ ]  Refactor codebase.
+- [ ]  Improve user documentation.
+- [ ]  Version 1.4.0 release.
 
 
 
@@ -100,4 +106,4 @@ Use this code at your own risk. All liability is disclaimed.
 
 This code is not yet ready for production environments.
 
-By reading this disclaimer, you agree to the terms and conditions set forth in the license and noted annotations in the code.
+Using this project you agree to the terms and conditions set forth in the license and noted annotations in the code.
