@@ -7,7 +7,7 @@ See https://github.com/pypeople-dev/pygate for more information
 from utils import password_util
 from utils.database import db
 from services.cache import pygate_cache
-from models.user_model import UserModel
+from models.create_user_model import CreateUserModel
 
 import logging
 
@@ -20,14 +20,16 @@ class UserService:
         Retrieve a user by username.
         """
         try:
-            user = pygate_cache.get_cache('user_cache', username) or UserService.user_collection.find_one({'username': username})
-            logging.debug(f"Retrieved user: {user}, type: {type(user)}")
+            user = pygate_cache.get_cache('user_cache', username) or await UserService.user_collection.find_one({'username': username})
+            if '_id' in user:
+                del user['_id']
+            if 'password' in user:
+                del user['password']
             if not user:
                 raise ValueError("User not found")
             return user
         except Exception as e:
-            logging.error(f"Error in get_user_by_username: {str(e)}")
-            raise
+            raise ValueError("User not found")
 
     @staticmethod
     async def get_user_by_email(email):
@@ -36,16 +38,33 @@ class UserService:
         """
         try:
             user = UserService.user_collection.find_one({'email': email})
-            logging.debug(f"Retrieved user: {user}, type: {type(user)}")
+            if '_id' in user:
+                del user['_id']
+            if 'password' in user:
+                del user['password']
             if not user:
-                raise ValueError("Email not found")
+                raise ValueError("User not found")
             return user
         except Exception as e:
-            logging.error(f"Error in get_user_by_email: {str(e)}")
-            raise
+            raise ValueError("User not found")
+        
+    @staticmethod
+    async def get_user_by_email_with_password(email):
+        """
+        Retrieve a user by email.
+        """
+        try:
+            user = UserService.user_collection.find_one({'email': email})
+            if '_id' in user:
+                del user['_id']
+            if not user:
+                raise ValueError("User not found")
+            return user
+        except Exception as e:
+            raise ValueError("User not found")
 
     @staticmethod
-    async def create_user(data: UserModel):
+    async def create_user(data: CreateUserModel):
         """
         Create a new user.
         """
@@ -58,8 +77,11 @@ class UserService:
         data.password = password_util.hash_password(data.password)
 
         data_dict = data.dict()
-        user = UserService.user_collection.insert_one(data_dict)
-        data_dict['_id'] = str(user.inserted_id)
+        UserService.user_collection.insert_one(data_dict)
+        if '_id' in data_dict:
+            del data_dict['_id']
+        if 'password' in data_dict:
+            del data_dict['password']
         pygate_cache.set_cache('user_cache', data.username, data_dict)
 
     @staticmethod
@@ -68,7 +90,7 @@ class UserService:
         Verify password and return user if valid.
         """
         try:
-            user = await UserService.get_user_by_email(email)
+            user = await UserService.get_user_by_email_with_password(email)
             
             if not password_util.verify_password(password, user.get('password')):
                 raise ValueError("Invalid email or password")
@@ -84,12 +106,27 @@ class UserService:
         """
         Update user information.
         """
-        if 'password' in update_data:
-            update_data['password'] = password_util.hash_password(update_data.get('password'))
-        
-        UserService.user_collection.update_one({'username': username}, {'$set': update_data})
-        
+        update_data_dict = update_data.dict()
+        non_null_update_data = {key: value for key, value in update_data_dict.items() if value is not None}
+        if non_null_update_data:
+            UserService.user_collection.update_one({'username': username}, {'$set': non_null_update_data})
         user = UserService.user_collection.find_one({'username': username})
         if '_id' in user:
             del user['_id']
-        pygate_cache.get_cache('user_cache', username, user)
+        if 'password' in user:
+            del user['password']
+        pygate_cache.set_cache('user_cache', username, user)
+
+    @staticmethod
+    async def update_password(username, update_data):
+        """
+        Update user information.
+        """
+        hashed_password = password_util.hash_password(update_data.new_password)
+        UserService.user_collection.update_one({'username': username}, {'$set': {'password': hashed_password}})
+        user = UserService.user_collection.find_one({'username': username})
+        if '_id' in user:
+            del user['_id']
+        if 'password' in user:
+            del user['password']
+        pygate_cache.set_cache('user_cache', username, user)
