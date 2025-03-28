@@ -10,8 +10,6 @@ from fastapi_jwt_auth import AuthJWT
 
 from services.endpoint_service import EndpointService
 from utils.auth_util import auth_required
-from utils.whitelist_util import whitelist_check
-from utils.role_util import role_required
 from models.endpoint_model import EndpointModel
 
 endpoint_router = APIRouter()

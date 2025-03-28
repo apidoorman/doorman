@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+from services.subscription_service import SubscriptionService
 from utils import password_util
 from utils.database import db
 from services.cache import pygate_cache
@@ -13,6 +14,8 @@ import logging
 
 class UserService:
     user_collection = db.users
+    subscriptions_collection = db.subscriptions
+    api_collection = db.apis
 
     @staticmethod
     async def get_user_by_username(username):
@@ -110,6 +113,8 @@ class UserService:
         non_null_update_data = {key: value for key, value in update_data_dict.items() if value is not None}
         if non_null_update_data:
             UserService.user_collection.update_one({'username': username}, {'$set': non_null_update_data})
+        if non_null_update_data.get('role'):
+            await UserService.purge_apis_after_role_change(username)
         user = UserService.user_collection.find_one({'username': username})
         if '_id' in user:
             del user['_id']
@@ -130,3 +135,21 @@ class UserService:
         if 'password' in user:
             del user['password']
         pygate_cache.set_cache('user_cache', username, user)
+
+    @staticmethod
+    async def purge_apis_after_role_change(username):
+        """
+        Remove subscriptions after role change.
+        """
+        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', username) or UserService.subscriptions_collection.find_one({'username': username})
+        for subscription in user_subscriptions.get('apis'):
+            api_name, api_version = subscription.split('/')
+            user = pygate_cache.get_cache('user_cache', username) or UserService.user_collection.find_one({'username': username})
+            api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}") or UserService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            if api and api.get('role') and user.get('role') not in api.get('role'):
+                user_subscriptions['apis'].remove(subscription)
+        UserService.subscriptions_collection.update_one(
+            {'username': username},
+            {'$set': {'apis': user_subscriptions.get('apis', [])}}
+        )
+        pygate_cache.set_cache('user_subscription_cache', username, user_subscriptions)

@@ -10,8 +10,7 @@ from fastapi_jwt_auth import AuthJWT
 
 from services.user_service import UserService
 from utils.auth_util import auth_required
-from utils.whitelist_util import whitelist_check
-from utils.role_util import role_required
+from utils.role_util import platform_role_required_bool
 from models.create_user_model import CreateUserModel
 from models.update_user_model import UpdateUserModel
 from models.update_password_model import UpdatePasswordModel
@@ -69,8 +68,10 @@ Response:
     dependencies=[
         Depends(auth_required)
     ])
-async def update_user(username: str, api_data: UpdateUserModel):
+async def update_user(username: str, api_data: UpdateUserModel, Authorize: AuthJWT = Depends()):
     try:
+        if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(('admin', 'dev'), Authorize.get_jwt_subject()):
+            raise HTTPException(status_code=403, detail="Can only update your own information")
         await UserService.update_user(username, api_data)
         return JSONResponse(content={"message": "User updated successfully"}, status_code=200)
     except ValueError as e:
@@ -92,8 +93,10 @@ Response:
     dependencies=[
         Depends(auth_required)
     ])
-async def update_user_password(username: str, api_data: UpdatePasswordModel):
+async def update_user_password(username: str, api_data: UpdatePasswordModel, Authorize: AuthJWT = Depends()):
     try:
+        if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(('admin', 'dev'), Authorize.get_jwt_subject()):
+            raise HTTPException(status_code=403, detail="Can only update your own password")
         await UserService.update_password(username, api_data)
         return JSONResponse(content={"message": "Password updated successfully"}, status_code=200)
     except ValueError as e:

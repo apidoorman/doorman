@@ -10,8 +10,6 @@ from fastapi_jwt_auth import AuthJWT
 
 from services.subscription_service import SubscriptionService
 from utils.auth_util import auth_required
-from utils.whitelist_util import whitelist_check
-from utils.role_util import role_required
 from models.subscribe_model import SubscribeModel
 
 subscription_router = APIRouter()

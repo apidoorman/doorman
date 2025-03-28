@@ -4,18 +4,18 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+import logging
 from fastapi import HTTPException, Depends, Request
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import MissingTokenError
 from services.cache import pygate_cache
-from services.subscription_service import SubscriptionService
-
-import logging
+from services.user_service import UserService
+from services.api_service import ApiService
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
-def subscription_required(request: Request, Authorize: AuthJWT = Depends()):
+async def group_required(request: Request, Authorize: AuthJWT = Depends()):
     try:
         Authorize.jwt_required()
         username = Authorize.get_jwt_subject()
@@ -26,11 +26,11 @@ def subscription_required(request: Request, Authorize: AuthJWT = Depends()):
         else:
             path = full_path
         api_and_version = '/'.join(path.split('/')[:2])
-        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', username) or SubscriptionService.subscriptions_collection.find_one({'username': username})
-        subscriptions = user_subscriptions.get('apis') if user_subscriptions and 'apis' in user_subscriptions else None
-        if not subscriptions or api_and_version not in subscriptions:
-            logger.info(f"User {username} attempted access to {api_and_version}")
-            raise HTTPException(status_code=403, detail="You are not subscribed to this resource")
+        logger.info(f"API and version: {api_and_version}")
+        user = await UserService.get_user_by_username(username)
+        api = pygate_cache.get_cache('api_cache', api_and_version) or ApiService.api_collection.find_one({'api_name': api_and_version.split('/')[0], 'api_version': api_and_version.split('/')[1]})
+        if not set(user.get('groups', [])).intersection(api.get('api_allowed_groups', [])):
+            raise HTTPException(status_code=403, detail="You do not have the correct group for this")
     except MissingTokenError:
         raise HTTPException(status_code=401, detail="Missing token")
     except HTTPException as e:
