@@ -9,8 +9,6 @@ from fastapi.responses import JSONResponse
 
 from services.group_service import GroupService
 from utils.auth_util import auth_required
-from utils.whitelist_util import whitelist_check
-from utils.role_util import role_required
 from models.group_model import GroupModel
 
 group_router = APIRouter()
