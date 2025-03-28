@@ -135,7 +135,7 @@ class TestPygate:
                                      "api_description": "Test API", 
                                      "api_servers": ["https://fake-json-api.mock.beeceptor.com/"], 
                                      "api_allowed_roles": [TestPygate.role_name],
-                                     "api_allowed_groups": [TestPygate.group_name],
+                                     "api_allowed_groups": ["ALL", TestPygate.group_name],
                                      "api_type": "REST"
                                  })
         assert response.status_code == 201

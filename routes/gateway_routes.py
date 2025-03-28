@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
 from utils.auth_util import auth_required
+from utils.group_util import group_required
 from utils.subscription_util import subscription_required
-from utils.whitelist_util import whitelist_check
 from services.gateway_service import GatewayService
 from models.request_model import RequestModel
 
@@ -21,7 +21,8 @@ gateway_router = APIRouter()
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     dependencies=[
         Depends(auth_required),
-        Depends(subscription_required)
+        Depends(subscription_required),
+        Depends(group_required)
     ]
 )
 async def rest_gateway(path: str, request: Request, 
