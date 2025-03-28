@@ -7,13 +7,13 @@ One Platform for REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed wit
 No specialized Go or C expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
 
 ## MVP Roadmap 🚀
-- [x]  Gateway authorization.
+- [x]  Gateway Authentication.
 - [x]  Basic user management.
 - [x]  API subscriptions.
-- [ ]  User roles and groups (in progress ⏳).
+- [x]  Basic Authorization (user roles and groups).
 - [ ]  REST gateway implementation (in progress ⏳).
-- [ ]  User rate limiting.
-- [ ]  User throttling.
+- [ ]  Advanced user management (rate limiting and throttling).
+- [ ]  Advanced Authorization (role and group permissions).
 - [ ]  Code optimization and testing.
 - [ ]  Add REST capabilties to user documentation.
 - [ ]  Version 1.0.0 release.
