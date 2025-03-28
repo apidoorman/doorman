@@ -4,30 +4,26 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from functools import wraps
-from fastapi import HTTPException, Depends
+import logging
+from fastapi import HTTPException, Depends, Request
 from fastapi_jwt_auth import AuthJWT
+from fastapi_jwt_auth.exceptions import MissingTokenError
+from services.cache import pygate_cache
+from services.user_service import UserService
 
-def role_required(allowed_roles):
-    def decorator(func):
-        @wraps(func)
-        async def decorated_function(*args, Authorize: AuthJWT = Depends(), **kwargs):
-            try:
-                Authorize.jwt_required('cookies')
-                claims = Authorize.get_raw_jwt()
-                user_role = claims.get('role')
-                if not user_role or user_role not in allowed_roles:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="You do not have permission to access this resource"
-                    )
-                return await func(*args, Authorize=Authorize, **kwargs)
-            except HTTPException as e:
-                raise e
-            except Exception as e:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Could not validate role credentials"
-                )
-        return decorated_function
-    return decorator
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger("pygate.gateway")
+
+async def platform_role_required_bool(roles, username):
+    try:
+        user = await UserService.get_user_by_username(username)
+        if user.get('role') not in roles:
+            raise HTTPException(status_code=403, detail="You do not have the correct role for this")
+        return True
+    except MissingTokenError:
+        raise HTTPException(status_code=401, detail="Missing token")
+    except HTTPException as e:
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return False
