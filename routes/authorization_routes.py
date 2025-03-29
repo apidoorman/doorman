@@ -71,7 +71,7 @@ async def status():
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
     except ValueError as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=400)
         
 """
 Logout endpoint
@@ -100,7 +100,7 @@ async def logout(response: Response, Authorize: AuthJWT = Depends()):
         logging.error(f"Logout failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})
     except ValueError as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=400)
     
 @authorization_router.api_route("/status", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def rest_gateway():
