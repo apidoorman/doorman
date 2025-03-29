@@ -4,12 +4,14 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from fastapi_jwt_auth import AuthJWT
 
 from services.role_service import RoleService
 from utils.auth_util import auth_required
 from models.role_model import RoleModel
+from utils.role_util import platform_role_required_bool
 
 role_router = APIRouter()
 
@@ -34,8 +36,10 @@ Response:
     dependencies=[
         Depends(auth_required)
     ])
-async def create_role(api_data: RoleModel):
+async def create_role(api_data: RoleModel, Authorize: AuthJWT = Depends()):
     try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
+            return JSONResponse(content={"error": "You do not have permission to create roles"}, status_code=403)
         await RoleService.create_role(api_data)
         return JSONResponse(content={'message': 'Role created successfully'}, status_code=201)
     except ValueError as e:

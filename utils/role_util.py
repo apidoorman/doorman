@@ -5,19 +5,51 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 import logging
-from fastapi import HTTPException, Depends, Request
-from fastapi_jwt_auth import AuthJWT
+from fastapi import HTTPException
 from fastapi_jwt_auth.exceptions import MissingTokenError
+from utils.database import db
 from services.cache import pygate_cache
 from services.user_service import UserService
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
-async def platform_role_required_bool(roles, username):
+role_collection = db.roles
+
+@staticmethod
+async def validate_platform_role(role_name, action):
+    """
+    Get the platform roles from the cache or database.
+    """
+    try:
+        role = pygate_cache.get_cache("role_cache", role_name)
+        if not role:
+            role = role_collection.find_one({"role_name": role_name})
+            if not role:
+                raise ValueError("Role not found")
+            if role.get("_id"): del role["_id"]
+            pygate_cache.set_cache("role_cache", role_name, role)
+        if not role:
+            raise ValueError("No roles found for validation")
+        if action == "manage_users" and role.get("manage_users"):
+            return True
+        elif action == "manage_apis" and role.get("manage_apis"):
+            return True
+        elif action == "manage_endpoints" and role.get("manage_endpoints"):
+            return True
+        elif action == "manage_groups" and role.get("manage_groups"):
+            return True
+        elif action == "manage_roles" and role.get("manage_roles"):
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error getting platform roles: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+async def platform_role_required_bool(username, action):
     try:
         user = await UserService.get_user_by_username(username)
-        if user.get('role') not in roles:
+        if not await validate_platform_role(user.get('role'), action):
             raise HTTPException(status_code=403, detail="You do not have the correct role for this")
         return True
     except MissingTokenError:

@@ -4,13 +4,14 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
 from services.endpoint_service import EndpointService
 from utils.auth_util import auth_required
 from models.endpoint_model import EndpointModel
+from utils.role_util import platform_role_required_bool
 
 endpoint_router = APIRouter()
 
@@ -34,6 +35,8 @@ Response:
     ])
 async def create_endpoint(endpoint_data: EndpointModel, Authorize: AuthJWT = Depends()):
     try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
+            return JSONResponse(content={"error": "You do not have permission to create endpoints"}, status_code=403)
         await EndpointService.create_endpoint(endpoint_data)
         return JSONResponse(content={'message': 'Endpoint created successfully'}, status_code=201)
     except ValueError as e:

@@ -11,7 +11,7 @@ from models.group_model import GroupModel
 from pymongo.errors import DuplicateKeyError
 
 class GroupService:
-    group_collection = db.group
+    group_collection = db.groups
 
     @staticmethod
     async def create_group(data: GroupModel):
@@ -61,7 +61,13 @@ class GroupService:
         """
         Get a group by name.
         """
-        group = pygate_cache.get_cache('group_cache', group_name) or GroupService.group_collection.find_one({'group_name': group_name})
+        group = pygate_cache.get_cache('group_cache', group_name)
+        if not group:
+            group = GroupService.group_collection.find_one({'group_name': group_name})
+            if not group:
+                raise ValueError("Group not found")
+            if group.get('_id'): del group['_id']
+            pygate_cache.set_cache('group_cache', group_name, group)
         if not group:
             raise ValueError("Group not found")
         if group.get('_id'): del group['_id']

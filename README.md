@@ -12,8 +12,10 @@ No specialized Go or C expertise required. Just a simple, cost-effective API Gat
 - [x]  API subscriptions.
 - [x]  Basic Authorization (user roles and groups).
 - [ ]  REST gateway implementation (in progress ⏳).
+- [ ]  Basic logging.
 - [ ]  Advanced user management (rate limiting and throttling).
 - [ ]  Advanced Authorization (role and group permissions).
+- [ ]  Key based routing
 - [ ]  Code optimization and testing.
 - [ ]  Add REST capabilties to user documentation.
 - [ ]  Version 1.0.0 release.
@@ -30,7 +32,7 @@ No specialized Go or C expertise required. Just a simple, cost-effective API Gat
 - [ ]  Add Websockets capabilties to user documentation.
 - [ ]  Version 1.3.0 release.
 - [ ]  Improve caching.
-- [ ]  Add logging.
+- [ ]  Advanced logging.
 - [ ]  Enable field encryption.
 - [ ]  Refactor codebase.
 - [ ]  Improve user documentation.
@@ -63,6 +65,7 @@ ALLOW_CREDENTIALS=true
 ALLOW_METHODS=GET,POST,PUT,DELETE
 ALLOW_HEADERS=*
 
+ENV=dev
 PORT=5001
 HTTPS_ONLY=False
 COOKIE_DOMAIN=localhost
