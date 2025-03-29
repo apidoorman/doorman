@@ -65,6 +65,18 @@ class Database:
                 "role": "admin",
                 "groups": ["ALL"]
             })
+        if self.db.roles.find_one({"role_name": "admin"}):
+            self.db.roles.delete_one({"role_name": "admin"})
+        if not self.db.roles.find_one({"role_name": "admin"}):
+            self.db.roles.insert_one({
+                "role_name": 'admin',
+                "role_description": "admin role",
+                "manage_users": True,
+                "manage_apis": True,
+                "manage_endpoints": True,
+                "manage_groups": True,
+                "manage_roles": True
+            })
 
 database = Database()
 

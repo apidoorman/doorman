@@ -36,10 +36,26 @@ class GatewayService:
             match = re.match(r"([^/]+/v\d+)", request.path)
             api_name_version = '/' + match.group(1) if match else ""
             endpoint_uri = re.sub(r"^[^/]+/v\d+/", "", request.path)
-            api = pygate_cache.get_cache('api_cache', pygate_cache.get_cache('api_id_cache', api_name_version)) or GatewayService.api_collection.find_one({'api_path': api_name_version})   
+            api = pygate_cache.get_cache('api_cache', pygate_cache.get_cache('api_id_cache', api_name_version))
+            if not api:
+                api = GatewayService.api_collection.find_one({'api_path': api_name_version})
+                if not api:
+                    raise ValueError("API does not exists: " + api_name_version)
+                if api.get('_id'): del api['_id']
+                pygate_cache.set_cache('api_cache', pygate_cache.get_cache('api_id_cache', api_name_version), api)
             if not api:
                 raise ValueError("API does not exists: " + api_name_version)
-            endpoints = pygate_cache.get_cache('api_endpoint_cache', api.get('api_id')) or GatewayService.endpoint_collection.find({'api_id': api.get('api_id')})
+            endpoints = pygate_cache.get_cache('api_endpoint_cache', api.get('api_id'))
+            if not endpoints:
+                endpoints = GatewayService.endpoint_collection.find({'api_id': api.get('api_id')})
+                if not endpoints:
+                    raise ValueError("No endpoints found for API: " + api_name_version)
+                api_endpoints = []
+                for endpoint in endpoints:
+                    if endpoint.get('_id'): del endpoint['_id']
+                    api_endpoints.append(endpoint.get('endpoint_method') + endpoint.get('endpoint_uri'))
+                pygate_cache.set_cache('api_endpoint_cache', api.get('api_id'), api_endpoints)
+                endpoints = api_endpoints
             if not endpoints or not any(re.fullmatch(re.sub(r"\{[^/]+\}", r"([^/]+)", endpoint), request.method + '/' + endpoint_uri) for endpoint in endpoints):
                 raise ValueError("Endpoint does not exists - " + str(endpoints) + "-" + request.method + '/' + endpoint_uri)
             server_index = pygate_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0

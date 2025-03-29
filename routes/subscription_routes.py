@@ -4,13 +4,14 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
 from services.subscription_service import SubscriptionService
 from utils.auth_util import auth_required
 from models.subscribe_model import SubscribeModel
+from utils.group_util import group_required
 
 subscription_router = APIRouter()
 
@@ -31,8 +32,10 @@ Response:
     dependencies=[
         Depends(auth_required)
     ])
-async def subscribe_api(api_data: SubscribeModel):
+async def subscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends()):
     try:
+        if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
+            raise HTTPException(status_code=403, detail="You do not have the correct group access")
         await SubscriptionService.subscribe(api_data)
         return JSONResponse(content={'message': 'Successfully subscribed to the API'}, status_code=200)
     except ValueError as e:
@@ -56,8 +59,10 @@ Response:
     dependencies=[
         Depends(auth_required)
     ])
-async def unsubscribe_api(api_data: SubscribeModel):
+async def unsubscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends()):
     try:
+        if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
+            raise HTTPException(status_code=403, detail="You do not have the correct group access")
         await SubscriptionService.unsubscribe(api_data)
         return JSONResponse(content={'message': 'Successfully unsubscribed from the API'}, status_code=200)
     except ValueError as e:
