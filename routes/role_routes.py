@@ -11,6 +11,7 @@ from fastapi_jwt_auth import AuthJWT
 from services.role_service import RoleService
 from utils.auth_util import auth_required
 from models.role_model import RoleModel
+from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
 
 role_router = APIRouter()
@@ -40,8 +41,7 @@ async def create_role(api_data: RoleModel, Authorize: AuthJWT = Depends()):
     try:
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return JSONResponse(content={"error": "You do not have permission to create roles"}, status_code=403)
-        await RoleService.create_role(api_data)
-        return JSONResponse(content={'message': 'Role created successfully'}, status_code=201)
+        return process_response(await RoleService.create_role(api_data))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -72,8 +72,7 @@ Response:
     ])
 async def get_roles(page: int = 1, page_size: int = 10):
     try:
-        roles = await RoleService.get_roles(page, page_size)
-        return JSONResponse(content=roles, status_code=200)
+        return process_response(await RoleService.get_roles(page, page_size))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -102,7 +101,6 @@ Response:
     ])
 async def get_role(role_name: str):
     try:
-        role = await RoleService.get_role(role_name)
-        return JSONResponse(content=role, status_code=200)
+        return process_response(await RoleService.get_role(role_name))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
