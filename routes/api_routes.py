@@ -6,10 +6,12 @@ See https://github.com/pypeople-dev/pygate for more information
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from fastapi_jwt_auth import AuthJWT
 
 from services.api_service import ApiService
 from utils.auth_util import auth_required
 from models.api_model import ApiModel
+from utils.role_util import platform_role_required_bool
 
 api_router = APIRouter() 
 
@@ -32,8 +34,10 @@ Response:
     dependencies=[
         Depends(auth_required)
     ])
-async def create_api(api_data: ApiModel):
+async def create_api(api_data: ApiModel, Authorize: AuthJWT = Depends()):
     try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
+            return JSONResponse(content={"error": "You do not have permission to create APIs"}, status_code=403)
         await ApiService.create_api(api_data)
         return JSONResponse(content={'message': 'API created successfully'}, status_code=201)
     except ValueError as e:

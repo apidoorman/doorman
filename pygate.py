@@ -5,6 +5,7 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 from datetime import timedelta
+import multiprocessing
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
@@ -156,15 +157,21 @@ def stop():
 
 def run():
     server_port = int(os.getenv('PORT', 5001))
-    logging.info("pygate server started on port " + str(server_port))
-
-    uvicorn.run(
-        "pygate:pygate",
-        host="0.0.0.0",
-        port=server_port,
-        reload=True, 
-        reload_excludes="venv"
-    )
+    env = os.getenv("ENV", "development")
+    
+    if env.lower() == "production":
+        num_workers = multiprocessing.cpu_count()
+        logging.info("pygate production server started on port " + str(server_port))
+        os.system(f"gunicorn pygate:pygate -k uvicorn.workers.UvicornWorker --workers {num_workers} --bind 0.0.0.0:{server_port}")
+    else:
+        logging.info("pygate dev server started on port " + str(server_port))
+        uvicorn.run(
+            "pygate:pygate",
+            host="0.0.0.0",
+            port=server_port,
+            reload=True,
+            reload_excludes="venv"
+        )
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "stop":
