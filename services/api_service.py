@@ -43,7 +43,13 @@ class ApiService:
         """
         Get an API by name and version.
         """
-        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}") or ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
+        if not api:
+            api = ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            if not api:
+                raise ValueError("API does not exist for the requested name and version")
+            if api.get('_id'): del api['_id']
+            pygate_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
         if not api:
             raise ValueError("API does not exist for the requested name and version")
         if '_id' in api:

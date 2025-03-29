@@ -1,9 +1,7 @@
-import json
 import random
 import time
 import requests
 import pytest
-import asyncio
 
 class TestPygate:
     base_url = "http://localhost:3002"
@@ -49,8 +47,26 @@ class TestPygate:
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
 
+
     @pytest.mark.asyncio
     @pytest.mark.order(2)
+    async def test_create_role(self):
+        TestPygate.role_name = "testrole" + str(time.time())
+        response = requests.post(f"{self.base_url}/platform/role", 
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "role_name": TestPygate.role_name,
+                                    "role_description": "Test role",
+                                    "manage_users": True,
+                                    "manage_apis": True,
+                                    "manage_endpoints": True,
+                                    "manage_groups": True,
+                                    "manage_roles": True
+                                })
+        assert response.status_code == 201
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(3)
     async def test_create_user(self):
         TestPygate.username = "newuser" + str(time.time())
         TestPygate.email = "newuser" + str(time.time()) + "@pygate.org"
@@ -67,7 +83,7 @@ class TestPygate:
         assert response.status_code == 201
 
     @pytest.mark.asyncio
-    @pytest.mark.order(3)
+    @pytest.mark.order(4)
     async def test_create_group(self):
         TestPygate.group_name = "testgroup" + str(time.time())
         response = requests.post(f"{self.base_url}/platform/group", 
@@ -79,35 +95,18 @@ class TestPygate:
         assert response.status_code == 201
 
     @pytest.mark.asyncio
-    @pytest.mark.order(4)
+    @pytest.mark.order(5)
     async def test_get_groups(self):
         response = requests.get(f"{self.base_url}/platform/group/all",
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(5)
+    @pytest.mark.order(6)
     async def test_get_group(self):
         response = requests.get(f"{self.base_url}/platform/group/" + TestPygate.group_name,
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(6)
-    async def test_create_role(self):
-        TestPygate.role_name = "testrole" + str(time.time())
-        response = requests.post(f"{self.base_url}/platform/role", 
-                                cookies=TestPygate.getAccessCookies(),
-                                json={
-                                    "role_name": TestPygate.role_name,
-                                    "role_description": "Test role",
-                                    "manage_users": False,
-                                    "manage_apis": False,
-                                    "manage_endpoints": False,
-                                    "manage_groups": False,
-                                    "manage_roles": False
-                                })
-        assert response.status_code == 201
 
     @pytest.mark.asyncio
     @pytest.mark.order(7)

@@ -6,10 +6,12 @@ See https://github.com/pypeople-dev/pygate for more information
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi_jwt_auth import AuthJWT
 
 from services.group_service import GroupService
 from utils.auth_util import auth_required
 from models.group_model import GroupModel
+from utils.role_util import platform_role_required_bool
 
 group_router = APIRouter()
 
@@ -30,8 +32,10 @@ Response:
     dependencies=[
         Depends(auth_required)
     ])
-async def create_group(api_data: GroupModel):
+async def create_group(api_data: GroupModel, Authorize: AuthJWT = Depends()):
     try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
+            return JSONResponse(content={"error": "You do not have permission to create groups"}, status_code=403)
         await GroupService.create_group(api_data)
         return JSONResponse(content={'message': 'Group created successfully'}, status_code=201)
     except ValueError as e:

@@ -9,6 +9,10 @@ from utils.cache import cache_manager
 from services.cache import pygate_cache
 from models.role_model import RoleModel
 from pymongo.errors import DuplicateKeyError
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger("pygate.gateway")
 
 class RoleService:
     role_collection = db.roles
@@ -61,7 +65,13 @@ class RoleService:
         """
         Get a role by name.
         """
-        role = pygate_cache.get_cache('role_cache', role_name) or RoleService.role_collection.find_one({'role_name': role_name})
+        role = pygate_cache.get_cache('role_cache', role_name)
+        if not role:
+            role = RoleService.role_collection.find_one({'role_name': role_name})
+            if not role:
+                raise ValueError("Role not found")
+            if role.get('_id'): del role['_id']
+            pygate_cache.set_cache('role_cache', role_name, role)
         if not role:
             raise ValueError("Role not found")
         if role.get('_id'): del role['_id']
