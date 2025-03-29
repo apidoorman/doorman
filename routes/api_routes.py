@@ -11,6 +11,7 @@ from fastapi_jwt_auth import AuthJWT
 from services.api_service import ApiService
 from utils.auth_util import auth_required
 from models.api_model import ApiModel
+from utils.response_util import process_resposnse
 from utils.role_util import platform_role_required_bool
 
 api_router = APIRouter() 
@@ -38,10 +39,9 @@ async def create_api(api_data: ApiModel, Authorize: AuthJWT = Depends()):
     try:
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return JSONResponse(content={"error": "You do not have permission to create APIs"}, status_code=403)
-        await ApiService.create_api(api_data)
-        return JSONResponse(content={'message': 'API created successfully'}, status_code=201)
+        return process_resposnse(await ApiService.create_api(api_data))
     except ValueError as e:
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
 
 """
 Get API *platform endpoint.
@@ -62,11 +62,9 @@ Response:
     ])
 async def get_api_by_name_version(api_name: str, api_version: str):
     try:
-        api = await ApiService.get_api_by_name_version(api_name, api_version)
-        if api.get('_id'): del api['_id']
-        return JSONResponse(content=api, status_code=200)
+        return process_resposnse(await ApiService.get_api_by_name_version(api_name, api_version))
     except ValueError as e:
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
 
 """
 Get All Accessable APIs *platform endpoint.
@@ -87,7 +85,6 @@ Response:
     ])
 async def get_all_apis(page: int = 1, page_size: int = 10):
     try:
-        apis = await ApiService.get_apis(page, page_size)
-        return JSONResponse(content=apis, status_code=200)
+        return process_resposnse(await ApiService.get_apis(page, page_size))
     except ValueError as e:
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
