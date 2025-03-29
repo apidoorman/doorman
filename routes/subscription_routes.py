@@ -12,6 +12,7 @@ from services.subscription_service import SubscriptionService
 from utils.auth_util import auth_required
 from models.subscribe_model import SubscribeModel
 from utils.group_util import group_required
+from utils.response_util import process_response
 
 subscription_router = APIRouter()
 
@@ -36,8 +37,7 @@ async def subscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends()
     try:
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
             raise HTTPException(status_code=403, detail="You do not have the correct group access")
-        await SubscriptionService.subscribe(api_data)
-        return JSONResponse(content={'message': 'Successfully subscribed to the API'}, status_code=200)
+        return process_response(await SubscriptionService.subscribe(api_data))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -63,8 +63,7 @@ async def unsubscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends
     try:
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
             raise HTTPException(status_code=403, detail="You do not have the correct group access")
-        await SubscriptionService.unsubscribe(api_data)
-        return JSONResponse(content={'message': 'Successfully unsubscribed from the API'}, status_code=200)
+        return process_response(await SubscriptionService.unsubscribe(api_data))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -85,8 +84,7 @@ Response:
     ])
 async def subscriptions_for_user_by_id(user_id: str):
     try:
-        subscriptions = SubscriptionService.get_user_subscriptions(user_id)
-        return JSONResponse(content={'subscriptions': subscriptions}, status_code=200)
+        return process_response(await SubscriptionService.get_user_subscriptions(user_id))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -107,7 +105,6 @@ Response:
 async def subscriptions_for_current_user(Authorize: AuthJWT = Depends()):
     try:
         username = Authorize.get_jwt_subject()
-        subscriptions = SubscriptionService.get_user_subscriptions(username)
-        return JSONResponse(content={'subscriptions': subscriptions}, status_code=200)
+        return process_response(await SubscriptionService.get_user_subscriptions(username))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -48,7 +48,7 @@ async def validate_platform_role(role_name, action):
 
 async def platform_role_required_bool(username, action):
     try:
-        user = await UserService.get_user_by_username(username)
+        user = await UserService.get_user_by_username_helper(username)
         if not await validate_platform_role(user.get('role'), action):
             raise HTTPException(status_code=403, detail="You do not have the correct role for this")
         return True

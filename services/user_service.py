@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+from models.response_model import ResponseModel
 from utils import password_util
 from utils.database import db
 from services.cache import pygate_cache
@@ -15,7 +16,7 @@ class UserService:
     api_collection = db.apis
 
     @staticmethod
-    async def get_user_by_username(username):
+    async def get_user_by_username_helper(username):
         """
         Retrieve a user by username.
         """
@@ -37,6 +38,45 @@ class UserService:
             return user
         except Exception as e:
             raise ValueError("User not found error" + str(e))
+        
+    @staticmethod
+    async def get_user_by_username(username):
+        """
+        Retrieve a user by username.
+        """
+        try:
+            user = pygate_cache.get_cache('user_cache', username)
+            if not user:
+                user = UserService.user_collection.find_one({'username': username})
+                if not user:
+                    return ResponseModel(
+                        status_code=404,
+                        error_code='USR002',
+                        error_message='User not found'
+                    ).dict()
+                if user.get('_id'): del user['_id']
+                if user.get('password'): del user['password']
+                pygate_cache.set_cache('user_cache', username, user)
+            if '_id' in user:
+                del user['_id']
+            if 'password' in user:
+                del user['password']
+            if not user:
+                return ResponseModel(
+                    status_code=404,
+                    error_code='USR002',
+                    error_message='User not found'
+                ).dict()
+            return ResponseModel(
+                status_code=200,
+                data=user
+            ).dict()
+        except Exception as e:
+            return ResponseModel(
+                status_code=404,
+                error_code='USR002',
+                error_message='User not found'
+            ).dict()
 
     @staticmethod
     async def get_user_by_email(email):
@@ -50,10 +90,21 @@ class UserService:
             if 'password' in user:
                 del user['password']
             if not user:
-                raise ValueError("User not found")
-            return user
+                return ResponseModel(
+                    status_code=404,
+                    error_code='USR002',
+                    error_message='User not found'
+                ).dict()
+            return ResponseModel(
+                status_code=200,
+                data=user
+            ).dict()
         except Exception as e:
-            raise ValueError("User not found")
+            return ResponseModel(
+                status_code=404,
+                error_code='USR002',
+                error_message='User not found'
+            ).dict()
         
     @staticmethod
     async def get_user_by_email_with_password(email):
@@ -76,13 +127,18 @@ class UserService:
         Create a new user.
         """
         if UserService.user_collection.find_one({'username': data.username}):
-            raise ValueError("Username already exists")
-        
+            return ResponseModel(
+                status_code=400,
+                error_code='USR001',
+                error_message='Username already exists'
+            ).dict()
         if UserService.user_collection.find_one({'email': data.email}):
-            raise ValueError("Email already exists")
-
+            return ResponseModel(
+                status_code=400,
+                error_code='USR001',
+                error_message='Email already exists'
+            ).dict()
         data.password = password_util.hash_password(data.password)
-
         data_dict = data.dict()
         UserService.user_collection.insert_one(data_dict)
         if '_id' in data_dict:
@@ -90,6 +146,10 @@ class UserService:
         if 'password' in data_dict:
             del data_dict['password']
         pygate_cache.set_cache('user_cache', data.username, data_dict)
+        return ResponseModel(
+            status_code=201,
+            message='User created successfully'
+        ).dict()
 
     @staticmethod
     async def check_password_return_user(email, password):
@@ -119,11 +179,21 @@ class UserService:
         if non_null_update_data.get('role'):
             await UserService.purge_apis_after_role_change(username)
         user = UserService.user_collection.find_one({'username': username})
+        if not user:
+            return ResponseModel(
+                status_code=404,
+                error_code='USR002',
+                error_message='User not found'
+            ).dict()
         if '_id' in user:
             del user['_id']
         if 'password' in user:
             del user['password']
         pygate_cache.set_cache('user_cache', username, user)
+        return ResponseModel(
+            status_code=200,
+            message='User updated successfully'
+        ).dict()
 
     @staticmethod
     async def update_password(username, update_data):
@@ -133,11 +203,21 @@ class UserService:
         hashed_password = password_util.hash_password(update_data.new_password)
         UserService.user_collection.update_one({'username': username}, {'$set': {'password': hashed_password}})
         user = UserService.user_collection.find_one({'username': username})
+        if not user:
+            return ResponseModel(
+                status_code=404,
+                error_code='USR002',
+                error_message='User not found'
+            ).dict()
         if '_id' in user:
             del user['_id']
         if 'password' in user:
             del user['password']
         pygate_cache.set_cache('user_cache', username, user)
+        return ResponseModel(
+            status_code=200,
+            message='User updated successfully'
+        ).dict()
 
     @staticmethod
     async def purge_apis_after_role_change(username):
