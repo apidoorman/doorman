@@ -11,6 +11,7 @@ from fastapi_jwt_auth import AuthJWT
 from services.group_service import GroupService
 from utils.auth_util import auth_required
 from models.group_model import GroupModel
+from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
 
 group_router = APIRouter()
@@ -36,8 +37,7 @@ async def create_group(api_data: GroupModel, Authorize: AuthJWT = Depends()):
     try:
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to create groups"}, status_code=403)
-        await GroupService.create_group(api_data)
-        return JSONResponse(content={'message': 'Group created successfully'}, status_code=201)
+        return process_response(await GroupService.create_group(api_data))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -64,8 +64,7 @@ Response:
     ])
 async def get_groups(page: int = 1, page_size: int = 10):
     try:
-        groups = await GroupService.get_groups(page, page_size)
-        return JSONResponse(content=groups, status_code=200)
+        return process_response(await GroupService.get_groups(page, page_size))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -91,7 +90,6 @@ Response:
     ])
 async def get_group(group_name: str):
     try:
-        group = await GroupService.get_group(group_name)
-        return JSONResponse(content=group, status_code=200)
+        return process_response(await GroupService.get_group(group_name))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

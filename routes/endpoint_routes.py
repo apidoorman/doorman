@@ -11,6 +11,7 @@ from fastapi_jwt_auth import AuthJWT
 from services.endpoint_service import EndpointService
 from utils.auth_util import auth_required
 from models.endpoint_model import EndpointModel
+from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
 
 endpoint_router = APIRouter()
@@ -37,8 +38,7 @@ async def create_endpoint(endpoint_data: EndpointModel, Authorize: AuthJWT = Dep
     try:
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
             return JSONResponse(content={"error": "You do not have permission to create endpoints"}, status_code=403)
-        await EndpointService.create_endpoint(endpoint_data)
-        return JSONResponse(content={'message': 'Endpoint created successfully'}, status_code=201)
+        return process_response(await EndpointService.create_endpoint(endpoint_data))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -66,7 +66,6 @@ Response:
     ])
 async def get_endpoints_by_name_version(api_name: str, api_version: str, Authorize: AuthJWT = Depends()):
     try:
-        endpoints = await EndpointService.get_endpoints_by_name_version(api_name, api_version)
-        return JSONResponse(content={"endpoints": endpoints}, status_code=200)
+        return process_response(await EndpointService.get_endpoints_by_name_version(api_name, api_version))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

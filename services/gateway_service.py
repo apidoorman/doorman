@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 import requests
 import logging
 
+from models.response_model import ResponseModel
 from utils.database import db
 from services.cache import pygate_cache
 import uuid
@@ -40,16 +41,22 @@ class GatewayService:
             if not api:
                 api = GatewayService.api_collection.find_one({'api_path': api_name_version})
                 if not api:
-                    raise ValueError("API does not exists: " + api_name_version)
+                    return ResponseModel(
+                        status_code=404,
+                        error_code='GTW001',
+                        error_message='API does not exist for the requested name and version'
+                    ).dict()
                 if api.get('_id'): del api['_id']
                 pygate_cache.set_cache('api_cache', pygate_cache.get_cache('api_id_cache', api_name_version), api)
-            if not api:
-                raise ValueError("API does not exists: " + api_name_version)
             endpoints = pygate_cache.get_cache('api_endpoint_cache', api.get('api_id'))
             if not endpoints:
                 endpoints = GatewayService.endpoint_collection.find({'api_id': api.get('api_id')})
                 if not endpoints:
-                    raise ValueError("No endpoints found for API: " + api_name_version)
+                    return ResponseModel(
+                        status_code=404,
+                        error_code='GTW002',
+                        error_message='No endpoints found for the requested API'
+                    ).dict()
                 api_endpoints = []
                 for endpoint in endpoints:
                     if endpoint.get('_id'): del endpoint['_id']
@@ -57,7 +64,11 @@ class GatewayService:
                 pygate_cache.set_cache('api_endpoint_cache', api.get('api_id'), api_endpoints)
                 endpoints = api_endpoints
             if not endpoints or not any(re.fullmatch(re.sub(r"\{[^/]+\}", r"([^/]+)", endpoint), request.method + '/' + endpoint_uri) for endpoint in endpoints):
-                raise ValueError("Endpoint does not exists - " + str(endpoints) + "-" + request.method + '/' + endpoint_uri)
+                return ResponseModel(
+                    status_code=404,
+                    error_code='GTW003',
+                    error_message='Endpoint does not exist for the requested API and URI'
+                ).dict()
             server_index = pygate_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
             api_servers = api.get('api_servers') or []
             server = api_servers[server_index]
@@ -77,17 +88,33 @@ class GatewayService:
             elif method == 'DELETE':
                 response = requests.delete(url)
             else:
-                return JSONResponse(content={"error": "Method not supported"}, status_code=405)
+                return ResponseModel(
+                    status_code=405,
+                    error_code='GTW004',
+                    error_message='Method not supported'
+                ).dict()
             try:
                 response_content = response.json()
             except requests.exceptions.JSONDecodeError:
                 response_content = response.text
             if response.status_code == 404:
-                return JSONResponse("Endpoint does not exists in backend service", status_code=404)
-            return JSONResponse(content=response_content, status_code=response.status_code)
+                return ResponseModel(
+                    status_code=404,
+                    error_code='GTW005',
+                    error_message='Endpoint does not exist in backend service'
+                ).dict()
+            return ResponseModel(
+                status_code=response.status_code,
+                response=response_content
+            ).dict()
         except Exception as e:
             GatewayService.logger.error(f"REST | {request_id} | Error in rest_gateway: {str(e)}")
-            return {"error": str(e)}
+            GatewayService.logger.info(f'"error: {str(e)}')
+            return ResponseModel(
+                status_code=500,
+                error_code='GTW006',
+                error_message='Internal server error'
+            ).dict()
         finally:
             end_time = time.time() * 1000
             response.headers['X-Request-Id'] = request_id

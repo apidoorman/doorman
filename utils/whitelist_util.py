@@ -17,7 +17,7 @@ def whitelist_check():
             try:
                 Authorize.jwt_required()
                 username = Authorize.get_jwt_subject()
-                user = await UserService.get_user_by_username(username)
+                user = await UserService.get_user_by_username_helper(username)
                 client_ip = request.client.host
                 if user.get('whitelist') and client_ip not in user.get('whitelist'):
                     raise HTTPException(status_code=403, detail="User is not whitelisted")
