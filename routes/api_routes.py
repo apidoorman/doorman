@@ -41,7 +41,7 @@ async def create_api(api_data: ApiModel, Authorize: AuthJWT = Depends()):
         await ApiService.create_api(api_data)
         return JSONResponse(content={'message': 'API created successfully'}, status_code=201)
     except ValueError as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=400)
 
 """
 Get API *platform endpoint.
@@ -66,7 +66,7 @@ async def get_api_by_name_version(api_name: str, api_version: str):
         if api.get('_id'): del api['_id']
         return JSONResponse(content=api, status_code=200)
     except ValueError as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=400)
 
 """
 Get All Accessable APIs *platform endpoint.
@@ -90,4 +90,4 @@ async def get_all_apis(page: int = 1, page_size: int = 10):
         apis = await ApiService.get_apis(page, page_size)
         return JSONResponse(content=apis, status_code=200)
     except ValueError as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=400)
