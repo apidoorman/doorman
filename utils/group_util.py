@@ -15,11 +15,11 @@ from services.api_service import ApiService
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
-async def group_required(request: Request, Authorize: AuthJWT = Depends()):
+async def group_required(request: Request, Authorize: AuthJWT = Depends(), full_path: str = None):
     try:
         Authorize.jwt_required()
         username = Authorize.get_jwt_subject()
-        full_path = request.url.path
+        if not full_path: full_path = request.url.path
         prefix = "/api/rest/"
         if full_path.startswith(prefix):
             path = full_path[len(prefix):]

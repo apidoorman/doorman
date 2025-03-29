@@ -58,11 +58,17 @@ class EndpointService:
         """
         Get an endpoint by API name, version and URI.
         """
-        endpoint = pygate_cache.get_cache('endpoint_cache', f"{api_name}/{api_version}/{endpoint_uri}") or EndpointService.endpoint_collection.find_one({
+        endpoint = pygate_cache.get_cache('endpoint_cache', f"{api_name}/{api_version}/{endpoint_uri}")
+        if not endpoint:
+            endpoint = EndpointService.endpoint_collection.find_one({
             'api_name': api_name,
             'api_version': api_version,
             'endpoint_uri': endpoint_uri
         })
+            if not endpoint:
+                raise ValueError("Endpoint does not exist")
+            if endpoint.get('_id'): del endpoint['_id']
+            pygate_cache.set_cache('endpoint_cache', f"{api_name}/{api_version}/{endpoint_uri}", endpoint)
         if not endpoint:
             raise ValueError("Endpoint does not exist")
         if '_id' in endpoint:
