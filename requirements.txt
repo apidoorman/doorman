@@ -23,3 +23,6 @@ requests
 
 # Cryptography
 cryptography
+
+# Testing
+pytest-asyncio

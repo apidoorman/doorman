@@ -32,25 +32,27 @@ Response:
 """
 @authorization_router.post("/authorization")
 async def login(request: Request, Authorize: AuthJWT = Depends()):
-    data = await request.json()
-    email = data.get('email')
-    password = data.get('password')
-    if not email or not password:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing email or password"
-        )
     try:
+        data = await request.json()
+        email = data.get('email')
+        password = data.get('password')
+        if not email or not password:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing email or password"
+            )
         user = await UserService.check_password_return_user(email, password)
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid email or password"
+            )
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize)
         response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
         Authorize.set_access_cookies(access_token, response)
         return response
     except ValueError as e:
-        raise HTTPException(
-            status_code=401,
-            detail=str(e)
-        )
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
 
 """
 Status endpoint
@@ -71,7 +73,7 @@ async def status():
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
     except ValueError as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
         
 """
 Logout endpoint
@@ -100,7 +102,7 @@ async def logout(response: Response, Authorize: AuthJWT = Depends()):
         logging.error(f"Logout failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})
     except ValueError as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     
 @authorization_router.api_route("/status", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def rest_gateway():
