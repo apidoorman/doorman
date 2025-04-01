@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     authjwt_cookie_path: str = "/"
     authjwt_cookie_samesite: str = 'lax'
     authjwt_cookie_csrf_protect: bool = False
+    authjwt_refresh_cookie_path: str = "/refresh"
 
     authjwt_access_token_expires: timedelta = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRES_MINUTES", 15)))
     authjwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", 30)))

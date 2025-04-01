@@ -18,16 +18,6 @@ group_router = APIRouter()
 
 """
 Create group *platform endpoint.
-Request:
-{
-    "group_name": "<string>",
-    "group_description": "<string>",
-    "api_access": ["<string>"]
-}
-Response:
-{
-    "message": "Group created successfully"
-}
 """
 @group_router.post("",
     dependencies=[
@@ -44,19 +34,6 @@ async def create_group(api_data: GroupModel, Authorize: AuthJWT = Depends()):
 
 """
 Get groups *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    "groups": [
-        {
-            "group_name": "<string>",
-            "group_description": "<string>",
-            "api_access": ["<string>"]
-        }
-    ]
-}
 """
 @group_router.get("/all",
     dependencies=[
@@ -71,18 +48,6 @@ async def get_groups(page: int = 1, page_size: int = 10):
 
 """
 Get group *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    {
-        "group_name": "<string>",
-        "group_description": "<string>",
-        "api_access": ["<string>"]
-    }
-    ]
-}
 """
 @group_router.get("/{group_name}",
     dependencies=[

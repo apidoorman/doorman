@@ -17,7 +17,6 @@ logger = logging.getLogger("pygate.gateway")
 
 def subscription_required(request: Request, Authorize: AuthJWT = Depends()):
     try:
-        Authorize.jwt_required()
         username = Authorize.get_jwt_subject()
         full_path = request.url.path
         prefix = "/api/rest/"
