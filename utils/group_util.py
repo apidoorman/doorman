@@ -17,7 +17,6 @@ logger = logging.getLogger("pygate.gateway")
 
 async def group_required(request: Request, Authorize: AuthJWT = Depends(), full_path: str = None):
     try:
-        Authorize.jwt_required()
         username = Authorize.get_jwt_subject()
         if not full_path: full_path = request.url.path
         prefix = "/api/rest/"
