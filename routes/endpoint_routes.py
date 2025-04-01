@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
+from models.update_endpoint_model import UpdateEndpointModel
 from services.endpoint_service import EndpointService
 from utils.auth_util import auth_required
 from models.endpoint_model import EndpointModel
@@ -18,17 +19,6 @@ endpoint_router = APIRouter()
 
 """
 Create endpoint *platform endpoint.
-Request:
-{
-    "api_name": "<string>",
-    "api_version": "<string>",
-    "endpoint_method": "<string>",
-    "endpoint_uri": "<string>"
-}
-Response:
-{
-    "message": "Endpoint created successfully"
-}
 """
 @endpoint_router.post("",
     dependencies=[
@@ -40,27 +30,36 @@ async def create_endpoint(endpoint_data: EndpointModel, Authorize: AuthJWT = Dep
             return JSONResponse(content={"error": "You do not have permission to create endpoints"}, status_code=403)
         return process_response(await EndpointService.create_endpoint(endpoint_data))
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    
+@endpoint_router.put("/{api_name}/{api_version}/{endpoint_uri}",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def update_endpoint(api_name: str, api_version: str, endpoint_uri: str, endpoint_data: UpdateEndpointModel, Authorize: AuthJWT = Depends()):
+    try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
+            return JSONResponse(content={"error": "You do not have permission to update endpoints"}, status_code=403)
+        return process_response(await EndpointService.update_endpoint(api_name, api_version, endpoint_uri, endpoint_data))
+    except ValueError as e:
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
 
+@endpoint_router.delete("/{api_name}/{api_version}/{endpoint_uri}",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def delete_endpoint(api_name: str, api_version: str, endpoint_uri: str, Authorize: AuthJWT = Depends()):
+    try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
+            return JSONResponse(content={"error": "You do not have permission to delete endpoints"}, status_code=403)
+        return process_response(await EndpointService.delete_endpoint(api_name, api_version, endpoint_uri))
+    except ValueError as e:
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
 
 """
 Get endpoints *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    "api_name": "<string>",
-    "api_version": "<string>",
-    "endpoints": [
-        {
-            "endpoint_method": "<string>",
-            "endpoint_uri": "<string>"
-        }
-    ]
-}
 """
-@endpoint_router.get("/api/{api_name}/{api_version}",
+@endpoint_router.get("/{api_name}/{api_version}",
     dependencies=[
         Depends(auth_required)
     ])
@@ -68,4 +67,4 @@ async def get_endpoints_by_name_version(api_name: str, api_version: str, Authori
     try:
         return process_response(await EndpointService.get_endpoints_by_name_version(api_name, api_version))
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)

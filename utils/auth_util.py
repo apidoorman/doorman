@@ -25,6 +25,6 @@ async def auth_required(Authorize: AuthJWT = Depends()):
                 detail="Token has been revoked"
             )
     except Exception as e:
-        logger.error("Unauthorized access")
+        logger.error(f"Unauthorized access: {e}")
         raise HTTPException(status_code=401, detail="Unauthorized")
     return Authorize
