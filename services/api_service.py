@@ -6,6 +6,7 @@ See https://github.com/pypeople-dev/pygate for more information
 
 from fastapi.responses import JSONResponse
 from models.response_model import ResponseModel
+from models.update_api_model import UpdateApiModel
 from utils.database import db
 from utils.cache import cache_manager
 from services.cache import pygate_cache
@@ -48,6 +49,79 @@ class ApiService:
         return ResponseModel(
             status_code=201,
             message='API created successfully'
+            ).dict()
+    
+    @staticmethod
+    async def update_api(api_name, api_version, data: UpdateApiModel):
+        """
+        Update an API on the platform.
+        """
+        if data.api_name and data.api_name != api_name or data.api_version and data.api_version != api_version:
+            return ResponseModel(
+                status_code=400, 
+                error_code='API005', 
+                error_message='API name and version cannot be updated'
+                ).dict()
+        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
+        if not api:
+            api = ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            if not api:
+                return ResponseModel(
+                    status_code=400, 
+                    error_code='API003', 
+                    error_message='API does not exist for the requested name and version'
+                    ).dict()
+            if api.get('_id'): del api['_id']
+            pygate_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
+        not_null_data = {k: v for k, v in data.dict().items() if v is not None}
+        if not_null_data:
+            update_result = ApiService.api_collection.update_one(
+                {'api_name': api_name, 'api_version': api_version},
+                {'$set': not_null_data}
+            )
+            if not update_result.acknowledged:
+                return ResponseModel(
+                    status_code=400, 
+                    error_code='API002', 
+                    error_message='Database error: Unable to update endpoint'
+                    ).dict()
+            return ResponseModel(
+                status_code=200,
+                message='API updated successfully'
+                ).dict()
+        else:
+            return ResponseModel(
+                status_code=400, 
+                error_code='API006', 
+                error_message='No data to update'
+                ).dict()
+        
+    @staticmethod
+    async def delete_api(api_name, api_version):
+        """
+        Delete an API from the platform.
+        """
+        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
+        if not api:
+            api = ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            if not api:
+                return ResponseModel(
+                    status_code=400, 
+                    error_code='API003', 
+                    error_message='API does not exist for the requested name and version'
+                    ).dict()
+        delete_result = ApiService.api_collection.delete_one({'api_name': api_name, 'api_version': api_version})
+        if not delete_result.acknowledged:
+            return ResponseModel(
+                status_code=400, 
+                error_code='API002', 
+                error_message='Database error: Unable to delete endpoint'
+                ).dict()
+        pygate_cache.delete_cache('api_cache', delete_result.api_id)
+        pygate_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
+        return ResponseModel(
+            status_code=200,
+            message='API deleted successfully'
             ).dict()
 
     @staticmethod
