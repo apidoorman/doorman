@@ -20,26 +20,6 @@ user_router = APIRouter()
 
 """
 Create user *platform endpoint.
-Request:
-{
-    "username": "<string>",
-    "email": "<string>",
-    "password": "<string>"
-    "role": "<string>"
-    "groups": ["<string>"],
-    "rate_limit": "<int>",
-    "rate_limit_duration": "<int>",
-    "throttle": "<int>",
-    "throttle_duration": "<int>"
-}
-Response:
-{
-    "message": "User created successfully",
-    "user_details" {
-        "user_id": "<string>",
-        "email": "<string>"
-    }
-}
 """
 @user_router.post("",
     dependencies=[
@@ -53,16 +33,6 @@ async def create_user(user_data: CreateUserModel, Authorize: AuthJWT = Depends()
 
 """
 Update user *platform endpoint.
-Request:
-{
-    "email": "<string>",
-    "role": "<string>",
-    "groups": ["<string>"]
-}
-Response:
-{
-    "message": "User updated successfully"
-}
 """
 @user_router.put("/{username}",
     dependencies=[
@@ -78,15 +48,6 @@ async def update_user(username: str, api_data: UpdateUserModel, Authorize: AuthJ
 
 """
 Update user *platform endpoint.
-Request:
-{
-    "current_password": "<string>",
-    "new_password": "<string>"
-}
-Response:
-{
-    "message": "Password updated successfully"
-}
 """
 @user_router.put("/{username}/update-password",
     dependencies=[
@@ -102,17 +63,6 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, Aut
 
 """
 Get user by username *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    "username": "<string>",
-    "email": "<string>",
-    "password": "<string>"
-    "role": "<string>"
-    "groups": ["<string>"]
-}
 """
 @user_router.get("/{username}",
     dependencies=[
@@ -126,17 +76,6 @@ async def get_user_by_username(username: str):
 
 """
 Get user by email *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    "username": "<string>",
-    "email": "<string>",
-    "password": "<string>"
-    "role": "<string>"
-    "groups": ["<string>"]
-}
 """
 @user_router.get("/email/{email}",
     dependencies=[

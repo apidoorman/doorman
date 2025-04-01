@@ -44,16 +44,6 @@ async def subscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends()
 
 """
 Unsubscribe from API *platform endpoint.
-Request:
-{
-    "username": "<string>",
-    "api_name": "<string>",
-    "api_version": "<string>"
-}
-Response:
-{
-    "message": "Successfully unsubscribed from the API"
-}
 """
 @subscription_router.post("/unsubscribe",
     dependencies=[
@@ -70,13 +60,6 @@ async def unsubscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends
 
 """
 Get API Subscriptions for user by id *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    "subscriptions": []
-}
 """
 @subscription_router.get("/subscriptions/{user_id}",
     dependencies=[
@@ -90,13 +73,6 @@ async def subscriptions_for_user_by_id(user_id: str):
 
 """
 Get API Subscriptions for active user *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    "subscriptions": []
-}
 """
 @subscription_router.get("/subscriptions",
     dependencies=[

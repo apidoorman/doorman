@@ -225,7 +225,7 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(18)
     async def test_api_endpoints(self):
-        response = requests.get(f"{self.base_url}/platform/endpoint/api/" + TestPygate.api_name + "/v1",
+        response = requests.get(f"{self.base_url}/platform/endpoint/" + TestPygate.api_name + "/v1",
                                 cookies=TestPygate.getAccessCookies()) 
         assert response.status_code == 200
 
@@ -293,6 +293,36 @@ class TestPygate:
     async def test_get_user_by_email(self):
         response = requests.get(f"{self.base_url}/platform/user/email/" + TestPygate.email,
                                 cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(25)
+    async def test_auth_refresh_calls(self):
+        response = requests.post(f"{self.base_url}/platform/authorization/refresh",
+                                cookies=TestPygate.getAccessCookies())
+        TestPygate.token = response.json().get('refresh_token')
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(26)
+    async def test_update_api(self):
+        response = requests.put(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "api_description": "Updated API description",
+                                    "api_allowed_roles": [TestPygate.role_name],
+                                    "api_allowed_groups": ["ALL", TestPygate.group_name]
+                                })
+        assert response.status_code == 200
+    
+    @pytest.mark.asyncio
+    @pytest.mark.order(27)
+    async def test_update_endpoint(self):
+        response = requests.put(f"{self.base_url}/platform/endpoint/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path,
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "description": "Updated endpoint description"
+                                })
         assert response.status_code == 200
 
 if __name__ == '__main__':
