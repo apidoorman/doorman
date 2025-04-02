@@ -15,7 +15,14 @@ from models.group_model import GroupModel
 from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
 
+import uuid
+import time
+import logging
+
 group_router = APIRouter()
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger("pygate.gateway")
 
 """
 Create group *platform endpoint.
@@ -26,11 +33,16 @@ Create group *platform endpoint.
     ])
 async def create_group(api_data: GroupModel, Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to create groups"}, status_code=403)
         return process_response(await GroupService.create_group(api_data))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
 
 """
 Update group *platform endpoint.
@@ -41,11 +53,16 @@ Update group *platform endpoint.
     ])
 async def update_group(group_name: str, api_data: UpdateGroupModel, Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to update groups"}, status_code=403)
         return process_response(await GroupService.update_group(group_name, api_data))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
 
 """
 Delete group *platform endpoint.
@@ -56,11 +73,16 @@ Delete group *platform endpoint.
     ])
 async def delete_group(group_name: str, Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to delete groups"}, status_code=403)
         return process_response(await GroupService.delete_group(group_name))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
 
 """
 Get groups *platform endpoint.
@@ -71,9 +93,14 @@ Get groups *platform endpoint.
     ])
 async def get_groups(page: int = 1, page_size: int = 10):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         return process_response(await GroupService.get_groups(page, page_size))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
 
 
 """
@@ -85,6 +112,11 @@ Get group *platform endpoint.
     ])
 async def get_group(group_name: str):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         return process_response(await GroupService.get_group(group_name))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")

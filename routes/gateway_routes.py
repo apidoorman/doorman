@@ -15,7 +15,14 @@ from utils.subscription_util import subscription_required
 from services.gateway_service import GatewayService
 from models.request_model import RequestModel
 
+import uuid
+import time
+import logging
+
 gateway_router = APIRouter()
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger("pygate.gateway")
 
 @gateway_router.api_route(
     "/rest/{path:path}",
@@ -29,6 +36,8 @@ gateway_router = APIRouter()
 async def rest_gateway(path: str, request: Request, 
                        Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         request_model = RequestModel(
             method=request.method,
             path=path,
@@ -40,3 +49,6 @@ async def rest_gateway(path: str, request: Request,
         return process_response(await GatewayService.rest_gateway(request_model))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
