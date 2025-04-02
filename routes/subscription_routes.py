@@ -12,9 +12,16 @@ from services.subscription_service import SubscriptionService
 from utils.auth_util import auth_required
 from models.subscribe_model import SubscribeModel
 from utils.group_util import group_required
-from utils.response_util import process_response
+from utils.response_util import process_response\
+
+import uuid
+import time
+import logging
 
 subscription_router = APIRouter()
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger("pygate.gateway")
 
 """
 Subscribe to API *platform endpoint.
@@ -35,11 +42,16 @@ Response:
     ])
 async def subscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
             raise HTTPException(status_code=403, detail="You do not have the correct group access")
         return process_response(await SubscriptionService.subscribe(api_data))
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
 
 
 """
@@ -51,11 +63,16 @@ Unsubscribe from API *platform endpoint.
     ])
 async def unsubscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
             raise HTTPException(status_code=403, detail="You do not have the correct group access")
         return process_response(await SubscriptionService.unsubscribe(api_data))
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
 
 
 """
@@ -67,9 +84,14 @@ Get API Subscriptions for user by id *platform endpoint.
     ])
 async def subscriptions_for_user_by_id(user_id: str):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         return process_response(await SubscriptionService.get_user_subscriptions(user_id))
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
 
 """
 Get API Subscriptions for active user *platform endpoint.
@@ -80,7 +102,12 @@ Get API Subscriptions for active user *platform endpoint.
     ])
 async def subscriptions_for_current_user(Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         username = Authorize.get_jwt_subject()
         return process_response(await SubscriptionService.get_user_subscriptions(username))
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
