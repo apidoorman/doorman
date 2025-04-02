@@ -61,7 +61,7 @@ async def get_api_by_name_version(api_name: str, api_version: str):
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     
 """
-Get API *platform endpoint.
+Delete API *platform endpoint.
 """
 @api_router.delete("/{api_name}/{api_version}",
     dependencies=[
