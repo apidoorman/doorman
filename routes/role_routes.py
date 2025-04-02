@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
+from models.update_role_model import UpdateRoleModel
 from services.role_service import RoleService
 from utils.auth_util import auth_required
 from models.role_model import RoleModel
@@ -30,7 +31,36 @@ async def create_role(api_data: RoleModel, Authorize: AuthJWT = Depends()):
         return process_response(await RoleService.create_role(api_data))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+"""
+Update API *platform endpoint.
+"""
+@role_router.put("/{role_name}",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def update_role(role_name: str, api_data: UpdateRoleModel, Authorize: AuthJWT = Depends()):
+    try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
+            return JSONResponse(content={"error": "You do not have permission to update roles"}, status_code=403)
+        return process_response(await RoleService.update_role(role_name, api_data))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
+"""
+Delete API *platform endpoint.
+"""
+@role_router.delete("/{role_name}",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def delete_role(role_name: str, Authorize: AuthJWT = Depends()):
+    try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
+            return JSONResponse(content={"error": "You do not have permission to delete roles"}, status_code=403)
+        return process_response(await RoleService.delete_role(role_name))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 """
 Create API *platform endpoint.

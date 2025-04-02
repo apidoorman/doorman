@@ -5,6 +5,7 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 from models.response_model import ResponseModel
+from models.update_group_model import UpdateGroupModel
 from utils.database import db
 from utils.cache import cache_manager
 from services.cache import pygate_cache
@@ -51,6 +52,82 @@ class GroupService:
                 error_code='GRP001',
                 error_message='Group already exists'
             ).dict()
+        
+    @staticmethod
+    async def update_group(group_name, data: UpdateGroupModel):
+        """
+        Update a group.
+        """
+        if data.group_name and data.group_name != group_name:
+            return ResponseModel(
+                status_code=400,
+                error_code='GRP004',
+                error_message='Group name cannot be updated'
+            ).dict()
+        group = pygate_cache.get_cache('group_cache', group_name)
+        if not group:
+            group = GroupService.group_collection.find_one({
+                'group_name': group_name
+            })
+            if not group:
+                return ResponseModel(
+                    status_code=400,
+                    error_code='GRP003',
+                    error_message='Group does not exist'
+                ).dict()
+        else:
+            pygate_cache.delete_cache('group_cache', group_name)
+        not_null_data = {k: v for k, v in data.dict().items() if v is not None}
+        if not_null_data:
+            update_result = GroupService.group_collection.update_one(
+                {'group_name': group_name},
+                {'$set': not_null_data}
+            )
+            if not update_result.acknowledged or update_result.modified_count == 0:
+                return ResponseModel(
+                    status_code=400,
+                    error_code='GRP005',
+                    error_message='Database error: Unable to update group'
+                ).dict()
+            return ResponseModel(
+                status_code=200,
+                message='Group updated successfully'
+                ).dict()
+        else:
+            return ResponseModel(
+                status_code=400,
+                error_code='GRP006',
+                error_message='No data to update'
+            ).dict()
+        
+    @staticmethod
+    async def delete_group(group_name):
+        """
+        Delete a group.
+        """
+        group = pygate_cache.get_cache('group_cache', group_name)
+        if not group:
+            group = GroupService.group_collection.find_one({
+                'group_name': group_name
+            })
+            if not group:
+                return ResponseModel(
+                    status_code=400,
+                    error_code='GRP003',
+                    error_message='Group does not exist'
+                ).dict()
+        delete_result = GroupService.group_collection.delete_one({'group_name': group_name})
+        if not delete_result.acknowledged:
+            return ResponseModel(
+                status_code=400,
+                error_code='GRP007',
+                error_message='Database error: Unable to delete group'
+            ).dict()
+        pygate_cache.delete_cache('group_cache', group_name)
+        return ResponseModel(
+            status_code=200,
+            message='Group deleted successfully'
+        ).dict()
 
     @staticmethod
     @cache_manager.cached(ttl=300)

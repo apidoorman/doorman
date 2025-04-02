@@ -1,18 +1,21 @@
-# pygate
+
+![Logo](https://i.ibb.co/Y5T8g9y/pygate-logo-white.png)
+
+##
 
 One Platform for AI, REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed with its own set of RESTful APIs. This is your APIs gateway to the world!
 
 🔗 [pygate.org](https://pygate.org)
 
-No specialized Go or C expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
+No specialized low-level langauge expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
 
-## MVP Roadmap 🚀
+## ✅ MVP Roadmap 🚀
 - [x]  Gateway Authentication.
 - [x]  Basic user management.
 - [x]  API subscriptions.
 - [x]  Basic Authorization (user roles and groups).
-- [ ]  REST gateway implementation (in progress ⏳).
-- [ ]  Basic logging.
+- [x]  REST gateway implementation.
+- [ ]  Basic logging (in progress ⏳).
 - [ ]  Advanced user management (rate limiting and throttling).
 - [ ]  Advanced Authorization (role and group permissions).
 - [ ]  Key based routing

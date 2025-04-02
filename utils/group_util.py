@@ -25,7 +25,6 @@ async def group_required(request: Request, Authorize: AuthJWT = Depends(), full_
         else:
             path = full_path
         api_and_version = '/'.join(path.split('/')[:2])
-        logger.info(f"API and version: {api_and_version}")
         user = await UserService.get_user_by_username_helper(username)
         api = pygate_cache.get_cache('api_cache', api_and_version) or ApiService.api_collection.find_one({'api_name': api_and_version.split('/')[0], 'api_version': api_and_version.split('/')[1]})
         if not set(user.get('groups', [])).intersection(api.get('api_allowed_groups', [])):
@@ -35,6 +34,5 @@ async def group_required(request: Request, Authorize: AuthJWT = Depends(), full_
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
     return Authorize
