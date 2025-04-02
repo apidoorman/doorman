@@ -15,7 +15,7 @@ class EndpointModel(BaseModel):
     endpoint_uri: str = Field(..., min_length=1, max_length=255)
 
     api_id: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = Field(None, min_length=1, max_length=255)
+    endpoint_description: Optional[str] = Field(None, min_length=1, max_length=255)
     endpoint_id: Optional[str] = Field(None, min_length=1, max_length=255)
 
     class Config:

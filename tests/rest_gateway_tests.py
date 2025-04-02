@@ -318,11 +318,59 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(27)
     async def test_update_endpoint(self):
-        response = requests.put(f"{self.base_url}/platform/endpoint/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path,
+        response = requests.put(f"{self.base_url}/platform/endpoint/GET/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path,
                                 cookies=TestPygate.getAccessCookies(),
                                 json={
-                                    "description": "Updated endpoint description"
+                                    "endpoint_description": "Updated endpoint description"
                                 })
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(28)
+    async def test_delete_endpoint(self):
+        response = requests.delete(f"{self.base_url}/platform/endpoint/GET/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path,
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(29)
+    async def test_delete_api(self):
+        response = requests.delete(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(30)
+    async def test_update_group(self):
+        response = requests.put(f"{self.base_url}/platform/group/" + TestPygate.group_name,
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "group_description": "Updated group description"
+                                })
+        assert response.status_code == 200
+    
+    @pytest.mark.asyncio
+    @pytest.mark.order(31)
+    async def test_delete_group(self):
+        response = requests.delete(f"{self.base_url}/platform/group/" + TestPygate.group_name,
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(32)
+    async def test_update_role(self):
+        response = requests.put(f"{self.base_url}/platform/role/" + TestPygate.role_name,
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "role_description": "Updated role description"
+                                })
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(33)
+    async def test_delete_role(self):
+        response = requests.delete(f"{self.base_url}/platform/role/" + TestPygate.role_name,
+                                cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
 
 if __name__ == '__main__':

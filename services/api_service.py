@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+import uuid
 from fastapi.responses import JSONResponse
 from models.response_model import ResponseModel
 from models.update_api_model import UpdateApiModel
@@ -12,7 +13,6 @@ from utils.cache import cache_manager
 from services.cache import pygate_cache
 from models.api_model import ApiModel
 
-import uuid
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
@@ -71,19 +71,20 @@ class ApiService:
                     error_code='API003', 
                     error_message='API does not exist for the requested name and version'
                     ).dict()
-            if api.get('_id'): del api['_id']
-            pygate_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
+        else:
+            pygate_cache.delete_cache('api_cache', pygate_cache.get_cache('api_id_cache', f"/{api_name}/{api_version}"))
+            pygate_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
             update_result = ApiService.api_collection.update_one(
                 {'api_name': api_name, 'api_version': api_version},
                 {'$set': not_null_data}
             )
-            if not update_result.acknowledged:
+            if not update_result.acknowledged or update_result.modified_count == 0:
                 return ResponseModel(
                     status_code=400, 
                     error_code='API002', 
-                    error_message='Database error: Unable to update endpoint'
+                    error_message='Database error: Unable to update endpoint or no changes were made'
                     ).dict()
             return ResponseModel(
                 status_code=200,
@@ -117,7 +118,7 @@ class ApiService:
                 error_code='API002', 
                 error_message='Database error: Unable to delete endpoint'
                 ).dict()
-        pygate_cache.delete_cache('api_cache', delete_result.api_id)
+        pygate_cache.delete_cache('api_cache', pygate_cache.get_cache('api_id_cache', f"/{api_name}/{api_version}"))
         pygate_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
         return ResponseModel(
             status_code=200,
