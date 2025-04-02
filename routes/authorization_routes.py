@@ -4,16 +4,20 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
-import logging
 
 from services.user_service import UserService
 from utils.token import create_access_token
 from utils.auth_util import auth_required
 from utils.auth_blacklist import TimedHeap, jwt_blacklist
+
+import uuid
+import time
+import logging
 
 authorization_router = APIRouter()
 
@@ -28,6 +32,8 @@ Login endpoint
 @authorization_router.post("/authorization")
 async def login(request: Request, Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         data = await request.json()
         email = data.get('email')
         password = data.get('password')
@@ -48,6 +54,9 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
         return response
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
     
 """
 Refresh token endpoint
@@ -58,6 +67,8 @@ Refresh token endpoint
     ])
 async def extended_login(Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         username = Authorize.get_jwt_subject()
         user = await UserService.get_user_by_username_helper(username)
         refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
@@ -69,6 +80,9 @@ async def extended_login(Authorize: AuthJWT = Depends()):
         return JSONResponse(status_code=500, content={"detail": "An error occurred during token refresh"})
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
 
 """
 Status endpoint
@@ -79,11 +93,16 @@ Status endpoint
     ])
 async def status():
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         return JSONResponse(content={"status": "authorized"}, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
     
 """
 Logout endpoint
@@ -94,6 +113,8 @@ Logout endpoint
     ])
 async def logout(response: Response, Authorize: AuthJWT = Depends()):
     try:
+        request_id = str(uuid.uuid4())
+        start_time = time.time() * 1000
         jwt_id = Authorize.get_raw_jwt()['jti']
         user = Authorize.get_jwt_subject()
         Authorize.unset_jwt_cookies(response)
@@ -106,6 +127,9 @@ async def logout(response: Response, Authorize: AuthJWT = Depends()):
         return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    finally:
+        end_time = time.time() * 1000
+        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
     
 @authorization_router.api_route("/status", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def rest_gateway():
