@@ -37,7 +37,7 @@ async def create_role(api_data: RoleModel, Authorize: AuthJWT = Depends()):
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return JSONResponse(content={"error": "You do not have permission to create roles"}, status_code=403)
-        return process_response(await RoleService.create_role(api_data))
+        return process_response(await RoleService.create_role(api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -57,7 +57,7 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, Authorize: Auth
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return JSONResponse(content={"error": "You do not have permission to update roles"}, status_code=403)
-        return process_response(await RoleService.update_role(role_name, api_data))
+        return process_response(await RoleService.update_role(role_name, api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -77,7 +77,7 @@ async def delete_role(role_name: str, Authorize: AuthJWT = Depends()):
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return JSONResponse(content={"error": "You do not have permission to delete roles"}, status_code=403)
-        return process_response(await RoleService.delete_role(role_name))
+        return process_response(await RoleService.delete_role(role_name, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -95,7 +95,7 @@ async def get_roles(page: int = 1, page_size: int = 10):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await RoleService.get_roles(page, page_size))
+        return process_response(await RoleService.get_roles(page, page_size, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -113,7 +113,7 @@ async def get_role(role_name: str):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await RoleService.get_role(role_name))
+        return process_response(await RoleService.get_role(role_name, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:

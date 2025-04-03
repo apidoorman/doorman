@@ -20,11 +20,13 @@ class RoleService:
     role_collection = db.roles
 
     @staticmethod
-    async def create_role(data: RoleModel):
+    async def create_role(data: RoleModel, request_id):
         """
         Onboard a role to the platform.
         """
+        logger.info(request_id + " | Creating role: " + data.role_name)
         if pygate_cache.get_cache('role_cache', data.role_name):
+            logger.error(request_id + " | Role creation failed with code ROLE001")
             return ResponseModel(
                 status_code=400,
                 error_code='ROLE001',
@@ -34,18 +36,21 @@ class RoleService:
         try:
             insert_result = RoleService.role_collection.insert_one(role_dict)
             if not insert_result.acknowledged:
-                    return ResponseModel(
-                        status_code=400,
-                        error_code='ROLE002',
-                        error_message='Database error: Unable to insert role'
-                    ).dict()
+                logger.error(request_id + " | Role creation failed with code ROLE002")
+                return ResponseModel(
+                    status_code=400,
+                    error_code='ROLE002',
+                    error_message='Database error: Unable to insert role'
+                ).dict()
             role_dict['_id'] = str(insert_result.inserted_id)
             pygate_cache.set_cache('role_cache', data.role_name, role_dict)
+            logger.info(request_id + " | Role creation successful")
             return ResponseModel(
                 status_code=201,
                 message='Role created successfully'
             ).dict()
         except DuplicateKeyError as e:
+            logger.error(request_id + " | Role creation failed with code ROLE001")
             return ResponseModel(
                 status_code=400,
                 error_code='GRP001',
@@ -53,11 +58,13 @@ class RoleService:
             ).dict()
         
     @staticmethod
-    async def update_role(role_name, data: UpdateRoleModel):
+    async def update_role(role_name, data: UpdateRoleModel, request_id):
         """
         Update a role.
         """
+        logger.info(request_id + " | Updating: " + role_name)
         if data.role_name and data.role_name != role_name:
+            logger.error(request_id + " | Role update failed with code ROLE005")
             return ResponseModel(
                 status_code=400,
                 error_code='ROLE005',
@@ -69,6 +76,7 @@ class RoleService:
                 'role_name': role_name
             })
             if not role:
+                logger.error(request_id + " | Role update failed with code ROLE004")
                 return ResponseModel(
                     status_code=400,
                     error_code='ROLE004',
@@ -80,16 +88,19 @@ class RoleService:
         if not_null_data:
             update_result = RoleService.role_collection.update_one({'role_name': role_name}, {'$set': not_null_data})
             if not update_result.acknowledged or update_result.modified_count == 0:
+                logger.error(request_id + " | Role update failed with code ROLE006")
                 return ResponseModel(
                     status_code=400,
                     error_code='ROLE006',
                     error_message='Database error: Unable to update role'
                 ).dict()
+            logger.info(request_id + " | Role update successful")
             return ResponseModel(
                 status_code=200,
                 message='Role updated successfully'
             ).dict()
         else:
+            logger.error(request_id + " | Role update failed with code ROLE007")
             return ResponseModel(
                 status_code=400,
                 error_code='ROLE007',
@@ -97,28 +108,32 @@ class RoleService:
             ).dict()
         
     @staticmethod
-    async def delete_role(role_name):
+    async def delete_role(role_name, request_id):
         """
         Delete a role.
         """
+        logger.info(request_id + " | Deleting group: " + role_name)
         role = pygate_cache.get_cache('role_cache', role_name)
         if not role:
             role = RoleService.role_collection.find_one({'role_name': role_name})
             if not role:
+                logger.error(request_id + " | Role deletion failed with code ROLE004")
                 return ResponseModel(
                     status_code=400,
                     error_code='ROLE004',
                     error_message='Role does not exist'
                 ).dict()
         else:
-            pygate_cache.delete_cache('role_cache', role_name)
+            pygate_cache.delete_cache('role_cache', role_name, request_id)
         delete_result = RoleService.role_collection.delete_one({'role_name': role_name})
         if not delete_result.acknowledged:
+            logger.error(request_id + " | Role deletion failed with code ROLE008")
             return ResponseModel(
                 status_code=400,
                 error_code='ROLE008',
                 error_message='Database error: Unable to delete role'
             ).dict()
+        logger.info(request_id + " | Role Deletion Successful")
         return ResponseModel(
             status_code=200,
             message='Role deleted successfully'
@@ -137,14 +152,16 @@ class RoleService:
 
     @staticmethod
     @cache_manager.cached(ttl=300)
-    async def get_roles(page=1, page_size=10):
+    async def get_roles(page=1, page_size=10, request_id=None):
         """
         Get all roles.
         """
+        logger.info(request_id + " | Getting roles: Page=" + str(page) + " Page Size=" + str(page_size))
         skip = (page - 1) * page_size
         cursor = RoleService.role_collection.find().sort('role_name', 1).skip(skip).limit(page_size)
         roles = cursor.to_list(length=None)
         if not roles:
+            logger.error(request_id + " | Roles retrieval failed with code ROLE003")
             return ResponseModel(
                 status_code=404,
                 error_code='ROLE003',
@@ -152,6 +169,7 @@ class RoleService:
             ).dict()
         for role in roles:
             if role.get('_id'): del role['_id']
+        logger.info(request_id + " | Roles retrieval successful")
         return ResponseModel(
             status_code=200,
             response={'roles': roles}
@@ -159,14 +177,16 @@ class RoleService:
 
     @staticmethod
     @cache_manager.cached(ttl=300)
-    async def get_role(role_name):
+    async def get_role(role_name, request_id):
         """
         Get a role by name.
         """
+        logger.info(request_id + " | Getting role: " + role_name)
         role = pygate_cache.get_cache('role_cache', role_name)
         if not role:
             role = RoleService.role_collection.find_one({'role_name': role_name})
             if not role:
+                logger.error(request_id + " | Role retrieval failed with code ROLE004")
                 return ResponseModel(
                     status_code=404,
                     error_code='ROLE004',
@@ -175,6 +195,7 @@ class RoleService:
             if role.get('_id'): del role['_id']
             pygate_cache.set_cache('role_cache', role_name, role)
         if role.get('_id'): del role['_id']
+        logger.info(request_id + " | Role retrieval successful")
         return ResponseModel(
             status_code=200,
             response=role
