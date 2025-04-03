@@ -37,7 +37,7 @@ async def create_endpoint(endpoint_data: EndpointModel, Authorize: AuthJWT = Dep
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
             return JSONResponse(content={"error": "You do not have permission to create endpoints"}, status_code=403)
-        return process_response(await EndpointService.create_endpoint(endpoint_data))
+        return process_response(await EndpointService.create_endpoint(endpoint_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -57,7 +57,7 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
             return JSONResponse(content={"error": "You do not have permission to update endpoints"}, status_code=403)
-        return process_response(await EndpointService.update_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, endpoint_data))
+        return process_response(await EndpointService.update_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, endpoint_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -77,7 +77,7 @@ async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str,
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
             return JSONResponse(content={"error": "You do not have permission to delete endpoints"}, status_code=403)
-        return process_response(await EndpointService.delete_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri))
+        return process_response(await EndpointService.delete_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -92,7 +92,7 @@ async def get_endpoint(api_name: str, api_version: str, endpoint_uri: str, reque
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await EndpointService.get_endpoint(request.method, api_name, api_version, '/' + endpoint_uri))
+        return process_response(await EndpointService.get_endpoint(request.method, api_name, api_version, '/' + endpoint_uri, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -110,7 +110,7 @@ async def get_endpoints_by_name_version(api_name: str, api_version: str, Authori
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await EndpointService.get_endpoints_by_name_version(api_name, api_version))
+        return process_response(await EndpointService.get_endpoints_by_name_version(api_name, api_version, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
