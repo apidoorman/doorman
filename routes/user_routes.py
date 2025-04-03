@@ -36,7 +36,7 @@ async def create_user(user_data: CreateUserModel, Authorize: AuthJWT = Depends()
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await UserService.create_user(user_data))
+        return process_response(await UserService.create_user(user_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -56,7 +56,7 @@ async def update_user(username: str, api_data: UpdateUserModel, Authorize: AuthJ
         start_time = time.time() * 1000
         if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             raise HTTPException(status_code=403, detail="Can only update your own information")
-        return process_response(await UserService.update_user(username, api_data))
+        return process_response(await UserService.update_user(username, api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -76,7 +76,7 @@ async def delete_user(username: str, Authorize: AuthJWT = Depends()):
         start_time = time.time() * 1000
         if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             raise HTTPException(status_code=403, detail="Can only delete your own account")
-        return process_response(await UserService.delete_user(username))
+        return process_response(await UserService.delete_user(username, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -96,7 +96,7 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, Aut
         start_time = time.time() * 1000
         if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             raise HTTPException(status_code=403, detail="Can only update your own password")
-        return process_response(await UserService.update_password(username, api_data))
+        return process_response(await UserService.update_password(username, api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -114,7 +114,7 @@ async def get_user_by_username(username: str):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await UserService.get_user_by_username(username))
+        return process_response(await UserService.get_user_by_username(username, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -132,7 +132,7 @@ async def get_user_by_email(email: str):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await UserService.get_user_by_email(email))
+        return process_response(await UserService.get_user_by_email(email, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
