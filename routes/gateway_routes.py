@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from slowapi.errors import RateLimitExceeded
 
-from services.rate_limit_service import rate_limit
+from services.limit_throttle_service import limit_and_throttle
 from utils.auth_util import auth_required
 from utils.group_util import group_required
 from utils.response_util import process_response
@@ -41,7 +41,7 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
     logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
     logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
     try:
-        await rate_limit(Authorize, request)
+        await limit_and_throttle(Authorize, request)
         request_model = RequestModel(
             method=request.method,
             path=path,
