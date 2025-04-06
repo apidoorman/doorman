@@ -45,6 +45,9 @@ async def limit_and_throttle(Authorize: AuthJWT, request: Request):
     throttle_count = await redis_client.incr(throttle_key)
     if throttle_count == 1:
         await redis_client.expire(throttle_key, throttle_window)
+    throttle_queue_limit = int(user.get("throttle_queue_limit", 10))
+    if throttle_count > throttle_queue_limit:
+        raise HTTPException(status_code=429, detail="Throttle queue limit exceeded")
     if throttle_count > throttle_limit:
         throttle_wait = float(user.get("throttle_wait", 0.5) or 0.5)
         throttle_wait_duration = user.get("throttle_wait_duration", "second")
