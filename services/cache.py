@@ -14,6 +14,22 @@ class PygateCacheManager:
         redis_port = int(os.getenv("REDIS_PORT"))
         redis_db = int(os.getenv("REDIS_DB"))
 
+        # Set default TTLs for each cache type (in seconds)
+        self.default_ttls = {
+            'api_cache': 86400,
+            'api_endpoint_cache': 86400,
+            'api_id_cache': 86400,
+            'endpoint_cache': 86400,
+            'group_cache': 86400,
+            'role_cache': 86400,
+            'user_subscription_cache': 86400,
+            'user_cache': 86400,
+            'user_group_cache': 86400,
+            'user_role_cache': 86400,
+            'endpoint_load_balancer': 86400,
+            'endpoint_server_cache': 86400
+        }
+
         self.redis = redis.StrictRedis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
         self.prefixes = {
             'api_cache': 'api_cache:',
@@ -36,8 +52,9 @@ class PygateCacheManager:
 
     def set_cache(self, cache_name, key, value):
         """Set a value in the specified cache."""
+        ttl = self.default_ttls.get(cache_name)
         redis_key = self._get_key(cache_name, key)
-        self.redis.set(redis_key, json.dumps(value))
+        self.redis.setex(redis_key, ttl, json.dumps(value))
 
     def get_cache(self, cache_name, key):
         """Get a value from the specified cache."""
