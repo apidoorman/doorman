@@ -17,8 +17,8 @@ No specialized low-level langauge expertise required. Just a simple, cost-effect
 - [x]  REST gateway implementation.
 - [x]  Basic logging.
 - [x]  Rate limiting.
-- [ ]  Throttling (in progress ⏳).
-- [ ]  Key based routing.
+- [x]  Throttling.
+- [ ]  Key based routing (in progress ⏳).
 - [ ]  Code optimization and testing.
 - [ ]  Add REST capabilties to user documentation.
 - [ ]  Version 1.0.0 release.
