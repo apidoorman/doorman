@@ -5,17 +5,16 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 from datetime import timedelta
-import multiprocessing
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from fastapi.middleware.cors import CORSMiddleware
 
+from redis.asyncio import Redis
+
 from pydantic import BaseSettings
 from dotenv import load_dotenv
-import uvicorn
-import asyncio
 
 from utils.cache import cache_manager
 from utils.auth_blacklist import purge_expired_tokens
@@ -29,17 +28,21 @@ from routes.api_routes import api_router
 from routes.endpoint_routes import endpoint_router
 from routes.gateway_routes import gateway_router
 
+import multiprocessing
 import logging
 import os
 import sys
 import subprocess
 import signal
+import uvicorn
+import asyncio
 
 load_dotenv()
 
 PID_FILE = "pygate.pid"
 
 pygate = FastAPI()
+
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
 methods = os.getenv("ALLOW_METHODS", "GET, POST, PUT, DELETE").split(",")
@@ -88,6 +91,10 @@ async def automatic_purger(interval_seconds):
 
 @pygate.on_event("startup")
 async def startup_event():
+    pygate.state.redis = Redis.from_url(
+        f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
+        decode_responses=True
+    )
     asyncio.create_task(automatic_purger(1800))
 
 @pygate.exception_handler(AuthJWTException)
@@ -95,6 +102,16 @@ async def authjwt_exception_handler(exc: AuthJWTException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"details": exc.message}
+    )
+
+@pygate.exception_handler(500)
+async def internal_server_error_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred. Please try again later."
+        }
     )
 
 cache_manager.init_app(pygate)

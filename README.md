@@ -15,10 +15,10 @@ No specialized low-level langauge expertise required. Just a simple, cost-effect
 - [x]  API subscriptions.
 - [x]  Basic Authorization (user roles and groups).
 - [x]  REST gateway implementation.
-- [ ]  Basic logging (in progress ⏳).
-- [ ]  Advanced user management (rate limiting and throttling).
-- [ ]  Advanced Authorization (role and group permissions).
-- [ ]  Key based routing
+- [x]  Basic logging.
+- [x]  Rate limiting.
+- [ ]  Throttling (in progress ⏳).
+- [ ]  Key based routing.
 - [ ]  Code optimization and testing.
 - [ ]  Add REST capabilties to user documentation.
 - [ ]  Version 1.0.0 release.
