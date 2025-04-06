@@ -74,11 +74,13 @@ class TestPygate:
         response = requests.post(f"{self.base_url}/platform/user", 
                                  cookies=TestPygate.getAccessCookies(),
                                  json={
-                                     "username": TestPygate.username, 
-                                     "email": TestPygate.email, 
-                                     "password": TestPygate.password, 
-                                     "role": "admin",
-                                     "groups": ["ALL"]
+                                    "username": TestPygate.username, 
+                                    "email": TestPygate.email, 
+                                    "password": TestPygate.password, 
+                                    "role": "admin",
+                                    "groups": ["ALL"],
+                                    "rate_limit": 2,
+                                    "rate_limit_duration": "minute"
                                  })
         assert response.status_code == 201
 
@@ -187,6 +189,27 @@ class TestPygate:
         response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(13)
+    async def test_gateway_call_2(self):
+        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(13)
+    async def test_gateway_call_3_rate_limit_exceed(self):
+        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 429
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(13)
+    async def test_gateway_call_4_rate_limit_exceed(self):
+        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 429
 
     @pytest.mark.asyncio
     @pytest.mark.order(14)

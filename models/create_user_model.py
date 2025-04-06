@@ -14,11 +14,13 @@ class CreateUserModel(BaseModel):
     password: str = Field(..., min_length=6, max_length=50)
     role: str = Field(..., min_length=2, max_length=50)
     groups: List[str] = Field(default_factory=list)
+    
     rate_limit: Optional[int] = Field(None, ge=0)
-    rate_limit_duration: Optional[int] = Field(None, ge=0)
+    rate_limit_duration: Optional[str] = Field(None, min_length=1, max_length=6)
     throttle: Optional[int] = Field(None, ge=0)
     throttle_duration: Optional[int] = Field(None, ge=0)
     whitelist: Optional[str] = Field(None, min_length=2, max_length=50)
+    custom_attributes: Optional[dict] = Field(None)
 
     class Config:
         arbitrary_types_allowed = True
