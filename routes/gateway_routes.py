@@ -38,6 +38,8 @@ logger = logging.getLogger("pygate.gateway")
 async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
+    logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+    logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
     try:
         await rate_limit(Authorize, request)
         request_model = RequestModel(
@@ -55,4 +57,4 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

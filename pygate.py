@@ -175,21 +175,19 @@ def stop():
 
 def run():
     server_port = int(os.getenv('PORT', 5001))
-    env = os.getenv("ENV", "development")
-    
-    if env.lower() == "production":
-        num_workers = multiprocessing.cpu_count()
-        logging.info("pygate production server started on port " + str(server_port))
-        os.system(f"gunicorn pygate:pygate -k uvicorn.workers.UvicornWorker --workers {num_workers} --bind 0.0.0.0:{server_port}")
-    else:
-        logging.info("pygate dev server started on port " + str(server_port))
-        uvicorn.run(
-            "pygate:pygate",
-            host="0.0.0.0",
-            port=server_port,
-            reload=True,
-            reload_excludes="venv"
-        )
+    max_threads = multiprocessing.cpu_count()
+    env_threads = int(os.getenv("THREADS", max_threads))
+    num_threads = min(env_threads, max_threads)
+    logger.info(f"pygate started with {num_threads} threads on port {server_port}")
+    uvicorn.run(
+        "pygate:pygate",
+        host="0.0.0.0",
+        port=server_port,
+        reload=True,
+        reload_excludes="venv",
+        workers=num_threads,
+        log_level="critical"
+    )
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "stop":
