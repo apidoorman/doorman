@@ -31,19 +31,23 @@ Login endpoint
 """
 @authorization_router.post("/authorization")
 async def login(request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         data = await request.json()
         email = data.get('email')
         password = data.get('password')
         if not email or not password:
+            logger.error(f"{request_id} | Missing email or password")
             raise HTTPException(
                 status_code=400,
                 detail="Missing email or password"
             )
         user = await UserService.check_password_return_user(email, password)
         if not user:
+            logger.error(f"{request_id} | Invalid email or password")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid email or password"
@@ -56,7 +60,7 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
     
 """
 Refresh token endpoint
@@ -65,10 +69,12 @@ Refresh token endpoint
     dependencies=[
         Depends(auth_required)
     ])
-async def extended_login(Authorize: AuthJWT = Depends()):
+async def extended_login(request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         username = Authorize.get_jwt_subject()
         user = await UserService.get_user_by_username_helper(username)
         refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
@@ -82,7 +88,7 @@ async def extended_login(Authorize: AuthJWT = Depends()):
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 """
 Status endpoint
@@ -91,10 +97,12 @@ Status endpoint
     dependencies=[
         Depends(auth_required)
     ])
-async def status():
+async def status(request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         return JSONResponse(content={"status": "authorized"}, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -102,7 +110,7 @@ async def status():
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
     
 """
 Logout endpoint
@@ -111,10 +119,12 @@ Logout endpoint
     dependencies=[
         Depends(auth_required)
     ])
-async def logout(response: Response, Authorize: AuthJWT = Depends()):
+async def logout(response: Response, request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         jwt_id = Authorize.get_raw_jwt()['jti']
         user = Authorize.get_jwt_subject()
         Authorize.unset_jwt_cookies(response)
@@ -129,7 +139,7 @@ async def logout(response: Response, Authorize: AuthJWT = Depends()):
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
     
 @authorization_router.api_route("/status", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def rest_gateway():

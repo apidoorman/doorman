@@ -20,7 +20,6 @@ import time
 import logging
 
 api_router = APIRouter() 
-
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
@@ -32,10 +31,11 @@ Create API *platform endpoint.
         Depends(auth_required)
     ])
 async def create_api(request: Request, api_data: ApiModel, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
-        logger.info(request_id + " | Endpoint: " + str(request.url.path))
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return JSONResponse(content={"error": "You do not have permission to create APIs"}, status_code=403)
         return process_response(await ApiService.create_api(api_data, request_id))
@@ -43,7 +43,7 @@ async def create_api(request: Request, api_data: ApiModel, Authorize: AuthJWT = 
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
     
 """
 Update API *platform endpoint.
@@ -53,10 +53,11 @@ Update API *platform endpoint.
         Depends(auth_required)
     ])
 async def update_api(api_name: str, api_version: str, request: Request, api_data: UpdateApiModel, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
-        logger.info(request_id + " | Endpoint: " + str(request.url.path))
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return JSONResponse(content={"error": "You do not have permission to update APIs"}, status_code=403)
         return process_response(await ApiService.update_api(api_name, api_version, api_data, request_id))
@@ -64,7 +65,7 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 """
 Get API *platform endpoint.
@@ -73,17 +74,18 @@ Get API *platform endpoint.
     dependencies=[
         Depends(auth_required)
     ])
-async def get_api_by_name_version(api_name: str, api_version: str, request: Request):
+async def get_api_by_name_version(api_name: str, api_version: str, request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
-        logger.info(request_id + " | Endpoint: " + str(request.url.path))
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         return process_response(await ApiService.get_api_by_name_version(api_name, api_version, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
     
 """
 Delete API *platform endpoint.
@@ -92,17 +94,18 @@ Delete API *platform endpoint.
     dependencies=[
         Depends(auth_required)
     ])
-async def get_api_by_name_version(api_name: str, api_version: str, request: Request):
+async def get_api_by_name_version(api_name: str, api_version: str, request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
-        logger.info(request_id + " | Endpoint: " + str(request.url.path))
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         return process_response(await ApiService.delete_api(api_name, api_version, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 """
 Get All Accessable APIs *platform endpoint.
@@ -111,14 +114,15 @@ Get All Accessable APIs *platform endpoint.
     dependencies=[
         Depends(auth_required)
     ])
-async def get_all_apis(request: Request, page: int = 1, page_size: int = 10):
+async def get_all_apis(request: Request, Authorize: AuthJWT = Depends(), page: int = 1, page_size: int = 10):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        request_id = str(uuid.uuid4())
-        start_time = time.time() * 1000
-        logger.info(request_id + " | Endpoint: " + str(request.url.path))
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
         return process_response(await ApiService.get_apis(page, page_size, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
         end_time = time.time() * 1000
-        logger.info(request_id + " | Total time: " + str(end_time - start_time) + " ms")
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
