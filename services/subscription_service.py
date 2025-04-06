@@ -43,14 +43,16 @@ class SubscriptionService:
 
     @staticmethod
     @cache_manager.cached(ttl=300)
-    async def get_user_subscriptions(username):
+    async def get_user_subscriptions(username, request_id):
         """
         Get user subscriptions.
         """
+        logger.info(f"{request_id} | Getting subscriptions for: {username}")
         subscriptions = pygate_cache.get_cache('user_subscription_cache', username)
         if not subscriptions:
             subscriptions = SubscriptionService.subscriptions_collection.find_one({'username': username})
             if not subscriptions:
+                logger.error(f"{request_id} | Subscription retrieval failed with code SUB002")
                 return ResponseModel(
                     status_code=404,
                     error_code='SUB002',
@@ -60,17 +62,20 @@ class SubscriptionService:
             pygate_cache.set_cache('user_subscription_cache', username, subscriptions)
         if '_id' in subscriptions:
             del subscriptions['_id']
+        logger.info(f"{request_id} | Subscriptions retrieved successfully")
         return ResponseModel(
             status_code=200,
             response={'subscriptions': subscriptions}
         ).dict()
 
     @staticmethod
-    async def subscribe(data):
+    async def subscribe(data, request_id):
         """
         Subscribe to an API.
         """
+        logger.info(f"{request_id} | Subscribing {data.username} to API: {data.api_name}/{data.api_version}")
         if not await SubscriptionService.api_exists(data.api_name, data.api_version):
+            logger.error(f"{request_id} | Subscription failed with code SUB003")
             return ResponseModel(
                 status_code=404,
                 error_code='SUB003',
@@ -88,6 +93,7 @@ class SubscriptionService:
             }
             SubscriptionService.subscriptions_collection.insert_one(user_subscriptions)
         elif 'apis' in user_subscriptions and f"{data.api_name}/{data.api_version}" in user_subscriptions['apis']:
+            logger.error(f"{request_id} | Subscription failed with code SUB004")
             return ResponseModel(
                 status_code=400,
                 error_code='SUB004',
@@ -102,16 +108,18 @@ class SubscriptionService:
         if user_subscriptions and '_id' in user_subscriptions:
             del user_subscriptions['_id']
         pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        logger.info(f"{request_id} | Subscription successful")
         return ResponseModel(
             status_code=200,
             response={'message': 'Successfully subscribed to the API'}
         ).dict()
         
     @staticmethod
-    async def unsubscribe(data):
+    async def unsubscribe(data, request_id):
         """
         Unsubscribe from an API.
         """
+        logger.info(f"{request_id} | Unsubscribing {data.username} from API: {data.api_name}/{data.api_version}")
         if not await SubscriptionService.api_exists(data.api_name, data.api_version):
             return ResponseModel(
                 status_code=404,
@@ -124,6 +132,7 @@ class SubscriptionService:
             if user_subscriptions and '_id' in user_subscriptions: del user_subscriptions['_id']
             pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         if not user_subscriptions or f"{data.api_name}/{data.api_version}" not in user_subscriptions.get('apis', []):
+            logger.error(f"{request_id} | Unsubscription failed with code SUB006")
             return ResponseModel(
                 status_code=400,
                 error_code='SUB006',
@@ -138,6 +147,7 @@ class SubscriptionService:
         if user_subscriptions and '_id' in user_subscriptions:
             del user_subscriptions['_id']
         pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        logger.info(f"{request_id} | Unsubscription successful")
         return ResponseModel(
             status_code=200,
             response={'message': 'Successfully unsubscribed from the API'}

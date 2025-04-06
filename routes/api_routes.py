@@ -4,7 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
@@ -31,13 +31,14 @@ Create API *platform endpoint.
     dependencies=[
         Depends(auth_required)
     ])
-async def create_api(api_data: ApiModel, Authorize: AuthJWT = Depends()):
+async def create_api(request: Request, api_data: ApiModel, Authorize: AuthJWT = Depends()):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
+        logger.info(request_id + " | Endpoint: " + str(request.url.path))
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return JSONResponse(content={"error": "You do not have permission to create APIs"}, status_code=403)
-        return process_response(await ApiService.create_api(api_data))
+        return process_response(await ApiService.create_api(api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -51,13 +52,14 @@ Update API *platform endpoint.
     dependencies=[
         Depends(auth_required)
     ])
-async def create_api(api_name: str, api_version: str, api_data: UpdateApiModel, Authorize: AuthJWT = Depends()):
+async def update_api(api_name: str, api_version: str, request: Request, api_data: UpdateApiModel, Authorize: AuthJWT = Depends()):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
+        logger.info(request_id + " | Endpoint: " + str(request.url.path))
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return JSONResponse(content={"error": "You do not have permission to update APIs"}, status_code=403)
-        return process_response(await ApiService.update_api(api_name, api_version, api_data))
+        return process_response(await ApiService.update_api(api_name, api_version, api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -71,11 +73,12 @@ Get API *platform endpoint.
     dependencies=[
         Depends(auth_required)
     ])
-async def get_api_by_name_version(api_name: str, api_version: str):
+async def get_api_by_name_version(api_name: str, api_version: str, request: Request):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await ApiService.get_api_by_name_version(api_name, api_version))
+        logger.info(request_id + " | Endpoint: " + str(request.url.path))
+        return process_response(await ApiService.get_api_by_name_version(api_name, api_version, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -89,11 +92,12 @@ Delete API *platform endpoint.
     dependencies=[
         Depends(auth_required)
     ])
-async def get_api_by_name_version(api_name: str, api_version: str):
+async def get_api_by_name_version(api_name: str, api_version: str, request: Request):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await ApiService.delete_api(api_name, api_version))
+        logger.info(request_id + " | Endpoint: " + str(request.url.path))
+        return process_response(await ApiService.delete_api(api_name, api_version, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -107,11 +111,12 @@ Get All Accessable APIs *platform endpoint.
     dependencies=[
         Depends(auth_required)
     ])
-async def get_all_apis(page: int = 1, page_size: int = 10):
+async def get_all_apis(request: Request, page: int = 1, page_size: int = 10):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await ApiService.get_apis(page, page_size))
+        logger.info(request_id + " | Endpoint: " + str(request.url.path))
+        return process_response(await ApiService.get_apis(page, page_size, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:

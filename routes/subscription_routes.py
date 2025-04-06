@@ -46,7 +46,7 @@ async def subscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends()
         start_time = time.time() * 1000
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
             raise HTTPException(status_code=403, detail="You do not have the correct group access")
-        return process_response(await SubscriptionService.subscribe(api_data))
+        return process_response(await SubscriptionService.subscribe(api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -67,7 +67,7 @@ async def unsubscribe_api(api_data: SubscribeModel, Authorize: AuthJWT = Depends
         start_time = time.time() * 1000
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
             raise HTTPException(status_code=403, detail="You do not have the correct group access")
-        return process_response(await SubscriptionService.unsubscribe(api_data))
+        return process_response(await SubscriptionService.unsubscribe(api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -86,7 +86,7 @@ async def subscriptions_for_user_by_id(user_id: str):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await SubscriptionService.get_user_subscriptions(user_id))
+        return process_response(await SubscriptionService.get_user_subscriptions(user_id, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -105,7 +105,7 @@ async def subscriptions_for_current_user(Authorize: AuthJWT = Depends()):
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
         username = Authorize.get_jwt_subject()
-        return process_response(await SubscriptionService.get_user_subscriptions(username))
+        return process_response(await SubscriptionService.get_user_subscriptions(username, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:

@@ -37,7 +37,7 @@ async def create_group(api_data: GroupModel, Authorize: AuthJWT = Depends()):
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to create groups"}, status_code=403)
-        return process_response(await GroupService.create_group(api_data))
+        return process_response(await GroupService.create_group(api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -57,7 +57,7 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, Authorize: A
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to update groups"}, status_code=403)
-        return process_response(await GroupService.update_group(group_name, api_data))
+        return process_response(await GroupService.update_group(group_name, api_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -77,7 +77,7 @@ async def delete_group(group_name: str, Authorize: AuthJWT = Depends()):
         start_time = time.time() * 1000
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to delete groups"}, status_code=403)
-        return process_response(await GroupService.delete_group(group_name))
+        return process_response(await GroupService.delete_group(group_name, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -95,7 +95,7 @@ async def get_groups(page: int = 1, page_size: int = 10):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await GroupService.get_groups(page, page_size))
+        return process_response(await GroupService.get_groups(page, page_size, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
@@ -114,7 +114,7 @@ async def get_group(group_name: str):
     try:
         request_id = str(uuid.uuid4())
         start_time = time.time() * 1000
-        return process_response(await GroupService.get_group(group_name))
+        return process_response(await GroupService.get_group(group_name, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
