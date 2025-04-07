@@ -27,7 +27,8 @@ class PygateCacheManager:
             'user_group_cache': 86400,
             'user_role_cache': 86400,
             'endpoint_load_balancer': 86400,
-            'endpoint_server_cache': 86400
+            'endpoint_server_cache': 86400,
+            'client_routing_cache': 86400
         }
 
         self.redis = redis.StrictRedis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
@@ -43,7 +44,8 @@ class PygateCacheManager:
             'user_group_cache': 'user_group_cache:',
             'user_role_cache': 'user_role_cache:',
             'endpoint_load_balancer': 'endpoint_load_balancer:',
-            'endpoint_server_cache': 'endpoint_server_cache:'
+            'endpoint_server_cache': 'endpoint_server_cache:',
+            'client_routing_cache': 'client_routing_cache:'
         }
 
     def _get_key(self, cache_name, key):
