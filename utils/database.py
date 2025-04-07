@@ -19,7 +19,7 @@ class Database:
         self.create_indexes()
 
     def initialize_collections(self):
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles']
+        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db.create_collection(collection)
@@ -55,6 +55,10 @@ class Database:
             IndexModel([("username", ASCENDING)], unique=True)
         ])
 
+        self.db.routings.create_indexes([
+            IndexModel([("client_key", ASCENDING)], unique=True)
+        ])
+
         # TODO: Remove this before merging to master
         if self.db.users.find_one({"username": "admin"}):
             self.db.users.delete_one({"username": "admin"})
@@ -76,7 +80,8 @@ class Database:
                 "manage_apis": True,
                 "manage_endpoints": True,
                 "manage_groups": True,
-                "manage_roles": True
+                "manage_roles": True,
+                "manage_routings": True
             })
 
 database = Database()

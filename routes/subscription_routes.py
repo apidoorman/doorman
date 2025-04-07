@@ -45,7 +45,7 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
             raise HTTPException(status_code=403, detail="You do not have the correct group access")
         return process_response(await SubscriptionService.subscribe(api_data, request_id))
@@ -68,7 +68,7 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version):
             raise HTTPException(status_code=403, detail="You do not have the correct group access")
         return process_response(await SubscriptionService.unsubscribe(api_data, request_id))
@@ -91,7 +91,7 @@ async def subscriptions_for_user_by_id(user_id: str, request: Request, Authorize
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await SubscriptionService.get_user_subscriptions(user_id, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
@@ -111,7 +111,7 @@ async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = 
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         username = Authorize.get_jwt_subject()
         return process_response(await SubscriptionService.get_user_subscriptions(username, request_id))
     except ValueError as e:
