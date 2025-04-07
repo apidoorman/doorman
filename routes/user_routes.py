@@ -37,7 +37,7 @@ async def create_user(user_data: CreateUserModel, request: Request, Authorize: A
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await UserService.create_user(user_data, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
@@ -57,7 +57,7 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             raise HTTPException(status_code=403, detail="Can only update your own information")
         return process_response(await UserService.update_user(username, api_data, request_id))
@@ -79,7 +79,7 @@ async def delete_user(username: str, request: Request, Authorize: AuthJWT = Depe
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             raise HTTPException(status_code=403, detail="Can only delete your own account")
         return process_response(await UserService.delete_user(username, request_id))
@@ -101,7 +101,7 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             raise HTTPException(status_code=403, detail="Can only update your own password")
         return process_response(await UserService.update_password(username, api_data, request_id))
@@ -123,7 +123,7 @@ async def get_user_by_username(username: str, request: Request, Authorize: AuthJ
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await UserService.get_user_by_username(username, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
@@ -143,7 +143,7 @@ async def get_user_by_email(email: str, request: Request, Authorize: AuthJWT = D
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await UserService.get_user_by_email(email, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)

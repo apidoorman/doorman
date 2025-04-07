@@ -39,7 +39,7 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-    logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+    logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
     try:
         await limit_and_throttle(Authorize, request)
         request_model = RequestModel(

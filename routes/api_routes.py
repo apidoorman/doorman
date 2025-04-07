@@ -35,7 +35,7 @@ async def create_api(request: Request, api_data: ApiModel, Authorize: AuthJWT = 
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return JSONResponse(content={"error": "You do not have permission to create APIs"}, status_code=403)
         return process_response(await ApiService.create_api(api_data, request_id))
@@ -57,7 +57,7 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return JSONResponse(content={"error": "You do not have permission to update APIs"}, status_code=403)
         return process_response(await ApiService.update_api(api_name, api_version, api_data, request_id))
@@ -79,7 +79,7 @@ async def get_api_by_name_version(api_name: str, api_version: str, request: Requ
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await ApiService.get_api_by_name_version(api_name, api_version, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
@@ -99,7 +99,7 @@ async def get_api_by_name_version(api_name: str, api_version: str, request: Requ
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await ApiService.delete_api(api_name, api_version, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
@@ -119,7 +119,7 @@ async def get_all_apis(request: Request, Authorize: AuthJWT = Depends(), page: i
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await ApiService.get_apis(page, page_size, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)

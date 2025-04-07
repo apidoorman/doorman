@@ -35,7 +35,7 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         data = await request.json()
         email = data.get('email')
         password = data.get('password')
@@ -74,7 +74,7 @@ async def extended_login(request: Request, Authorize: AuthJWT = Depends()):
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         username = Authorize.get_jwt_subject()
         user = await UserService.get_user_by_username_helper(username)
         refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
@@ -102,7 +102,7 @@ async def status(request: Request, Authorize: AuthJWT = Depends()):
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return JSONResponse(content={"status": "authorized"}, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -124,7 +124,7 @@ async def logout(response: Response, request: Request, Authorize: AuthJWT = Depe
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         jwt_id = Authorize.get_raw_jwt()['jti']
         user = Authorize.get_jwt_subject()
         Authorize.unset_jwt_cookies(response)
