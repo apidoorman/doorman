@@ -16,6 +16,7 @@ class RoleModel(BaseModel):
     manage_endpoints: bool = False
     manage_groups: bool = False
     manage_roles: bool = False
+    manage_routings: bool = False
 
     class Config:
         arbitrary_types_allowed = True

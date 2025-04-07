@@ -36,7 +36,7 @@ async def create_role(api_data: RoleModel, request: Request, Authorize: AuthJWT 
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return JSONResponse(content={"error": "You do not have permission to create roles"}, status_code=403)
         return process_response(await RoleService.create_role(api_data, request_id))
@@ -58,7 +58,7 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return JSONResponse(content={"error": "You do not have permission to update roles"}, status_code=403)
         return process_response(await RoleService.update_role(role_name, api_data, request_id))
@@ -80,7 +80,7 @@ async def delete_role(role_name: str, request: Request, Authorize: AuthJWT = Dep
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return JSONResponse(content={"error": "You do not have permission to delete roles"}, status_code=403)
         return process_response(await RoleService.delete_role(role_name, request_id))
@@ -102,7 +102,7 @@ async def get_roles(request: Request, Authorize: AuthJWT = Depends(), page: int 
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await RoleService.get_roles(page, page_size, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
@@ -122,7 +122,7 @@ async def get_role(role_name: str, request: Request, Authorize: AuthJWT = Depend
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {str(request.url.path)}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await RoleService.get_role(role_name, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)

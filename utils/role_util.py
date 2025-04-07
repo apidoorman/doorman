@@ -41,6 +41,8 @@ async def validate_platform_role(role_name, action):
             return True
         elif action == "manage_roles" and role.get("manage_roles"):
             return True
+        elif action == "manage_routings" and role.get("manage_routings"):
+            return True
         return False
     except Exception as e:
         logger.error(f"Error getting platform roles: {e}")

@@ -4,9 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi.responses import JSONResponse
+# Removed unused import: JSONResponse
 
 from models.response_model import ResponseModel
+from utils import routing_util
 from utils.database import db
 from services.cache import pygate_cache
 
@@ -70,10 +71,29 @@ class GatewayService:
                     error_code='GTW003',
                     error_message='Endpoint does not exist for the requested API and URI'
                 ).dict()
-            server_index = pygate_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
-            api_servers = api.get('api_servers') or []
-            server = api_servers[server_index]
-            pygate_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api.get('api_servers')))
+            client_key = request.headers.get('client-key')
+            if client_key:
+                routing = await routing_util.get_client_routing(client_key)
+                if not routing:
+                    logger.error(f"{request_id} | REST gateway failed with code GTW007")
+                    return ResponseModel(
+                        status_code=401,
+                        error_code='GTW007',
+                        error_message='Client key is invalid'
+                    ).dict()
+                server_index = routing.get('server_index') or 0
+                api_servers = routing.get('routing_servers') or []
+                server = api_servers[server_index]
+                server_index = (server_index + 1) % len(api_servers)
+                routing['server_index'] = server_index
+                pygate_cache.set_cache('client_routing_cache', client_key, routing)
+                logger.info(f"{request_id} | REST gateway to: {server}")
+            else:
+                server_index = pygate_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
+                api_servers = api.get('api_servers') or []
+                server = api_servers[server_index]
+                pygate_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api.get('api_servers')))
+                logger.info(f"{request_id} | REST gateway to: {server}")
             url = server + request.path
             method = request.method.upper()
             if method == 'GET':
@@ -109,7 +129,7 @@ class GatewayService:
                 status_code=response.status_code,
                 response=response_content
             ).dict()
-        except Exception as e:
+        except Exception:
             logger.error(f"{request_id} | REST gateway failed with code GTW006")
             return ResponseModel(
                 status_code=500,
@@ -117,4 +137,5 @@ class GatewayService:
                 error_message='Internal server error'
             ).dict()
         finally:
-            response.headers['X-Request-Id'] = request_id
+            if response:
+                response.headers['X-Request-Id'] = request_id
