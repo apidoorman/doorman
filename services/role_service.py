@@ -112,7 +112,7 @@ class RoleService:
         """
         Delete a role.
         """
-        logger.info(request_id + " | Deleting group: " + role_name)
+        logger.info(request_id + " | Deleting role: " + role_name)
         role = pygate_cache.get_cache('role_cache', role_name)
         if not role:
             role = RoleService.role_collection.find_one({'role_name': role_name})
@@ -124,7 +124,7 @@ class RoleService:
                     error_message='Role does not exist'
                 ).dict()
         else:
-            pygate_cache.delete_cache('role_cache', role_name, request_id)
+            pygate_cache.delete_cache('role_cache', role_name)
         delete_result = RoleService.role_collection.delete_one({'role_name': role_name})
         if not delete_result.acknowledged:
             logger.error(request_id + " | Role deletion failed with code ROLE008")

@@ -27,6 +27,7 @@ from routes.user_routes import user_router
 from routes.api_routes import api_router
 from routes.endpoint_routes import endpoint_router
 from routes.gateway_routes import gateway_router
+from routes.routing_routes import routing_router
 
 import multiprocessing
 import logging
@@ -124,6 +125,7 @@ pygate.include_router(endpoint_router, prefix="/platform/endpoint", tags=["Endpo
 pygate.include_router(group_router, prefix="/platform/group", tags=["Group"])
 pygate.include_router(role_router, prefix="/platform/role", tags=["Role"])
 pygate.include_router(subscription_router, prefix="/platform/subscription", tags=["Subscription"])
+pygate.include_router(routing_router, prefix="/platform/routing", tags=["Routing"])
 
 @pygate.exception_handler(500)
 async def internal_server_error_handler():
@@ -185,8 +187,7 @@ def run():
         port=server_port,
         reload=True,
         reload_excludes="venv",
-        workers=num_threads,
-        log_level="critical"
+        workers=num_threads
     )
 
 if __name__ == "__main__":
