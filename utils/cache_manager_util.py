@@ -27,12 +27,10 @@ class CacheManager:
         caches.set_config(self.cache_config)
 
     def init_app(self, app: FastAPI):
-        """Initialize cache with FastAPI application"""
         app.state.cache = self
         return self
     
     def cached(self, ttl=300, key=None):
-        """Wrapper around aiocache.cached with default configuration"""
         return cached(ttl=ttl, key=key, cache=Cache.REDIS)
 
 cache_manager = CacheManager()

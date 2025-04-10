@@ -1,7 +1,8 @@
 from fastapi import Request, HTTPException
 from fastapi_jwt_auth import AuthJWT
-from services.cache import pygate_cache
+from utils.pygate_cache_util import pygate_cache
 from services.user_service import UserService
+from utils.database import user_collection
 
 import asyncio
 import time
@@ -27,9 +28,9 @@ async def limit_and_throttle(Authorize: AuthJWT, request: Request):
     redis_client = request.app.state.redis
     user = pygate_cache.get_cache("user_cache", username)
     if not user:
-        user = await UserService.user_collection.find_one({"username": username})
-    rate = int(user.get("rate_limit", 1))
-    duration = user.get("rate_limit_duration", "minute")
+        user = await user_collection.find_one({"username": username})
+    rate = int(user.get("rate_limit_duration") or 1)
+    duration = user.get("rate_limit_duration_type", "minute")
     window = duration_to_seconds(duration)
     now = int(time.time())
     key = f"rate_limit:{username}:{now // window}"
@@ -38,19 +39,19 @@ async def limit_and_throttle(Authorize: AuthJWT, request: Request):
         await redis_client.expire(key, window)
     if count > rate:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
-    throttle_limit = int(user.get("throttle_soft_limit", 5))
-    throttle_duration = user.get("throttle_duration", "second")
+    throttle_limit = int(user.get("throttle_duration") or 5)
+    throttle_duration = user.get("throttle_duration_type", "second")
     throttle_window = duration_to_seconds(throttle_duration)
     throttle_key = f"throttle_limit:{username}:{now // throttle_window}"
     throttle_count = await redis_client.incr(throttle_key)
     if throttle_count == 1:
         await redis_client.expire(throttle_key, throttle_window)
-    throttle_queue_limit = int(user.get("throttle_queue_limit", 10))
+    throttle_queue_limit = int(user.get("throttle_queue_limit") or 10)
     if throttle_count > throttle_queue_limit:
         raise HTTPException(status_code=429, detail="Throttle queue limit exceeded")
     if throttle_count > throttle_limit:
-        throttle_wait = float(user.get("throttle_wait", 0.5) or 0.5)
-        throttle_wait_duration = user.get("throttle_wait_duration", "second")
+        throttle_wait = float(user.get("throttle_wait_duration", 0.5) or 0.5)
+        throttle_wait_duration = user.get("throttle_wait_duration_type", "second")
         if throttle_wait_duration != "second":
             throttle_wait *= duration_to_seconds(throttle_wait_duration)
         dynamic_wait = throttle_wait * (throttle_count - throttle_limit)

@@ -7,8 +7,8 @@ See https://github.com/pypeople-dev/pygate for more information
 from fastapi import HTTPException, Depends, Request
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import MissingTokenError
-from services.cache import pygate_cache
-from services.subscription_service import SubscriptionService
+from utils.pygate_cache_util import pygate_cache
+from utils.database import subscriptions_collection
 
 import logging
 
@@ -25,7 +25,7 @@ def subscription_required(request: Request, Authorize: AuthJWT = Depends()):
         else:
             path = full_path
         api_and_version = '/'.join(path.split('/')[:2])
-        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', username) or SubscriptionService.subscriptions_collection.find_one({'username': username})
+        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', username) or subscriptions_collection.find_one({'username': username})
         subscriptions = user_subscriptions.get('apis') if user_subscriptions and 'apis' in user_subscriptions else None
         if not subscriptions or api_and_version not in subscriptions:
             logger.info(f"User {username} attempted access to {api_and_version}")

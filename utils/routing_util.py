@@ -1,12 +1,10 @@
-from services.cache import pygate_cache
-from utils.database import db
+from utils.pygate_cache_util import pygate_cache
+from utils.database import routing_collection
 
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
-
-routing_collection = db.routings
 
 async def get_client_routing(client_key):
     """

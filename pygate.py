@@ -6,6 +6,7 @@ See https://github.com/pypeople-dev/pygate for more information
 
 from datetime import timedelta
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
@@ -16,7 +17,7 @@ from redis.asyncio import Redis
 from pydantic import BaseSettings
 from dotenv import load_dotenv
 
-from utils.cache import cache_manager
+from utils.cache_manager_util import cache_manager
 from utils.auth_blacklist import purge_expired_tokens
 
 from routes.authorization_routes import authorization_router
@@ -71,7 +72,7 @@ class Settings(BaseSettings):
     authjwt_cookie_domain: str = domain
     authjwt_cookie_path: str = "/"
     authjwt_cookie_samesite: str = 'lax'
-    authjwt_cookie_csrf_protect: bool = False
+    authjwt_cookie_csrf_protect: bool = https_only
     authjwt_refresh_cookie_path: str = "/refresh"
 
     authjwt_access_token_expires: timedelta = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRES_MINUTES", 15)))
@@ -102,7 +103,11 @@ async def startup_event():
 async def authjwt_exception_handler(exc: AuthJWTException):
     return JSONResponse(
         status_code=exc.status_code,
-        content={"details": exc.message}
+        content={
+            "code": "AUTH001",
+            "error": "JWT Error",
+            "message": exc.message
+            }
     )
 
 @pygate.exception_handler(500)
@@ -110,9 +115,20 @@ async def internal_server_error_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
+            "code": "ISE001",
             "error": "Internal Server Error",
             "message": "An unexpected error occurred. Please try again later."
         }
+    )
+
+@pygate.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=400,
+        content={
+            "code": "VAL001",
+            "error": exc.errors(), 
+            "message": exc.body}
     )
 
 cache_manager.init_app(pygate)
@@ -126,13 +142,6 @@ pygate.include_router(group_router, prefix="/platform/group", tags=["Group"])
 pygate.include_router(role_router, prefix="/platform/role", tags=["Role"])
 pygate.include_router(subscription_router, prefix="/platform/subscription", tags=["Subscription"])
 pygate.include_router(routing_router, prefix="/platform/routing", tags=["Routing"])
-
-@pygate.exception_handler(500)
-async def internal_server_error_handler():
-    return {
-        "error": "Internal Server Error",
-        "message": "An unexpected error occurred. Please try again later.",
-    }
 
 def start():
     if os.path.exists(PID_FILE):
@@ -152,12 +161,12 @@ def start():
 
     with open(PID_FILE, "w") as f:
         f.write(str(process.pid))
-    print(f"pygate started with PID {process.pid}.")
+    logger.info(f"Starting pygate with PID {process.pid}.")
 
 
 def stop():
     if not os.path.exists(PID_FILE):
-        print("No running instance found.")
+        logger.info("No running instance found")
         return
 
     with open(PID_FILE, "r") as f:
@@ -168,9 +177,9 @@ def stop():
             subprocess.call(["taskkill", "/F", "/PID", str(pid)])
         else:
             os.killpg(pid, signal.SIGTERM)
-        print(f"pygate with PID {pid} has been stopped.")
+        print(f"Stopping pygate with PID {pid}")
     except ProcessLookupError:
-        print("Process already terminated.")
+        print("Process already terminated")
     finally:
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
@@ -180,14 +189,15 @@ def run():
     max_threads = multiprocessing.cpu_count()
     env_threads = int(os.getenv("THREADS", max_threads))
     num_threads = min(env_threads, max_threads)
-    logger.info(f"pygate started with {num_threads} threads on port {server_port}")
+    logger.info(f"Started pygate with {num_threads} threads on port {server_port}")
     uvicorn.run(
         "pygate:pygate",
         host="0.0.0.0",
         port=server_port,
         reload=True,
         reload_excludes="venv",
-        workers=num_threads
+        workers=num_threads,
+        log_level="critical"
     )
 
 if __name__ == "__main__":
