@@ -197,7 +197,9 @@ def run():
         reload=True,
         reload_excludes="venv",
         workers=num_threads,
-        log_level="critical"
+        log_level="critical",
+        ssl_certfile=os.getenv("SSL_CERTFILE"),
+        ssl_keyfile=os.getenv("SSL_KEYFILE")
     )
 
 if __name__ == "__main__":
