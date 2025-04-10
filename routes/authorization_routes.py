@@ -11,7 +11,7 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 
 from services.user_service import UserService
-from utils.token import create_access_token
+from utils.token_util import create_access_token
 from utils.auth_util import auth_required
 from utils.auth_blacklist import TimedHeap, jwt_blacklist
 
@@ -26,10 +26,8 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
-"""
-Login endpoint
-"""
-@authorization_router.post("/authorization")
+@authorization_router.post("/authorization",
+    description="Create authorization token",)
 async def login(request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -57,15 +55,17 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
         Authorize.set_access_cookies(access_token, response)
         return response
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
     
-"""
-Refresh token endpoint
-"""
 @authorization_router.post("/authorization/refresh",
+    description="Create authorization refresh token",
     dependencies=[
         Depends(auth_required)
     ])
@@ -85,15 +85,17 @@ async def extended_login(request: Request, Authorize: AuthJWT = Depends()):
         logging.error(f"Token refresh failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during token refresh"})
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-"""
-Status endpoint
-"""
 @authorization_router.get("/authorization/status",
+    description="Get authorization token status",
     dependencies=[
         Depends(auth_required)
     ])
@@ -107,15 +109,17 @@ async def status(request: Request, Authorize: AuthJWT = Depends()):
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
     
-"""
-Logout endpoint
-"""
 @authorization_router.post("/authorization/invalidate",
+    description="Invalidate authorization token",
     dependencies=[
         Depends(auth_required)
     ])
@@ -136,11 +140,11 @@ async def logout(response: Response, request: Request, Authorize: AuthJWT = Depe
         logging.error(f"Logout failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-    
-@authorization_router.api_route("/status", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-async def rest_gateway():
-    return JSONResponse(content={"message": "Gateway is online"}, status_code=200)

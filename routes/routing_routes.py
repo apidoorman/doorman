@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
-from models.routing_model import RoutingModel
+from models.create_routing_model import CreateRoutingModel
 from models.update_routing_model import UpdateRoutingModel
 from services.routing_service import RoutingService
 from utils.auth_util import auth_required
@@ -24,14 +24,12 @@ routing_router = APIRouter()
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
-"""
-Create routing *platform endpoint.
-"""
 @routing_router.post("",
+    description="Add routing",
     dependencies=[
         Depends(auth_required)
     ])
-async def create_routing(api_data: RoutingModel, request: Request, Authorize: AuthJWT = Depends()):
+async def create_routing(api_data: CreateRoutingModel, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -41,12 +39,17 @@ async def create_routing(api_data: RoutingModel, request: Request, Authorize: Au
             return JSONResponse(content={"error": "You do not have permission to create routings"}, status_code=403)
         return process_response(await RoutingService.create_routing(api_data, request_id))
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 @routing_router.put("/{client_key}",
+    description="Update routing",
     dependencies=[
         Depends(auth_required)
     ])
@@ -60,12 +63,17 @@ async def update_routing(client_key: str, api_data: UpdateRoutingModel, request:
             return JSONResponse(content={"error": "You do not have permission to update routings"}, status_code=403)
         return process_response(await RoutingService.update_routing(client_key, api_data, request_id))
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 @routing_router.delete("/{client_key}",
+    description="Delete routing",
     dependencies=[
         Depends(auth_required)
     ])
@@ -79,12 +87,17 @@ async def delete_routing(client_key: str, request: Request, Authorize: AuthJWT =
             return JSONResponse(content={"error": "You do not have permission to delete routings"}, status_code=403)
         return process_response(await RoutingService.delete_routing(client_key, request_id))
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 @routing_router.get("/{client_key}",
+    description="Get routing",
     dependencies=[
         Depends(auth_required)
     ])
@@ -98,12 +111,17 @@ async def get_routing(client_key: str, request: Request, Authorize: AuthJWT = De
             return JSONResponse(content={"error": "You do not have permission to get routings"}, status_code=403)
         return process_response(await RoutingService.get_routing(client_key, request_id))
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 @routing_router.get("/all",
+    description="Get all routings",
     dependencies=[
         Depends(auth_required)
     ])
@@ -117,7 +135,11 @@ async def get_routings(request: Request, Authorize: AuthJWT = Depends(), page: i
             return JSONResponse(content={"error": "You do not have permission to get routings"}, status_code=403)
         return process_response(await RoutingService.get_routings(page, page_size, request_id))
     except ValueError as e:
+        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
