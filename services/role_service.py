@@ -6,10 +6,10 @@ See https://github.com/pypeople-dev/pygate for more information
 
 from models.response_model import ResponseModel
 from models.update_role_model import UpdateRoleModel
-from utils.database import db
-from utils.cache import cache_manager
-from services.cache import pygate_cache
-from models.role_model import RoleModel
+from utils.database import role_collection
+from utils.cache_manager_util import cache_manager
+from utils.pygate_cache_util import pygate_cache
+from models.create_role_model import CreateRoleModel
 from pymongo.errors import DuplicateKeyError
 import logging
 
@@ -17,10 +17,9 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 class RoleService:
-    role_collection = db.roles
 
     @staticmethod
-    async def create_role(data: RoleModel, request_id):
+    async def create_role(data: CreateRoleModel, request_id):
         """
         Onboard a role to the platform.
         """
@@ -34,7 +33,7 @@ class RoleService:
             ).dict()
         role_dict = data.dict()
         try:
-            insert_result = RoleService.role_collection.insert_one(role_dict)
+            insert_result = role_collection.insert_one(role_dict)
             if not insert_result.acknowledged:
                 logger.error(request_id + " | Role creation failed with code ROLE002")
                 return ResponseModel(
@@ -72,7 +71,7 @@ class RoleService:
             ).dict()
         role = pygate_cache.get_cache('role_cache', role_name)
         if not role:
-            role = RoleService.role_collection.find_one({
+            role = role_collection.find_one({
                 'role_name': role_name
             })
             if not role:
@@ -86,7 +85,7 @@ class RoleService:
             pygate_cache.delete_cache('role_cache', role_name)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
-            update_result = RoleService.role_collection.update_one({'role_name': role_name}, {'$set': not_null_data})
+            update_result = role_collection.update_one({'role_name': role_name}, {'$set': not_null_data})
             if not update_result.acknowledged or update_result.modified_count == 0:
                 logger.error(request_id + " | Role update failed with code ROLE006")
                 return ResponseModel(
@@ -115,7 +114,7 @@ class RoleService:
         logger.info(request_id + " | Deleting role: " + role_name)
         role = pygate_cache.get_cache('role_cache', role_name)
         if not role:
-            role = RoleService.role_collection.find_one({'role_name': role_name})
+            role = role_collection.find_one({'role_name': role_name})
             if not role:
                 logger.error(request_id + " | Role deletion failed with code ROLE004")
                 return ResponseModel(
@@ -125,7 +124,7 @@ class RoleService:
                 ).dict()
         else:
             pygate_cache.delete_cache('role_cache', role_name)
-        delete_result = RoleService.role_collection.delete_one({'role_name': role_name})
+        delete_result = role_collection.delete_one({'role_name': role_name})
         if not delete_result.acknowledged:
             logger.error(request_id + " | Role deletion failed with code ROLE008")
             return ResponseModel(
@@ -146,7 +145,7 @@ class RoleService:
         """
         Check if a role exists.
         """
-        if pygate_cache.get_cache('role_cache', data.get('role_name')) or RoleService.role_collection.find_one({'role_name': data.get('role_name')}):
+        if pygate_cache.get_cache('role_cache', data.get('role_name')) or role_collection.find_one({'role_name': data.get('role_name')}):
             return True
         return False
 
@@ -158,7 +157,7 @@ class RoleService:
         """
         logger.info(request_id + " | Getting roles: Page=" + str(page) + " Page Size=" + str(page_size))
         skip = (page - 1) * page_size
-        cursor = RoleService.role_collection.find().sort('role_name', 1).skip(skip).limit(page_size)
+        cursor = role_collection.find().sort('role_name', 1).skip(skip).limit(page_size)
         roles = cursor.to_list(length=None)
         if not roles:
             logger.error(request_id + " | Roles retrieval failed with code ROLE003")
@@ -184,7 +183,7 @@ class RoleService:
         logger.info(request_id + " | Getting role: " + role_name)
         role = pygate_cache.get_cache('role_cache', role_name)
         if not role:
-            role = RoleService.role_collection.find_one({'role_name': role_name})
+            role = role_collection.find_one({'role_name': role_name})
             if not role:
                 logger.error(request_id + " | Role retrieval failed with code ROLE004")
                 return ResponseModel(

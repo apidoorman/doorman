@@ -5,9 +5,10 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 from models.response_model import ResponseModel
-from utils.database import db
-from utils.cache import cache_manager
-from services.cache import pygate_cache
+from utils.database import subscriptions_collection, api_collection
+from utils.cache_manager_util import cache_manager
+from utils.pygate_cache_util import pygate_cache
+from models.subscribe_model import SubscribeModel
 
 import logging
 
@@ -15,9 +16,6 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 class SubscriptionService:
-    subscriptions_collection = db.subscriptions
-    api_collection = db.apis
-    user_collection = db.users
 
     @staticmethod
     @cache_manager.cached(ttl=300)
@@ -27,7 +25,7 @@ class SubscriptionService:
         """
         api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
-            api = SubscriptionService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
                 return ResponseModel(
                     status_code=404,
@@ -50,7 +48,7 @@ class SubscriptionService:
         logger.info(f"{request_id} | Getting subscriptions for: {username}")
         subscriptions = pygate_cache.get_cache('user_subscription_cache', username)
         if not subscriptions:
-            subscriptions = SubscriptionService.subscriptions_collection.find_one({'username': username})
+            subscriptions = subscriptions_collection.find_one({'username': username})
             if not subscriptions:
                 logger.error(f"{request_id} | Subscription retrieval failed with code SUB002")
                 return ResponseModel(
@@ -69,7 +67,7 @@ class SubscriptionService:
         ).dict()
 
     @staticmethod
-    async def subscribe(data, request_id):
+    async def subscribe(data: SubscribeModel, request_id):
         """
         Subscribe to an API.
         """
@@ -83,7 +81,7 @@ class SubscriptionService:
             ).dict()
         user_subscriptions = pygate_cache.get_cache('user_subscription_cache', data.username)
         if not user_subscriptions:
-            user_subscriptions = SubscriptionService.subscriptions_collection.find_one({'username': data.username})
+            user_subscriptions = subscriptions_collection.find_one({'username': data.username})
             if user_subscriptions and '_id' in user_subscriptions: del user_subscriptions['_id']
             pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         if user_subscriptions is None:
@@ -91,7 +89,7 @@ class SubscriptionService:
                 'username': data.username,
                 'apis': [f"{data.api_name}/{data.api_version}"]
             }
-            SubscriptionService.subscriptions_collection.insert_one(user_subscriptions)
+            subscriptions_collection.insert_one(user_subscriptions)
         elif 'apis' in user_subscriptions and f"{data.api_name}/{data.api_version}" in user_subscriptions['apis']:
             logger.error(f"{request_id} | Subscription failed with code SUB004")
             return ResponseModel(
@@ -100,11 +98,11 @@ class SubscriptionService:
                 error_message='User is already subscribed to the API'
             ).dict()
         else:
-            SubscriptionService.subscriptions_collection.update_one(
+            subscriptions_collection.update_one(
                 {'username': data.username},
                 {'$push': {'apis': f"{data.api_name}/{data.api_version}"}}
             )
-        user_subscriptions = SubscriptionService.subscriptions_collection.find_one({'username': data.username})
+        user_subscriptions = subscriptions_collection.find_one({'username': data.username})
         if user_subscriptions and '_id' in user_subscriptions:
             del user_subscriptions['_id']
         pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
@@ -115,7 +113,7 @@ class SubscriptionService:
         ).dict()
         
     @staticmethod
-    async def unsubscribe(data, request_id):
+    async def unsubscribe(data: SubscribeModel, request_id):
         """
         Unsubscribe from an API.
         """
@@ -128,7 +126,7 @@ class SubscriptionService:
             ).dict()
         user_subscriptions = pygate_cache.get_cache('user_subscription_cache', data.username)
         if not user_subscriptions:
-            user_subscriptions = SubscriptionService.subscriptions_collection.find_one({'username': data.username})
+            user_subscriptions = subscriptions_collection.find_one({'username': data.username})
             if user_subscriptions and '_id' in user_subscriptions: del user_subscriptions['_id']
             pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         if not user_subscriptions or f"{data.api_name}/{data.api_version}" not in user_subscriptions.get('apis', []):
@@ -139,11 +137,11 @@ class SubscriptionService:
                 error_message='User is not subscribed to the API'
             ).dict()
         user_subscriptions['apis'].remove(f"{data.api_name}/{data.api_version}")
-        SubscriptionService.subscriptions_collection.update_one(
+        subscriptions_collection.update_one(
             {'username': data.username},
             {'$set': {'apis': user_subscriptions.get('apis', [])}}
         )
-        user_subscriptions = SubscriptionService.subscriptions_collection.find_one({'username': data.username})
+        user_subscriptions = subscriptions_collection.find_one({'username': data.username})
         if user_subscriptions and '_id' in user_subscriptions:
             del user_subscriptions['_id']
         pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)

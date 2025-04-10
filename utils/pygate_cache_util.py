@@ -14,24 +14,9 @@ class PygateCacheManager:
         redis_port = int(os.getenv("REDIS_PORT"))
         redis_db = int(os.getenv("REDIS_DB"))
 
-        # Set default TTLs for each cache type (in seconds)
-        self.default_ttls = {
-            'api_cache': 86400,
-            'api_endpoint_cache': 86400,
-            'api_id_cache': 86400,
-            'endpoint_cache': 86400,
-            'group_cache': 86400,
-            'role_cache': 86400,
-            'user_subscription_cache': 86400,
-            'user_cache': 86400,
-            'user_group_cache': 86400,
-            'user_role_cache': 86400,
-            'endpoint_load_balancer': 86400,
-            'endpoint_server_cache': 86400,
-            'client_routing_cache': 86400
-        }
+        pool = redis.ConnectionPool(host=redis_host, port=redis_port, db=redis_db, decode_responses=True, max_connections=100)
+        self.redis = redis.StrictRedis(connection_pool=pool)
 
-        self.redis = redis.StrictRedis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
         self.prefixes = {
             'api_cache': 'api_cache:',
             'api_endpoint_cache': 'api_endpoint_cache:',
@@ -46,6 +31,22 @@ class PygateCacheManager:
             'endpoint_load_balancer': 'endpoint_load_balancer:',
             'endpoint_server_cache': 'endpoint_server_cache:',
             'client_routing_cache': 'client_routing_cache:'
+        }
+
+        self.default_ttls = {
+            'api_cache': 86400,
+            'api_endpoint_cache': 86400,
+            'api_id_cache': 86400,
+            'endpoint_cache': 86400,
+            'group_cache': 86400,
+            'role_cache': 86400,
+            'user_subscription_cache': 86400,
+            'user_cache': 86400,
+            'user_group_cache': 86400,
+            'user_role_cache': 86400,
+            'endpoint_load_balancer': 86400,
+            'endpoint_server_cache': 86400,
+            'client_routing_cache': 86400
         }
 
     def _get_key(self, cache_name, key):
@@ -75,6 +76,11 @@ class PygateCacheManager:
         keys = self.redis.keys(pattern)
         if keys:
             self.redis.delete(*keys)
+
+    def clear_all_caches(self):
+        """Clear all caches."""
+        for cache_name in self.prefixes.keys():
+            self.clear_cache(cache_name)
 
 pygate_cache = PygateCacheManager()
 
