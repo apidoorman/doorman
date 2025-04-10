@@ -53,24 +53,30 @@ Install requirements
 
 Set environment variables
 ```bash
+# Mongo DB Config
 MONGO_DB_URI=mongodb://localhost:27017/pygate
 
+# Redis Config
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 
+# Authorization Config
 JWT_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-ALLOWED_ORIGINS=http://localhost:5001
+# HTTP Config
+ALLOWED_ORIGINS=https://localhost:5001,https://localhost:5002
 ALLOW_CREDENTIALS=true
 ALLOW_METHODS=GET,POST,PUT,DELETE
-ALLOW_HEADERS=*
-
-PORT=5001
-HTTPS_ONLY=False
+ALLOW_HEADERS=Authorization,Clieny-Key
+HTTPS_ONLY=True
 COOKIE_DOMAIN=localhost
-THREADS=1
 
+# Application Config
+PORT=5001
+THREADS=1
+SSL_CERTFILE=./certs/localhost.crt
+SSL_KEYFILE=./certs/localhost.key
 PID_FILE=pygate.pid
 ```
 
