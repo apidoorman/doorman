@@ -7,14 +7,12 @@ See https://github.com/pypeople-dev/pygate for more information
 import logging
 from fastapi import HTTPException
 from fastapi_jwt_auth.exceptions import MissingTokenError
-from utils.database import db
-from services.cache import pygate_cache
+from utils.database import role_collection
+from utils.pygate_cache_util import pygate_cache
 from services.user_service import UserService
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
-
-role_collection = db.roles
 
 @staticmethod
 async def validate_platform_role(role_name, action):
@@ -42,6 +40,10 @@ async def validate_platform_role(role_name, action):
         elif action == "manage_roles" and role.get("manage_roles"):
             return True
         elif action == "manage_routings" and role.get("manage_routings"):
+            return True
+        elif action == "manage_gateway" and role.get("manage_gateway"):
+            return True
+        elif action == "manage_subscriptions" and role.get("manage_subscriptions"):
             return True
         return False
     except Exception as e:

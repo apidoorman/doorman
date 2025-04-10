@@ -3,52 +3,46 @@
 
 ##
 
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-Apache%202.0-green)
+![Pre-release](https://img.shields.io/badge/release-pre--release-yellow)
+![Last Commit](https://img.shields.io/github/last-commit/pypeople-dev/pygate)
+![GitHub issues](https://img.shields.io/github/issues/pypeople-dev/pygate)
+
 One Platform for AI, REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed with its own set of RESTful APIs. This is your APIs gateway to the world!
+
 
 🔗 [pygate.org](https://pygate.org)
 
-No specialized low-level langauge expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
 
-## ✅ MVP Roadmap 🚀
-- [x]  Gateway Authentication.
-- [x]  Basic user management.
-- [x]  API subscriptions.
-- [x]  Basic Authorization (user roles and groups).
-- [x]  REST gateway implementation.
-- [x]  Basic logging.
-- [x]  Rate limiting.
-- [x]  Throttling.
-- [x]  Key based routing.
-- [ ]  Code optimization and testing (in progress ⏳).
-- [ ]  Add REST capabilties to user documentation.
-- [ ]  Version 1.0.0 release.
-- [ ]  AI gatewat implementation.
-- [ ]  Code optimization and testing.
-- [ ]  Add AI capabilties to user documentation.
-- [ ]  Version 1.1.0 release.
-- [ ]  GraphQL gateway implementation.
-- [ ]  Code optimization and testing.
-- [ ]  Add GraphQL capabilties to user documentation.
-- [ ]  Version 1.2.0 release.
-- [ ]  gRPC gateway implementation.
-- [ ]  Code optimization and testing.
-- [ ]  Add gRPC capabilties to user documentation.
-- [ ]  Version 1.3.0 release.
-- [ ]  Websockets gateway implementation.
-- [ ]  Code optimization and testing.
-- [ ]  Add Websockets capabilties to user documentation.
-- [ ]  Version 1.4.0 release.
-- [ ]  Improve caching.
-- [ ]  Advanced logging.
-- [ ]  Enable field encryption.
-- [ ]  Refactor codebase.
-- [ ]  Improve user documentation.
-- [ ]  Version 1.5.0 release.
+No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
 
+
+## Features
+- ✅ Authentication & Authorization
+- ✅ Dynamic Routing
+- ✅ Role & Group Management
+- ✅ Rate Limiting & Throttling
+- ✅ Logging & Monitoring
+- ✅ Caching with Redis
+- ✅ MongoDB Integration
+- ✅ REST Support
+- 🔜 AI Support
+- 🔜 SOAP Support
+- 🔜 GraphQL Support
+- 🔜 gRPC Support
+- 🔜 WebSocket Support
+
+## Releases
+- v1.0.0 - REST Support (Latest - 16 April 2025)
+- v1.1.0 - AI Support (To Be Announced)
+- v1.1.0 - SOAP Support (To Be Announced)
+- v1.3.0 - GraphQL Support (To Be Announced)
+- v1.4.0 - gRPC Support (To Be Announced)
+- v1.5.0 - Websocket Support (To Be Announced)
 
 
 ## Installation
-
 Ensure you have a MongoDB server and redis running.
 
 Install requirements
@@ -72,10 +66,10 @@ ALLOW_CREDENTIALS=true
 ALLOW_METHODS=GET,POST,PUT,DELETE
 ALLOW_HEADERS=*
 
-ENV=dev
 PORT=5001
 HTTPS_ONLY=False
 COOKIE_DOMAIN=localhost
+THREADS=1
 
 PID_FILE=pygate.pid
 ```
@@ -99,9 +93,7 @@ Run pygate in console
 ```
 
 
-
 ## License Information
-
 The contents of this repository are property of pygate.org.
 
 Review the Apache License 2.0 for valid authorization of use.
@@ -109,11 +101,9 @@ Review the Apache License 2.0 for valid authorization of use.
 [View License - Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 
-
 ## Disclaimer
+This project is under active development and is not yet ready for production environments.
 
-Use this code at your own risk. All liability is disclaimed.
+Use at your own risk. By using this software, you agree to the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0) and any annotations found in the source code.
 
-This code is not yet ready for production environments.
-
-Using this project you agree to the terms and conditions set forth in the license and noted annotations in the code.
+We welcome contributors and testers!

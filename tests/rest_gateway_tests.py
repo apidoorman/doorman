@@ -23,7 +23,7 @@ class TestPygate:
     def setup_class(cls):
         for _ in range(5):
             try:
-                response = requests.get(f"{cls.base_url}/platform/status")
+                response = requests.get(f"{cls.base_url}/api/status/rest")
                 if response.status_code == 200:
                     print("Server started successfully")
                     break
@@ -44,11 +44,6 @@ class TestPygate:
         TestPygate.token = response.json().get('access_token') 
         assert TestPygate.token is not None
 
-        response = requests.get(f"{self.base_url}/platform/authorization/status",
-                                cookies=TestPygate.getAccessCookies())
-        assert response.status_code == 200
-
-
     @pytest.mark.asyncio
     @pytest.mark.order(2)
     async def test_create_role(self):
@@ -64,7 +59,8 @@ class TestPygate:
                                     "manage_groups": True,
                                     "manage_roles": True,
                                     "manage_subscriptions": True,
-                                    "manage_routings": True
+                                    "manage_routings": True,
+                                    "manage_gateway": True
                                 })
         assert response.status_code == 201
 
@@ -73,7 +69,7 @@ class TestPygate:
     async def test_create_user(self):
         TestPygate.username = "newuser" + str(time.time())
         TestPygate.email = "newuser" + str(time.time()) + "@pygate.org"
-        TestPygate.password = "newpass"
+        TestPygate.password = "newPassword@12345"
         response = requests.post(f"{self.base_url}/platform/user", 
                                  cookies=TestPygate.getAccessCookies(),
                                  json={
@@ -82,8 +78,15 @@ class TestPygate:
                                     "password": TestPygate.password, 
                                     "role": TestPygate.role_name,
                                     "groups": ["ALL"],
-                                    "rate_limit": 2,
-                                    "rate_limit_duration": "minute"
+                                    "rate_limit_duration": 2,
+                                    "rate_limit_duration_type": "minute",
+                                    "throttle_duration": 10,
+                                    "throttle_duration_type": "second",
+                                    "throttle_wait_duration": 5,
+                                    "throttle_wait_duration_type": "seconds",
+                                    "custom_attributes": {
+                                        "custom_key": "custom_value"
+                                    }
                                  })
         assert response.status_code == 201
 
@@ -153,10 +156,11 @@ class TestPygate:
         response = requests.post(f"{self.base_url}/platform/endpoint", 
                                  cookies=TestPygate.getAccessCookies(),
                                  json={
-                                     "api_name": TestPygate.api_name,
-                                     "api_version": "v1", 
-                                     "endpoint_uri": TestPygate.endpoint_path,
-                                     "endpoint_method": "GET"
+                                    "api_name": TestPygate.api_name,
+                                    "api_version": "v1", 
+                                    "endpoint_uri": TestPygate.endpoint_path,
+                                    "endpoint_method": "GET",
+                                    "endpoint_description": "Test endpoint",
                                  })
         assert response.status_code == 201
 
@@ -176,15 +180,11 @@ class TestPygate:
     @pytest.mark.order(12)
     async def test_re_auth_calls(self):
         response = requests.post(f"{self.base_url}/platform/authorization", 
-                                 json={"email": TestPygate.email, "password": TestPygate.password})
+                                json={"email": TestPygate.email, "password": TestPygate.password})
         assert response.status_code == 200
 
         TestPygate.token = response.json().get('access_token') 
         assert TestPygate.token is not None
-
-        response = requests.get(f"{self.base_url}/platform/authorization/status",
-                                cookies=TestPygate.getAccessCookies())
-        assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(13)
@@ -316,7 +316,7 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(27)
     async def test_update_password(self):
-        new_password = "newpass123"
+        new_password = "newerPassword@6789"
         response = requests.put(f"{self.base_url}/platform/user/" + TestPygate.username + "/update-password",
                                 cookies=TestPygate.getAccessCookies(),
                                 json={
@@ -335,10 +335,6 @@ class TestPygate:
 
         TestPygate.token = response.json().get('access_token') 
         assert TestPygate.token is not None
-
-        response = requests.get(f"{self.base_url}/platform/authorization/status",
-                                cookies=TestPygate.getAccessCookies())
-        assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(29)
@@ -427,6 +423,13 @@ class TestPygate:
 
     @pytest.mark.asyncio
     @pytest.mark.order(39)
+    async def test_clear_all_caches(self):
+        response = requests.delete(f"{self.base_url}/api/caches",
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(40)
     async def test_delete_role(self):
         response = requests.delete(f"{self.base_url}/platform/role/" + TestPygate.role_name,
                                 cookies=TestPygate.getAccessCookies())

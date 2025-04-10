@@ -5,13 +5,12 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 import uuid
-from fastapi.responses import JSONResponse
 from models.response_model import ResponseModel
 from models.update_api_model import UpdateApiModel
-from utils.database import db
-from utils.cache import cache_manager
-from services.cache import pygate_cache
-from models.api_model import ApiModel
+from utils.database import api_collection
+from utils.cache_manager_util import cache_manager
+from utils.pygate_cache_util import pygate_cache
+from models.create_api_model import CreateApiModel
 
 import logging
 
@@ -19,16 +18,15 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 class ApiService:
-    api_collection = db.apis
 
     @staticmethod
-    async def create_api(data: ApiModel, request_id):
+    async def create_api(data: CreateApiModel, request_id):
         """
         Onboard an API to the platform.
         """
         logger.info(request_id + " | Creating API: " + data.api_name + " " + data.api_version)
         cache_key = f"{data.api_name}/{data.api_version}"
-        if pygate_cache.get_cache('api_cache', cache_key) or ApiService.api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version}):
+        if pygate_cache.get_cache('api_cache', cache_key) or api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version}):
             logger.error(request_id + " | API Creation Failed with code API001")
             return ResponseModel(
                 status_code=400, 
@@ -38,7 +36,7 @@ class ApiService:
         data.api_path = f"/{data.api_name}/{data.api_version}"
         data.api_id = str(uuid.uuid4())
         api_dict = data.dict()
-        insert_result = ApiService.api_collection.insert_one(api_dict)
+        insert_result = api_collection.insert_one(api_dict)
         if not insert_result.acknowledged:
             logger.error(request_id + " | API creation failed with code API002")
             return ResponseModel(
@@ -70,7 +68,7 @@ class ApiService:
                 ).dict()
         api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
-            api = ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             logger.info(request_id + " | API update failed with code API003")
             if not api:
                 logger.error(request_id + " | API update failed with code API003")
@@ -84,7 +82,7 @@ class ApiService:
             pygate_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
-            update_result = ApiService.api_collection.update_one(
+            update_result = api_collection.update_one(
                 {'api_name': api_name, 'api_version': api_version},
                 {'$set': not_null_data}
             )
@@ -116,7 +114,7 @@ class ApiService:
         logger.info(request_id + " | Deleting API: " + api_name + " " + api_version)
         api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
-            api = ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
                 logger.error(request_id + " | API deletion failed with code API003")
                 return ResponseModel(
@@ -124,7 +122,7 @@ class ApiService:
                     error_code='API003', 
                     error_message='API does not exist for the requested name and version'
                     ).dict()
-        delete_result = ApiService.api_collection.delete_one({'api_name': api_name, 'api_version': api_version})
+        delete_result = api_collection.delete_one({'api_name': api_name, 'api_version': api_version})
         if not delete_result.acknowledged:
             logger.error(request_id + " | API deletion failed with code API002")
             return ResponseModel(
@@ -149,7 +147,7 @@ class ApiService:
         logger.info(request_id + " | Getting API: " + api_name + " " + api_version)
         api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
-            api = ApiService.api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
                 logger.error(request_id + " | API retrieval failed with code API003")
                 return ResponseModel(
@@ -175,7 +173,7 @@ class ApiService:
         """
         logger.info(request_id + " | Getting APIs: Page=" + str(page) + " Page Size=" + str(page_size))
         skip = (page - 1) * page_size
-        cursor = ApiService.api_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
+        cursor = api_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
         apis = cursor.to_list(length=None)
         if not apis:
             logger.error(request_id + " | APIs retrieval failed with code API004")
