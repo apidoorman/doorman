@@ -13,7 +13,12 @@ load_dotenv()
 
 class Database:
     def __init__(self):
-        self.client = MongoClient(os.getenv("MONGO_DB_URI"), serverSelectionTimeoutMS=5000, maxPoolSize=50)
+        self.client = MongoClient(
+            os.getenv("MONGO_DB_URI"),
+            serverSelectionTimeoutMS=5000,
+            maxPoolSize=100,
+            minPoolSize=5
+        )
         self.db = self.client.get_database()
         self.initialize_collections()
         self.create_indexes()
@@ -81,7 +86,9 @@ class Database:
                 "manage_endpoints": True,
                 "manage_groups": True,
                 "manage_roles": True,
-                "manage_routings": True
+                "manage_routings": True,
+                "manage_gateway": True,
+                "manage_subscriptions": True
             })
 
 database = Database()
@@ -90,3 +97,10 @@ database.initialize_collections()
 database.create_indexes()
 
 db = database.db
+api_collection = db.apis
+endpoint_collection = db.endpoints
+group_collection = db.groups
+role_collection = db.roles
+routing_collection = db.routings
+subscriptions_collection = db.subscriptions
+user_collection = db.users

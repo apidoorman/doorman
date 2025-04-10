@@ -9,10 +9,12 @@ from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from slowapi.errors import RateLimitExceeded
 
-from services.limit_throttle_service import limit_and_throttle
+from utils.pygate_cache_util import pygate_cache
+from utils.limit_throttle_util import limit_and_throttle
 from utils.auth_util import auth_required
 from utils.group_util import group_required
 from utils.response_util import process_response
+from utils.role_util import platform_role_required_bool
 from utils.subscription_util import subscription_required
 from services.gateway_service import GatewayService
 from models.request_model import RequestModel
@@ -26,9 +28,31 @@ gateway_router = APIRouter()
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
+@gateway_router.api_route("/status/rest", methods=["GET"],
+    description="Check if the REST gateway is online")
+async def rest_gateway():
+    return JSONResponse(content={"message": "Gateway is online"}, status_code=200)
+
+@gateway_router.api_route("/caches", methods=["DELETE"],
+    description="Clear all caches",
+    dependencies=[
+        Depends(auth_required)
+    ]
+)
+async def clear_all_caches(Authorize: AuthJWT = Depends()):
+    try:
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_gateway'):
+            return JSONResponse(content={"error": "You do not have permission to create roles"}, status_code=403)
+        pygate_cache.clear_all_caches()
+        return JSONResponse(content={"message": "All caches cleared"}, status_code=200)
+    except Exception as e:
+        logger.error(f"Error clearing caches: {str(e)}", exc_info=True)
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+
 @gateway_router.api_route(
     "/rest/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+    description="REST API gateway",
     dependencies=[
         Depends(auth_required),
         Depends(subscription_required),
@@ -50,7 +74,7 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
             query_params=dict(request.query_params),
             identity=Authorize.get_jwt_subject()
         )
-        return process_response(await GatewayService.rest_gateway(request_model, request_id))
+        return process_response(await GatewayService.rest_gateway(request_model, request_id, start_time))
     except RateLimitExceeded as e:
         return JSONResponse(content={"error": "Rate limit exceeded"}, status_code=429)
     except ValueError:
