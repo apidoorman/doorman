@@ -15,8 +15,8 @@ class CreateEndpointModel(BaseModel):
     endpoint_uri: str = Field(..., min_length=1, max_length=255, description="URI for the endpoint", example="/customer")
     endpoint_description: str = Field(..., min_length=1, max_length=255, description="Description of the endpoint", example="Get customer details")
     
-    api_id: Optional[str] = Field(None, min_length=1, max_length=255, description="Unique identifier for the API, auto-generated", example=None)
-    endpoint_id: Optional[str] = Field(None, min_length=1, max_length=255, description="Unique identifier for the endpoint, auto-generated", example=None)
+    api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
+    endpoint_id: Optional[str] = Field(None, description="Unique identifier for the endpoint, auto-generated", example=None)
 
     class Config:
         arbitrary_types_allowed = True

@@ -6,9 +6,9 @@ See https://github.com/pypeople-dev/pygate for more information
 
 from pydantic import BaseModel, Field
 
-class UpdatePasswordModel(BaseModel):
-
-    new_password: str = Field(..., min_length=6, max_length=36, description="New password of the user", example="NewPassword456!")
+class ResponseMessage(BaseModel): 
+    
+    message: str = Field(None, description="The response message", example="API Deleted Successfully")
 
     class Config:
         arbitrary_types_allowed = True

@@ -43,7 +43,11 @@ load_dotenv()
 
 PID_FILE = "pygate.pid"
 
-pygate = FastAPI()
+pygate = FastAPI(
+    title="pygate",  # Set the title for Swagger UI
+    description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.",  # Optional: Add a description
+    version="1.0.0"
+)
 
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
@@ -78,9 +82,6 @@ class Settings(BaseSettings):
     authjwt_access_token_expires: timedelta = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRES_MINUTES", 15)))
     authjwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", 30)))
 
-    class Config:
-        env_file = ".env"
-
 @AuthJWT.load_config
 def get_config():
     return Settings()
@@ -88,7 +89,7 @@ def get_config():
 async def automatic_purger(interval_seconds):
     while True:
         await asyncio.sleep(interval_seconds)
-        purge_expired_tokens()
+        await purge_expired_tokens()
         logging.info("Expired JWTs purged from blacklist.")
 
 @pygate.on_event("startup")

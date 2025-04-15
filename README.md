@@ -3,19 +3,18 @@
 
 ##
 
+![api-gateway](https://img.shields.io/badge/API-Gateway-blue)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 ![Pre-release](https://img.shields.io/badge/release-pre--release-yellow)
 ![Last Commit](https://img.shields.io/github/last-commit/pypeople-dev/pygate)
 ![GitHub issues](https://img.shields.io/github/issues/pypeople-dev/pygate)
 
-One Platform for AI, REST, SOAP, GraphQL, gRPC and Websocket APIs. Fully managed with its own set of RESTful APIs. This is your APIs gateway to the world!
-
+A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.
 
 🔗 [pygate.org](https://pygate.org)
 
-
-No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. Keep it simple, scalable, and efficient while giving developers everything they need to manage APIs with ease. 🐍
+No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. 🐍
 
 
 ## Features
@@ -32,18 +31,33 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - 🔜 GraphQL Support
 - 🔜 gRPC Support
 - 🔜 WebSocket Support
+- 🔜 Request Validation
+- 🔜 Transformation
+- 🔜 Field Encryption
+- 🔜 Orchestration
+
 
 ## Releases
-- v1.0.0 - REST Support (Latest - 16 April 2025)
+- [v1.0.0 - REST Support](https://github.com/pygate-dev/pygate/releases) (Latest - 16 April 2025)
 - v1.1.0 - AI Support (To Be Announced)
-- v1.1.0 - SOAP Support (To Be Announced)
-- v1.3.0 - GraphQL Support (To Be Announced)
-- v1.4.0 - gRPC Support (To Be Announced)
-- v1.5.0 - Websocket Support (To Be Announced)
+
+
+## Documentation
+🔗 [API documentation](https://pygate.org/docs)
+
+🔗 [Postman collection](https://pygate.org/docs/pm/v1.0.0)
+
+🔗 [OpenAPI swagger](https://pygate.org/docs/openapi/v1.0.0)
 
 
 ## Installation
 Ensure you have a MongoDB server and redis running.
+
+Clone pygate repository
+
+```bash
+  git clone https://github.com/pygate-dev/pygate.git
+```
 
 Install requirements
 
@@ -55,7 +69,7 @@ Set environment variables
 ```bash
 # Mongo DB Config
 MONGO_DB_URI=mongodb://localhost:27017/pygate
-
+`
 # Redis Config
 REDIS_HOST=localhost
 REDIS_PORT=6379
@@ -65,7 +79,7 @@ REDIS_DB=0
 JWT_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # HTTP Config
-ALLOWED_ORIGINS=https://localhost:5001,https://localhost:5002
+ALLOWED_ORIGINS=https://localhost:8443,https://localhost:9000
 ALLOW_CREDENTIALS=true
 ALLOW_METHODS=GET,POST,PUT,DELETE
 ALLOW_HEADERS=Authorization,Clieny-Key
@@ -73,26 +87,26 @@ HTTPS_ONLY=True
 COOKIE_DOMAIN=localhost
 
 # Application Config
-PORT=5001
-THREADS=1
+PORT=8443
+THREADS=4
 SSL_CERTFILE=./certs/localhost.crt
 SSL_KEYFILE=./certs/localhost.key
 PID_FILE=pygate.pid
 ```
 
-Start pygate
+Start pygate background process
     
 ```bash
   python pygate.py start
 ```
 
-Stop pygate
+Stop pygate background process
     
 ```bash
   python pygate.py stop
 ```
 
-Run pygate in console
+Run pygate console instance
     
 ```bash
   python pygate.py run
