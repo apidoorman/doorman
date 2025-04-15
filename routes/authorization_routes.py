@@ -53,18 +53,10 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
         email = data.get('email')
         password = data.get('password')
         if not email or not password:
-            logger.error(f"{request_id} | Missing email or password")
-            raise HTTPException(
-                status_code=400,
-                detail="Missing email or password"
-            )
+            return JSONResponse(content={"error_code": "PWD001", "error_message": "Missing email or password"}, status_code=400)
         user = await UserService.check_password_return_user(email, password)
         if not user:
-            logger.error(f"{request_id} | Invalid email or password")
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid email or password"
-            )
+            return JSONResponse(content={"error_code": "PWD002", "error_message": "Invalid email or password"}, status_code=400)
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize, False)
         response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
         response.delete_cookie("access_token_cookie")
