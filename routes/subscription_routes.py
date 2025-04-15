@@ -50,10 +50,10 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version, api_data.username):
-            raise HTTPException(status_code=403, detail="You do not have the correct group access")
+            return JSONResponse(content={"error_code": "SUB007", "error_message": "You do not have the correct group access"}, status_code=403)
         return process_response(await SubscriptionService.subscribe(api_data, request_id))
     except HTTPException as e:
-        return JSONResponse(content={"error_code": "GNE001", "error_message": e.detail}, status_code=e.status_code)
+        return JSONResponse(content={"error_code": "GEN001", "error_message": e.detail}, status_code=e.status_code)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -87,10 +87,10 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version, api_data.username):
-            raise HTTPException(status_code=403, detail="You do not have the correct group access")
+            return JSONResponse(content={"error_code": "SUB007", "error_message": "You do not have the correct group access"}, status_code=403)
         return process_response(await SubscriptionService.unsubscribe(api_data, request_id))
     except HTTPException as e:
-        return JSONResponse(content={"error_code": "GNE002", "error_message": e.detail}, status_code=e.status_code)
+        return JSONResponse(content={"error_code": "GEN002", "error_message": e.detail}, status_code=e.status_code)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
