@@ -251,7 +251,6 @@ class TestPygate:
     @pytest.mark.order(18)
     async def test_gateway_call_regular_route(self):
         response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
                                 cookies=TestPygate.getAccessCookies(), verify=False)
         assert response.status_code == 200
 

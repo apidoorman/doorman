@@ -10,17 +10,25 @@ def process_response(response):
     """
     Process the response from the API.
     """
+    logger.info(f"Processing response")
     response = ResponseModel(**response)
     try:
         processed_response = None
         if response.status_code == 200:
-            processed_response = response.response
+            if response.message:
+                processed_response = {
+                    "message": response.message
+                    }
+            else:
+                processed_response = response.response
         elif response.status_code == 201:
-            processed_response = {"message": response.message}
-        elif response.status_code in (400, 404):
             processed_response = {
-                "code": response.error_code,
-                "message": response.error_message
+                "message": response.message
+                }
+        elif response.status_code in (400, 403, 404):
+            processed_response = {
+                "error_code": response.error_code,
+                "error_message": response.error_message
             }
         else:
             processed_response = {

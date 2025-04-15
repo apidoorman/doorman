@@ -54,7 +54,7 @@ class SubscriptionService:
                 return ResponseModel(
                     status_code=404,
                     error_code='SUB002',
-                    error_message='User does not exist'
+                    error_message='User is not subscribed to any API'
                 ).dict()
             if subscriptions.get('_id'): del subscriptions['_id']
             pygate_cache.set_cache('user_subscription_cache', username, subscriptions)
