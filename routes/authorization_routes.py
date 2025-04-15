@@ -60,7 +60,7 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize, False)
         response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
         response.delete_cookie("access_token_cookie")
-        response.set_cookie("access_token_cookie", access_token, httponly=True)
+        response.set_cookie("access_token_cookie", access_token)
         Authorize.set_access_cookies(access_token, response)
         return response
     except Exception as e:
