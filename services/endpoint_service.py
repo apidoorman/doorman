@@ -57,7 +57,7 @@ class EndpointService:
             return ResponseModel(
                 status_code=400,
                 error_code='END003',
-                error_message='Database error: Unable to insert endpoint'
+                error_message='Unable to insert endpoint'
             ).dict()
         endpoint_dict['_id'] = str(insert_result.inserted_id)
         pygate_cache.set_cache('endpoint_cache', cache_key, endpoint_dict)
@@ -73,13 +73,6 @@ class EndpointService:
     @staticmethod
     async def update_endpoint(endpoint_method, api_name, api_version, endpoint_uri, data: UpdateEndpointModel, request_id):
         logger.info(request_id + " | Updating endpoint: " + api_name + " " + api_version + " " + endpoint_uri)
-        if data.endpoint_method and data.endpoint_method != endpoint_method or data.api_name and data.api_name != api_name or data.api_version and data.api_version != api_version or data.endpoint_uri and data.endpoint_uri != endpoint_uri:
-            logger.error(request_id + " | Endpoint update failed with code END006")
-            return ResponseModel(
-                status_code=400,
-                error_code='END006',
-                error_message='API method, name, version and URI cannot be updated'
-            ).dict()
         cache_key = f"/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
         endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
         if not endpoint:
@@ -98,6 +91,13 @@ class EndpointService:
                 ).dict()
         else:
             pygate_cache.delete_cache('endpoint_cache', cache_key)
+        if (data.endpoint_method and data.endpoint_method != endpoint.get('endpoint_method')) or (data.api_name and data.api_name != endpoint.get('api_name')) or (data.api_version and data.api_version != endpoint.get('api_version')) or (data.endpoint_uri and data.endpoint_uri != endpoint.get('endpoint_uri')):
+            logger.error(request_id + " | Endpoint update failed with code END006")
+            return ResponseModel(
+                status_code=400,
+                error_code='END006',
+                error_message='API method, name, version and URI cannot be updated'
+            ).dict()
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
             update_result = endpoint_collection.update_one({
@@ -115,7 +115,7 @@ class EndpointService:
                 return ResponseModel(
                     status_code=400,
                     error_code='END003',
-                    error_message='Database error: Unable to update endpoint'
+                    error_message='Unable to update endpoint'
                 ).dict()
             logger.info(request_id + " | Endpoint update successful")
             return ResponseModel(
@@ -163,7 +163,7 @@ class EndpointService:
             return ResponseModel(
                 status_code=400,
                 error_code='END009',
-                error_message='Database error: Unable to delete endpoint'
+                error_message='Unable to delete endpoint'
             ).dict()
         pygate_cache.delete_cache('endpoint_cache', cache_key)
         logger.info(request_id + " | Endpoint deletion successful")

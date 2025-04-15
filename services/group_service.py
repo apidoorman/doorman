@@ -39,7 +39,7 @@ class GroupService:
                 return ResponseModel(
                     status_code=400,
                     error_code='GRP002',
-                    error_message='Database error: Unable to insert group'
+                    error_message='Unable to insert group'
                 ).dict()
             group_dict['_id'] = str(insert_result.inserted_id)
             pygate_cache.set_cache('group_cache', data.group_name, group_dict)
@@ -93,7 +93,7 @@ class GroupService:
                 return ResponseModel(
                     status_code=400,
                     error_code='GRP005',
-                    error_message='Database error: Unable to update group'
+                    error_message='Unable to update group'
                 ).dict()
             logger.info(request_id + " | Group updated successful")
             return ResponseModel(
@@ -132,7 +132,7 @@ class GroupService:
             return ResponseModel(
                 status_code=400,
                 error_code='GRP007',
-                error_message='Database error: Unable to delete group'
+                error_message='Unable to delete group'
             ).dict()
         pygate_cache.delete_cache('group_cache', group_name)
         logger.info(request_id + " | Group deletion successful")

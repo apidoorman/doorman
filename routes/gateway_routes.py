@@ -29,15 +29,40 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 @gateway_router.api_route("/status/rest", methods=["GET"],
-    description="Check if the REST gateway is online")
-async def rest_gateway():
+    description="Check if the REST gateway is online",
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Gateway is online"
+                    }
+                }
+            }
+        }
+    }
+)
+async def rest_gateway_status():
     return JSONResponse(content={"message": "Gateway is online"}, status_code=200)
 
 @gateway_router.api_route("/caches", methods=["DELETE"],
     description="Clear all caches",
     dependencies=[
         Depends(auth_required)
-    ]
+    ],
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "All caches cleared"
+                    }
+                }
+            }
+        }
+    }
 )
 async def clear_all_caches(Authorize: AuthJWT = Depends()):
     try:
@@ -55,13 +80,15 @@ async def clear_all_caches(Authorize: AuthJWT = Depends()):
     description="REST API gateway",
     dependencies=[
         Depends(auth_required),
-        Depends(subscription_required),
-        Depends(group_required)
-    ]
+        Depends(subscription_required)
+    ],
+    include_in_schema=False
 )
 async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
+    await group_required(request, Authorize, path)
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
+    logger.info(f"{request_id} | Time: {time.strftime('%Y-%m-%d %H:%M:%S')}:{int(time.time() * 1000) % 1000}ms")
     logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
     logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
     try:

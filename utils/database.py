@@ -73,7 +73,16 @@ class Database:
                 "email": "admin@pygate.org",
                 "password": password_util.hash_password("password1"),
                 "role": "admin",
-                "groups": ["ALL"]
+                "groups": ["ALL", "admin"],
+                "rate_limit_duration": 2000000,
+                "rate_limit_duration_type": "minute",
+                "throttle_duration": 100000000,
+                "throttle_duration_type": "second",
+                "throttle_wait_duration": 5000000,
+                "throttle_wait_duration_type": "seconds",
+                "custom_attributes": {
+                    "custom_key": "custom_value"
+                }
             })
         if self.db.roles.find_one({"role_name": "admin"}):
             self.db.roles.delete_one({"role_name": "admin"})
