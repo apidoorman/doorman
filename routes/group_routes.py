@@ -4,10 +4,13 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+from typing import List
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
+from models.group_model_response import GroupModelResponse
+from models.response_model import ResponseModel
 from models.update_group_model import UpdateGroupModel
 from services.group_service import GroupService
 from utils.auth_util import auth_required
@@ -28,7 +31,21 @@ logger = logging.getLogger("pygate.gateway")
     description="Add group",
     dependencies=[
         Depends(auth_required)
-    ])
+    ],
+    response_model=ResponseModel,
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Group created successfully"
+                    }
+                }
+            }
+        }
+    }
+)
 async def create_group(api_data: CreateGroupModel, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -38,9 +55,6 @@ async def create_group(api_data: CreateGroupModel, request: Request, Authorize: 
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to create groups"}, status_code=403)
         return process_response(await GroupService.create_group(api_data, request_id))
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -52,7 +66,21 @@ async def create_group(api_data: CreateGroupModel, request: Request, Authorize: 
     description="Update group",
     dependencies=[
         Depends(auth_required)
-    ])
+    ],
+    response_model=ResponseModel,
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Group updated successfully"
+                    }
+                }
+            }
+        }
+    }
+)
 async def update_group(group_name: str, api_data: UpdateGroupModel, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -62,9 +90,6 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to update groups"}, status_code=403)
         return process_response(await GroupService.update_group(group_name, api_data, request_id))
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -76,7 +101,21 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
     description="Delete group",
     dependencies=[
         Depends(auth_required)
-    ])
+    ],
+    response_model=ResponseModel,
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Group deleted successfully"
+                    }
+                }
+            }
+        }
+    }
+)
 async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -86,9 +125,6 @@ async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = D
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return JSONResponse(content={"error": "You do not have permission to delete groups"}, status_code=403)
         return process_response(await GroupService.delete_group(group_name, request_id))
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -100,7 +136,9 @@ async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = D
     description="Get all groups",
     dependencies=[
         Depends(auth_required)
-    ])
+    ],
+    response_model=List[GroupModelResponse]
+)
 async def get_groups(request: Request, Authorize: AuthJWT = Depends(), page: int = 1, page_size: int = 10):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -108,9 +146,6 @@ async def get_groups(request: Request, Authorize: AuthJWT = Depends(), page: int
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await GroupService.get_groups(page, page_size, request_id))
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -123,7 +158,9 @@ async def get_groups(request: Request, Authorize: AuthJWT = Depends(), page: int
     description="Get group",
     dependencies=[
         Depends(auth_required)
-    ])
+    ],
+    response_model=GroupModelResponse
+)
 async def get_group(group_name: str, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -131,9 +168,6 @@ async def get_group(group_name: str, request: Request, Authorize: AuthJWT = Depe
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await GroupService.get_group(group_name, request_id))
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)

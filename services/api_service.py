@@ -42,7 +42,7 @@ class ApiService:
             return ResponseModel(
                 status_code=400, 
                 error_code='API002', 
-                error_message='Database error: Unable to insert endpoint'
+                error_message='Unable to insert endpoint'
                 ).dict()
         api_dict['_id'] = str(insert_result.inserted_id)
         pygate_cache.set_cache('api_cache', data.api_id, api_dict)
@@ -91,7 +91,7 @@ class ApiService:
                 return ResponseModel(
                     status_code=400, 
                     error_code='API002', 
-                    error_message='Database error: Unable to update api'
+                    error_message='Unable to update api'
                     ).dict()
             logger.info(request_id + " | API updated successful")
             return ResponseModel(
@@ -128,7 +128,7 @@ class ApiService:
             return ResponseModel(
                 status_code=400, 
                 error_code='API002', 
-                error_message='Database error: Unable to delete endpoint'
+                error_message='Unable to delete endpoint'
                 ).dict()
         pygate_cache.delete_cache('api_cache', pygate_cache.get_cache('api_id_cache', f"/{api_name}/{api_version}"))
         pygate_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
