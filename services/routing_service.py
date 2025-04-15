@@ -25,7 +25,6 @@ class RoutingService:
         Onboard a routing to the platform.
         """
         logger.info(request_id + " | Creating routing: " + data.routing_name)
-        logger.info(request_id + " | Routing data: " + str(data))
         data.client_key = str(uuid.uuid4()) if not data.client_key else data.client_key
         if pygate_cache.get_cache('client_routing_cache', data.client_key):
             logger.error(request_id + " | Routing creation failed with code ROUT001")
@@ -42,14 +41,14 @@ class RoutingService:
                 return ResponseModel(
                     status_code=400,
                     error_code='ROUT002',
-                    error_message='Database error: Unable to insert routing'
+                    error_message='Unable to insert routing'
                 ).dict()
             routing_dict['_id'] = str(insert_result.inserted_id)
             pygate_cache.set_cache('client_routing_cache', data.client_key, routing_dict)
             logger.info(request_id + " | Routing creation successful")
             return ResponseModel(
                 status_code=201,
-                message='Routing created successfully'
+                message='Routing created successfully with key: ' + data.client_key,
             ).dict()
         except DuplicateKeyError as e:
             logger.error(request_id + " | Routing creation failed with code ROUT001")
@@ -70,7 +69,7 @@ class RoutingService:
             return ResponseModel(
                 status_code=400,
                 error_code='ROUT005',
-                error_message='Routing name cannot be changed'
+                error_message='Routing key cannot be changed'
             ).dict()
         routing = pygate_cache.get_cache('client_routing_cache', client_key)
         if not routing:
@@ -94,7 +93,7 @@ class RoutingService:
                 return ResponseModel(
                     status_code=400,
                     error_code='ROUT006',
-                    error_message='Database error: Unable to update routing'
+                    error_message='Unable to update routing'
                 ).dict()
             logger.info(request_id + " | Routing update successful")
             return ResponseModel(
@@ -135,7 +134,7 @@ class RoutingService:
             return ResponseModel(
                 status_code=400,
                 error_code='ROUT008',
-                error_message='Database error: Unable to delete routing'
+                error_message='Unable to delete routing'
             ).dict()
         logger.info(request_id + " | Routing deletion successful")
         return ResponseModel(
@@ -162,10 +161,10 @@ class RoutingService:
                     error_message='Routing does not exist'
                 ).dict()
         logger.info(request_id + " | Routing retrieval successful")
+        if routing.get('_id'): del routing['_id']
         return ResponseModel(
             status_code=200,
-            message='Routing retrieved successfully',
-            data=routing
+            response=routing
         ).dict()
     
     @staticmethod

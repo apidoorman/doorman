@@ -11,7 +11,6 @@ from utils import routing_util
 from utils.database import api_collection, endpoint_collection
 from utils.pygate_cache_util import pygate_cache
 
-import uuid
 import requests
 import logging
 import re
@@ -29,6 +28,7 @@ class GatewayService:
         """
         response = None
         logger.info(f"{request_id} | REST gateway trying resource: {request.path}")
+        current_time = backend_end_time = None
         try:
             if not url and not method:
                 match = re.match(r"([^/]+/v\d+)", request.path)
@@ -67,7 +67,7 @@ class GatewayService:
                     return ResponseModel(
                         status_code=404,
                         error_code='GTW003',
-                        error_message='Endpoint does not exist for the requested API and URI'
+                        error_message='Endpoint does not exist for the requested API'
                     ).dict()
                 client_key = request.headers.get('client-key')
                 if client_key:
@@ -128,7 +128,7 @@ class GatewayService:
                     error_code='GTW005',
                     error_message='Endpoint does not exist in backend service'
                 ).dict()
-            logger.info(f"{request_id} | REST gateway response successfully recieved")
+            logger.info(f"{request_id} | REST gateway status code: {response.status_code}")
             return ResponseModel(
                 status_code=response.status_code,
                 response=response_content
@@ -143,7 +143,7 @@ class GatewayService:
         finally:
             if current_time:
                 logger.info(f"{request_id} | Gateway time {current_time - start_time}ms")
-            if backend_end_time:
+            if backend_end_time and current_time:
                 logger.info(f"{request_id} | Backend time {backend_end_time - current_time}ms")
             if response:
                 response.headers['X-Request-Id'] = request_id

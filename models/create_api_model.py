@@ -19,7 +19,7 @@ class CreateApiModel(BaseModel):
     api_allowed_retry_count: int = Field(0, description="Number of allowed retries for the API", example=0)
     
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
-    api_path: Optional[str] = Field(None, description="Unqiue path for the API, auto-generated", example=None)
+    api_path: Optional[str] = Field(None, description="Unique path for the API, auto-generated", example=None)
 
     class Config:
         arbitrary_types_allowed = True

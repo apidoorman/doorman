@@ -39,7 +39,7 @@ class RoleService:
                 return ResponseModel(
                     status_code=400,
                     error_code='ROLE002',
-                    error_message='Database error: Unable to insert role'
+                    error_message='Unable to insert role'
                 ).dict()
             role_dict['_id'] = str(insert_result.inserted_id)
             pygate_cache.set_cache('role_cache', data.role_name, role_dict)
@@ -91,7 +91,7 @@ class RoleService:
                 return ResponseModel(
                     status_code=400,
                     error_code='ROLE006',
-                    error_message='Database error: Unable to update role'
+                    error_message='Unable to update role'
                 ).dict()
             logger.info(request_id + " | Role update successful")
             return ResponseModel(
@@ -130,7 +130,7 @@ class RoleService:
             return ResponseModel(
                 status_code=400,
                 error_code='ROLE008',
-                error_message='Database error: Unable to delete role'
+                error_message='Unable to delete role'
             ).dict()
         logger.info(request_id + " | Role Deletion Successful")
         return ResponseModel(
