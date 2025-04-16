@@ -155,10 +155,10 @@ class UserService:
         try:
             user = await UserService.get_user_by_email_with_password_helper(email)
             if not password_util.verify_password(password, user.get('password')):
-                HTTPException(status_code=400, detail="Invalid email or password")
+                raise HTTPException(status_code=400, detail="Invalid email or password")
             return user
         except Exception as e:
-            HTTPException(status_code=400, detail="Invalid email or password")
+            raise HTTPException(status_code=400, detail="Invalid email or password")
 
     @staticmethod
     async def update_user(username, update_data, request_id):
