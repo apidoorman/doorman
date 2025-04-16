@@ -97,17 +97,17 @@ class GatewayService:
                 retry = api.get('api_allowed_retry_count') or 0
             current_time = time.time() * 1000
             query_params = request.query_params if hasattr(request, 'query_params') else {}
-
+            headers = {key: value for key, value in request.headers.items()}
             if method == 'GET':
-                response = requests.get(url, params=query_params)
+                response = requests.get(url, params=query_params, headers=headers)
             elif method == 'POST':
                 body = await request.json()
-                response = requests.post(url, json=body, params=query_params)
+                response = requests.post(url, json=body, params=query_params, headers=headers)
             elif method == 'PUT':
                 body = await request.json()
-                response = requests.put(url, json=body, params=query_params)
+                response = requests.put(url, json=body, params=query_params, headers=headers)
             elif method == 'DELETE':
-                response = requests.delete(url, params=query_params)
+                response = requests.delete(url, params=query_params, headers=headers)
             else:
                 logger.error(f"{request_id} | REST gateway failed with code GTW004")
                 return ResponseModel(
