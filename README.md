@@ -45,9 +45,9 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 ## Documentation
 🔗 [API documentation](https://pygate.org/docs)
 
-🔗 [Postman collection](https://pygate.org/docs/pm/v1.0.0)
+🔗 [Postman collection](https://pygate.org/pygate-postman-collection.json)
 
-🔗 [OpenAPI swagger](https://pygate.org/docs/openapi/v1.0.0)
+🔗 [OpenAPI swagger](https://pygate.org/openapi.json)
 
 
 ## Installation
@@ -67,8 +67,13 @@ Install requirements
 
 Set environment variables
 ```bash
+# Startup admin should be used for setup only
+STARTUP_ADMIN_EMAIL=admin@localhost.com
+STARTUP_ADMIN_PASSWORD=SecPassword!12345
+
 # Mongo DB Config
-MONGO_DB_URI=mongodb://localhost:27017/pygate
+MONGO_DB_HOSTS=localhost:27017 # Comma separated
+MONGO_REPLICA_SET_NAME=rs0
 
 # Redis Config
 REDIS_HOST=localhost
@@ -79,18 +84,19 @@ REDIS_DB=0
 JWT_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # HTTP Config
-ALLOWED_ORIGINS=https://localhost:8443,https://localhost:9000
-ALLOW_CREDENTIALS=true
-ALLOW_METHODS=GET,POST,PUT,DELETE
-ALLOW_HEADERS=Authorization,Clieny-Key
+ALLOWED_ORIGINS=https://localhost:8443  # Comma separated
+ALLOW_CREDENTIALS=True
+ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD  # Comma separated
+ALLOW_HEADERS=*  # Comma separated, allow all for now. Will set this per API
 HTTPS_ONLY=True
-COOKIE_DOMAIN=localhost
+COOKIE_DOMAIN=localhost # should match your origin host name
 
 # Application Config
 PORT=8443
 THREADS=4
-SSL_CERTFILE=./certs/localhost.crt
-SSL_KEYFILE=./certs/localhost.key
+DEV_RELOAD=False # Helpful when running in console for debug
+SSL_CERTFILE=./certs/localhost.crt # Update to your cert path if using HTTPS_ONlY
+SSL_KEYFILE=./certs/localhost.key # Update to your key path if using HTTPS_ONlY
 PID_FILE=pygate.pid
 ```
 

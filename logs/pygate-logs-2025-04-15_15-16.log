@@ -1,0 +1,25 @@
+2025-04-15 15:16:55,260 - __main__ - INFO - Started pygate with 2 threads on port 3002
+2025-04-15 15:17:14,475 - pygate.gateway - INFO - d87573e2-c30e-4358-897c-5f292416674a | Username: None | From: 127.0.0.1:63410
+2025-04-15 15:17:14,475 - pygate.gateway - INFO - d87573e2-c30e-4358-897c-5f292416674a | Username: None | From: 127.0.0.1:63410
+2025-04-15 15:17:14,476 - pygate.gateway - INFO - d87573e2-c30e-4358-897c-5f292416674a | Endpoint: POST /platform/authorization
+2025-04-15 15:17:14,476 - pygate.gateway - INFO - d87573e2-c30e-4358-897c-5f292416674a | Endpoint: POST /platform/authorization
+2025-04-15 15:17:14,478 - pygate.gateway - INFO - d87573e2-c30e-4358-897c-5f292416674a | Total time: 2.919189453125ms
+2025-04-15 15:17:14,478 - pygate.gateway - INFO - d87573e2-c30e-4358-897c-5f292416674a | Total time: 2.919189453125ms
+2025-04-15 15:17:25,624 - pygate.gateway - INFO - 50654aaa-a208-41c1-a005-fb346d553b6f | Username: None | From: 127.0.0.1:63413
+2025-04-15 15:17:25,624 - pygate.gateway - INFO - 50654aaa-a208-41c1-a005-fb346d553b6f | Username: None | From: 127.0.0.1:63413
+2025-04-15 15:17:25,624 - pygate.gateway - INFO - 50654aaa-a208-41c1-a005-fb346d553b6f | Endpoint: POST /platform/authorization
+2025-04-15 15:17:25,624 - pygate.gateway - INFO - 50654aaa-a208-41c1-a005-fb346d553b6f | Endpoint: POST /platform/authorization
+2025-04-15 15:17:25,625 - pygate.gateway - INFO - 50654aaa-a208-41c1-a005-fb346d553b6f | Total time: 1.2431640625ms
+2025-04-15 15:17:25,625 - pygate.gateway - INFO - 50654aaa-a208-41c1-a005-fb346d553b6f | Total time: 1.2431640625ms
+2025-04-15 15:17:26,300 - pygate.gateway - INFO - 3e479471-7337-4d94-b339-67b930e6f7df | Username: None | From: 127.0.0.1:63413
+2025-04-15 15:17:26,300 - pygate.gateway - INFO - 3e479471-7337-4d94-b339-67b930e6f7df | Username: None | From: 127.0.0.1:63413
+2025-04-15 15:17:26,300 - pygate.gateway - INFO - 3e479471-7337-4d94-b339-67b930e6f7df | Endpoint: POST /platform/authorization
+2025-04-15 15:17:26,300 - pygate.gateway - INFO - 3e479471-7337-4d94-b339-67b930e6f7df | Endpoint: POST /platform/authorization
+2025-04-15 15:17:26,302 - pygate.gateway - INFO - 3e479471-7337-4d94-b339-67b930e6f7df | Total time: 1.950927734375ms
+2025-04-15 15:17:26,302 - pygate.gateway - INFO - 3e479471-7337-4d94-b339-67b930e6f7df | Total time: 1.950927734375ms
+2025-04-15 15:17:41,319 - pygate.gateway - INFO - f4f56e92-2b69-4be1-aa8d-4328c920fc64 | Username: None | From: 127.0.0.1:63418
+2025-04-15 15:17:41,319 - pygate.gateway - INFO - f4f56e92-2b69-4be1-aa8d-4328c920fc64 | Username: None | From: 127.0.0.1:63418
+2025-04-15 15:17:41,319 - pygate.gateway - INFO - f4f56e92-2b69-4be1-aa8d-4328c920fc64 | Endpoint: POST /platform/authorization
+2025-04-15 15:17:41,319 - pygate.gateway - INFO - f4f56e92-2b69-4be1-aa8d-4328c920fc64 | Endpoint: POST /platform/authorization
+2025-04-15 15:17:41,320 - pygate.gateway - INFO - f4f56e92-2b69-4be1-aa8d-4328c920fc64 | Total time: 1.330078125ms
+2025-04-15 15:17:41,320 - pygate.gateway - INFO - f4f56e92-2b69-4be1-aa8d-4328c920fc64 | Total time: 1.330078125ms
