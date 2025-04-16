@@ -6,7 +6,7 @@
 ![api-gateway](https://img.shields.io/badge/API-Gateway-blue)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
-![Pre-release](https://img.shields.io/badge/release-pre--release-yellow)
+![Release](https://img.shields.io/badge/release-v1.0.0-green)
 ![Last Commit](https://img.shields.io/github/last-commit/pypeople-dev/pygate)
 ![GitHub issues](https://img.shields.io/github/issues/pypeople-dev/pygate)
 
