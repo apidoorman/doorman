@@ -53,16 +53,18 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
         email = data.get('email')
         password = data.get('password')
         if not email or not password:
-            return JSONResponse(content={"error_code": "PWD001", "error_message": "Missing email or password"}, status_code=400)
+            return JSONResponse(content={"error_code": "AUTH001", "error_message": "Missing email or password"}, status_code=400)
         user = await UserService.check_password_return_user(email, password)
         if not user:
-            return JSONResponse(content={"error_code": "PWD002", "error_message": "Invalid email or password"}, status_code=400)
+            return JSONResponse(content={"error_code": "AUTH002", "error_message": "Invalid email or password"}, status_code=400)
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize, False)
         response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
         response.delete_cookie("access_token_cookie")
-        response.set_cookie("access_token_cookie", access_token)
+        response.set_cookie("access_token_cookie", access_token, secure=True, httponly=True)
         Authorize.set_access_cookies(access_token, response)
         return response
+    except HTTPException as e:
+        return JSONResponse(content={"error_code": "AUTH003","error_message": "Unable to validate credentials"}, status_code=401)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -100,8 +102,11 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
         refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
         response = JSONResponse(content={"refresh_token": refresh_token}, media_type="application/json")
         response.delete_cookie("access_token_cookie")
+        response.set_cookie("access_token_cookie", refresh_token, secure=True, httponly=True)
         Authorize.set_access_cookies(refresh_token, response)
         return response
+    except HTTPException as e:
+        return JSONResponse(content={"error_code": "AUTH003","error_message": "Unable to validate credentials"}, status_code=401)
     except AuthJWTException as e:
         logging.error(f"Token refresh failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during token refresh"})

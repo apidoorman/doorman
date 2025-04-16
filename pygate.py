@@ -4,7 +4,8 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from logging.handlers import TimedRotatingFileHandler
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -44,7 +45,7 @@ load_dotenv()
 PID_FILE = "pygate.pid"
 
 pygate = FastAPI(
-    title="pygate",  # Set the title for Swagger UI
+    title="pygate",
     description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.",  # Optional: Add a description
     version="1.0.0"
 )
@@ -64,7 +65,20 @@ pygate.add_middleware(
     allow_headers=headers,
 )
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+os.makedirs("logs", exist_ok=True)
+log_file_handler = TimedRotatingFileHandler(
+    filename="logs/pygate-logs-{start_time}.log".format(
+        start_time="{:%Y-%m-%d_%H-%M}".format(datetime.now())
+    ),
+    when="H",
+    interval=6,
+    backupCount=999,
+    encoding="utf-8"
+)
+log_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(log_file_handler)
 logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
@@ -195,8 +209,8 @@ def run():
         "pygate:pygate",
         host="0.0.0.0",
         port=server_port,
-        reload=True,
-        reload_excludes="venv",
+        reload=os.getenv("DEV_RELOAD", "false").lower() == "true",
+        reload_excludes=["venv", "logs"],
         workers=num_threads,
         log_level="critical",
         ssl_certfile=os.getenv("SSL_CERTFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None,
