@@ -22,7 +22,7 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - ✅ Dynamic Routing
 - ✅ Role & Group Management
 - ✅ Rate Limiting & Throttling
-- ✅ Logging & Monitoring
+- ✅ Logging files
 - ✅ Caching with Redis
 - ✅ MongoDB Integration
 - ✅ REST Support
