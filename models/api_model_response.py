@@ -16,6 +16,7 @@ class ApiModelResponse(BaseModel):
     api_allowed_groups: Optional[List[str]] = Field(None, description="Allowed user groups for the API" , example=["admin", "client-1-group"])
     api_servers: Optional[List[str]] = Field(None, description="List of backend servers for the API", example=["http://localhost:8080", "http://localhost:8081"])
     api_type: Optional[str] = Field(None, description="Type of the API. Valid values: 'REST'", example="REST")
+    api_allowed_headers: Optional[List[str]] = Field(None, description="Allowed headers for the API", example=["Content-Type", "Authorization"])
     api_allowed_retry_count: Optional[int] = Field(None, description="Number of allowed retries for the API", example=0)
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example="c3eda315-545a-4fef-a831-7e45e2f68987")
     api_path: Optional[str] = Field(None, description="Unqiue path for the API, auto-generated", example="/customer/v1")
