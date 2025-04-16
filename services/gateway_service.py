@@ -97,7 +97,7 @@ class GatewayService:
                 retry = api.get('api_allowed_retry_count') or 0
             current_time = time.time() * 1000
             query_params = request.query_params if hasattr(request, 'query_params') else {}
-            headers = {key: value for key, value in request.headers.items()}
+            headers = {key: value for key, value in request.headers.items() if key in (api.get('api_allowed_headers') or [])}
             if method == 'GET':
                 response = requests.get(url, params=query_params, headers=headers)
             elif method == 'POST':
