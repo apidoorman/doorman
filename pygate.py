@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 from logging.handlers import TimedRotatingFileHandler
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +17,7 @@ from redis.asyncio import Redis
 from pydantic import BaseSettings
 from dotenv import load_dotenv
 
+from models.response_model import ResponseModel
 from utils.cache_manager_util import cache_manager
 from utils.auth_blacklist import purge_expired_tokens
 
@@ -39,6 +39,8 @@ import subprocess
 import signal
 import uvicorn
 import asyncio
+
+from utils.response_util import process_response
 
 load_dotenv()
 
@@ -116,35 +118,27 @@ async def startup_event():
 
 @pygate.exception_handler(AuthJWTException)
 async def authjwt_exception_handler(exc: AuthJWTException):
-    return JSONResponse(
+    return process_response(ResponseModel(
         status_code=exc.status_code,
-        content={
-            "code": "AUTH001",
-            "error": "JWT Error",
-            "message": exc.message
-            }
-    )
+        error_code="JWT001",
+        error_message=exc.message
+    ).dict())
 
 @pygate.exception_handler(500)
 async def internal_server_error_handler(request: Request, exc: Exception):
-    return JSONResponse(
+    return process_response(ResponseModel(
         status_code=500,
-        content={
-            "code": "ISE001",
-            "error": "Internal Server Error",
-            "message": "An unexpected error occurred. Please try again later."
-        }
-    )
+        error_code="ISE001",
+        error_message="Internal Server Error"
+    ).dict())
 
 @pygate.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(
-        status_code=400,
-        content={
-            "code": "VAL001",
-            "error": exc.errors(), 
-            "message": exc.body}
-    )
+    return process_response(ResponseModel(
+        status_code=422,
+        error_code="VAL001",
+        error_message="Validation Error"
+    ).dict())
 
 cache_manager.init_app(pygate)
 
