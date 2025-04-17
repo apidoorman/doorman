@@ -55,6 +55,9 @@ async def create_role(api_data: CreateRoleModel, request: Request, Authorize: Au
             logger.error(f"{request_id} | User does not have permission to create roles")
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="ROLE009",
                 error_message="You do not have permission to create roles"
             ))
@@ -70,6 +73,9 @@ async def create_role(api_data: CreateRoleModel, request: Request, Authorize: Au
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -105,6 +111,9 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="ROLE010",
                 error_message="You do not have permission to update roles"
             ))
@@ -113,6 +122,9 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -148,6 +160,9 @@ async def delete_role(role_name: str, request: Request, Authorize: AuthJWT = Dep
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="ROLE011",
                 error_message="You do not have permission to delete roles"
             ))
@@ -156,6 +171,9 @@ async def delete_role(role_name: str, request: Request, Authorize: AuthJWT = Dep
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -181,6 +199,9 @@ async def get_roles(request: Request, Authorize: AuthJWT = Depends(), page: int 
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -206,6 +227,9 @@ async def get_role(role_name: str, request: Request, Authorize: AuthJWT = Depend
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())

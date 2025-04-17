@@ -118,12 +118,18 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
     except RateLimitExceeded as e:
         return process_response(ResponseModel(
             status_code=429,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW009",
             error_message="Rate limit exceeded"
             ).dict())
     except ValueError:
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())

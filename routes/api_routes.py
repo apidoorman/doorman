@@ -55,6 +55,9 @@ async def create_api(request: Request, api_data: CreateApiModel, Authorize: Auth
             logger.warning(f"{request_id} | Permission denied for user: {Authorize.get_jwt_subject()}")
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="API007",
                 error_message="You do not have permission to create APIs"
             ))
@@ -63,6 +66,9 @@ async def create_api(request: Request, api_data: CreateApiModel, Authorize: Auth
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -98,6 +104,9 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="API008",
                 error_message="You do not have permission to update APIs"
             ))
@@ -106,6 +115,9 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -143,6 +155,9 @@ async def get_api_by_name_version(api_name: str, api_version: str, request: Requ
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -180,6 +195,9 @@ async def delete_api(api_name: str, api_version: str, request: Request, Authoriz
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -205,6 +223,9 @@ async def get_all_apis(request: Request, Authorize: AuthJWT = Depends(), page: i
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())

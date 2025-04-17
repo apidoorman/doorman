@@ -55,6 +55,9 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
         if not email or not password:
             return process_response(ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="AUTH001",
                 error_message="Missing email or password"
             ))
@@ -62,6 +65,9 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
         if not user:
             return process_response(ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="AUTH002",
                 error_message="Invalid email or password"
             ))
@@ -69,7 +75,7 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
         response = process_response(ResponseModel(
             status_code=200,
             response_headers={
-            "request_id": request_id
+                "request_id": request_id
             },
             response={"access_token": access_token}
         ).dict())
@@ -78,6 +84,9 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
     except HTTPException as e:
         return process_response(ResponseModel(
             status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="AUTH003",
             error_message="Unable to validate credentials"
             ).dict())
@@ -85,6 +94,9 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -123,7 +135,7 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
         response = process_response(ResponseModel(
             status_code=200,
             response_headers={
-            "request_id": request_id
+                "request_id": request_id
             },
             response={"refresh_token": refresh_token}
         ).dict())
@@ -132,6 +144,9 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
     except HTTPException as e:
         return process_response(ResponseModel(
             status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="AUTH003",
             error_message="Unable to validate credentials"
             ).dict())
@@ -139,6 +154,9 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
         logging.error(f"Token refresh failed: {str(e)}")
         return process_response(ResponseModel(
             status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="AUTH004",
             error_message="Token refresh failed"
             ).dict())
@@ -146,6 +164,9 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -180,11 +201,17 @@ async def authorization_status(request: Request, Authorize: AuthJWT = Depends())
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message="Token is valid"
             ).dict())
     except Exception as e:
         return process_response(ResponseModel(
             status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="AUTH005",
             error_message="Token is invalid"
             ).dict())
@@ -192,6 +219,9 @@ async def authorization_status(request: Request, Authorize: AuthJWT = Depends())
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -232,12 +262,18 @@ async def authorization_invalidate(response: Response, request: Request, Authori
         await jwt_blacklist[user].push(jti)
         return process_response(ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message="Your token has been invalidated"
             ).dict())
     except AuthJWTException as e:
         logging.error(f"Logout failed: {str(e)}")
         return process_response(ResponseModel(
             status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="AUTH006",
             error_message="Unable to invalidate token"
             ).dict())
@@ -245,6 +281,9 @@ async def authorization_invalidate(response: Response, request: Request, Authori
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())

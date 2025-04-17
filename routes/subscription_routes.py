@@ -51,6 +51,9 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version, api_data.username):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="SUB007",
                 error_message="You do not have the correct group access"
             ))
@@ -58,6 +61,9 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
     except HTTPException as e:
         return process_response(ResponseModel(
             status_code=e.status_code,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GEN001",
             error_message=e.detail
         ))
@@ -65,6 +71,9 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -100,6 +109,9 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version, api_data.username):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="SUB008",
                 error_message="You do not have the correct group access"
             ))
@@ -107,6 +119,9 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
     except HTTPException as e:
         return process_response(ResponseModel(
             status_code=e.status_code,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GEN002",
             error_message=e.detail
         ))
@@ -114,6 +129,9 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -155,6 +173,9 @@ async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = 
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -195,6 +216,9 @@ async def subscriptions_for_user_by_id(user_id: str, request: Request, Authorize
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
