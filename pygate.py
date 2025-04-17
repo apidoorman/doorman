@@ -78,10 +78,9 @@ log_file_handler = TimedRotatingFileHandler(
     encoding="utf-8"
 )
 log_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-root_logger.addHandler(log_file_handler)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(log_file_handler)
 
 class Settings(BaseSettings):
     mongo_db_uri: str = os.getenv("MONGO_DB_URI")
@@ -204,7 +203,7 @@ def run():
         host="0.0.0.0",
         port=server_port,
         reload=os.getenv("DEV_RELOAD", "false").lower() == "true",
-        reload_excludes=["venv", "logs"],
+        reload_excludes=["venv/*", "logs/*"],
         workers=num_threads,
         log_level="critical",
         ssl_certfile=os.getenv("SSL_CERTFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None,
