@@ -4,8 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-# Removed unused import: JSONResponse
-
 from models.response_model import ResponseModel
 from utils import routing_util
 from utils.database import api_collection, endpoint_collection

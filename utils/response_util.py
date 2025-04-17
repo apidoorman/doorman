@@ -33,7 +33,7 @@ def process_response(response):
             processed_response = {
                 "message": "An unknown error occurred"
             }
-        return JSONResponse(content=processed_response, status_code=response.status_code)
+        return JSONResponse(content=processed_response, status_code=response.status_code, headers=response.response_headers)
     except Exception as e:
         logger.error(f"An error occurred while processing the response: {e}")
         return JSONResponse(content={"error": "Unable to process response"}, status_code=500)
