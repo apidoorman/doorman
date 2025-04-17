@@ -5,7 +5,6 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request
-from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
 from models.response_model import ResponseModel
@@ -50,13 +49,25 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version, api_data.username):
-            return JSONResponse(content={"error_code": "SUB007", "error_message": "You do not have the correct group access"}, status_code=403)
+            return process_response(ResponseModel(
+                status_code=403,
+                error_code="SUB007",
+                error_message="You do not have the correct group access"
+            ))
         return process_response(await SubscriptionService.subscribe(api_data, request_id))
     except HTTPException as e:
-        return JSONResponse(content={"error_code": "GEN001", "error_message": e.detail}, status_code=e.status_code)
+        return process_response(ResponseModel(
+            status_code=e.status_code,
+            error_code="GEN001",
+            error_message=e.detail
+        ))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict())
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -87,13 +98,25 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version, api_data.username):
-            return JSONResponse(content={"error_code": "SUB007", "error_message": "You do not have the correct group access"}, status_code=403)
+            return process_response(ResponseModel(
+                status_code=403,
+                error_code="SUB008",
+                error_message="You do not have the correct group access"
+            ))
         return process_response(await SubscriptionService.unsubscribe(api_data, request_id))
     except HTTPException as e:
-        return JSONResponse(content={"error_code": "GEN002", "error_message": e.detail}, status_code=e.status_code)
+        return process_response(ResponseModel(
+            status_code=e.status_code,
+            error_code="GEN002",
+            error_message=e.detail
+        ))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict())
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -130,7 +153,11 @@ async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = 
         return process_response(await SubscriptionService.get_user_subscriptions(username, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict())
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -166,7 +193,11 @@ async def subscriptions_for_user_by_id(user_id: str, request: Request, Authorize
         return process_response(await SubscriptionService.get_user_subscriptions(user_id, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict())
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
