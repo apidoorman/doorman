@@ -34,6 +34,9 @@ class EndpointService:
             logger.error(request_id + " | Endpoint creation failed with code END001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='END001',
                 error_message='Endpoint already exists for the requested API name, version and URI'
             ).dict()
@@ -56,6 +59,9 @@ class EndpointService:
             logger.error(request_id + " | Endpoint creation failed with code END003")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='END003',
                 error_message='Unable to insert endpoint'
             ).dict()
@@ -67,6 +73,9 @@ class EndpointService:
         logger.info(request_id + " | Endpoint creation successful")
         return ResponseModel(
             status_code=201,
+            response_headers={
+                "request_id": request_id
+            },
             message='Endpoint created successfully'
         ).dict()
     
@@ -95,6 +104,9 @@ class EndpointService:
             logger.error(request_id + " | Endpoint update failed with code END006")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='END006',
                 error_message='API method, name, version and URI cannot be updated'
             ).dict()
@@ -126,6 +138,9 @@ class EndpointService:
             logger.error(request_id + " | Endpoint update failed with code END007")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='END007',
                 error_message='No data to update'
             ).dict()
@@ -162,6 +177,9 @@ class EndpointService:
             logger.error(request_id + " | Endpoint deletion failed with code END009")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='END009',
                 error_message='Unable to delete endpoint'
             ).dict()
@@ -169,6 +187,9 @@ class EndpointService:
         logger.info(request_id + " | Endpoint deletion successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='Endpoint deleted successfully'
         ).dict()
 
@@ -222,6 +243,9 @@ class EndpointService:
             logger.error(request_id + " | Endpoint retrieval failed with code END005")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='END005',
                 error_message='No endpoints found for the requested API name and version'
             ).dict()
