@@ -21,6 +21,7 @@ aiocache
 
 # HTTP client
 requests
+httpx
 
 # Cryptography
 cryptography

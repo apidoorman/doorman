@@ -30,6 +30,9 @@ class RoutingService:
             logger.error(request_id + " | Routing creation failed with code RTG001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='RTG001',
                 error_message='Routing already exists'
             ).dict()
@@ -54,6 +57,9 @@ class RoutingService:
             logger.error(request_id + " | Routing creation failed with code RTG001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='RTG001',
                 error_message='Routing already exists'
             ).dict()
@@ -68,6 +74,9 @@ class RoutingService:
             logger.error(request_id + " | Role update failed with code ROLE005")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='RTG005',
                 error_message='Routing key cannot be changed'
             ).dict()
@@ -104,6 +113,9 @@ class RoutingService:
             logger.error(request_id + " | Routing update failed with code RTG007")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='RTG007',
                 error_message='No data to update'
             ).dict()
@@ -133,12 +145,18 @@ class RoutingService:
             logger.error(request_id + " | Routing deletion failed with code RTG008")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='RTG008',
                 error_message='Unable to delete routing'
             ).dict()
         logger.info(request_id + " | Routing deletion successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='Routing deleted successfully'
         ).dict()
     
@@ -180,6 +198,9 @@ class RoutingService:
             logger.error(request_id + " | Routing retrieval failed with code RTG002")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='RTG002',
                 error_message='No routings found'
             ).dict()

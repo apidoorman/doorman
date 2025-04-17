@@ -28,6 +28,9 @@ class RoleService:
             logger.error(request_id + " | Role creation failed with code ROLE001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='ROLE001',
                 error_message='Role already exists'
             ).dict()
@@ -52,6 +55,9 @@ class RoleService:
             logger.error(request_id + " | Role creation failed with code ROLE001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='GRP001',
                 error_message='Role already exists'
             ).dict()
@@ -66,6 +72,9 @@ class RoleService:
             logger.error(request_id + " | Role update failed with code ROLE005")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='ROLE005',
                 error_message='Role name cannot be changed'
             ).dict()
@@ -102,6 +111,9 @@ class RoleService:
             logger.error(request_id + " | Role update failed with code ROLE007")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='ROLE007',
                 error_message='No data to update'
             ).dict()
@@ -129,12 +141,18 @@ class RoleService:
             logger.error(request_id + " | Role deletion failed with code ROLE008")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='ROLE008',
                 error_message='Unable to delete role'
             ).dict()
         logger.info(request_id + " | Role Deletion Successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='Role deleted successfully'
         ).dict()
 
@@ -163,6 +181,9 @@ class RoleService:
             logger.error(request_id + " | Roles retrieval failed with code ROLE003")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='ROLE003',
                 error_message='No roles found'
             ).dict()

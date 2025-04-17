@@ -54,6 +54,9 @@ async def create_routing(api_data: CreateRoutingModel, request: Request, Authori
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="RTG009",
                 error_message="You do not have permission to create routings"
             ))
@@ -62,6 +65,9 @@ async def create_routing(api_data: CreateRoutingModel, request: Request, Authori
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -97,6 +103,9 @@ async def update_routing(client_key: str, api_data: UpdateRoutingModel, request:
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="RTG010",
                 error_message="You do not have permission to update routings"
             ))
@@ -105,6 +114,9 @@ async def update_routing(client_key: str, api_data: UpdateRoutingModel, request:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -140,6 +152,9 @@ async def delete_routing(client_key: str, request: Request, Authorize: AuthJWT =
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="RTG011",
                 error_message="You do not have permission to delete routings"
             ))
@@ -148,6 +163,9 @@ async def delete_routing(client_key: str, request: Request, Authorize: AuthJWT =
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -171,6 +189,9 @@ async def get_routings(request: Request, Authorize: AuthJWT = Depends(), page: i
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="RTG012",
                 error_message="You do not have permission to get routings"
             ))
@@ -179,6 +200,9 @@ async def get_routings(request: Request, Authorize: AuthJWT = Depends(), page: i
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -202,6 +226,9 @@ async def get_routing(client_key: str, request: Request, Authorize: AuthJWT = De
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="RTG013",
                 error_message="You do not have permission to get routings"
             ))
@@ -210,6 +237,9 @@ async def get_routing(client_key: str, request: Request, Authorize: AuthJWT = De
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())

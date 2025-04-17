@@ -73,6 +73,9 @@ class UserService:
             logger.error(f"{request_id} | User retrieval failed with code USR002")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
@@ -97,6 +100,9 @@ class UserService:
             logger.error(f"{request_id} | User retrieval failed with code USR002")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
@@ -116,6 +122,9 @@ class UserService:
             logger.error(f"{request_id} | User creation failed with code USR001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR001',
                 error_message='Username already exists'
             ).dict()
@@ -123,6 +132,9 @@ class UserService:
             logger.error(f"{request_id} | User creation failed with code USR001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR001',
                 error_message='Email already exists'
             ).dict()
@@ -130,6 +142,9 @@ class UserService:
             logger.error(f"{request_id} | User creation failed with code USR005")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR005',
                 error_message='Password must include at least 16 characters, one uppercase letter, one lowercase letter, one digit, and one special character'
             ).dict()
@@ -144,6 +159,9 @@ class UserService:
         logger.info(f"{request_id} | User creation successful")
         return ResponseModel(
             status_code=201,
+            response_headers={
+                "request_id": request_id
+            },
             message='User created successfully'
         ).dict()
 
@@ -193,6 +211,9 @@ class UserService:
         logger.info(f"{request_id} | User update successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='User updated successfully'
         ).dict()
     
@@ -217,6 +238,9 @@ class UserService:
             logger.error(f"{request_id} | User deletion failed with code USR003")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR003',
                 error_message='Unable to delete user'
             ).dict()
@@ -225,6 +249,9 @@ class UserService:
         logger.info(f"{request_id} | User deletion successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='User deleted successfully'
         ).dict()
 
@@ -238,6 +265,9 @@ class UserService:
             logger.error(f"{request_id} | User password update failed with code USR005")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR005',
                 error_message='Password must include at least 16 characters, one uppercase letter, one lowercase letter, one digit, and one special character'
             ).dict()
@@ -248,6 +278,9 @@ class UserService:
             logger.error(f"{request_id} | User password update failed with code USR002")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
@@ -259,6 +292,9 @@ class UserService:
         logger.info(f"{request_id} | User password update successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='User updated successfully'
         ).dict()
 

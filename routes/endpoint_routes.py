@@ -54,6 +54,9 @@ async def create_endpoint(endpoint_data: CreateEndpointModel, request: Request, 
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="END010",
                 error_message="You do not have permission to create endpoints"
             ))
@@ -62,6 +65,9 @@ async def create_endpoint(endpoint_data: CreateEndpointModel, request: Request, 
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -97,6 +103,9 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="END011",
                 error_message="You do not have permission to update endpoints"
             ))
@@ -105,6 +114,9 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -140,6 +152,9 @@ async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str,
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="END012",
                 error_message="You do not have permission to delete endpoints"
             ))
@@ -148,6 +163,9 @@ async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str,
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -173,6 +191,9 @@ async def get_endpoint(api_name: str, api_version: str, endpoint_uri: str, reque
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -198,6 +219,9 @@ async def get_endpoints_by_name_version(api_name: str, api_version: str, request
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())

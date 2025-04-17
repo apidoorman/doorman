@@ -50,6 +50,9 @@ class ApiService:
         logger.info(request_id + " | API creation successful")
         return ResponseModel(
             status_code=201,
+            response_headers={
+                "request_id": request_id
+            },
             message='API created successfully'
             ).dict()
     
@@ -135,6 +138,9 @@ class ApiService:
         logger.info(request_id + " | API deletion successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='API deleted successfully'
             ).dict()
 

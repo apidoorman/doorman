@@ -28,6 +28,9 @@ class GroupService:
         if pygate_cache.get_cache('group_cache', data.group_name):
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='GRP001',
                 error_message='Group already exists'
             ).dict()
@@ -52,6 +55,9 @@ class GroupService:
             logger.error(request_id + " | Group creation failed with code GRP001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='GRP001',
                 error_message='Group already exists'
             ).dict()
@@ -65,6 +71,9 @@ class GroupService:
         if data.group_name and data.group_name != group_name:
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='GRP004',
                 error_message='Group name cannot be updated'
             ).dict()
@@ -104,6 +113,9 @@ class GroupService:
             logger.error(request_id + " | Group update failed with code GRP006")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='GRP006',
                 error_message='No data to update'
             ).dict()
@@ -131,6 +143,9 @@ class GroupService:
             logger.error(request_id + " | Group deletion failed with code GRP002")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='GRP007',
                 error_message='Unable to delete group'
             ).dict()
@@ -138,6 +153,9 @@ class GroupService:
         logger.info(request_id + " | Group deletion successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='Group deleted successfully'
         ).dict()
 
@@ -165,6 +183,9 @@ class GroupService:
             logger.error(request_id + " | Groups retrieval failed with code GRP002")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='GRP002',
                 error_message='No groups found'
             ).dict()
