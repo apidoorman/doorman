@@ -12,8 +12,7 @@ from fastapi_jwt_auth.exceptions import AuthJWTException
 from models.response_model import ResponseModel
 from services.user_service import UserService
 from utils.response_util import process_response
-from utils.token_util import create_access_token
-from utils.auth_util import auth_required
+from utils.auth_util import auth_required, create_access_token
 from utils.auth_blacklist import TimedHeap, jwt_blacklist
 
 import uuid
@@ -70,6 +69,15 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
                 },
                 error_code="AUTH002",
                 error_message="Invalid email or password"
+            ))
+        if not user["active"]:
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code="AUTH007",
+                error_message="User is not active"
             ))
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize, False)
         response = process_response(ResponseModel(
@@ -132,6 +140,15 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         username = Authorize.get_jwt_subject()
         user = await UserService.get_user_by_username_helper(username)
+        if not user["active"]:
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code="AUTH007",
+                error_message="User is not active"
+            ))
         refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
         response = process_response(ResponseModel(
             status_code=200,

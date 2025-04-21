@@ -1,10 +1,16 @@
-from datetime import datetime, timedelta
-from fastapi_jwt_auth import AuthJWT
-import uuid
+from utils.database import user_token_collection
 
-def create_access_token(data: dict, Authorize: AuthJWT, refresh: bool = False):
-    to_encode = data.copy()
-    expire = timedelta(minutes=30) if not refresh else timedelta(days=7)
-    to_encode.update({"exp": datetime.utcnow() + expire, "jti": str(uuid.uuid4())})
-    encoded_jwt = Authorize.create_access_token(subject=data["sub"], expires_time=expire, user_claims={"role": data.get("role")})
-    return encoded_jwt
+async def deduct_ai_token(api, username):
+    token_group = api.get('api_token_group')
+    if not token_group:
+        return False
+    user_tokens_doc = await user_token_collection.find_one({'username': username})
+    if not user_tokens_doc:
+        return False
+    user_tokens = user_tokens_doc.get('users_tokens') or {}
+    token_info = user_tokens.get(token_group)
+    if not token_info or token_info.get('available_tokens', 0) <= 0:
+        return False
+    available_tokens = token_info.get('available_tokens', 0) - 1
+    await user_token_collection.update_one({'username': username}, {'$set': {f'users_tokens.{token_group}.available_tokens': available_tokens}})
+    return True
