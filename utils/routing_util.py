@@ -22,3 +22,15 @@ async def get_client_routing(client_key):
     except Exception as e:
         logger.error(f"Error in get_client_routing: {e}")
         return None
+    
+async def get_routing_info(client_key):
+    routing = await get_client_routing(client_key)
+    if not routing:
+        return None
+    server_index = routing.get('server_index', 0)
+    api_servers = routing.get('routing_servers', [])
+    server = api_servers[server_index]
+    server_index = (server_index + 1) % len(api_servers)
+    routing['server_index'] = server_index
+    pygate_cache.set_cache('client_routing_cache', client_key, routing)
+    return server
