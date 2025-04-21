@@ -13,6 +13,8 @@ from models.create_user_model import CreateUserModel
 
 import logging
 
+from utils.role_util import platform_role_required_bool
+
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
@@ -45,7 +47,6 @@ class UserService:
                 pygate_cache.set_cache('user_cache', username, user)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
-            pygate_cache.set_cache('user_cache', username, user)
             return user
         except Exception as e:
             raise HTTPException(status_code=404, detail="User not found")
@@ -86,7 +87,7 @@ class UserService:
         ).dict()
 
     @staticmethod
-    async def get_user_by_email(email, request_id):
+    async def get_user_by_email(active_username, email, request_id):
         """
         Retrieve a user by email.
         """
@@ -107,6 +108,13 @@ class UserService:
                 error_message='User not found'
             ).dict()
         logger.info(f"{request_id} | User retrieval successful")
+        if not active_username == user.get('username') and not await platform_role_required_bool(active_username, 'manage_users'):
+            logger.error(f"{request_id} | User retrieval failed with code USR008")
+            return ResponseModel(
+                    status_code=403,
+                    error_code="USR008",
+                    error_message="Unable to retrieve information for user",
+                ).dict()
         return ResponseModel(
             status_code=200,
             response=user

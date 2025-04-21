@@ -33,7 +33,7 @@ class Database:
         self.db = self.client.get_database()
 
     def initialize_collections(self):
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings']
+        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'token_defs', 'user_tokens']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
@@ -55,7 +55,8 @@ class Database:
                     "throttle_wait_duration_type": "seconds",
                     "custom_attributes": {
                         "custom_key": "custom_value"
-                    }
+                    },
+                    "active": True
                 })
             if not self.db.roles.find_one({"role_name": "admin"}):
                 self.db.roles.insert_one({
@@ -105,6 +106,14 @@ class Database:
             IndexModel([("client_key", ASCENDING)], unique=True)
         ])
 
+        self.db.token_defs.create_indexes([
+            IndexModel([("api_token_group", ASCENDING)], unique=True)
+        ])
+
+        self.db.token_defs.create_indexes([
+            IndexModel([("username", ASCENDING)], unique=True)
+        ])
+
 database = Database()
 
 database.initialize_collections()
@@ -118,3 +127,5 @@ role_collection = db.roles
 routing_collection = db.routings
 subscriptions_collection = db.subscriptions
 user_collection = db.users
+token_def_collection = db.token_defs
+user_token_collection = db.user_tokens
