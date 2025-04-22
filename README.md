@@ -6,11 +6,11 @@
 ![api-gateway](https://img.shields.io/badge/API-Gateway-blue)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
-![Release](https://img.shields.io/badge/release-v1.0.0-green)
+![Release](https://img.shields.io/badge/release-pre--release-orange)
 ![Last Commit](https://img.shields.io/github/last-commit/pypeople-dev/pygate)
 ![GitHub issues](https://img.shields.io/github/issues/pypeople-dev/pygate)
 
-A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.
+A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs. Fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.
 
 🔗 [pygate.org](https://pygate.org)
 
@@ -26,8 +26,8 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - ✅ Caching with Redis
 - ✅ MongoDB Integration
 - ✅ REST Support
-- 🔜 AI Support
-- 🔜 SOAP Support
+- ✅ AI Support
+- ✅ SOAP Support
 - 🔜 GraphQL Support
 - 🔜 gRPC Support
 - 🔜 WebSocket Support
@@ -38,7 +38,7 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 
 
 ## Releases
-- [v1.0.0 - REST Support](https://github.com/pygate-dev/pygate/releases) (Latest - 16 April 2025)
+- [v1.0.0 - REST Support](https://github.com/pygate-dev/pygate/releases) (Latest - 25 April 2025)
 - v1.1.0 - AI Support (To Be Announced)
 
 

@@ -60,8 +60,8 @@ async def create_api(request: Request, api_data: CreateApiModel, Authorize: Auth
                 },
                 error_code="API007",
                 error_message="You do not have permission to create APIs"
-            ))
-        return process_response(await ApiService.create_api(api_data, request_id))
+            ).dict(), "rest")
+        return process_response(await ApiService.create_api(api_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -71,7 +71,7 @@ async def create_api(request: Request, api_data: CreateApiModel, Authorize: Auth
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -109,8 +109,8 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
                 },
                 error_code="API008",
                 error_message="You do not have permission to update APIs"
-            ))
-        return process_response(await ApiService.update_api(api_name, api_version, api_data, request_id))
+            ).dict(), "rest")
+        return process_response(await ApiService.update_api(api_name, api_version, api_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -120,7 +120,7 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -150,7 +150,7 @@ async def get_api_by_name_version(api_name: str, api_version: str, request: Requ
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await ApiService.get_api_by_name_version(api_name, api_version, request_id))
+        return process_response(await ApiService.get_api_by_name_version(api_name, api_version, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -160,7 +160,7 @@ async def get_api_by_name_version(api_name: str, api_version: str, request: Requ
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -190,7 +190,7 @@ async def delete_api(api_name: str, api_version: str, request: Request, Authoriz
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await ApiService.delete_api(api_name, api_version, request_id))
+        return process_response(await ApiService.delete_api(api_name, api_version, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -200,7 +200,7 @@ async def delete_api(api_name: str, api_version: str, request: Request, Authoriz
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -218,7 +218,7 @@ async def get_all_apis(request: Request, Authorize: AuthJWT = Depends(), page: i
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await ApiService.get_apis(page, page_size, request_id))
+        return process_response(await ApiService.get_apis(page, page_size, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -228,7 +228,7 @@ async def get_all_apis(request: Request, Authorize: AuthJWT = Depends(), page: i
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

@@ -86,7 +86,7 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
                 "request_id": request_id
             },
             response={"access_token": access_token}
-        ).dict())
+        ).dict(), "rest")
         response.delete_cookie("access_token_cookie")
         Authorize.set_access_cookies(access_token, response)
         return response
@@ -98,7 +98,7 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
             },
             error_code="AUTH003",
             error_message="Unable to validate credentials"
-            ).dict())
+            ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -108,7 +108,7 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -148,7 +148,7 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
                 },
                 error_code="AUTH007",
                 error_message="User is not active"
-            ))
+            ).dict(), "rest")
         refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
         response = process_response(ResponseModel(
             status_code=200,
@@ -156,7 +156,7 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
                 "request_id": request_id
             },
             response={"refresh_token": refresh_token}
-        ).dict())
+        ).dict(), "rest")
         Authorize.set_access_cookies(refresh_token, response)
         return response
     except HTTPException as e:
@@ -167,7 +167,7 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
             },
             error_code="AUTH003",
             error_message="Unable to validate credentials"
-            ).dict())
+            ).dict(), "rest")
     except AuthJWTException as e:
         logging.error(f"Token refresh failed: {str(e)}")
         return process_response(ResponseModel(
@@ -177,7 +177,7 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
             },
             error_code="AUTH004",
             error_message="Token refresh failed"
-            ).dict())
+            ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -187,7 +187,7 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -223,7 +223,7 @@ async def authorization_status(request: Request, Authorize: AuthJWT = Depends())
                 "request_id": request_id
             },
             message="Token is valid"
-            ).dict())
+            ).dict(), "rest")
     except Exception as e:
         return process_response(ResponseModel(
             status_code=401,
@@ -232,7 +232,7 @@ async def authorization_status(request: Request, Authorize: AuthJWT = Depends())
             },
             error_code="AUTH005",
             error_message="Token is invalid"
-            ).dict())
+            ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -242,7 +242,7 @@ async def authorization_status(request: Request, Authorize: AuthJWT = Depends())
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -284,7 +284,7 @@ async def authorization_invalidate(response: Response, request: Request, Authori
                 "request_id": request_id
             },
             message="Your token has been invalidated"
-            ).dict())
+            ).dict(), "rest")
         response.delete_cookie("access_token_cookie")
         return response
     except AuthJWTException as e:
@@ -296,7 +296,7 @@ async def authorization_invalidate(response: Response, request: Request, Authori
             },
             error_code="AUTH006",
             error_message="Unable to invalidate token"
-            ).dict())
+            ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -306,7 +306,7 @@ async def authorization_invalidate(response: Response, request: Request, Authori
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

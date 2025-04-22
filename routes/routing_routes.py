@@ -59,8 +59,8 @@ async def create_routing(api_data: CreateRoutingModel, request: Request, Authori
                 },
                 error_code="RTG009",
                 error_message="You do not have permission to create routings"
-            ))
-        return process_response(await RoutingService.create_routing(api_data, request_id))
+            ).dict(), "rest")
+        return process_response(await RoutingService.create_routing(api_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -70,7 +70,7 @@ async def create_routing(api_data: CreateRoutingModel, request: Request, Authori
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -108,8 +108,8 @@ async def update_routing(client_key: str, api_data: UpdateRoutingModel, request:
                 },
                 error_code="RTG010",
                 error_message="You do not have permission to update routings"
-            ))
-        return process_response(await RoutingService.update_routing(client_key, api_data, request_id))
+            ).dict(), "rest")
+        return process_response(await RoutingService.update_routing(client_key, api_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -119,7 +119,7 @@ async def update_routing(client_key: str, api_data: UpdateRoutingModel, request:
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -157,8 +157,8 @@ async def delete_routing(client_key: str, request: Request, Authorize: AuthJWT =
                 },
                 error_code="RTG011",
                 error_message="You do not have permission to delete routings"
-            ))
-        return process_response(await RoutingService.delete_routing(client_key, request_id))
+            ).dict(), "rest")
+        return process_response(await RoutingService.delete_routing(client_key, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -168,7 +168,7 @@ async def delete_routing(client_key: str, request: Request, Authorize: AuthJWT =
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -194,8 +194,8 @@ async def get_routings(request: Request, Authorize: AuthJWT = Depends(), page: i
                 },
                 error_code="RTG012",
                 error_message="You do not have permission to get routings"
-            ))
-        return process_response(await RoutingService.get_routings(page, page_size, request_id))
+            ).dict(), "rest")
+        return process_response(await RoutingService.get_routings(page, page_size, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -205,7 +205,7 @@ async def get_routings(request: Request, Authorize: AuthJWT = Depends(), page: i
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -231,8 +231,8 @@ async def get_routing(client_key: str, request: Request, Authorize: AuthJWT = De
                 },
                 error_code="RTG013",
                 error_message="You do not have permission to get routings"
-            ))
-        return process_response(await RoutingService.get_routing(client_key, request_id))
+            ).dict(), "rest")
+        return process_response(await RoutingService.get_routing(client_key, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -242,7 +242,7 @@ async def get_routing(client_key: str, request: Request, Authorize: AuthJWT = De
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

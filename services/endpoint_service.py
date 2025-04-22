@@ -27,6 +27,7 @@ class EndpointService:
         logger.info(request_id + " | Creating endpoint: " + data.api_name + " " + data.api_version + " " + data.endpoint_uri)
         cache_key = f"/{data.endpoint_method}/{data.api_name}/{data.api_version}/{data.endpoint_uri}".replace("//", "/")
         if pygate_cache.get_cache('endpoint_cache', cache_key) or endpoint_collection.find_one({
+            'endpoint_method': data.endpoint_method,
             'api_name': data.api_name,
             'api_version': data.api_version,
             'endpoint_uri': data.endpoint_uri

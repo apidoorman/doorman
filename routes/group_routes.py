@@ -60,7 +60,7 @@ async def create_group(api_data: CreateGroupModel, request: Request, Authorize: 
                 error_code="GRP008",
                 error_message="You do not have permission to create groups"
             ))
-        return process_response(await GroupService.create_group(api_data, request_id))
+        return process_response(await GroupService.create_group(api_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -70,7 +70,7 @@ async def create_group(api_data: CreateGroupModel, request: Request, Authorize: 
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -109,7 +109,7 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
                 error_code="GRP009",
                 error_message="You do not have permission to update groups"
             ))
-        return process_response(await GroupService.update_group(group_name, api_data, request_id))
+        return process_response(await GroupService.update_group(group_name, api_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -119,7 +119,7 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -157,8 +157,8 @@ async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = D
                 },
                 error_code="GRP010",
                 error_message="You do not have permission to delete groups"
-            ))
-        return process_response(await GroupService.delete_group(group_name, request_id))
+            ).dict(), "rest")
+        return process_response(await GroupService.delete_group(group_name, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -168,7 +168,7 @@ async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = D
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -186,7 +186,7 @@ async def get_groups(request: Request, Authorize: AuthJWT = Depends(), page: int
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await GroupService.get_groups(page, page_size, request_id))
+        return process_response(await GroupService.get_groups(page, page_size, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -196,7 +196,7 @@ async def get_groups(request: Request, Authorize: AuthJWT = Depends(), page: int
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -215,7 +215,7 @@ async def get_group(group_name: str, request: Request, Authorize: AuthJWT = Depe
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await GroupService.get_group(group_name, request_id))
+        return process_response(await GroupService.get_group(group_name, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -225,7 +225,7 @@ async def get_group(group_name: str, request: Request, Authorize: AuthJWT = Depe
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

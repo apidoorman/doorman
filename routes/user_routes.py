@@ -58,9 +58,8 @@ async def create_user(user_data: CreateUserModel, request: Request, Authorize: A
                     status_code=403,
                     error_code="USR006",
                     error_message="Can only update your own information"
-                ).dict()
-            )
-        return process_response(await UserService.create_user(user_data, request_id))
+                ).dict(), "rest")
+        return process_response(await UserService.create_user(user_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -70,7 +69,7 @@ async def create_user(user_data: CreateUserModel, request: Request, Authorize: A
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -106,9 +105,8 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
                     status_code=403,
                     error_code="USR006",
                     error_message="Can only update your own information"
-                ).dict()
-            )
-        return process_response(await UserService.update_user(username, api_data, request_id))
+                ).dict(), "rest")
+        return process_response(await UserService.update_user(username, api_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -118,7 +116,7 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -154,9 +152,8 @@ async def delete_user(username: str, request: Request, Authorize: AuthJWT = Depe
                     status_code=403, 
                     error_code="USR007",
                     error_message="Can only delete your own account"
-                ).dict()
-            )
-        return process_response(await UserService.delete_user(username, request_id))
+                ).dict(), "rest")
+        return process_response(await UserService.delete_user(username, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -166,7 +163,7 @@ async def delete_user(username: str, request: Request, Authorize: AuthJWT = Depe
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -204,8 +201,8 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
                 },
                 error_code="USR006",
                 error_message="Can only update your own password"
-            ).dict())
-        return process_response(await UserService.update_password(username, api_data, request_id))
+            ).dict(), "rest")
+        return process_response(await UserService.update_password(username, api_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -215,7 +212,7 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -239,9 +236,8 @@ async def get_user_by_username(username: str, request: Request, Authorize: AuthJ
                     status_code=403,
                     error_code="USR008",
                     error_message="Unable to retrieve information for user",
-                ).dict()
-            )
-        return process_response(await UserService.get_user_by_username(username, request_id))
+                ).dict(), "rest")
+        return process_response(await UserService.get_user_by_username(username, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -251,7 +247,7 @@ async def get_user_by_username(username: str, request: Request, Authorize: AuthJ
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -269,7 +265,7 @@ async def get_user_by_email(email: str, request: Request, Authorize: AuthJWT = D
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await UserService.get_user_by_email(Authorize.get_jwt_subject(), email, request_id))
+        return process_response(await UserService.get_user_by_email(Authorize.get_jwt_subject(), email, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -279,7 +275,7 @@ async def get_user_by_email(email: str, request: Request, Authorize: AuthJWT = D
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

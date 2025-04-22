@@ -47,7 +47,7 @@ async def rest_gateway_status():
     return process_response(ResponseModel(
         status_code=200,
         message="Gateway is online"
-    ).dict())
+    ).dict(), "rest")
 
 @gateway_router.api_route("/caches", methods=["DELETE"],
     description="Clear all caches",
@@ -79,13 +79,13 @@ async def clear_all_caches(Authorize: AuthJWT = Depends()):
         return process_response(ResponseModel(
             status_code=200,
             message="All caches cleared"
-            ).dict())
+            ).dict(), "rest")
     except Exception as e:
         return process_response(ResponseModel(
             status_code=500,
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
 
 @gateway_router.api_route(
     "/rest/{path:path}",
@@ -106,15 +106,25 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
     logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
     try:
         await limit_and_throttle(Authorize, request)
+        content_type = request.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            body = await request.json()
+        elif "application/xml" in content_type or "text/xml" in content_type:
+            body = (await request.body()).decode("utf-8")
+        else:
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
         request_model = RequestModel(
             method=request.method,
             path=path,
             headers=dict(request.headers),
-            body=await request.json() if request.method in ["POST", "PUT", "PATCH"] else None,
+            body=body,
             query_params=dict(request.query_params),
             identity=Authorize.get_jwt_subject()
         )
-        return process_response(await GatewayService.rest_gateway(Authorize, request_model, request_id, start_time))
+        return process_response(await GatewayService.rest_gateway(Authorize, request_model, request_id, start_time), "rest")
     except RateLimitExceeded as e:
         return process_response(ResponseModel(
             status_code=429,
@@ -123,7 +133,7 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
             },
             error_code="GTW009",
             error_message="Rate limit exceeded"
-            ).dict())
+            ).dict(), "rest")
     except ValueError:
         return process_response(ResponseModel(
             status_code=500,
@@ -132,7 +142,46 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@gateway_router.api_route(
+    "/soap/{path:path}",
+    methods=["POST"],
+    description="SOAP API gateway",
+    dependencies=[
+        Depends(auth_required),
+        Depends(subscription_required)
+    ],
+    include_in_schema=False
+)
+async def soap_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
+    await group_required(request, Authorize, path)
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    logger.info(f"{request_id} | Time: {time.strftime('%Y-%m-%d %H:%M:%S')}:{int(time.time() * 1000) % 1000}ms")
+    logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+    logger.info(f"{request_id} | Endpoint: POST {path}")
+    try:
+        await limit_and_throttle(Authorize, request)
+        response_payload = await GatewayService.soap_gateway(path, Authorize, request, request_id, start_time)
+        return process_response(response_payload, "soap")
+    except RateLimitExceeded:
+        return process_response(ResponseModel(
+            status_code=429,
+            response_headers={"request_id": request_id},
+            error_code="GTW009",
+            error_message="Rate limit exceeded"
+        ).dict(), "soap")
+    except ValueError:
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={"request_id": request_id},
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+        ).dict(), "soap")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

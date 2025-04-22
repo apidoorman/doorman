@@ -45,7 +45,7 @@ async def auth_required(Authorize: AuthJWT = Depends()):
             logger.error(f"Unauthorized access: User {username} is inactive")
             raise HTTPException(status_code=401, detail="User is inactive")
     except Exception as e:
-        logger.error(f"Unauthorized access: {e}")
+        logger.error(f"Unauthorized access: {str(e)}")
         raise HTTPException(status_code=401, detail="Unauthorized")
     return Authorize
 
