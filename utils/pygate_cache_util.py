@@ -30,7 +30,8 @@ class PygateCacheManager:
             'user_role_cache': 'user_role_cache:',
             'endpoint_load_balancer': 'endpoint_load_balancer:',
             'endpoint_server_cache': 'endpoint_server_cache:',
-            'client_routing_cache': 'client_routing_cache:'
+            'client_routing_cache': 'client_routing_cache:',
+            'token_def_cache': 'token_def_cache'
         }
 
         self.default_ttls = {
@@ -46,7 +47,8 @@ class PygateCacheManager:
             'user_role_cache': 86400,
             'endpoint_load_balancer': 86400,
             'endpoint_server_cache': 86400,
-            'client_routing_cache': 86400
+            'client_routing_cache': 86400,
+            'token_def_cache': 86400
         }
 
     def _get_key(self, cache_name, key):

@@ -15,6 +15,8 @@ class TestPygate:
     password = None
     client_key = None
     csrf_token = None
+    api_name_soap = None
+    endpoint_path_soap = None
 
     @staticmethod
     def getAccessCookies():
@@ -81,7 +83,7 @@ class TestPygate:
                                     "password": TestPygate.password, 
                                     "role": TestPygate.role_name,
                                     "groups": ["ALL"],
-                                    "rate_limit_duration": 2,
+                                    "rate_limit_duration": 3,
                                     "rate_limit_duration_type": "minute",
                                     "throttle_duration": 10,
                                     "throttle_duration_type": "second",
@@ -149,10 +151,28 @@ class TestPygate:
                                      "api_name": TestPygate.api_name,
                                      "api_version": "v1", 
                                      "api_description": "Test API", 
-                                     "api_servers": ["https://fake-json-api.mock.beeceptor.com/"], 
+                                     "api_servers": ["https://fake-json-api.mock.beeceptor.com"], 
                                      "api_allowed_roles": [TestPygate.role_name],
                                      "api_allowed_groups": ["ALL", TestPygate.group_name],
                                      "api_type": "REST"
+                                 }, verify=False)
+        assert response.status_code == 201
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(9)
+    async def test_onboard_api_soap(self):
+        TestPygate.api_name_soap = "test" + "".join(random.sample("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 8))
+        response = requests.post(f"{self.base_url}/platform/api", 
+                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
+                                cookies=TestPygate.getAccessCookies(),
+                                 json={
+                                     "api_name": TestPygate.api_name_soap,
+                                     "api_version": "v1", 
+                                     "api_description": "Test SOAP API", 
+                                     "api_servers": ["https://www.dataaccess.com/webservicesserver"], 
+                                     "api_allowed_roles": [TestPygate.role_name],
+                                     "api_allowed_groups": ["ALL", TestPygate.group_name],
+                                     "api_type": "SOAP"
                                  }, verify=False)
         assert response.status_code == 201
 
@@ -175,6 +195,24 @@ class TestPygate:
         assert response.status_code == 201
 
     @pytest.mark.asyncio
+    @pytest.mark.order(10)
+    async def test_onboard_endpoint_soap(self):
+
+        TestPygate.endpoint_path_soap = "/NumberConversion.wso"
+
+        response = requests.post(f"{self.base_url}/platform/endpoint", 
+                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
+                                cookies=TestPygate.getAccessCookies(),
+                                 json={
+                                    "api_name": TestPygate.api_name_soap,
+                                    "api_version": "v1", 
+                                    "endpoint_uri": TestPygate.endpoint_path_soap,
+                                    "endpoint_method": "POST",
+                                    "endpoint_description": "Test endpoint",
+                                 }, verify=False)
+        assert response.status_code == 201
+
+    @pytest.mark.asyncio
     @pytest.mark.order(11)
     async def test_subscribe(self):
         response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
@@ -183,6 +221,19 @@ class TestPygate:
                                     json={
                                         "username": TestPygate.username, 
                                         "api_name": TestPygate.api_name, 
+                                        "api_version": "v1"
+                                    }, verify=False)
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(11)
+    async def test_subscribe_soap(self):
+        response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
+                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
+                                cookies=TestPygate.getAccessCookies(),
+                                    json={
+                                        "username": TestPygate.username, 
+                                        "api_name": TestPygate.api_name_soap, 
                                         "api_version": "v1"
                                     }, verify=False)
         assert response.status_code == 200
@@ -252,6 +303,15 @@ class TestPygate:
     async def test_gateway_call_regular_route(self):
         response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
                                 cookies=TestPygate.getAccessCookies(), verify=False)
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(19)
+    async def test_gateway_call_regular_route_soap(self):
+        response = requests.post(f"{self.base_url}/api/soap/" + TestPygate.api_name_soap + "/v1" + TestPygate.endpoint_path_soap,
+                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
+                                cookies=TestPygate.getAccessCookies(), verify=False,
+                                data="<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:web=\"http://www.dataaccess.com/webservicesserver/\"><soapenv:Header/><soapenv:Body><web:NumberToWords><ubiNum>123</ubiNum></web:NumberToWords></soapenv:Body></soapenv:Envelope>",)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
