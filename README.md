@@ -83,6 +83,9 @@ REDIS_DB=0
 # Authorization Config
 JWT_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
+# API Encryption Key (for API Keys)
+ENC_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
 # HTTP Config
 ALLOWED_ORIGINS=https://localhost:8443  # Comma separated
 ALLOW_CREDENTIALS=True
