@@ -20,6 +20,8 @@ class TokenTierModel(BaseModel):
 class TokenModel(BaseModel):
 
     api_token_group: str = Field(..., min_length=1, max_length=50, description="API group for the tokens", example="ai-group-1")
+    api_key: str = Field(..., description="API key for the token tier", example="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+    api_key_header: str = Field(..., description="Header the API key should be sent in", example="x-api-key")
     token_tiers: List[TokenTierModel] = Field(..., min_items=1, description="Token tiers information")
     
     class Config:

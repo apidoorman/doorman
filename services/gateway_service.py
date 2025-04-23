@@ -4,11 +4,13 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+import os
 from models.response_model import ResponseModel
 from utils import api_util, routing_util
 from utils import token_util
+from utils.gateway_utils import get_headers
 from utils.pygate_cache_util import pygate_cache
-from utils.token_util import deduct_ai_token
+from utils.token_util import deduct_ai_token, get_token_api_heaeder
 
 import json
 import xml.etree.ElementTree as ET
@@ -21,6 +23,13 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 class GatewayService:
+
+    timeout = httpx.Timeout(
+                connect=float(os.getenv("HTTP_CONNECT_TIMEOUT", 5.0)),
+                read=float(os.getenv("HTTP_READ_TIMEOUT", 30.0)),
+                write=float(os.getenv("HTTP_WRITE_TIMEOUT", 30.0)),
+                pool=float(os.getenv("HTTP_TIMEOUT", 30.0))
+            )
 
     def error_response(request_id, code, message, status=404):
             logger.error(f"{request_id} | REST gateway failed with code {code}")
@@ -83,15 +92,22 @@ class GatewayService:
                 method = request.method.upper()
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_tokens_enabled'):
-                    if not await token_util.deduct_ai_token(api, Authorize.get_jwt_subject()):
+                    if not await token_util.deduct_ai_token(api.get('api_token_group'), Authorize.get_jwt_subject()):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any tokens', status=401)
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
             allowed_headers = api.get('api_allowed_headers') or []
-            headers = {key: value for key, value in request.headers.items() if key in allowed_headers}
+            headers = get_headers(request, allowed_headers)
+            if api.get('api_tokens_enabled'):
+                ai_token_headers = await token_util.get_token_api_header(api.get('api_token_group'))
+                if ai_token_headers:
+                    headers[ai_token_headers[0]] = ai_token_headers[1]
+                user_specific_api_key = await token_util.get_user_api_key(api.get('api_token_group'), Authorize.get_jwt_subject())
+                if user_specific_api_key:
+                    headers[ai_token_headers[0]] = user_specific_api_key
             content_type = request.headers.get("Content-Type", "").upper()
             logger.info(f"{request_id} | REST gateway to: {url}")
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
                 if method == "GET":
                     http_response = await client.get(url, params=query_params, headers=headers)
                 elif method in ("POST", "PUT", "DELETE"):
@@ -126,6 +142,13 @@ class GatewayService:
                 status_code=http_response.status_code,
                 response_headers=response_headers,
                 response=response_content
+            ).dict()
+        except httpx.TimeoutException:
+            return ResponseModel(
+                status_code=504,
+                response_headers={"request_id": request_id},
+                error_code="GTW010",
+                error_message="Gateway timeout"
             ).dict()
         except Exception:
             logger.error(f"{request_id} | REST gateway failed with code GTW006")
@@ -181,7 +204,6 @@ class GatewayService:
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any tokens', status=401)
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
-            allowed_headers = api.get('api_allowed_headers') or []
             incoming_content_type = request.headers.get("Content-Type", "").lower()
             if incoming_content_type == "application/xml":
                 content_type = "text/xml; charset=utf-8"
@@ -189,12 +211,13 @@ class GatewayService:
                 content_type = incoming_content_type
             else:
                 content_type = "text/xml; charset=utf-8"
-            headers = {key: value for key, value in request.headers.items() if key in allowed_headers}
+            allowed_headers = api.get('api_allowed_headers') or []
+            headers = get_headers(request, allowed_headers)
             headers["Content-Type"] = content_type
             if "SOAPAction" not in headers:
                 headers["SOAPAction"] = '""'
             envelope = (await request.body()).decode("utf-8")
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
                 http_response = await client.post(url, content=envelope, params=query_params, headers=headers)
             response_content = http_response.text
             logger.info(f"{request_id} | SOAP gateway response: {response_content}")
@@ -213,6 +236,13 @@ class GatewayService:
                 status_code=http_response.status_code,
                 response_headers=response_headers,
                 response=response_content
+            ).dict()
+        except httpx.TimeoutException:
+            return ResponseModel(
+                status_code=504,
+                response_headers={"request_id": request_id},
+                error_code="GTW010",
+                error_message="Gateway timeout"
             ).dict()
         except Exception:
             logger.error(f"{request_id} | SOAP gateway failed with code GTW006")
