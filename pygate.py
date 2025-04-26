@@ -49,7 +49,7 @@ PID_FILE = "pygate.pid"
 pygate = FastAPI(
     title="pygate",
     description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.",  # Optional: Add a description
-    version="1.0.0"
+    version="0.0.1"
 )
 
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
