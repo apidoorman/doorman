@@ -16,6 +16,7 @@ from utils.group_util import group_required
 from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
 from utils.subscription_util import subscription_required
+from utils.health_check_util import check_mongodb, check_redis, get_memory_usage, get_active_connections, get_uptime
 from services.gateway_service import GatewayService
 from models.request_model import RequestModel
 
@@ -29,14 +30,46 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 @gateway_router.api_route("/status/rest", methods=["GET"],
-    description="Check if the REST gateway is online",
+    description="Check if the REST gateway is online and all dependencies are healthy",
     responses={
         200: {
             "description": "Successful Response",
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Gateway is online"
+                        "status": "healthy",
+                        "version": "0.0.1",
+                        "dependencies": {
+                            "mongodb": "connected",
+                            "redis": "connected",
+                            "cache": "operational"
+                        },
+                        "metrics": {
+                            "memory_usage": "45%",
+                            "active_connections": 10,
+                            "uptime": "2h 15m"
+                        }
+                    }
+                }
+            }
+        },
+        503: {
+            "description": "Service Unavailable",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "unhealthy",
+                        "version": "0.0.1",
+                        "dependencies": {
+                            "mongodb": "disconnected",
+                            "redis": "connected",
+                            "cache": "operational"
+                        },
+                        "metrics": {
+                            "memory_usage": "45%",
+                            "active_connections": 10,
+                            "uptime": "2h 15m"
+                        }
                     }
                 }
             }
@@ -44,11 +77,37 @@ logger = logging.getLogger("pygate.gateway")
     }
 )
 async def rest_gateway_status():
-    return process_response(ResponseModel(
-        status_code=200,
-        message="Gateway is online"
-    ).dict(), "rest")
-
+    try:
+        mongodb_status = "connected" if await check_mongodb() else "disconnected"
+        redis_status = "connected" if await check_redis() else "disconnected"
+        metrics = {
+            "memory_usage": get_memory_usage(),
+            "active_connections": get_active_connections(),
+            "uptime": get_uptime()
+        }
+        status = "healthy" if mongodb_status == "connected" and redis_status == "connected" else "unhealthy"
+        response = {
+            "status": status,
+            "version": "0.0.1",
+            "dependencies": {
+                "mongodb": mongodb_status,
+                "redis": redis_status,
+                "cache": "operational" if pygate_cache.is_operational() else "degraded"
+            },
+            "metrics": metrics
+        }
+        return process_response(ResponseModel(
+            status_code=200 if status == "healthy" else 503,
+            response=response
+        ).dict(), "rest")
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return process_response(ResponseModel(
+            status_code=503,
+            error_code="HLT001",
+            error_message="Health check failed"
+        ).dict(), "rest")
+    
 @gateway_router.api_route("/caches", methods=["DELETE"],
     description="Clear all caches",
     dependencies=[

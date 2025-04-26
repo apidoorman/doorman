@@ -84,6 +84,20 @@ class PygateCacheManager:
         for cache_name in self.prefixes.keys():
             self.clear_cache(cache_name)
 
+    @staticmethod
+    def is_operational():
+        """Check if the cache is operational"""
+        try:
+            # Try to set and get a test value
+            test_key = "health_check_test"
+            test_value = "test"
+            pygate_cache.set_cache(test_key, test_key, test_value)
+            retrieved_value = pygate_cache.get_cache(test_key, test_key)
+            pygate_cache.delete_cache(test_key, test_key)
+            return retrieved_value == test_value
+        except Exception:
+            return False
+
 pygate_cache = PygateCacheManager()
 
 """

@@ -38,8 +38,7 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 
 
 ## Releases
-- [v1.0.0 - REST Support](https://github.com/pygate-dev/pygate/releases) (Latest - 25 April 2025)
-- v1.1.0 - AI Support (To Be Announced)
+- [v0.0.1- REST, AI, and SOAP API Support](https://github.com/pygate-dev/pygate/releases) (29 April 2025)
 
 
 ## Documentation
