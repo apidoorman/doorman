@@ -117,6 +117,7 @@ database.initialize_collections()
 database.create_indexes()
 
 db = database.db
+mongodb_client = database.client
 api_collection = db.apis
 endpoint_collection = db.endpoints
 group_collection = db.groups
