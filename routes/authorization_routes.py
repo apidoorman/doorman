@@ -6,14 +6,13 @@ See https://github.com/pypeople-dev/pygate for more information
 
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
-from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 
 from models.response_model import ResponseModel
 from services.user_service import UserService
-from utils.token_util import create_access_token
-from utils.auth_util import auth_required
+from utils.response_util import process_response
+from utils.auth_util import auth_required, create_access_token
 from utils.auth_blacklist import TimedHeap, jwt_blacklist
 
 import uuid
@@ -53,21 +52,63 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
         email = data.get('email')
         password = data.get('password')
         if not email or not password:
-            return JSONResponse(content={"error_code": "AUTH001", "error_message": "Missing email or password"}, status_code=400)
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code="AUTH001",
+                error_message="Missing email or password"
+            ))
         user = await UserService.check_password_return_user(email, password)
         if not user:
-            return JSONResponse(content={"error_code": "AUTH002", "error_message": "Invalid email or password"}, status_code=400)
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code="AUTH002",
+                error_message="Invalid email or password"
+            ))
+        if not user["active"]:
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code="AUTH007",
+                error_message="User is not active"
+            ))
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize, False)
-        response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
+        response = process_response(ResponseModel(
+            status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
+            response={"access_token": access_token}
+        ).dict(), "rest")
         response.delete_cookie("access_token_cookie")
-        response.set_cookie("access_token_cookie", access_token, secure=True, httponly=True)
         Authorize.set_access_cookies(access_token, response)
         return response
     except HTTPException as e:
-        return JSONResponse(content={"error_code": "AUTH003","error_message": "Unable to validate credentials"}, status_code=401)
+        return process_response(ResponseModel(
+            status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="AUTH003",
+            error_message="Unable to validate credentials"
+            ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -99,20 +140,54 @@ async def extended_authorization(request: Request, Authorize: AuthJWT = Depends(
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         username = Authorize.get_jwt_subject()
         user = await UserService.get_user_by_username_helper(username)
+        if not user["active"]:
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code="AUTH007",
+                error_message="User is not active"
+            ).dict(), "rest")
         refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
-        response = JSONResponse(content={"refresh_token": refresh_token}, media_type="application/json")
-        response.delete_cookie("access_token_cookie")
-        response.set_cookie("access_token_cookie", refresh_token, secure=True, httponly=True)
+        response = process_response(ResponseModel(
+            status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
+            response={"refresh_token": refresh_token}
+        ).dict(), "rest")
         Authorize.set_access_cookies(refresh_token, response)
         return response
     except HTTPException as e:
-        return JSONResponse(content={"error_code": "AUTH003","error_message": "Unable to validate credentials"}, status_code=401)
+        return process_response(ResponseModel(
+            status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="AUTH003",
+            error_message="Unable to validate credentials"
+            ).dict(), "rest")
     except AuthJWTException as e:
         logging.error(f"Token refresh failed: {str(e)}")
-        return JSONResponse(status_code=500, content={"detail": "An error occurred during token refresh"})
+        return process_response(ResponseModel(
+            status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="AUTH004",
+            error_message="Token refresh failed"
+            ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -142,12 +217,32 @@ async def authorization_status(request: Request, Authorize: AuthJWT = Depends())
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return JSONResponse(content={"status": "authorized"}, status_code=200)
+        return process_response(ResponseModel(
+            status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
+            message="Token is valid"
+            ).dict(), "rest")
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        return process_response(ResponseModel(
+            status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="AUTH005",
+            error_message="Token is invalid"
+            ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -183,17 +278,35 @@ async def authorization_invalidate(response: Response, request: Request, Authori
         if user not in jwt_blacklist:
             jwt_blacklist[user] = TimedHeap()
         await jwt_blacklist[user].push(jti)
-        response = JSONResponse(content={"message": "Your token has been invalidated"}, status_code=200)
+        response = process_response(ResponseModel(
+            status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
+            message="Your token has been invalidated"
+            ).dict(), "rest")
         response.delete_cookie("access_token_cookie")
-        response.delete_cookie("refresh_token_cookie")
-        response.delete_cookie("csrf_access_token")
         return response
     except AuthJWTException as e:
         logging.error(f"Logout failed: {str(e)}")
-        return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})
+        return process_response(ResponseModel(
+            status_code=401,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="AUTH006",
+            error_message="Unable to invalidate token"
+            ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

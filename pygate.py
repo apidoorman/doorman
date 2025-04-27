@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 from logging.handlers import TimedRotatingFileHandler
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +17,7 @@ from redis.asyncio import Redis
 from pydantic import BaseSettings
 from dotenv import load_dotenv
 
+from models.response_model import ResponseModel
 from utils.cache_manager_util import cache_manager
 from utils.auth_blacklist import purge_expired_tokens
 
@@ -40,6 +40,8 @@ import signal
 import uvicorn
 import asyncio
 
+from utils.response_util import process_response
+
 load_dotenv()
 
 PID_FILE = "pygate.pid"
@@ -47,7 +49,7 @@ PID_FILE = "pygate.pid"
 pygate = FastAPI(
     title="pygate",
     description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.",  # Optional: Add a description
-    version="1.0.0"
+    version="0.0.1"
 )
 
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
@@ -76,10 +78,9 @@ log_file_handler = TimedRotatingFileHandler(
     encoding="utf-8"
 )
 log_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-root_logger.addHandler(log_file_handler)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(log_file_handler)
 
 class Settings(BaseSettings):
     mongo_db_uri: str = os.getenv("MONGO_DB_URI")
@@ -116,35 +117,27 @@ async def startup_event():
 
 @pygate.exception_handler(AuthJWTException)
 async def authjwt_exception_handler(exc: AuthJWTException):
-    return JSONResponse(
+    return process_response(ResponseModel(
         status_code=exc.status_code,
-        content={
-            "code": "AUTH001",
-            "error": "JWT Error",
-            "message": exc.message
-            }
-    )
+        error_code="JWT001",
+        error_message=exc.message
+    ).dict(), "rest")
 
 @pygate.exception_handler(500)
 async def internal_server_error_handler(request: Request, exc: Exception):
-    return JSONResponse(
+    return process_response(ResponseModel(
         status_code=500,
-        content={
-            "code": "ISE001",
-            "error": "Internal Server Error",
-            "message": "An unexpected error occurred. Please try again later."
-        }
-    )
+        error_code="ISE001",
+        error_message="Internal Server Error"
+    ).dict(), "rest")
 
 @pygate.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(
-        status_code=400,
-        content={
-            "code": "VAL001",
-            "error": exc.errors(), 
-            "message": exc.body}
-    )
+    return process_response(ResponseModel(
+        status_code=422,
+        error_code="VAL001",
+        error_message="Validation Error"
+    ).dict(), "rest")
 
 cache_manager.init_app(pygate)
 
@@ -210,9 +203,9 @@ def run():
         host="0.0.0.0",
         port=server_port,
         reload=os.getenv("DEV_RELOAD", "false").lower() == "true",
-        reload_excludes=["venv", "logs"],
+        reload_excludes=["venv/*", "logs/*"],
         workers=num_threads,
-        log_level="critical",
+        log_level="info",
         ssl_certfile=os.getenv("SSL_CERTFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None,
         ssl_keyfile=os.getenv("SSL_KEYFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None
     )

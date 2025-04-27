@@ -27,20 +27,23 @@ class RoutingService:
         logger.info(request_id + " | Creating routing: " + data.routing_name)
         data.client_key = str(uuid.uuid4()) if not data.client_key else data.client_key
         if pygate_cache.get_cache('client_routing_cache', data.client_key):
-            logger.error(request_id + " | Routing creation failed with code ROUT001")
+            logger.error(request_id + " | Routing creation failed with code RTG001")
             return ResponseModel(
                 status_code=400,
-                error_code='ROUT001',
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code='RTG001',
                 error_message='Routing already exists'
             ).dict()
         routing_dict = data.dict()
         try:
             insert_result = routing_collection.insert_one(routing_dict)
             if not insert_result.acknowledged:
-                logger.error(request_id + " | Routing creation failed with code ROUT002")
+                logger.error(request_id + " | Routing creation failed with code RTG002")
                 return ResponseModel(
                     status_code=400,
-                    error_code='ROUT002',
+                    error_code='RTG002',
                     error_message='Unable to insert routing'
                 ).dict()
             routing_dict['_id'] = str(insert_result.inserted_id)
@@ -51,10 +54,13 @@ class RoutingService:
                 message='Routing created successfully with key: ' + data.client_key,
             ).dict()
         except DuplicateKeyError as e:
-            logger.error(request_id + " | Routing creation failed with code ROUT001")
+            logger.error(request_id + " | Routing creation failed with code RTG001")
             return ResponseModel(
                 status_code=400,
-                error_code='ROUT001',
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code='RTG001',
                 error_message='Routing already exists'
             ).dict()
         
@@ -68,7 +74,10 @@ class RoutingService:
             logger.error(request_id + " | Role update failed with code ROLE005")
             return ResponseModel(
                 status_code=400,
-                error_code='ROUT005',
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code='RTG005',
                 error_message='Routing key cannot be changed'
             ).dict()
         routing = pygate_cache.get_cache('client_routing_cache', client_key)
@@ -77,10 +86,10 @@ class RoutingService:
                 'client_key': client_key
             })
             if not routing:
-                logger.error(request_id + " | Routing update failed with code ROUT004")
+                logger.error(request_id + " | Routing update failed with code RTG004")
                 return ResponseModel(
                     status_code=400,
-                    error_code='ROUT004',
+                    error_code='RTG004',
                     error_message='Routing does not exist'
                 ).dict()
         else:
@@ -89,10 +98,10 @@ class RoutingService:
         if not_null_data:
             update_result = routing_collection.update_one({'client_key': client_key}, {'$set': not_null_data})
             if not update_result.acknowledged or update_result.modified_count == 0:
-                logger.error(request_id + " | Routing update failed with code ROUT006")
+                logger.error(request_id + " | Routing update failed with code RTG006")
                 return ResponseModel(
                     status_code=400,
-                    error_code='ROUT006',
+                    error_code='RTG006',
                     error_message='Unable to update routing'
                 ).dict()
             logger.info(request_id + " | Routing update successful")
@@ -101,10 +110,13 @@ class RoutingService:
                 message='Routing updated successfully'
             ).dict()
         else:
-            logger.error(request_id + " | Routing update failed with code ROUT007")
+            logger.error(request_id + " | Routing update failed with code RTG007")
             return ResponseModel(
                 status_code=400,
-                error_code='ROUT007',
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code='RTG007',
                 error_message='No data to update'
             ).dict()
         
@@ -120,25 +132,31 @@ class RoutingService:
                 'client_key': client_key
             })
             if not routing:
-                logger.error(request_id + " | Routing deletion failed with code ROUT004")
+                logger.error(request_id + " | Routing deletion failed with code RTG004")
                 return ResponseModel(
                     status_code=400,
-                    error_code='ROUT004',
+                    error_code='RTG004',
                     error_message='Routing does not exist'
                 ).dict()
         else:
             pygate_cache.delete_cache('client_routing_cache', client_key)
         delete_result = routing_collection.delete_one({'client_key': client_key})
         if not delete_result.acknowledged or delete_result.deleted_count == 0:
-            logger.error(request_id + " | Routing deletion failed with code ROUT008")
+            logger.error(request_id + " | Routing deletion failed with code RTG008")
             return ResponseModel(
                 status_code=400,
-                error_code='ROUT008',
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code='RTG008',
                 error_message='Unable to delete routing'
             ).dict()
         logger.info(request_id + " | Routing deletion successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='Routing deleted successfully'
         ).dict()
     
@@ -154,10 +172,10 @@ class RoutingService:
                 'client_key': client_key
             })
             if not routing:
-                logger.error(request_id + " | Routing retrieval failed with code ROUT004")
+                logger.error(request_id + " | Routing retrieval failed with code RTG004")
                 return ResponseModel(
                     status_code=400,
-                    error_code='ROUT004',
+                    error_code='RTG004',
                     error_message='Routing does not exist'
                 ).dict()
         logger.info(request_id + " | Routing retrieval successful")
@@ -177,10 +195,13 @@ class RoutingService:
         cursor = routing_collection.find().sort('client_key', 1).skip(skip).limit(page_size)
         routings = cursor.to_list(length=None)
         if not routings:
-            logger.error(request_id + " | Routing retrieval failed with code ROUT002")
+            logger.error(request_id + " | Routing retrieval failed with code RTG002")
             return ResponseModel(
                 status_code=404,
-                error_code='ROUT002',
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code='RTG002',
                 error_message='No routings found'
             ).dict()
         for route in routings:

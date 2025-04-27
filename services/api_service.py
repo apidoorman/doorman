@@ -50,6 +50,9 @@ class ApiService:
         logger.info(request_id + " | API creation successful")
         return ResponseModel(
             status_code=201,
+            response_headers={
+                "request_id": request_id
+            },
             message='API created successfully'
             ).dict()
     
@@ -59,7 +62,7 @@ class ApiService:
         Update an API on the platform.
         """
         logger.info(request_id + " | Updating API: " + api_name + " " + api_version)
-        if data.api_name and data.api_name != api_name or data.api_version and data.api_version != api_version:
+        if data.api_name and data.api_name != api_name or data.api_version and data.api_version != api_version or data.api_path and data.api_path != f"/{api_name}/{api_version}":
             logger.error(request_id + " | API update failed with code API005")
             return ResponseModel(
                 status_code=400, 
@@ -69,7 +72,6 @@ class ApiService:
         api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
             api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
-            logger.info(request_id + " | API update failed with code API003")
             if not api:
                 logger.error(request_id + " | API update failed with code API003")
                 return ResponseModel(
@@ -135,6 +137,9 @@ class ApiService:
         logger.info(request_id + " | API deletion successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='API deleted successfully'
             ).dict()
 
