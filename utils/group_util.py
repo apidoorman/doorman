@@ -19,7 +19,12 @@ async def group_required(request: Request = None, Authorize: AuthJWT = Depends()
     try:
         username = Authorize.get_jwt_subject()
         if not full_path: full_path = request.url.path
-        prefix = "/api/rest/"
+        if full_path.startswith("/api/rest/"):
+            prefix = "/api/rest/"
+        elif full_path.startswith("/api/soap/"):
+            prefix = "/api/soap/"
+        else:
+            prefix = ""
         if full_path.startswith(prefix):
             path = full_path[len(prefix):]
         else:
