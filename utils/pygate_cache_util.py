@@ -30,7 +30,8 @@ class PygateCacheManager:
             'user_role_cache': 'user_role_cache:',
             'endpoint_load_balancer': 'endpoint_load_balancer:',
             'endpoint_server_cache': 'endpoint_server_cache:',
-            'client_routing_cache': 'client_routing_cache:'
+            'client_routing_cache': 'client_routing_cache:',
+            'token_def_cache': 'token_def_cache'
         }
 
         self.default_ttls = {
@@ -46,7 +47,8 @@ class PygateCacheManager:
             'user_role_cache': 86400,
             'endpoint_load_balancer': 86400,
             'endpoint_server_cache': 86400,
-            'client_routing_cache': 86400
+            'client_routing_cache': 86400,
+            'token_def_cache': 86400
         }
 
     def _get_key(self, cache_name, key):
@@ -81,6 +83,19 @@ class PygateCacheManager:
         """Clear all caches."""
         for cache_name in self.prefixes.keys():
             self.clear_cache(cache_name)
+
+    @staticmethod
+    def is_operational():
+        """Check if the cache is operational"""
+        try:
+            test_key = "health_check_test"
+            test_value = "test"
+            pygate_cache.set_cache(test_key, test_key, test_value)
+            retrieved_value = pygate_cache.get_cache(test_key, test_key)
+            pygate_cache.delete_cache(test_key, test_key)
+            return retrieved_value == test_value
+        except Exception:
+            return False
 
 pygate_cache = PygateCacheManager()
 

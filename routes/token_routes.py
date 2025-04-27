@@ -8,59 +8,57 @@ from typing import List
 from fastapi import APIRouter, Depends, Request
 from fastapi_jwt_auth import AuthJWT
 
-from models.endpoint_model_response import EndpointModelResponse
 from models.response_model import ResponseModel
-from models.update_endpoint_model import UpdateEndpointModel
-from services.endpoint_service import EndpointService
+from models.user_tokens_model import UserTokenModel
+from models.token_model import TokenModel
+from services.token_service import TokenService
 from utils.auth_util import auth_required
-from models.create_endpoint_model import CreateEndpointModel
 from utils.response_util import process_response
-from utils.role_util import platform_role_required_bool
 
 import uuid
 import time
 import logging
 
-endpoint_router = APIRouter()
+from utils.role_util import platform_role_required_bool
+
+token_router = APIRouter()
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
-@endpoint_router.post("",
-    description="Add endpoint",
+@token_router.post("",
+    description="Create a token",
     dependencies=[
         Depends(auth_required)
     ],
     response_model=ResponseModel,
     responses={
-        200: {
+        201: {
             "description": "Successful Response",
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Endpoint created successfully"
+                        "message": "Token created successfully"
                     }
                 }
             }
         }
     }
 )
-async def create_endpoint(endpoint_data: CreateEndpointModel, request: Request, Authorize: AuthJWT = Depends()):
+async def create_token(token_data: TokenModel, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
-            return process_response(ResponseModel(
-                status_code=403,
-                response_headers={
-                    "request_id": request_id
-                },
-                error_code="END010",
-                error_message="You do not have permission to create endpoints"
-            ).dict(), "rest")
-        return process_response(await EndpointService.create_endpoint(endpoint_data, request_id), "rest")
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+            return process_response(
+                ResponseModel(
+                    status_code=403,
+                    error_code="TKN001",
+                    error_message="You do not have permission to manage tokens",
+                ).dict(), "rest")
+        return process_response(await TokenService.create_token(token_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -75,8 +73,8 @@ async def create_endpoint(endpoint_data: CreateEndpointModel, request: Request, 
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@endpoint_router.put("/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}",
-    description="Update endpoint",
+@token_router.put("/{api_token_group}",
+    description="Update a token",
     dependencies=[
         Depends(auth_required)
     ],
@@ -87,29 +85,27 @@ async def create_endpoint(endpoint_data: CreateEndpointModel, request: Request, 
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Endpoint updated successfully"
+                        "message": "Token created successfully"
                     }
                 }
             }
         }
     }
 )
-async def update_endpoint(endpoint_method: str, api_name: str, api_version: str, endpoint_uri: str, endpoint_data: UpdateEndpointModel, request: Request, Authorize: AuthJWT = Depends()):
+async def update_token(api_token_group:str, token_data: TokenModel, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
-            return process_response(ResponseModel(
-                status_code=403,
-                response_headers={
-                    "request_id": request_id
-                },
-                error_code="END011",
-                error_message="You do not have permission to update endpoints"
-            ).dict(), "rest")
-        return process_response(await EndpointService.update_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, endpoint_data, request_id), "rest")
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+            return process_response(
+                ResponseModel(
+                    status_code=403,
+                    error_code="TKN001",
+                    error_message="You do not have permission to manage tokens",
+                ).dict(), "rest")
+        return process_response(await TokenService.update_token(api_token_group, token_data, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -124,8 +120,8 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@endpoint_router.delete("/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}",
-    description="Delete endpoint",
+@token_router.delete("/{api_token_group}",
+    description="Update a token",
     dependencies=[
         Depends(auth_required)
     ],
@@ -136,57 +132,27 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Endpoint deleted successfully"
+                        "message": "Token created successfully"
                     }
                 }
             }
         }
     }
 )
-async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str, endpoint_uri: str, request: Request, Authorize: AuthJWT = Depends()):
+async def delete_token(api_token_group:str, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_endpoints'):
-            return process_response(ResponseModel(
-                status_code=403,
-                response_headers={
-                    "request_id": request_id
-                },
-                error_code="END012",
-                error_message="You do not have permission to delete endpoints"
-            ))
-        return process_response(await EndpointService.delete_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id), "rest")
-    except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return process_response(ResponseModel(
-            status_code=500,
-            response_headers={
-                "request_id": request_id
-            },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-            ).dict(), "rest")
-    finally:
-        end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-    
-@endpoint_router.get("/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}",
-    description="Get endpoint by API name, API version and endpoint uri",
-    dependencies=[
-        Depends(auth_required)
-    ],
-    response_model=EndpointModelResponse
-)
-async def get_endpoint(endpoint_method: str, api_name: str, api_version: str, endpoint_uri: str, request: Request, Authorize: AuthJWT = Depends()):
-    request_id = str(uuid.uuid4())
-    start_time = time.time() * 1000
-    try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await EndpointService.get_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id), "rest")
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+            return process_response(
+                ResponseModel(
+                    status_code=403,
+                    error_code="TKN001",
+                    error_message="You do not have permission to manage tokens",
+                ).dict(), "rest")
+        return process_response(await TokenService.update_token(api_token_group, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -201,20 +167,109 @@ async def get_endpoint(endpoint_method: str, api_name: str, api_version: str, en
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@endpoint_router.get("/{api_name}/{api_version}",
-    description="Get all endpoints for an API",
+@token_router.post("/{username}",
+    description="Add tokens",
     dependencies=[
         Depends(auth_required)
     ],
-    response_model=List[EndpointModelResponse]
+    response_model=ResponseModel,
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Tokens added successfully"
+                    }
+                }
+            }
+        }
+    }
 )
-async def get_endpoints_by_name_version(api_name: str, api_version: str, request: Request, Authorize: AuthJWT = Depends()):
+async def add_user_tokens(token_data: TokenModel, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await EndpointService.get_endpoints_by_name_version(api_name, api_version, request_id), "rest")
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+            return process_response(
+                ResponseModel(
+                    status_code=403,
+                    error_code="TKN001",
+                    error_message="You do not have permission to manage tokens",
+                ).dict(), "rest")
+        return process_response(await TokenService.add_tokens(token_data, request_id), "rest")
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "rest")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@token_router.get("/all",
+    description="Get all user tokens",
+    dependencies=[
+        Depends(auth_required)
+    ],
+    response_model=List[UserTokenModel]
+)
+async def get_roles(request: Request, Authorize: AuthJWT = Depends(), page: int = 1, page_size: int = 10):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+            return process_response(
+                ResponseModel(
+                    status_code=403,
+                    error_code="TKN002",
+                    error_message="Unable to retrieve tokens for all user",
+                ).dict(), "rest")
+        return process_response(await TokenService.get_all_tokens(page, page_size, request_id), "rest")
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "rest")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@token_router.get("/{username}",
+    description="Get tokens for a user",
+    dependencies=[
+        Depends(auth_required)
+    ],
+    response_model=UserTokenModel
+)
+async def get_tokens(username: str, request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        if not Authorize.get_jwt_subject == username and not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+            return process_response(
+                ResponseModel(
+                    status_code=403,
+                    error_code="TKN003",
+                    error_message="Unable to retrieve tokens for user",
+                ).dict(), "rest")
+        return process_response(await TokenService.get_user_tokens(username, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(

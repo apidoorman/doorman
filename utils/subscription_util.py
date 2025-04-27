@@ -19,7 +19,12 @@ def subscription_required(request: Request, Authorize: AuthJWT = Depends()):
     try:
         username = Authorize.get_jwt_subject()
         full_path = request.url.path
-        prefix = "/api/rest/"
+        if full_path.startswith("/api/rest/"):
+            prefix = "/api/rest/"
+        elif full_path.startswith("/api/soap/"):
+            prefix = "/api/soap/"
+        else:
+            prefix = ""
         if full_path.startswith(prefix):
             path = full_path[len(prefix):]
         else:

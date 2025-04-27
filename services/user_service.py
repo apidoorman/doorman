@@ -13,6 +13,8 @@ from models.create_user_model import CreateUserModel
 
 import logging
 
+from utils.role_util import platform_role_required_bool
+
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
@@ -45,7 +47,6 @@ class UserService:
                 pygate_cache.set_cache('user_cache', username, user)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
-            pygate_cache.set_cache('user_cache', username, user)
             return user
         except Exception as e:
             raise HTTPException(status_code=404, detail="User not found")
@@ -73,6 +74,9 @@ class UserService:
             logger.error(f"{request_id} | User retrieval failed with code USR002")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
@@ -83,7 +87,7 @@ class UserService:
         ).dict()
 
     @staticmethod
-    async def get_user_by_email(email, request_id):
+    async def get_user_by_email(active_username, email, request_id):
         """
         Retrieve a user by email.
         """
@@ -97,10 +101,20 @@ class UserService:
             logger.error(f"{request_id} | User retrieval failed with code USR002")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
         logger.info(f"{request_id} | User retrieval successful")
+        if not active_username == user.get('username') and not await platform_role_required_bool(active_username, 'manage_users'):
+            logger.error(f"{request_id} | User retrieval failed with code USR008")
+            return ResponseModel(
+                    status_code=403,
+                    error_code="USR008",
+                    error_message="Unable to retrieve information for user",
+                ).dict()
         return ResponseModel(
             status_code=200,
             response=user
@@ -116,6 +130,9 @@ class UserService:
             logger.error(f"{request_id} | User creation failed with code USR001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR001',
                 error_message='Username already exists'
             ).dict()
@@ -123,6 +140,9 @@ class UserService:
             logger.error(f"{request_id} | User creation failed with code USR001")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR001',
                 error_message='Email already exists'
             ).dict()
@@ -130,6 +150,9 @@ class UserService:
             logger.error(f"{request_id} | User creation failed with code USR005")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR005',
                 error_message='Password must include at least 16 characters, one uppercase letter, one lowercase letter, one digit, and one special character'
             ).dict()
@@ -144,6 +167,9 @@ class UserService:
         logger.info(f"{request_id} | User creation successful")
         return ResponseModel(
             status_code=201,
+            response_headers={
+                "request_id": request_id
+            },
             message='User created successfully'
         ).dict()
 
@@ -193,6 +219,9 @@ class UserService:
         logger.info(f"{request_id} | User update successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='User updated successfully'
         ).dict()
     
@@ -217,6 +246,9 @@ class UserService:
             logger.error(f"{request_id} | User deletion failed with code USR003")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR003',
                 error_message='Unable to delete user'
             ).dict()
@@ -225,6 +257,9 @@ class UserService:
         logger.info(f"{request_id} | User deletion successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='User deleted successfully'
         ).dict()
 
@@ -238,6 +273,9 @@ class UserService:
             logger.error(f"{request_id} | User password update failed with code USR005")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR005',
                 error_message='Password must include at least 16 characters, one uppercase letter, one lowercase letter, one digit, and one special character'
             ).dict()
@@ -248,6 +286,9 @@ class UserService:
             logger.error(f"{request_id} | User password update failed with code USR002")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
@@ -259,6 +300,9 @@ class UserService:
         logger.info(f"{request_id} | User password update successful")
         return ResponseModel(
             status_code=200,
+            response_headers={
+                "request_id": request_id
+            },
             message='User updated successfully'
         ).dict()
 
