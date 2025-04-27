@@ -19,7 +19,7 @@ START_TIME = time.time()
 
 async def check_mongodb():
     try:
-        await mongodb_client.server_info()
+        mongodb_client.admin.command('ping')
         return True
     except Exception as e:
         logger.error(f"MongoDB health check failed: {str(e)}")
@@ -31,7 +31,7 @@ async def check_redis():
             f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
             decode_responses=True
         )
-        await redis.ping()
+        redis.ping()
         return True
     except Exception as e:
         logger.error(f"Redis health check failed: {str(e)}")
