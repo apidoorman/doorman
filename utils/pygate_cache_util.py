@@ -88,7 +88,6 @@ class PygateCacheManager:
     def is_operational():
         """Check if the cache is operational"""
         try:
-            # Try to set and get a test value
             test_key = "health_check_test"
             test_value = "test"
             pygate_cache.set_cache(test_key, test_key, test_value)
