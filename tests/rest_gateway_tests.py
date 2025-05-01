@@ -3,7 +3,7 @@ import time
 import requests
 import pytest
 
-class TestPygate:
+class TestDoorman:
     base_url = "https://localhost:3002"
     token = None
     api_name = None
@@ -20,7 +20,7 @@ class TestPygate:
 
     @staticmethod
     def getAccessCookies():
-        return {"access_token_cookie": TestPygate.token}
+        return {"access_token_cookie": TestDoorman.token}
 
     @pytest.fixture(scope="class", autouse=True)
     def setup_class(cls):
@@ -35,27 +35,27 @@ class TestPygate:
                 time.sleep(2)
         else:
             print("Failed to connect to the server after multiple attempts")
-            raise RuntimeError("pygate is not running")
+            raise RuntimeError("doorman is not running")
 
     @pytest.mark.asyncio
     @pytest.mark.order(1)
     async def test_auth_calls(self):
         response = requests.post(f"{self.base_url}/platform/authorization", 
-                                json={"email": "admin@pygate.org", "password": "password1"}, verify=False)
+                                json={"email": "admin@doorman.so", "password": "password1"}, verify=False)
         assert response.status_code == 200
-        TestPygate.csrf_token = response.cookies.get('csrf_access_token')
-        TestPygate.token = response.json().get('access_token') 
-        assert TestPygate.token is not None
+        TestDoorman.csrf_token = response.cookies.get('csrf_access_token')
+        TestDoorman.token = response.json().get('access_token') 
+        assert TestDoorman.token is not None
 
     @pytest.mark.asyncio
     @pytest.mark.order(2)
     async def test_create_role(self):
-        TestPygate.role_name = "testrole" + str(time.time())
+        TestDoorman.role_name = "testrole" + str(time.time())
         response = requests.post(f"{self.base_url}/platform/role", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
-                                    "role_name": TestPygate.role_name,
+                                    "role_name": TestDoorman.role_name,
                                     "role_description": "Test role",
                                     "manage_users": True,
                                     "manage_apis": True,
@@ -71,17 +71,17 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(3)
     async def test_create_user(self):
-        TestPygate.username = "newuser" + str(time.time())
-        TestPygate.email = "newuser" + str(time.time()) + "@pygate.org"
-        TestPygate.password = "newPassword@12345"
+        TestDoorman.username = "newuser" + str(time.time())
+        TestDoorman.email = "newuser" + str(time.time()) + "@doorman.so"
+        TestDoorman.password = "newPassword@12345"
         response = requests.post(f"{self.base_url}/platform/user", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                  json={
-                                    "username": TestPygate.username, 
-                                    "email": TestPygate.email, 
-                                    "password": TestPygate.password, 
-                                    "role": TestPygate.role_name,
+                                    "username": TestDoorman.username, 
+                                    "email": TestDoorman.email, 
+                                    "password": TestDoorman.password, 
+                                    "role": TestDoorman.role_name,
                                     "groups": ["ALL"],
                                     "rate_limit_duration": 3,
                                     "rate_limit_duration_type": "minute",
@@ -98,12 +98,12 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(4)
     async def test_create_group(self):
-        TestPygate.group_name = "testgroup" + str(time.time())
+        TestDoorman.group_name = "testgroup" + str(time.time())
         response = requests.post(f"{self.base_url}/platform/group", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
-                                    "group_name": TestPygate.group_name, 
+                                    "group_name": TestDoorman.group_name, 
                                     "group_description": "Test group"
                                 }, verify=False)
         assert response.status_code == 201
@@ -112,48 +112,48 @@ class TestPygate:
     @pytest.mark.order(5)
     async def test_get_groups(self):
         response = requests.get(f"{self.base_url}/platform/group/all",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(6)
     async def test_get_group(self):
-        response = requests.get(f"{self.base_url}/platform/group/" + TestPygate.group_name,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/platform/group/" + TestDoorman.group_name,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(7)
     async def test_get_roles(self):
         response = requests.get(f"{self.base_url}/platform/role/all",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(8)
     async def test_get_role(self):
-        response = requests.get(f"{self.base_url}/platform/role/" + TestPygate.role_name,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/platform/role/" + TestDoorman.role_name,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(9)
     async def test_onboard_api(self):
-        TestPygate.api_name = "test" + "".join(random.sample("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 8))
+        TestDoorman.api_name = "test" + "".join(random.sample("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 8))
         response = requests.post(f"{self.base_url}/platform/api", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                  json={
-                                     "api_name": TestPygate.api_name,
+                                     "api_name": TestDoorman.api_name,
                                      "api_version": "v1", 
                                      "api_description": "Test API", 
                                      "api_servers": ["https://fake-json-api.mock.beeceptor.com"], 
-                                     "api_allowed_roles": [TestPygate.role_name],
-                                     "api_allowed_groups": ["ALL", TestPygate.group_name],
+                                     "api_allowed_roles": [TestDoorman.role_name],
+                                     "api_allowed_groups": ["ALL", TestDoorman.group_name],
                                      "api_type": "REST"
                                  }, verify=False)
         assert response.status_code == 201
@@ -161,17 +161,17 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(9)
     async def test_onboard_api_soap(self):
-        TestPygate.api_name_soap = "test" + "".join(random.sample("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 8))
+        TestDoorman.api_name_soap = "test" + "".join(random.sample("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 8))
         response = requests.post(f"{self.base_url}/platform/api", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                  json={
-                                     "api_name": TestPygate.api_name_soap,
+                                     "api_name": TestDoorman.api_name_soap,
                                      "api_version": "v1", 
                                      "api_description": "Test SOAP API", 
                                      "api_servers": ["https://www.dataaccess.com/webservicesserver"], 
-                                     "api_allowed_roles": [TestPygate.role_name],
-                                     "api_allowed_groups": ["ALL", TestPygate.group_name],
+                                     "api_allowed_roles": [TestDoorman.role_name],
+                                     "api_allowed_groups": ["ALL", TestDoorman.group_name],
                                      "api_type": "SOAP"
                                  }, verify=False)
         assert response.status_code == 201
@@ -180,15 +180,15 @@ class TestPygate:
     @pytest.mark.order(10)
     async def test_onboard_endpoint(self):
 
-        TestPygate.endpoint_path = "/users"
+        TestDoorman.endpoint_path = "/users"
 
         response = requests.post(f"{self.base_url}/platform/endpoint", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                  json={
-                                    "api_name": TestPygate.api_name,
+                                    "api_name": TestDoorman.api_name,
                                     "api_version": "v1", 
-                                    "endpoint_uri": TestPygate.endpoint_path,
+                                    "endpoint_uri": TestDoorman.endpoint_path,
                                     "endpoint_method": "GET",
                                     "endpoint_description": "Test endpoint",
                                  }, verify=False)
@@ -198,15 +198,15 @@ class TestPygate:
     @pytest.mark.order(10)
     async def test_onboard_endpoint_soap(self):
 
-        TestPygate.endpoint_path_soap = "/NumberConversion.wso"
+        TestDoorman.endpoint_path_soap = "/NumberConversion.wso"
 
         response = requests.post(f"{self.base_url}/platform/endpoint", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                  json={
-                                    "api_name": TestPygate.api_name_soap,
+                                    "api_name": TestDoorman.api_name_soap,
                                     "api_version": "v1", 
-                                    "endpoint_uri": TestPygate.endpoint_path_soap,
+                                    "endpoint_uri": TestDoorman.endpoint_path_soap,
                                     "endpoint_method": "POST",
                                     "endpoint_description": "Test endpoint",
                                  }, verify=False)
@@ -216,11 +216,11 @@ class TestPygate:
     @pytest.mark.order(11)
     async def test_subscribe(self):
         response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                     json={
-                                        "username": TestPygate.username, 
-                                        "api_name": TestPygate.api_name, 
+                                        "username": TestDoorman.username, 
+                                        "api_name": TestDoorman.api_name, 
                                         "api_version": "v1"
                                     }, verify=False)
         assert response.status_code == 200
@@ -229,11 +229,11 @@ class TestPygate:
     @pytest.mark.order(11)
     async def test_subscribe_soap(self):
         response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                     json={
-                                        "username": TestPygate.username, 
-                                        "api_name": TestPygate.api_name_soap, 
+                                        "username": TestDoorman.username, 
+                                        "api_name": TestDoorman.api_name_soap, 
                                         "api_version": "v1"
                                     }, verify=False)
         assert response.status_code == 200
@@ -242,23 +242,23 @@ class TestPygate:
     @pytest.mark.order(12)
     async def test_re_auth_calls(self):
         response = requests.post(f"{self.base_url}/platform/authorization", 
-                                json={"email": TestPygate.email, "password": TestPygate.password}, verify=False)
+                                json={"email": TestDoorman.email, "password": TestDoorman.password}, verify=False)
         assert response.status_code == 200
-        TestPygate.csrf_token = response.cookies.get('csrf_access_token')
-        TestPygate.token = response.json().get('access_token') 
-        assert TestPygate.token is not None
+        TestDoorman.csrf_token = response.cookies.get('csrf_access_token')
+        TestDoorman.token = response.json().get('access_token') 
+        assert TestDoorman.token is not None
 
     @pytest.mark.asyncio
     @pytest.mark.order(13)
     async def test_create_routing(self):
-        TestPygate.client_key = "test_routing" + str(time.time())
+        TestDoorman.client_key = "test_routing" + str(time.time())
         response = requests.post(f"{self.base_url}/platform/routing",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
                                     "routing_name": "test_routing",
                                     "routing_description": "Test routing",
-                                    "client_key": TestPygate.client_key,
+                                    "client_key": TestDoorman.client_key,
                                     "routing_servers": ["https://fake-json-api.mock.beeceptor.com/"],
                                 }, verify=False)
         assert response.status_code == 201
@@ -266,17 +266,17 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(14)
     async def test_get_routing(self):
-        response = requests.get(f"{self.base_url}/platform/routing/{TestPygate.client_key}",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/platform/routing/{TestDoorman.client_key}",
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(15)
     async def test_update_routing(self):
-        response = requests.put(f"{self.base_url}/platform/routing/{TestPygate.client_key}",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+        response = requests.put(f"{self.base_url}/platform/routing/{TestDoorman.client_key}",
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
                                     "routing_description": "Updated routing description"
                                 }, verify=False)
@@ -285,41 +285,41 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(16)
     async def test_gateway_call_client_key(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                headers={"client-key": TestPygate.client_key, "X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
+                                headers={"client-key": TestDoorman.client_key, "X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(17)
     async def test_delete_routing(self):
-        response = requests.delete(f"{self.base_url}/platform/routing/{TestPygate.client_key}",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.delete(f"{self.base_url}/platform/routing/{TestDoorman.client_key}",
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(18)
     async def test_gateway_call_regular_route(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(19)
     async def test_gateway_call_regular_route_soap(self):
-        response = requests.post(f"{self.base_url}/api/soap/" + TestPygate.api_name_soap + "/v1" + TestPygate.endpoint_path_soap,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False,
+        response = requests.post(f"{self.base_url}/api/soap/" + TestDoorman.api_name_soap + "/v1" + TestDoorman.endpoint_path_soap,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False,
                                 data="<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:web=\"http://www.dataaccess.com/webservicesserver/\"><soapenv:Header/><soapenv:Body><web:NumberToWords><ubiNum>123</ubiNum></web:NumberToWords></soapenv:Body></soapenv:Envelope>",)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(19)
     async def test_gateway_call_rate_limited(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 429
 
 
@@ -327,11 +327,11 @@ class TestPygate:
     @pytest.mark.order(20)
     async def test_unsubscribe(self):
         response = requests.post(f"{self.base_url}/platform/subscription/unsubscribe", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                     json={
-                                        "username": TestPygate.username, 
-                                        "api_name": TestPygate.api_name, 
+                                        "username": TestDoorman.username, 
+                                        "api_name": TestDoorman.api_name, 
                                         "api_version": "v1"
                                     }, verify=False)
         assert response.status_code == 200
@@ -339,45 +339,45 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(21)
     async def test_re_gateway_call(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 403
 
     @pytest.mark.asyncio
     @pytest.mark.order(22)
     async def test_get_api(self):
-        response = requests.get(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/platform/api/" + TestDoorman.api_name + "/v1",
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(23)
     async def test_get_all_apis(self):
         response = requests.get(f"{self.base_url}/platform/api/all",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 params={"page": 1, "page_size": 10}, verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(24)
     async def test_api_endpoints(self):
-        response = requests.get(f"{self.base_url}/platform/endpoint/" + TestPygate.api_name + "/v1",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False) 
+        response = requests.get(f"{self.base_url}/platform/endpoint/" + TestDoorman.api_name + "/v1",
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False) 
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(25)
     async def test_re_subscribe(self):
         response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                     json={
-                                        "username": TestPygate.username, 
-                                        "api_name": TestPygate.api_name, 
+                                        "username": TestDoorman.username, 
+                                        "api_name": TestDoorman.api_name, 
                                         "api_version": "v1"
                                     }, verify=False)
         assert response.status_code == 200
@@ -385,12 +385,12 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(26)
     async def test_update_user(self):
-        TestPygate.email  = "newuser" + str(time.time()) + "@pygate.org"
-        response = requests.put(f"{self.base_url}/platform/user/" + TestPygate.username,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+        TestDoorman.email  = "newuser" + str(time.time()) + "@doorman.so"
+        response = requests.put(f"{self.base_url}/platform/user/" + TestDoorman.username,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
-                                    "email": TestPygate.email,
+                                    "email": TestDoorman.email,
                                     "groups": ["ALL", "ALL_UPDATED"]
                                 }, verify=False)
         assert response.status_code == 200
@@ -399,71 +399,71 @@ class TestPygate:
     @pytest.mark.order(27)
     async def test_update_password(self):
         new_password = "newerPassword@6789"
-        response = requests.put(f"{self.base_url}/platform/user/" + TestPygate.username + "/update-password",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+        response = requests.put(f"{self.base_url}/platform/user/" + TestDoorman.username + "/update-password",
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
-                                    "old_password": TestPygate.password,
+                                    "old_password": TestDoorman.password,
                                     "new_password": new_password
                                 }, verify=False)
-        TestPygate.password = new_password
+        TestDoorman.password = new_password
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(28)
     async def test_re_auth_calls(self):
         response = requests.post(f"{self.base_url}/platform/authorization", 
-                                 json={"email": TestPygate.email, "password": TestPygate.password}, verify=False)
+                                 json={"email": TestDoorman.email, "password": TestDoorman.password}, verify=False)
         assert response.status_code == 200
-        TestPygate.csrf_token = response.cookies.get('csrf_access_token')
-        TestPygate.token = response.json().get('access_token') 
-        assert TestPygate.token is not None
+        TestDoorman.csrf_token = response.cookies.get('csrf_access_token')
+        TestDoorman.token = response.json().get('access_token') 
+        assert TestDoorman.token is not None
 
     @pytest.mark.asyncio
     @pytest.mark.order(29)
     async def test_get_user(self):
-        response = requests.get(f"{self.base_url}/platform/user/" + TestPygate.username,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/platform/user/" + TestDoorman.username,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
     
     @pytest.mark.asyncio
     @pytest.mark.order(30)
     async def test_get_user_by_email(self):
-        response = requests.get(f"{self.base_url}/platform/user/email/" + TestPygate.email,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.get(f"{self.base_url}/platform/user/email/" + TestDoorman.email,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(31)
     async def test_auth_refresh_calls(self):
         response = requests.post(f"{self.base_url}/platform/authorization/refresh",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
-        TestPygate.csrf_token = response.cookies.get('csrf_access_token')
-        TestPygate.token = response.json().get('refresh_token')
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
+        TestDoorman.csrf_token = response.cookies.get('csrf_access_token')
+        TestDoorman.token = response.json().get('refresh_token')
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(32)
     async def test_update_api(self):
-        response = requests.put(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+        response = requests.put(f"{self.base_url}/platform/api/" + TestDoorman.api_name + "/v1",
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
                                     "api_description": "Updated API description",
-                                    "api_allowed_roles": [TestPygate.role_name],
-                                    "api_allowed_groups": ["ALL", TestPygate.group_name]
+                                    "api_allowed_roles": [TestDoorman.role_name],
+                                    "api_allowed_groups": ["ALL", TestDoorman.group_name]
                                 }, verify=False)
         assert response.status_code == 200
     
     @pytest.mark.asyncio
     @pytest.mark.order(33)
     async def test_update_endpoint(self):
-        response = requests.put(f"{self.base_url}/platform/endpoint/GET/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+        response = requests.put(f"{self.base_url}/platform/endpoint/GET/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
                                     "endpoint_description": "Updated endpoint description"
                                 }, verify=False)
@@ -472,25 +472,25 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(34)
     async def test_delete_endpoint(self):
-        response = requests.delete(f"{self.base_url}/platform/endpoint/GET/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.delete(f"{self.base_url}/platform/endpoint/GET/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(35)
     async def test_delete_api(self):
-        response = requests.delete(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.delete(f"{self.base_url}/platform/api/" + TestDoorman.api_name + "/v1",
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(36)
     async def test_update_group(self):
-        response = requests.put(f"{self.base_url}/platform/group/" + TestPygate.group_name,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+        response = requests.put(f"{self.base_url}/platform/group/" + TestDoorman.group_name,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
                                     "group_description": "Updated group description"
                                 }, verify=False)
@@ -499,17 +499,17 @@ class TestPygate:
     @pytest.mark.asyncio
     @pytest.mark.order(37)
     async def test_delete_group(self):
-        response = requests.delete(f"{self.base_url}/platform/group/" + TestPygate.group_name,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.delete(f"{self.base_url}/platform/group/" + TestDoorman.group_name,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(38)
     async def test_update_role(self):
-        response = requests.put(f"{self.base_url}/platform/role/" + TestPygate.role_name,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(),
+        response = requests.put(f"{self.base_url}/platform/role/" + TestDoorman.role_name,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(),
                                 json={
                                     "role_description": "Updated role description"
                                 }, verify=False)
@@ -519,16 +519,16 @@ class TestPygate:
     @pytest.mark.order(39)
     async def test_clear_all_caches(self):
         response = requests.delete(f"{self.base_url}/api/caches",
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(40)
     async def test_delete_role(self):
-        response = requests.delete(f"{self.base_url}/platform/role/" + TestPygate.role_name,
-                                headers={"X-CSRF-TOKEN": TestPygate.csrf_token},
-                                cookies=TestPygate.getAccessCookies(), verify=False)
+        response = requests.delete(f"{self.base_url}/platform/role/" + TestDoorman.role_name,
+                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
+                                cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
 
 if __name__ == '__main__':

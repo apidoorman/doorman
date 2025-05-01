@@ -1,17 +1,17 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 import logging
 from fastapi import HTTPException
 from fastapi_jwt_auth.exceptions import MissingTokenError
 from utils.database import role_collection, user_collection
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 @staticmethod
 async def validate_platform_role(role_name, action):
@@ -19,13 +19,13 @@ async def validate_platform_role(role_name, action):
     Get the platform roles from the cache or database.
     """
     try:
-        role = pygate_cache.get_cache("role_cache", role_name)
+        role = doorman_cache.get_cache("role_cache", role_name)
         if not role:
             role = role_collection.find_one({"role_name": role_name})
             if not role:
                 raise HTTPException(status_code=404, detail="Role not found")
             if role.get("_id"): del role["_id"]
-            pygate_cache.set_cache("role_cache", role_name, role)
+            doorman_cache.set_cache("role_cache", role_name, role)
         if action == "manage_users" and role.get("manage_users"):
             return True
         elif action == "manage_apis" and role.get("manage_apis"):
@@ -48,14 +48,14 @@ async def validate_platform_role(role_name, action):
 
 async def platform_role_required_bool(username, action):
     try:
-        user = pygate_cache.get_cache('user_cache', username)
+        user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = user_collection.find_one({'username': username})
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             if user.get('_id'): del user['_id']
             if user.get('password'): del user['password']
-            pygate_cache.set_cache('user_cache', username, user)
+            doorman_cache.set_cache('user_cache', username, user)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         if not await validate_platform_role(user.get('role'), action):

@@ -1,20 +1,20 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from models.response_model import ResponseModel
 from models.token_model import TokenModel
 from utils.database import token_def_collection
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from pymongo.errors import PyMongoError
 
 import logging
 from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 class TokenService:
 
@@ -46,7 +46,7 @@ class TokenService:
             logger.error(request_id + f" | Token creation failed with code {validation_error.error_code}")
             return validation_error.dict()
         try:
-            if pygate_cache.get_cache('token_def_cache', data.api_token_group) or token_def_collection.find_one({'token_name': data.api_token_group}):
+            if doorman_cache.get_cache('token_def_cache', data.api_token_group) or token_def_collection.find_one({'token_name': data.api_token_group}):
                 logger.error(request_id + " | Token creation failed with code TKN001")
                 return ResponseModel(
                     status_code=400,
@@ -63,7 +63,7 @@ class TokenService:
                     error_message='Unable to insert token'
                 ).dict()
             token_data_dict['_id'] = str(insert_result.inserted_id)
-            pygate_cache.set_cache('token_def_cache', data.api_token_group, token_data_dict)
+            doorman_cache.set_cache('token_def_cache', data.api_token_group, token_data_dict)
             logger.info(request_id + " | Token creation successful")
             return ResponseModel(
                 status_code=201,
@@ -98,7 +98,7 @@ class TokenService:
                     error_code='TKN003', 
                     error_message='Token api group name cannot be updated'
                 ).dict()
-            token = pygate_cache.get_cache('token_def_cache', api_token_group)
+            token = doorman_cache.get_cache('token_def_cache', api_token_group)
             if not token:
                 token = token_def_collection.find_one({'api_token_group': api_token_group})
                 if not token:
@@ -109,7 +109,7 @@ class TokenService:
                         error_message='Token does not exist for the request api token group'
                     ).dict()
             else:
-                pygate_cache.delete_cache('token_def_cache', api_token_group)
+                doorman_cache.delete_cache('token_def_cache', api_token_group)
             not_null_data = {k: v for k, v in data.dict().items() if v is not None}
             if not_null_data:
                 update_result = token_def_collection.update_one(
@@ -150,7 +150,7 @@ class TokenService:
         """
         logger.info(request_id + " | Deleting token: " + api_token_group)
         try:
-            token = pygate_cache.get_cache('token_def_cache', api_token_group)
+            token = doorman_cache.get_cache('token_def_cache', api_token_group)
             if not token:
                 token = token_def_collection.find_one({'api_token_group': api_token_group})
                 if not token:
@@ -161,7 +161,7 @@ class TokenService:
                         error_message='Token does not exist for the request api token group'
                     ).dict()
             else:
-                pygate_cache.delete_cache('token_def_cache', api_token_group)
+                doorman_cache.delete_cache('token_def_cache', api_token_group)
             delete_result = token_def_collection.delete_one({'api_token_group': api_token_group})
             if not delete_result.acknowledged or delete_result.deleted_count == 0:
                 logger.error(request_id + " | Token deletion failed with code TKN008")

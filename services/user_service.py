@@ -1,14 +1,14 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from fastapi import HTTPException
 from models.response_model import ResponseModel
 from utils import password_util
 from utils.database import user_collection, subscriptions_collection, api_collection
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from models.create_user_model import CreateUserModel
 
 import logging
@@ -16,7 +16,7 @@ import logging
 from utils.role_util import platform_role_required_bool
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 class UserService:
 
@@ -37,14 +37,14 @@ class UserService:
         Retrieve a user by username.
         """
         try:
-            user = pygate_cache.get_cache('user_cache', username)
+            user = doorman_cache.get_cache('user_cache', username)
             if not user:
                 user = user_collection.find_one({'username': username})
                 if not user:
                     raise HTTPException(status_code=404, detail="User not found")
                 if user.get('_id'): del user['_id']
                 if user.get('password'): del user['password']
-                pygate_cache.set_cache('user_cache', username, user)
+                doorman_cache.set_cache('user_cache', username, user)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             return user
@@ -57,7 +57,7 @@ class UserService:
         Retrieve a user by username.
         """
         logger.info(f"{request_id} | Getting user: {username}")
-        user = pygate_cache.get_cache('user_cache', username)
+        user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = user_collection.find_one({'username': username})
             if not user:
@@ -69,7 +69,7 @@ class UserService:
                 ).dict()
             if user.get('_id'): del user['_id']
             if user.get('password'): del user['password']
-            pygate_cache.set_cache('user_cache', username, user)
+            doorman_cache.set_cache('user_cache', username, user)
         if not user:
             logger.error(f"{request_id} | User retrieval failed with code USR002")
             return ResponseModel(
@@ -163,7 +163,7 @@ class UserService:
             del data_dict['_id']
         if 'password' in data_dict:
             del data_dict['password']
-        pygate_cache.set_cache('user_cache', data.username, data_dict)
+        doorman_cache.set_cache('user_cache', data.username, data_dict)
         logger.info(f"{request_id} | User creation successful")
         return ResponseModel(
             status_code=201,
@@ -192,7 +192,7 @@ class UserService:
         Update user information.
         """
         logger.info(f"{request_id} | Updating user: {username}")
-        user = pygate_cache.get_cache('user_cache', username)
+        user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = user_collection.find_one({'username': username})
             if not user:
@@ -203,7 +203,7 @@ class UserService:
                     error_message='User not found'
                 ).dict()
         else:
-            pygate_cache.delete_cache('user_cache', username)
+            doorman_cache.delete_cache('user_cache', username)
         non_null_update_data = {k: v for k, v in update_data.dict().items() if v is not None}
         if non_null_update_data:
             update_result = user_collection.update_one({'username': username}, {'$set': non_null_update_data})
@@ -231,7 +231,7 @@ class UserService:
         Delete a user.
         """
         logger.info(f"{request_id} | Deleting user: {username}")
-        user = pygate_cache.get_cache('user_cache', username)
+        user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = user_collection.find_one({'username': username})
             if not user:
@@ -252,8 +252,8 @@ class UserService:
                 error_code='USR003',
                 error_message='Unable to delete user'
             ).dict()
-        pygate_cache.delete_cache('user_cache', username)
-        pygate_cache.delete_cache('user_subscription_cache', username)
+        doorman_cache.delete_cache('user_cache', username)
+        doorman_cache.delete_cache('user_subscription_cache', username)
         logger.info(f"{request_id} | User deletion successful")
         return ResponseModel(
             status_code=200,
@@ -296,7 +296,7 @@ class UserService:
             del user['_id']
         if 'password' in user:
             del user['password']
-        pygate_cache.set_cache('user_cache', username, user)
+        doorman_cache.set_cache('user_cache', username, user)
         logger.info(f"{request_id} | User password update successful")
         return ResponseModel(
             status_code=200,
@@ -312,17 +312,17 @@ class UserService:
         Remove subscriptions after role change.
         """
         logger.info(f"{request_id} | Purging APIs for user: {username}")
-        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', username) or subscriptions_collection.find_one({'username': username})
+        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or subscriptions_collection.find_one({'username': username})
         if user_subscriptions:
             for subscription in user_subscriptions.get('apis'):
                 api_name, api_version = subscription.split('/')
-                user = pygate_cache.get_cache('user_cache', username) or user_collection.find_one({'username': username})
-                api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}") or api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+                user = doorman_cache.get_cache('user_cache', username) or user_collection.find_one({'username': username})
+                api = doorman_cache.get_cache('api_cache', f"{api_name}/{api_version}") or api_collection.find_one({'api_name': api_name, 'api_version': api_version})
                 if api and api.get('role') and user.get('role') not in api.get('role'):
                     user_subscriptions['apis'].remove(subscription)
             subscriptions_collection.update_one(
                 {'username': username},
                 {'$set': {'apis': user_subscriptions.get('apis', [])}}
             )
-            pygate_cache.set_cache('user_subscription_cache', username, user_subscriptions)
+            doorman_cache.set_cache('user_subscription_cache', username, user_subscriptions)
         logger.info(f"{request_id} | Purge successful")
