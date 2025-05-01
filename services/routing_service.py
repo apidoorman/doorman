@@ -1,21 +1,21 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from models.response_model import ResponseModel
 from models.create_routing_model import CreateRoutingModel
 from models.update_routing_model import UpdateRoutingModel
 from utils.database import routing_collection
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from pymongo.errors import DuplicateKeyError
 
 import uuid
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 class RoutingService:
 
@@ -26,7 +26,7 @@ class RoutingService:
         """
         logger.info(request_id + " | Creating routing: " + data.routing_name)
         data.client_key = str(uuid.uuid4()) if not data.client_key else data.client_key
-        if pygate_cache.get_cache('client_routing_cache', data.client_key):
+        if doorman_cache.get_cache('client_routing_cache', data.client_key):
             logger.error(request_id + " | Routing creation failed with code RTG001")
             return ResponseModel(
                 status_code=400,
@@ -47,7 +47,7 @@ class RoutingService:
                     error_message='Unable to insert routing'
                 ).dict()
             routing_dict['_id'] = str(insert_result.inserted_id)
-            pygate_cache.set_cache('client_routing_cache', data.client_key, routing_dict)
+            doorman_cache.set_cache('client_routing_cache', data.client_key, routing_dict)
             logger.info(request_id + " | Routing creation successful")
             return ResponseModel(
                 status_code=201,
@@ -80,7 +80,7 @@ class RoutingService:
                 error_code='RTG005',
                 error_message='Routing key cannot be changed'
             ).dict()
-        routing = pygate_cache.get_cache('client_routing_cache', client_key)
+        routing = doorman_cache.get_cache('client_routing_cache', client_key)
         if not routing:
             routing = routing_collection.find_one({
                 'client_key': client_key
@@ -93,7 +93,7 @@ class RoutingService:
                     error_message='Routing does not exist'
                 ).dict()
         else:
-            pygate_cache.delete_cache('client_routing_cache', client_key)
+            doorman_cache.delete_cache('client_routing_cache', client_key)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
             update_result = routing_collection.update_one({'client_key': client_key}, {'$set': not_null_data})
@@ -126,7 +126,7 @@ class RoutingService:
         Delete a routing.
         """
         logger.info(request_id + " | Deleting: " + client_key)
-        routing = pygate_cache.get_cache('client_routing_cache', client_key)
+        routing = doorman_cache.get_cache('client_routing_cache', client_key)
         if not routing:
             routing = routing_collection.find_one({
                 'client_key': client_key
@@ -139,7 +139,7 @@ class RoutingService:
                     error_message='Routing does not exist'
                 ).dict()
         else:
-            pygate_cache.delete_cache('client_routing_cache', client_key)
+            doorman_cache.delete_cache('client_routing_cache', client_key)
         delete_result = routing_collection.delete_one({'client_key': client_key})
         if not delete_result.acknowledged or delete_result.deleted_count == 0:
             logger.error(request_id + " | Routing deletion failed with code RTG008")
@@ -166,7 +166,7 @@ class RoutingService:
         Get a routing.
         """
         logger.info(request_id + " | Getting: " + client_key)
-        routing = pygate_cache.get_cache('client_routing_cache', client_key)
+        routing = doorman_cache.get_cache('client_routing_cache', client_key)
         if not routing:
             routing = routing_collection.find_one({
                 'client_key': client_key

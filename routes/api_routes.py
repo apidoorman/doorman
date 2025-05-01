@@ -1,7 +1,7 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from fastapi import APIRouter, Depends, Request
@@ -24,7 +24,7 @@ from typing import List
 
 api_router = APIRouter() 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 @api_router.post("",
     description="Add API",
