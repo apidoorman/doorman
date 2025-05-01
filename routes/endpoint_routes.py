@@ -1,7 +1,7 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from typing import List
@@ -24,7 +24,7 @@ import logging
 endpoint_router = APIRouter()
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 @endpoint_router.post("",
     description="Add endpoint",

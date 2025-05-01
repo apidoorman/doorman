@@ -5,7 +5,7 @@ import logging
 from fastapi.responses import Response
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 def process_rest_response(response):
     try:

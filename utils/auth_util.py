@@ -1,7 +1,7 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from datetime import datetime, timedelta
@@ -11,12 +11,12 @@ from fastapi_jwt_auth import AuthJWT
 
 from utils.auth_blacklist import jwt_blacklist
 from utils.database import user_collection
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 async def auth_required(Authorize: AuthJWT = Depends()):
     try:
@@ -31,14 +31,14 @@ async def auth_required(Authorize: AuthJWT = Depends()):
                         status_code=401,
                         detail="Token has been revoked"
                     )
-        user = pygate_cache.get_cache('user_cache', username)
+        user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = user_collection.find_one({'username': username})
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             if user.get('_id'): del user['_id']
             if user.get('password'): del user['password']
-            pygate_cache.set_cache('user_cache', username, user)
+            doorman_cache.set_cache('user_cache', username, user)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         if user.get("active") is False:
