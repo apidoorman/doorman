@@ -1,21 +1,21 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from models.response_model import ResponseModel
 from models.update_endpoint_model import UpdateEndpointModel
 from utils.database import endpoint_collection, api_collection
 from utils.cache_manager_util import cache_manager
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from models.create_endpoint_model import CreateEndpointModel
 
 import uuid
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 class EndpointService:
 
@@ -26,7 +26,7 @@ class EndpointService:
         """
         logger.info(request_id + " | Creating endpoint: " + data.api_name + " " + data.api_version + " " + data.endpoint_uri)
         cache_key = f"/{data.endpoint_method}/{data.api_name}/{data.api_version}/{data.endpoint_uri}".replace("//", "/")
-        if pygate_cache.get_cache('endpoint_cache', cache_key) or endpoint_collection.find_one({
+        if doorman_cache.get_cache('endpoint_cache', cache_key) or endpoint_collection.find_one({
             'endpoint_method': data.endpoint_method,
             'api_name': data.api_name,
             'api_version': data.api_version,
@@ -41,7 +41,7 @@ class EndpointService:
                 error_code='END001',
                 error_message='Endpoint already exists for the requested API name, version and URI'
             ).dict()
-        data.api_id = pygate_cache.get_cache('api_id_cache', data.api_name + data.api_version)
+        data.api_id = doorman_cache.get_cache('api_id_cache', data.api_name + data.api_version)
         if not data.api_id:
             api = api_collection.find_one({"api_name": data.api_name, "api_version": data.api_version})
             if not api:
@@ -52,7 +52,7 @@ class EndpointService:
                     error_message='API does not exist for the requested name and version'
                 ).dict()
             data.api_id = api.get('api_id')
-            pygate_cache.set_cache('api_id_cache', f"{data.api_name}/{data.api_version}", data.api_id)
+            doorman_cache.set_cache('api_id_cache', f"{data.api_name}/{data.api_version}", data.api_id)
         data.endpoint_id = str(uuid.uuid4())
         endpoint_dict = data.dict()
         insert_result = endpoint_collection.insert_one(endpoint_dict)
@@ -67,10 +67,10 @@ class EndpointService:
                 error_message='Unable to insert endpoint'
             ).dict()
         endpoint_dict['_id'] = str(insert_result.inserted_id)
-        pygate_cache.set_cache('endpoint_cache', cache_key, endpoint_dict)
-        api_endpoints = pygate_cache.get_cache('api_endpoint_cache', data.api_id) or list()
+        doorman_cache.set_cache('endpoint_cache', cache_key, endpoint_dict)
+        api_endpoints = doorman_cache.get_cache('api_endpoint_cache', data.api_id) or list()
         api_endpoints.append(endpoint_dict.get('endpoint_method') + endpoint_dict.get('endpoint_uri'))
-        pygate_cache.set_cache('api_endpoint_cache', data.api_id, api_endpoints)
+        doorman_cache.set_cache('api_endpoint_cache', data.api_id, api_endpoints)
         logger.info(request_id + " | Endpoint creation successful")
         return ResponseModel(
             status_code=201,
@@ -84,7 +84,7 @@ class EndpointService:
     async def update_endpoint(endpoint_method, api_name, api_version, endpoint_uri, data: UpdateEndpointModel, request_id):
         logger.info(request_id + " | Updating endpoint: " + api_name + " " + api_version + " " + endpoint_uri)
         cache_key = f"/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
-        endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
+        endpoint = doorman_cache.get_cache('endpoint_cache', cache_key)
         if not endpoint:
             endpoint = endpoint_collection.find_one({
                 'api_name': api_name,
@@ -100,7 +100,7 @@ class EndpointService:
                     error_message='Endpoint does not exist for the requested API name, version and URI'
                 ).dict()
         else:
-            pygate_cache.delete_cache('endpoint_cache', cache_key)
+            doorman_cache.delete_cache('endpoint_cache', cache_key)
         if (data.endpoint_method and data.endpoint_method != endpoint.get('endpoint_method')) or (data.api_name and data.api_name != endpoint.get('api_name')) or (data.api_version and data.api_version != endpoint.get('api_version')) or (data.endpoint_uri and data.endpoint_uri != endpoint.get('endpoint_uri')):
             logger.error(request_id + " | Endpoint update failed with code END006")
             return ResponseModel(
@@ -153,7 +153,7 @@ class EndpointService:
         """
         logger.info(request_id + " | Deleting: " + api_name + " " + api_version + " " + endpoint_uri)
         cache_key = f"/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
-        endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
+        endpoint = doorman_cache.get_cache('endpoint_cache', cache_key)
         if not endpoint:
             endpoint = endpoint_collection.find_one({
                 'api_name': api_name,
@@ -184,7 +184,7 @@ class EndpointService:
                 error_code='END009',
                 error_message='Unable to delete endpoint'
             ).dict()
-        pygate_cache.delete_cache('endpoint_cache', cache_key)
+        doorman_cache.delete_cache('endpoint_cache', cache_key)
         logger.info(request_id + " | Endpoint deletion successful")
         return ResponseModel(
             status_code=200,
@@ -201,7 +201,7 @@ class EndpointService:
         Get an endpoint by API name, version and URI.
         """
         logger.info(request_id + " | Getting: " + api_name + " " + api_version + " " + endpoint_uri)
-        endpoint = pygate_cache.get_cache('endpoint_cache', f"{api_name}/{api_version}/{endpoint_uri}")
+        endpoint = doorman_cache.get_cache('endpoint_cache', f"{api_name}/{api_version}/{endpoint_uri}")
         if not endpoint:
             endpoint = endpoint_collection.find_one({
             'api_name': api_name,
@@ -217,7 +217,7 @@ class EndpointService:
                     error_message='Endpoint does not exist for the requested API name, version and URI'
                 ).dict()
             if endpoint.get('_id'): del endpoint['_id']
-            pygate_cache.set_cache('endpoint_cache', f"{api_name}/{api_version}/{endpoint_uri}", endpoint)
+            doorman_cache.set_cache('endpoint_cache', f"{api_name}/{api_version}/{endpoint_uri}", endpoint)
         if '_id' in endpoint:
             del endpoint['_id']
         logger.info(request_id + " | Endpoint retrieval successful")

@@ -1,7 +1,7 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from pymongo import MongoClient, IndexModel, ASCENDING
@@ -20,9 +20,9 @@ class Database:
         self.db_existed = True
 
         if len(host_list) > 1 and replica_set_name:
-            connection_uri = f"mongodb://{','.join(host_list)}/pygate?replicaSet={replica_set_name}"
+            connection_uri = f"mongodb://{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
         else:
-            connection_uri = f"mongodb://{','.join(host_list)}/pygate"
+            connection_uri = f"mongodb://{','.join(host_list)}/doorman"
 
         self.client = MongoClient(
             connection_uri,
