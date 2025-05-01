@@ -1,19 +1,19 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from models.response_model import ResponseModel
 from utils.database import subscriptions_collection, api_collection
 from utils.cache_manager_util import cache_manager
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from models.subscribe_model import SubscribeModel
 
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 class SubscriptionService:
 
@@ -23,7 +23,7 @@ class SubscriptionService:
         """
         Check if an API exists.
         """
-        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
+        api = doorman_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
             api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
@@ -34,7 +34,7 @@ class SubscriptionService:
                 ).dict()
             if api.get('_id'):
                 del api['_id']
-            pygate_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
+            doorman_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
         if api and '_id' in api:
             del api['_id']
         return api
@@ -46,7 +46,7 @@ class SubscriptionService:
         Get user subscriptions.
         """
         logger.info(f"{request_id} | Getting subscriptions for: {username}")
-        subscriptions = pygate_cache.get_cache('user_subscription_cache', username)
+        subscriptions = doorman_cache.get_cache('user_subscription_cache', username)
         if not subscriptions:
             subscriptions = subscriptions_collection.find_one({'username': username})
             if not subscriptions:
@@ -57,7 +57,7 @@ class SubscriptionService:
                     error_message='User is not subscribed to any API'
                 ).dict()
             if subscriptions.get('_id'): del subscriptions['_id']
-            pygate_cache.set_cache('user_subscription_cache', username, subscriptions)
+            doorman_cache.set_cache('user_subscription_cache', username, subscriptions)
         if '_id' in subscriptions:
             del subscriptions['_id']
         logger.info(f"{request_id} | Subscriptions retrieved successfully")
@@ -82,11 +82,11 @@ class SubscriptionService:
                 error_code='SUB003',
                 error_message='API does not exist for the requested name and version'
             ).dict()
-        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', data.username)
+        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', data.username)
         if not user_subscriptions:
             user_subscriptions = subscriptions_collection.find_one({'username': data.username})
             if user_subscriptions and '_id' in user_subscriptions: del user_subscriptions['_id']
-            pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+            doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         if user_subscriptions is None:
             user_subscriptions = {
                 'username': data.username,
@@ -111,7 +111,7 @@ class SubscriptionService:
         user_subscriptions = subscriptions_collection.find_one({'username': data.username})
         if user_subscriptions and '_id' in user_subscriptions:
             del user_subscriptions['_id']
-        pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         logger.info(f"{request_id} | Subscription successful")
         return ResponseModel(
             status_code=200,
@@ -133,11 +133,11 @@ class SubscriptionService:
                 error_code='SUB005',
                 error_message='API does not exist for the requested name and version'
             ).dict()
-        user_subscriptions = pygate_cache.get_cache('user_subscription_cache', data.username)
+        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', data.username)
         if not user_subscriptions:
             user_subscriptions = subscriptions_collection.find_one({'username': data.username})
             if user_subscriptions and '_id' in user_subscriptions: del user_subscriptions['_id']
-            pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+            doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         if not user_subscriptions or f"{data.api_name}/{data.api_version}" not in user_subscriptions.get('apis', []):
             logger.error(f"{request_id} | Unsubscription failed with code SUB006")
             return ResponseModel(
@@ -156,7 +156,7 @@ class SubscriptionService:
         user_subscriptions = subscriptions_collection.find_one({'username': data.username})
         if user_subscriptions and '_id' in user_subscriptions:
             del user_subscriptions['_id']
-        pygate_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         logger.info(f"{request_id} | Unsubscription successful")
         return ResponseModel(
             status_code=200,

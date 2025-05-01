@@ -1,7 +1,7 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from fastapi import APIRouter, Request, Depends
@@ -9,7 +9,7 @@ from fastapi_jwt_auth import AuthJWT
 from slowapi.errors import RateLimitExceeded
 
 from models.response_model import ResponseModel
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from utils.limit_throttle_util import limit_and_throttle
 from utils.auth_util import auth_required
 from utils.group_util import group_required
@@ -27,7 +27,7 @@ import logging
 gateway_router = APIRouter()
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 @gateway_router.api_route("/status/rest", methods=["GET"],
     description="Check if the REST gateway is online and all dependencies are healthy",
@@ -92,7 +92,7 @@ async def rest_gateway_status():
             "dependencies": {
                 "mongodb": mongodb_status,
                 "redis": redis_status,
-                "cache": "operational" if pygate_cache.is_operational() else "degraded"
+                "cache": "operational" if doorman_cache.is_operational() else "degraded"
             },
             "metrics": metrics
         }
@@ -134,7 +134,7 @@ async def clear_all_caches(Authorize: AuthJWT = Depends()):
                 error_code="GTW008",
                 error_message="You do not have permission to clear caches"
             ))
-        pygate_cache.clear_all_caches()
+        doorman_cache.clear_all_caches()
         return process_response(ResponseModel(
             status_code=200,
             message="All caches cleared"

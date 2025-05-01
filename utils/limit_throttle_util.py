@@ -1,6 +1,6 @@
 from fastapi import Request, HTTPException
 from fastapi_jwt_auth import AuthJWT
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from services.user_service import UserService
 from utils.database import user_collection
 
@@ -26,7 +26,7 @@ def duration_to_seconds(duration: str) -> int:
 async def limit_and_throttle(Authorize: AuthJWT, request: Request):
     username = Authorize.get_jwt_subject()
     redis_client = request.app.state.redis
-    user = pygate_cache.get_cache("user_cache", username)
+    user = doorman_cache.get_cache("user_cache", username)
     if not user:
         user = await user_collection.find_one({"username": username})
     rate = int(user.get("rate_limit_duration") or 1)
