@@ -3,7 +3,6 @@ import time
 import requests
 import pytest
 
-
 class TestDoorman:
     base_url = "https://localhost:3002"
     token = None
@@ -16,8 +15,6 @@ class TestDoorman:
     password = None
     client_key = None
     csrf_token = None
-    api_name_soap = None
-    endpoint_path_soap = None
 
     @staticmethod
     def getAccessCookies():
@@ -151,38 +148,18 @@ class TestDoorman:
                                  json={
                                      "api_name": TestDoorman.api_name,
                                      "api_version": "v1", 
-                                     "api_description": "Test API", 
-                                     "api_servers": ["https://fake-json-api.mock.beeceptor.com"], 
+                                     "api_description": "Test GraphQL API", 
+                                     "api_servers": ["https://countries.trevorblades.com/graphql"], 
                                      "api_allowed_roles": [TestDoorman.role_name],
                                      "api_allowed_groups": ["ALL", TestDoorman.group_name],
-                                     "api_type": "REST"
-                                 }, verify=False)
-        assert response.status_code == 201
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(9)
-    async def test_onboard_api_soap(self):
-        TestDoorman.api_name_soap = "test" + "".join(random.sample("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 8))
-        response = requests.post(f"{self.base_url}/platform/api", 
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(),
-                                 json={
-                                     "api_name": TestDoorman.api_name_soap,
-                                     "api_version": "v1", 
-                                     "api_description": "Test SOAP API", 
-                                     "api_servers": ["https://www.dataaccess.com/webservicesserver"], 
-                                     "api_allowed_roles": [TestDoorman.role_name],
-                                     "api_allowed_groups": ["ALL", TestDoorman.group_name],
-                                     "api_type": "SOAP"
+                                     "api_type": "GRAPHQL"
                                  }, verify=False)
         assert response.status_code == 201
 
     @pytest.mark.asyncio
     @pytest.mark.order(10)
     async def test_onboard_endpoint(self):
-
-        TestDoorman.endpoint_path = "/users"
-
+        TestDoorman.endpoint_path = "/graphql"
         response = requests.post(f"{self.base_url}/platform/endpoint", 
                                 headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
                                 cookies=TestDoorman.getAccessCookies(),
@@ -190,26 +167,14 @@ class TestDoorman:
                                     "api_name": TestDoorman.api_name,
                                     "api_version": "v1", 
                                     "endpoint_uri": TestDoorman.endpoint_path,
-                                    "endpoint_method": "GET",
-                                    "endpoint_description": "Test endpoint",
-                                 }, verify=False)
-        assert response.status_code == 201
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(10)
-    async def test_onboard_endpoint_soap(self):
-
-        TestDoorman.endpoint_path_soap = "/NumberConversion.wso"
-
-        response = requests.post(f"{self.base_url}/platform/endpoint", 
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(),
-                                 json={
-                                    "api_name": TestDoorman.api_name_soap,
-                                    "api_version": "v1", 
-                                    "endpoint_uri": TestDoorman.endpoint_path_soap,
                                     "endpoint_method": "POST",
-                                    "endpoint_description": "Test endpoint",
+                                    "endpoint_description": "Test GraphQL endpoint",
+                                    "endpoint_parameters": {
+                                        "body": [
+                                            {"name": "query", "required": True, "type": "string"},
+                                            {"name": "variables", "required": False, "type": "object"}
+                                        ]
+                                    }
                                  }, verify=False)
         assert response.status_code == 201
 
@@ -222,19 +187,6 @@ class TestDoorman:
                                     json={
                                         "username": TestDoorman.username, 
                                         "api_name": TestDoorman.api_name, 
-                                        "api_version": "v1"
-                                    }, verify=False)
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(11)
-    async def test_subscribe_soap(self):
-        response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(),
-                                    json={
-                                        "username": TestDoorman.username, 
-                                        "api_name": TestDoorman.api_name_soap, 
                                         "api_version": "v1"
                                     }, verify=False)
         assert response.status_code == 200
@@ -260,7 +212,7 @@ class TestDoorman:
                                     "routing_name": "test_routing",
                                     "routing_description": "Test routing",
                                     "client_key": TestDoorman.client_key,
-                                    "routing_servers": ["https://fake-json-api.mock.beeceptor.com/"],
+                                    "routing_servers": ["https://countries.trevorblades.com/graphql"],
                                 }, verify=False)
         assert response.status_code == 201
 
@@ -286,9 +238,19 @@ class TestDoorman:
     @pytest.mark.asyncio
     @pytest.mark.order(16)
     async def test_gateway_call_client_key(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
-                                headers={"client-key": TestDoorman.client_key, "X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(), verify=False)
+        response = requests.post(f"{self.base_url}/api/graphql/" + TestDoorman.api_name,
+                                headers={
+                                    "client-key": TestDoorman.client_key,
+                                    "X-CSRF-TOKEN": TestDoorman.csrf_token,
+                                    "Content-Type": "application/json",
+                                    "X-API-Version": "v1"
+                                },
+                                cookies=TestDoorman.getAccessCookies(),
+                                json={
+                                    "query": "query { countries { name code capital } }",
+                                    "variables": {}
+                                },
+                                verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -302,27 +264,42 @@ class TestDoorman:
     @pytest.mark.asyncio
     @pytest.mark.order(18)
     async def test_gateway_call_regular_route(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
-                                cookies=TestDoorman.getAccessCookies(), verify=False)
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(19)
-    async def test_gateway_call_regular_route_soap(self):
-        response = requests.post(f"{self.base_url}/api/soap/" + TestDoorman.api_name_soap + "/v1" + TestDoorman.endpoint_path_soap,
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(), verify=False,
-                                data="<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:web=\"http://www.dataaccess.com/webservicesserver/\"><soapenv:Header/><soapenv:Body><web:NumberToWords><ubiNum>123</ubiNum></web:NumberToWords></soapenv:Body></soapenv:Envelope>",)
+        response = requests.post(f"{self.base_url}/api/graphql/" + TestDoorman.api_name,
+                                headers={
+                                    "X-CSRF-TOKEN": TestDoorman.csrf_token,
+                                    "Content-Type": "application/json",
+                                    "X-API-Version": "v1"
+                                },
+                                cookies=TestDoorman.getAccessCookies(),
+                                json={
+                                    "query": "query { countries { name code capital } }",
+                                    "variables": {}
+                                },
+                                verify=False)
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     @pytest.mark.order(19)
     async def test_gateway_call_rate_limited(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(), verify=False)
+        # Make multiple requests in quick succession to trigger rate limit
+        for _ in range(4):  # Make 4 requests, should hit the 3/minute limit
+            response = requests.post(f"{self.base_url}/api/graphql/" + TestDoorman.api_name,
+                                    headers={
+                                        "X-CSRF-TOKEN": TestDoorman.csrf_token,
+                                        "Content-Type": "application/json",
+                                        "X-API-Version": "v1"
+                                    },
+                                    cookies=TestDoorman.getAccessCookies(),
+                                    json={
+                                        "query": "query { countries { name code capital } }",
+                                        "variables": {}
+                                    },
+                                    verify=False)
+            if response.status_code == 429:
+                break
+            time.sleep(0.1)  # Small delay between requests
+        
         assert response.status_code == 429
-
 
     @pytest.mark.asyncio
     @pytest.mark.order(20)
@@ -340,9 +317,18 @@ class TestDoorman:
     @pytest.mark.asyncio
     @pytest.mark.order(21)
     async def test_re_gateway_call(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(), verify=False)
+        response = requests.post(f"{self.base_url}/api/graphql/" + TestDoorman.api_name,
+                                headers={
+                                    "X-CSRF-TOKEN": TestDoorman.csrf_token,
+                                    "Content-Type": "application/json",
+                                    "X-API-Version": "v1"
+                                },
+                                cookies=TestDoorman.getAccessCookies(),
+                                json={
+                                    "query": "query { countries { name code capital } }",
+                                    "variables": {}
+                                },
+                                verify=False)
         assert response.status_code == 403
 
     @pytest.mark.asyncio
@@ -386,7 +372,7 @@ class TestDoorman:
     @pytest.mark.asyncio
     @pytest.mark.order(26)
     async def test_update_user(self):
-        TestDoorman.email  = "newuser" + str(time.time()) + "@doorman.so"
+        TestDoorman.email = "newuser" + str(time.time()) + "@doorman.so"
         response = requests.put(f"{self.base_url}/platform/user/" + TestDoorman.username,
                                 headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
                                 cookies=TestDoorman.getAccessCookies(),
@@ -462,7 +448,7 @@ class TestDoorman:
     @pytest.mark.asyncio
     @pytest.mark.order(33)
     async def test_update_endpoint(self):
-        response = requests.put(f"{self.base_url}/platform/endpoint/GET/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path,
+        response = requests.put(f"{self.base_url}/platform/endpoint/POST/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path,
                                 headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
                                 cookies=TestDoorman.getAccessCookies(),
                                 json={
@@ -473,7 +459,7 @@ class TestDoorman:
     @pytest.mark.asyncio
     @pytest.mark.order(34)
     async def test_delete_endpoint(self):
-        response = requests.delete(f"{self.base_url}/platform/endpoint/GET/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path,
+        response = requests.delete(f"{self.base_url}/platform/endpoint/POST/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path,
                                 headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
                                 cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
@@ -530,4 +516,4 @@ class TestDoorman:
         response = requests.delete(f"{self.base_url}/platform/role/" + TestDoorman.role_name,
                                 headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
                                 cookies=TestDoorman.getAccessCookies(), verify=False)
-        assert response.status_code == 200
+        assert response.status_code == 200 
