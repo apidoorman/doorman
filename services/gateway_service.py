@@ -107,6 +107,8 @@ class GatewayService:
                     headers[ai_token_headers[0]] = user_specific_api_key
             content_type = request.headers.get("Content-Type", "").upper()
             logger.info(f"{request_id} | REST gateway to: {url}")
+            if api.get('api_authorization_field_swap'):
+                headers[api.get('Authorization')] = headers.get(api.get('api_authorization_field_swap'))
             async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
                 if method == "GET":
                     http_response = await client.get(url, params=query_params, headers=headers)
@@ -217,6 +219,8 @@ class GatewayService:
             if "SOAPAction" not in headers:
                 headers["SOAPAction"] = '""'
             envelope = (await request.body()).decode("utf-8")
+            if api.get('api_authorization_field_swap'):
+                headers[api.get('Authorization')] = headers.get(api.get('api_authorization_field_swap'))
             async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
                 http_response = await client.post(url, content=envelope, params=query_params, headers=headers)
             response_content = http_response.text
