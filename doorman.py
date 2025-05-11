@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from redis.asyncio import Redis
 

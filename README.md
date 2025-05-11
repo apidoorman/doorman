@@ -38,7 +38,7 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 
 
 ## Releases
-- [v0.0.1- REST, AI, and SOAP API Support](https://github.com/apidoorman/doorman/releases) (29 April 2025)
+- [v0.0.1- REST, AI, and SOAP API Support](https://github.com/apidoorman/doorman/releases) (20 May 2025)
 
 
 ## Documentation
