@@ -28,7 +28,7 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - ✅ REST Support
 - ✅ AI Support
 - ✅ SOAP Support
-- 🔜 GraphQL Support
+- ✅ GraphQL Support
 - 🔜 gRPC Support
 - 🔜 WebSocket Support
 - 🔜 Request Validation
