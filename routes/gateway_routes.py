@@ -23,14 +23,15 @@ from models.request_model import RequestModel
 import uuid
 import time
 import logging
+import json
 
 gateway_router = APIRouter()
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
-@gateway_router.api_route("/status/rest", methods=["GET"],
-    description="Check if the REST gateway is online and all dependencies are healthy",
+@gateway_router.api_route("/status", methods=["GET"],
+    description="Check if the gateway is online and all dependencies are healthy",
     responses={
         200: {
             "description": "Successful Response",
@@ -241,6 +242,75 @@ async def soap_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
             error_code="GTW999",
             error_message="An unexpected error occurred"
         ).dict(), "soap")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@gateway_router.api_route(
+    "/graphql/{api_name}",
+    methods=["POST"],
+    description="GraphQL API gateway",
+    dependencies=[
+        Depends(auth_required),
+        Depends(subscription_required)
+    ],
+    include_in_schema=False
+)
+async def graphql_gateway(api_name: str, request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    logger.info(f"{request_id} | Time: {time.strftime('%Y-%m-%d %H:%M:%S')}:{int(time.time() * 1000) % 1000}ms")
+    logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+    logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+    try:
+        await limit_and_throttle(Authorize, request)
+        body = await request.json()
+        if not isinstance(body, dict) or 'query' not in body:
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={"request_id": request_id},
+                error_code="GTW011",
+                error_message="Invalid GraphQL request: missing query"
+            ).dict(), "graphql")
+        api_version = request.headers.get('X-API-Version', 'v1')
+        api_name_version = f'{api_name}/{api_version}'
+        await group_required(request, Authorize, api_name_version)
+        try:
+            request_model = RequestModel(
+                method=request.method,
+                path=f"{api_name}",
+                headers=dict(request.headers),
+                body=json.dumps(body),
+                query_params=dict(request.query_params),
+                identity=Authorize.get_jwt_subject()
+            )
+        except Exception as e:
+            logger.error(f"{request_id} | Failed to create request model: {str(e)}")
+            return process_response(ResponseModel(
+                status_code=500,
+                response_headers={"request_id": request_id},
+                error_code="GTW014",
+                error_message="Failed to process request"
+            ).dict(), "graphql")
+        return process_response(await GatewayService.graphql_gateway(Authorize, request_model, request_id, start_time), "graphql")
+    except RateLimitExceeded as e:
+        return process_response(ResponseModel(
+            status_code=429,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW009",
+            error_message="Rate limit exceeded"
+            ).dict(), "graphql")
+    except ValueError:
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "graphql")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
