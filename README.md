@@ -36,7 +36,7 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - 🔜 Field Encryption
 - 🔜 Orchestration
 
-## Coming enhancements
+## Coming Enhancements
 
 REST:
 - Multipart form handling
