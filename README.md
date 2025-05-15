@@ -62,7 +62,7 @@ gRPC:
 - Reflection
 - Health checks
 
-### Releases
+## Releases
 - [v0.0.1 - Initial testing release](https://github.com/apidoorman/doorman/releases) (TBD)
 
 
