@@ -24,9 +24,11 @@ async def get_user_api_key(api_token_group, username):
     token_info = user_tokens.get(api_token_group)
     return token_info.get('user_api_key')
 
-async def get_token_api_heaeder(api_token_group):
+async def get_token_api_header(api_token_group):
+    if not api_token_group:
+        return None
     token_def = await token_def_collection.find_one({'api_token_group': api_token_group})
     if not token_def:
         return None
     #TODO: encrypt/decrypt api key
-    return [api_token_group.get('api_key_header'), api_token_group.get('api_key')]
+    return [token_def.get('api_key_header'), token_def.get('api_key')]

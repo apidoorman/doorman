@@ -10,6 +10,7 @@ email-validator
 
 # FastAPI and server
 fastapi==0.95.2
+starlette==0.27.0
 pydantic>=1.10.13
 fastapi-jwt-auth==0.5.0
 uvicorn[standard]
@@ -21,10 +22,18 @@ aiocache
 
 # HTTP client
 requests
-httpx
+httpx==0.24.1
 
 # Cryptography
 cryptography
 
 # Testing
 pytest-asyncio
+
+# GraphQL
+gql>=3.4.0
+
+# gRPC
+grpcio==1.62.0
+grpcio-tools==1.62.0
+protobuf==4.25.2
