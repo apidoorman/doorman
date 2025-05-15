@@ -1,39 +1,44 @@
 # Core dependencies
-redis
-gevent
-greenlet
-pymongo
-bcrypt
-psutil
-python-dotenv
-email-validator
+redis>=5.0.1
+gevent>=23.9.1
+greenlet>=3.0.3
+pymongo>=4.6.1
+bcrypt>=4.1.2
+psutil>=5.9.8
+python-dotenv>=1.0.1
+email-validator>=2.1.0.post1
 
 # FastAPI and server
 fastapi==0.95.2
-starlette==0.27.0
-pydantic>=1.10.13
+starlette>=0.40.0
+pydantic>=1.10.13,<2.0.0  # Keep v1 for compatibility
 fastapi-jwt-auth==0.5.0
-uvicorn[standard]
-aiohttp
-slowapi
+uvicorn[standard]>=0.27.1
+aiohttp>=3.9.3
+slowapi>=0.1.8
 
 # Caching
-aiocache
+aiocache>=0.12.2
 
 # HTTP client
-requests
+requests>=2.31.0
 httpx==0.24.1
 
 # Cryptography
-cryptography
+cryptography>=42.0.2
 
 # Testing
-pytest-asyncio
+pytest-asyncio>=0.23.5
 
 # GraphQL
 gql>=3.4.0
+graphql-core>=3.2.3
 
 # gRPC
-grpcio==1.62.0
-grpcio-tools==1.62.0
-protobuf==4.25.2
+grpcio>=1.62.0,<2.0.0
+grpcio-tools>=1.62.0,<2.0.0
+protobuf>=4.25.2,<5.0.0
+
+# Additional dependencies
+python-multipart>=0.0.9  # For file uploads
+typing-extensions>=4.9.0  # For type hints
