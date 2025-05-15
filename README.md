@@ -29,16 +29,41 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - ✅ AI Support
 - ✅ SOAP Support
 - ✅ GraphQL Support
-- 🔜 gRPC Support
+- ✅ gRPC Support
 - 🔜 WebSocket Support
 - 🔜 Request Validation
 - 🔜 Transformation
 - 🔜 Field Encryption
 - 🔜 Orchestration
 
+## Coming enhancements
 
-## Releases
-- [v0.0.1- REST, AI, and SOAP API Support](https://github.com/apidoorman/doorman/releases) (20 May 2025)
+REST:
+- Multipart form handling
+- File upload support
+- WebSocket support
+- SSE support
+
+SOAP:
+- WSDL validation
+- SOAP attachment handling
+- MTOM/DIME support
+- SOAP security
+
+GraphQL:
+- Subscription support
+- File upload handling
+- Query batching
+- Schema validation
+
+gRPC:
+- Streaming support
+- gRPC-Web
+- Reflection
+- Health checks
+
+### Releases
+- [v0.0.1 - Initial testing release](https://github.com/apidoorman/doorman/releases) (TBD)
 
 
 ## Documentation
@@ -100,6 +125,12 @@ DEV_RELOAD=False # Helpful when running in console for debug
 SSL_CERTFILE=./certs/localhost.crt # Update to your cert path if using HTTPS_ONlY
 SSL_KEYFILE=./certs/localhost.key # Update to your key path if using HTTPS_ONlY
 PID_FILE=Doorman.pid
+```
+
+Create and give permissions to folders
+
+```
+mkdir -p proto generated && chmod 755 proto generated
 ```
 
 Start Doorman background process

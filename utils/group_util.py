@@ -23,6 +23,8 @@ async def group_required(request: Request = None, Authorize: AuthJWT = Depends()
             prefix = "/api/rest/"
         elif full_path.startswith("/api/soap/"):
             prefix = "/api/soap/"
+        elif full_path.startswith("/api/grpc/"):
+            prefix = "/api/grpc/"
         else:
             prefix = ""
         if full_path.startswith(prefix):

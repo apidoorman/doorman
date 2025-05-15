@@ -4,7 +4,7 @@ import requests
 import pytest
 
 class TestDoorman:
-    base_url = "https://localhost:3002"
+    base_url = "http://localhost:3002"
     token = None
     api_name = None
     endpoint_path = None

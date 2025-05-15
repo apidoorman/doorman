@@ -314,3 +314,100 @@ async def graphql_gateway(api_name: str, request: Request, Authorize: AuthJWT = 
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@gateway_router.api_route(
+    "/grpc/{path:path}",
+    methods=["POST"],
+    description="gRPC API gateway",
+    dependencies=[
+        Depends(auth_required),
+        Depends(subscription_required)
+    ],
+    include_in_schema=False
+)
+async def grpc_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        api_name = path.split('/')[0]
+        api_version = request.headers.get('X-API-Version', 'v1')
+        api_path = f"{api_name}/{api_version}"
+        logger.info(f"{request_id} | Processing gRPC request for API: {api_path}")
+        try:
+            await group_required(request, Authorize, api_path)
+        except Exception as e:
+            logger.error(f"{request_id} | Group required check failed: {str(e)}")
+            return process_response(ResponseModel(
+                status_code=403,
+                response_headers={"request_id": request_id},
+                error_code="GTW013",
+                error_message="Access denied"
+            ).dict(), "grpc")
+        try:
+            await limit_and_throttle(Authorize, request)
+        except Exception as e:
+            logger.error(f"{request_id} | Rate limit check failed: {str(e)}")
+            return process_response(ResponseModel(
+                status_code=429,
+                response_headers={"request_id": request_id},
+                error_code="GTW009",
+                error_message="Rate limit exceeded"
+            ).dict(), "grpc")
+        try:
+            content_type = request.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                body = await request.json()
+            else:
+                try:
+                    body = await request.json()
+                except Exception as e:
+                    logger.error(f"{request_id} | Failed to parse request body: {str(e)}")
+                    return process_response(ResponseModel(
+                        status_code=400,
+                        response_headers={"request_id": request_id},
+                        error_code="GTW011",
+                        error_message="Invalid request body format"
+                    ).dict(), "grpc")
+        except Exception as e:
+            logger.error(f"{request_id} | Failed to read request body: {str(e)}")
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={"request_id": request_id},
+                error_code="GTW011",
+                error_message="Failed to read request body"
+            ).dict(), "grpc")
+        request_model = RequestModel(
+            method=request.method,
+            path=path,
+            headers=dict(request.headers),
+            body=json.dumps(body) if body else None,
+            query_params=dict(request.query_params),
+            identity=Authorize.get_jwt_subject()
+        )
+        logger.info(f"{request_id} | Forwarding request to gRPC gateway service")
+        return process_response(await GatewayService.grpc_gateway(Authorize, request_model, request_id, start_time), "grpc")
+    except RateLimitExceeded as e:
+        logger.error(f"{request_id} | Rate limit exceeded: {str(e)}")
+        return process_response(ResponseModel(
+            status_code=429,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW009",
+            error_message="Rate limit exceeded"
+            ).dict(), "grpc")
+    except Exception as e:
+        logger.error(f"{request_id} | Unexpected error in gRPC gateway: {str(e)}")
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "grpc")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

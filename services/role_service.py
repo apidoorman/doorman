@@ -58,7 +58,7 @@ class RoleService:
                 response_headers={
                     "request_id": request_id
                 },
-                error_code='GRP001',
+                error_code='ROLE001',
                 error_message='Role already exists'
             ).dict()
         
