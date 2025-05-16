@@ -31,6 +31,7 @@ from routes.api_routes import api_router
 from routes.endpoint_routes import endpoint_router
 from routes.gateway_routes import gateway_router
 from routes.routing_routes import routing_router
+from routes.proto_routes import proto_router
 
 import multiprocessing
 import logging
@@ -148,12 +149,12 @@ doorman.include_router(group_router, prefix="/platform/group", tags=["Group"])
 doorman.include_router(role_router, prefix="/platform/role", tags=["Role"])
 doorman.include_router(subscription_router, prefix="/platform/subscription", tags=["Subscription"])
 doorman.include_router(routing_router, prefix="/platform/routing", tags=["Routing"])
+doorman.include_router(proto_router, prefix="/platform/proto", tags=["Proto"])
 
 def start():
     if os.path.exists(PID_FILE):
         print("doorman is already running!")
         sys.exit(0)
-
     if os.name == "nt":
         process = subprocess.Popen([sys.executable, __file__, "run"],
                                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
@@ -164,7 +165,6 @@ def start():
                                    stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL,
                                    preexec_fn=os.setsid)
-
     with open(PID_FILE, "w") as f:
         f.write(str(process.pid))
     logger.info(f"Starting doorman with PID {process.pid}.")
@@ -174,10 +174,8 @@ def stop():
     if not os.path.exists(PID_FILE):
         logger.info("No running instance found")
         return
-
     with open(PID_FILE, "r") as f:
         pid = int(f.read())
-    
     try:
         if os.name == "nt":
             subprocess.call(["taskkill", "/F", "/PID", str(pid)])
