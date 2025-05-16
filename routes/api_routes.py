@@ -6,7 +6,16 @@ See https://github.com/pypeople-dev/doorman for more information
 
 from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
 from fastapi_jwt_auth import AuthJWT
-
+from werkzeug.utils import secure_filename
+from pathlib import Path
+import os
+import re
+import logging
+import uuid
+import time
+from datetime import datetime
+import subprocess
+from typing import List
 
 from models.response_model import ResponseModel
 from services.api_service import ApiService
@@ -18,49 +27,55 @@ from models.api_model_response import ApiModelResponse
 from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
 
-import uuid
-import time
-import logging
-from typing import List
-import os
-import subprocess
-from datetime import datetime
-import re
-
 api_router = APIRouter() 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
-def sanitize_filename(filename: str) -> str:
-    """
-    Sanitize a filename to prevent path traversal attacks.
-    Only allows alphanumeric characters, hyphens, and underscores.
-    """
-    # Remove any path separators and normalize to lowercase
-    sanitized = re.sub(r'[\\/]', '', filename)
-    # Only allow alphanumeric, hyphen, and underscore
-    sanitized = re.sub(r'[^a-zA-Z0-9\-_]', '', sanitized)
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
+
+def sanitize_filename(filename: str):
+    if not filename:
+        raise ValueError("Empty filename provided")
+    sanitized = secure_filename(filename)
+    if not sanitized:
+        raise ValueError("Invalid filename after sanitization")
     return sanitized
 
-def get_safe_proto_path(api_name: str, api_version: str) -> tuple[str, str]:
-    """
-    Get safe paths for proto file and generated files.
-    Returns tuple of (proto_path, generated_dir)
-    """
-    safe_api_name = sanitize_filename(api_name)
-    safe_api_version = sanitize_filename(api_version)
-    key = f"{safe_api_name}_{safe_api_version}"
-    
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    proto_dir = os.path.join(project_root, "proto")
-    generated_dir = os.path.join(project_root, "generated")
-    
-    # Ensure directories exist
-    os.makedirs(proto_dir, exist_ok=True)
-    os.makedirs(generated_dir, exist_ok=True)
-    
-    proto_path = os.path.join(proto_dir, f"{key}.proto")
-    return proto_path, generated_dir
+def validate_path(base_path: Path, target_path: Path):
+    try:
+        base_path = Path(os.path.realpath(base_path))
+        target_path = Path(os.path.realpath(target_path))
+        project_root = Path(os.path.realpath(PROJECT_ROOT))
+        if not str(base_path).startswith(str(project_root)):
+            return False
+        return str(target_path).startswith(str(base_path))
+    except Exception as e:
+        logger.error(f"Path validation error: {str(e)}")
+        return False
+
+def get_safe_proto_path(api_name: str, api_version: str):
+    try:
+        safe_api_name = sanitize_filename(api_name)
+        safe_api_version = sanitize_filename(api_version)
+        key = f"{safe_api_name}_{safe_api_version}"
+        proto_dir = (PROJECT_ROOT / "proto").resolve()
+        generated_dir = (PROJECT_ROOT / "generated").resolve()
+        proto_dir.mkdir(exist_ok=True)
+        generated_dir.mkdir(exist_ok=True)
+        proto_path = (proto_dir / f"{key}.proto").resolve()
+        if not validate_path(PROJECT_ROOT, proto_path) or not validate_path(PROJECT_ROOT, generated_dir):
+            raise ValueError("Invalid path detected")
+        return proto_path, generated_dir
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path validation error: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create safe paths: {str(e)}"
+        )
 
 @api_router.post("",
     description="Add API",
@@ -287,19 +302,12 @@ async def get_all_apis(request: Request, Authorize: AuthJWT = Depends(), page: i
             }
         }
     })
-async def upload_proto_file(
-    api_name: str,
-    api_version: str,
-    file: UploadFile = File(...),
-    Authorize: AuthJWT = Depends()
-):
-    """Upload a proto file for an API"""
+async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = File(...), Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()}")
         logger.info(f"{request_id} | Endpoint: POST /proto/{api_name}/{api_version}")
-        
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return process_response(ResponseModel(
                 status_code=403,
@@ -307,58 +315,44 @@ async def upload_proto_file(
                 error_code="AUTH001",
                 error_message="User does not have permission to manage APIs"
             ).dict(), "rest")
-
-        # Get safe paths
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
-        
         content = await file.read()
         proto_content = content.decode('utf-8')
-        
-        # Use sanitized names in package declaration
         safe_api_name = sanitize_filename(api_name)
         safe_api_version = sanitize_filename(api_version)
-        
         if 'package' in proto_content:
             proto_content = re.sub(r'package\s+[^;]+;', f'package {safe_api_name}_{safe_api_version};', proto_content)
         else:
             proto_content = re.sub(r'syntax\s*=\s*"proto3";', f'syntax = "proto3";\n\npackage {safe_api_name}_{safe_api_version};', proto_content)
-        
-        with open(proto_path, "w") as f:
-            f.write(proto_content)
-            
+        proto_path.write_text(proto_content)
         try:
             subprocess.run([
                 "python", "-m", "grpc_tools.protoc",
-                f"--proto_path={os.path.dirname(proto_path)}",
+                f"--proto_path={proto_path.parent}",
                 f"--python_out={generated_dir}",
                 f"--grpc_python_out={generated_dir}",
-                proto_path
+                str(proto_path)
             ], check=True)
-            
-            init_path = os.path.join(generated_dir, "__init__.py")
-            if not os.path.exists(init_path):
-                with open(init_path, "w") as f:
-                    f.write('"""Generated gRPC code."""\n')
-                    
-            pb2_file = os.path.join(generated_dir, f"{safe_api_name}_{safe_api_version}_pb2.py")
-            pb2_grpc_file = os.path.join(generated_dir, f"{safe_api_name}_{safe_api_version}_pb2_grpc.py")
-            
-            if os.path.exists(pb2_grpc_file):
-                with open(pb2_grpc_file, 'r') as f:
-                    content = f.read()
+            init_path = (generated_dir / "__init__.py").resolve()
+            if not validate_path(generated_dir, init_path):
+                raise ValueError("Invalid init path")
+            if not init_path.exists():
+                init_path.write_text('"""Generated gRPC code."""\n')
+            pb2_grpc_file = (generated_dir / f"{safe_api_name}_{safe_api_version}_pb2_grpc.py").resolve()
+            if not validate_path(generated_dir, pb2_grpc_file):
+                raise ValueError("Invalid grpc file path")
+            if pb2_grpc_file.exists():
+                content = pb2_grpc_file.read_text()
                 content = content.replace(
                     f'import {safe_api_name}_{safe_api_version}_pb2 as {safe_api_name}__{safe_api_version}__pb2',
                     f'from generated import {safe_api_name}_{safe_api_version}_pb2 as {safe_api_name}__{safe_api_version}__pb2'
                 )
-                with open(pb2_grpc_file, 'w') as f:
-                    f.write(content)
-                    
+                pb2_grpc_file.write_text(content)
             return process_response(ResponseModel(
                 status_code=200,
                 response_headers={"request_id": request_id},
                 message="Proto file uploaded and gRPC code generated successfully"
             ).dict(), "rest")
-            
         except subprocess.CalledProcessError as e:
             logger.error(f"{request_id} | Failed to generate gRPC code: {str(e)}")
             return process_response(ResponseModel(
@@ -367,7 +361,14 @@ async def upload_proto_file(
                 error_code="GTW012",
                 error_message=f"Failed to generate gRPC code: {str(e)}"
             ).dict(), "rest")
-            
+    except HTTPException as e:
+        logger.error(f"{request_id} | Path validation error: {str(e)}")
+        return process_response(ResponseModel(
+            status_code=e.status_code,
+            response_headers={"request_id": request_id},
+            error_code="GTW013",
+            error_message=str(e.detail)
+        ).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | Error uploading proto file: {str(e)}")
         return process_response(ResponseModel(
@@ -398,13 +399,7 @@ async def upload_proto_file(
         }
     }
 )
-async def get_proto_file(
-    api_name: str,
-    api_version: str,
-    request: Request,
-    Authorize: AuthJWT = Depends()
-):
-    """Get a proto file for an API"""
+async def get_proto_file(api_name: str, api_version: str, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
@@ -427,20 +422,27 @@ async def get_proto_file(
                 error_message=f"API {api_name}/{api_version} not found"
             ).dict(), "rest")
         proto_path, _ = get_safe_proto_path(api_name, api_version)
-        if not os.path.exists(proto_path):
+        if not proto_path.exists():
             return process_response(ResponseModel(
                 status_code=404,
                 response_headers={"request_id": request_id},
                 error_code="API002",
                 error_message=f"Proto file not found for API {api_name}/{api_version}"
             ).dict(), "rest")
-        with open(proto_path, "r") as f:
-            proto_content = f.read()
+        proto_content = proto_path.read_text()
         return process_response(ResponseModel(
             status_code=200,
             response_headers={"request_id": request_id},
             message="Proto file retrieved successfully",
             response={"content": proto_content}
+        ).dict(), "rest")
+    except HTTPException as e:
+        logger.error(f"{request_id} | Path validation error: {str(e)}")
+        return process_response(ResponseModel(
+            status_code=e.status_code,
+            response_headers={"request_id": request_id},
+            error_code="GTW013",
+            error_message=str(e.detail)
         ).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | Failed to get proto file: {str(e)}")
@@ -472,13 +474,7 @@ async def get_proto_file(
         }
     }
 )
-async def update_proto_file(
-    api_name: str,
-    api_version: str,
-    request: Request,
-    proto_file: UploadFile = File(...),
-    Authorize: AuthJWT = Depends()
-):
+async def update_proto_file(api_name: str, api_version: str, request: Request, proto_file: UploadFile = File(...), Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -494,15 +490,14 @@ async def update_proto_file(
                 error_message="You do not have permission to update proto files"
             ).dict(), "rest")
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
-        with open(proto_path, "wb") as f:
-            f.write(await proto_file.read())
+        proto_path.write_bytes(await proto_file.read())
         try:
             subprocess.run([
                 'python', '-m', 'grpc_tools.protoc',
-                f'--proto_path={os.path.dirname(proto_path)}',
+                f'--proto_path={proto_path.parent}',
                 f'--python_out={generated_dir}',
                 f'--grpc_python_out={generated_dir}',
-                proto_path
+                str(proto_path)
             ], check=True)
         except subprocess.CalledProcessError as e:
             logger.error(f"{request_id} | Failed to generate gRPC code: {str(e)}")
@@ -520,6 +515,14 @@ async def update_proto_file(
                 "request_id": request_id
             },
             message="Proto file updated successfully"
+        ).dict(), "rest")
+    except HTTPException as e:
+        logger.error(f"{request_id} | Path validation error: {str(e)}")
+        return process_response(ResponseModel(
+            status_code=e.status_code,
+            response_headers={"request_id": request_id},
+            error_code="GTW013",
+            error_message=str(e.detail)
         ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
@@ -563,9 +566,7 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request, A
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
             return process_response(ResponseModel(
                 status_code=403,
-                response_headers={
-                    "request_id": request_id
-                },
+                response_headers={"request_id": request_id},
                 error_code="API008",
                 error_message="You do not have permission to delete proto files"
             ).dict(), "rest")
@@ -573,34 +574,38 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request, A
         safe_api_name = sanitize_filename(api_name)
         safe_api_version = sanitize_filename(api_version)
         key = f"{safe_api_name}_{safe_api_version}"
-        if os.path.exists(proto_path):
-            os.remove(proto_path)
+        if proto_path.exists():
+            if not validate_path(PROJECT_ROOT, proto_path):
+                raise ValueError("Unsafe proto file path detected")
+            proto_path.unlink()
             logger.info(f"{request_id} | Deleted proto file: {proto_path}")
-        generated_files = [
-            f"{key}_pb2.py",
-            f"{key}_pb2.pyc",
-            f"{key}_pb2_grpc.py",
-            f"{key}_pb2_grpc.pyc"
-        ]
+        generated_files = [f"{key}_pb2.py", f"{key}_pb2.pyc", f"{key}_pb2_grpc.py", f"{key}_pb2_grpc.pyc"]
         for file in generated_files:
-            file_path = os.path.join(generated_dir, file)
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            file_path = (generated_dir / file).resolve()
+            if not validate_path(generated_dir, file_path):
+                logger.warning(f"{request_id} | Unsafe file path detected: {file_path}. Skipping deletion.")
+                continue
+            if file_path.exists():
+                file_path.unlink()
                 logger.info(f"{request_id} | Deleted generated file: {file_path}")
         return process_response(ResponseModel(
             status_code=200,
-            response_headers={
-                "request_id": request_id
-            },
+            response_headers={"request_id": request_id},
             message="Proto file and generated files deleted successfully"
+        ).dict(), "rest")
+    except ValueError as e:
+        logger.error(f"{request_id} | Path validation error: {str(e)}")
+        return process_response(ResponseModel(
+            status_code=400,
+            response_headers={"request_id": request_id},
+            error_code="GTW013",
+            error_message=str(e)
         ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
-            response_headers={
-                "request_id": request_id
-            },
+            response_headers={"request_id": request_id},
             error_code="GTW999",
             error_message="An unexpected error occurred"
         ).dict(), "rest")
