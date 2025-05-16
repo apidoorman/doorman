@@ -189,7 +189,7 @@ message EchoResponse {{
             f.write(proto_content)
         with open("test.proto", "rb") as f:
             response = requests.post(
-                f"{self.base_url}/platform/api/proto/{TestDoorman.api_name}/v1",
+                f"{self.base_url}/platform/proto/{TestDoorman.api_name}/v1",
                 headers={
                     "X-CSRF-TOKEN": TestDoorman.csrf_token,
                     "Cookie": f"access_token_cookie={TestDoorman.token}"
@@ -223,7 +223,7 @@ message EchoResponse {{
     @pytest.mark.order(7)
     async def test_get_proto_file(self):
         response = requests.get(
-            f"{self.base_url}/platform/api/proto/{TestDoorman.api_name}/v1",
+            f"{self.base_url}/platform/proto/{TestDoorman.api_name}/v1",
             headers={
                 "X-CSRF-TOKEN": TestDoorman.csrf_token,
                 "Cookie": f"access_token_cookie={TestDoorman.token}"
@@ -260,7 +260,7 @@ message EchoResponse {{
             f.write(updated_proto_content)
         with open("test.proto", "rb") as f:
             response = requests.put(
-                f"{self.base_url}/platform/api/proto/{TestDoorman.api_name}/v1",
+                f"{self.base_url}/platform/proto/{TestDoorman.api_name}/v1",
                 headers={
                     "X-CSRF-TOKEN": TestDoorman.csrf_token,
                     "Cookie": f"access_token_cookie={TestDoorman.token}"
@@ -381,7 +381,7 @@ message EchoResponse {{
     @pytest.mark.order(14)
     async def test_grpc_call_without_proto(self):
         response = requests.delete(
-            f"{self.base_url}/platform/api/proto/{TestDoorman.api_name}/v1",
+            f"{self.base_url}/platform/proto/{TestDoorman.api_name}/v1",
             headers={
                 "X-CSRF-TOKEN": TestDoorman.csrf_token,
                 "Cookie": f"access_token_cookie={TestDoorman.token}"
@@ -433,7 +433,7 @@ message EchoResponse {{
             f.write(proto_content)
         with open("test.proto", "rb") as f:
             response = requests.post(
-                f"{self.base_url}/platform/api/proto/{TestDoorman.api_name}/v1",
+                f"{self.base_url}/platform/proto/{TestDoorman.api_name}/v1",
                 headers={
                     "X-CSRF-TOKEN": TestDoorman.csrf_token,
                     "Cookie": f"access_token_cookie={TestDoorman.token}"
@@ -503,7 +503,7 @@ message EchoResponse {{
     @pytest.mark.asyncio
     @pytest.mark.order(19)
     async def test_delete_proto_files(self):
-        response = requests.delete(f"{self.base_url}/platform/api/proto/{TestDoorman.api_name}/v1",
+        response = requests.delete(f"{self.base_url}/platform/proto/{TestDoorman.api_name}/v1",
                                 headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
                                 cookies=TestDoorman.getAccessCookies(), verify=False)
         assert response.status_code == 200
