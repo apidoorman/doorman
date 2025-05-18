@@ -33,7 +33,7 @@ class Database:
         self.db = self.client.get_database()
 
     def initialize_collections(self):
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'token_defs', 'user_tokens']
+        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'token_defs', 'user_tokens', 'endpoint_validations']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
@@ -104,11 +104,12 @@ class Database:
         ])
 
         self.db.token_defs.create_indexes([
-            IndexModel([("api_token_group", ASCENDING)], unique=True)
+            IndexModel([("api_token_group", ASCENDING)], unique=True),
+            IndexModel([("username", ASCENDING)], unique=True)
         ])
 
-        self.db.token_defs.create_indexes([
-            IndexModel([("username", ASCENDING)], unique=True)
+        self.db.endpoint_validations.create_indexes([
+            IndexModel([("endpoint_id", ASCENDING)], unique=True)
         ])
 
 database = Database()
@@ -127,3 +128,4 @@ subscriptions_collection = db.subscriptions
 user_collection = db.users
 token_def_collection = db.token_defs
 user_token_collection = db.user_tokens
+endpoint_validation_collection = db.endpoint_validations

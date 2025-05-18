@@ -4,9 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
+from models.create_endpoint_validation_model import CreateEndpointValidationModel
 from models.response_model import ResponseModel
 from models.update_endpoint_model import UpdateEndpointModel
-from utils.database import endpoint_collection, api_collection
+from utils.database import endpoint_collection, api_collection, endpoint_validation_collection
 from utils.cache_manager_util import cache_manager
 from utils.doorman_cache_util import doorman_cache
 from models.create_endpoint_model import CreateEndpointModel
@@ -254,4 +255,56 @@ class EndpointService:
         return ResponseModel(
             status_code=200,
             response={'endpoints': endpoints}
+        ).dict()
+    
+    @staticmethod
+    async def create_endpoint_validation(data: CreateEndpointValidationModel, request_id):
+        """
+        Create a new endpoint validation.
+        """
+        logger.info(request_id + " | Creating endpoint validation: " + data.endpoint_id)
+        if not data.endpoint_id:
+            logger.error(request_id + " | Endpoint ID is required")
+            return ResponseModel(
+                status_code=400,
+                error_code="END013",
+                error_message="Endpoint ID is required"
+            ).dict()
+        if not data.validation_schema:
+            logger.error(request_id + " | Validation schema is required")
+            return ResponseModel(
+                status_code=400,
+                error_code="END014",
+                error_message="Validation schema is required"
+            ).dict()
+        if doorman_cache.get_cache('endpoint_validation_cache', data.endpoint_id):
+            logger.error(request_id + " | Endpoint validation already exists")
+            return ResponseModel(
+                status_code=400,
+                error_code="END017",
+                error_message="Endpoint validation already exists"
+            ).dict()
+        if not endpoint_collection.find_one({
+            'endpoint_id': data.endpoint_id
+        }):
+            logger.error(request_id + " | Endpoint does not exist")
+            return ResponseModel(
+                status_code=400,
+                error_code="END015",
+                error_message="Endpoint does not exist"
+            ).dict()
+        validation_dict = data.dict()
+        insert_result = endpoint_validation_collection.insert_one(validation_dict)
+        if not insert_result.acknowledged:
+            logger.error(request_id + " | Endpoint validation creation failed with code END016")
+            return ResponseModel(
+                status_code=400,
+                error_code="END016",
+                error_message="Unable to create endpoint validation"
+            ).dict()
+        logger.info(request_id + " | Endpoint validation created successfully")
+        doorman_cache.set_cache('endpoint_validation_cache', f"{data.endpoint_id}", validation_dict)
+        return ResponseModel(
+            status_code=201,
+            message="Endpoint validation created successfully"
         ).dict()

@@ -22,6 +22,7 @@ class DoormanCacheManager:
             'api_endpoint_cache': 'api_endpoint_cache:',
             'api_id_cache': 'api_id_cache:',
             'endpoint_cache': 'endpoint_cache:',
+            'endpoint_validation_cache': 'endpoint_validation_cache:',
             'group_cache': 'group_cache:',
             'role_cache': 'role_cache:',
             'user_subscription_cache': 'user_subscription_cache:',
