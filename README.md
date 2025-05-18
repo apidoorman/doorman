@@ -10,7 +10,7 @@
 ![Last Commit](https://img.shields.io/github/last-commit/apidoorman/doorman)
 ![GitHub issues](https://img.shields.io/github/issues/apidoorman/doorman)
 
-A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs. Fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.
+A lightweight API gateway for AI, REST, SOAP, GraphQL, and gRPC APIs. Fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.
 
 🔗 [doorman.so](https://doorman.so)
 
@@ -30,7 +30,6 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - ✅ SOAP Support
 - ✅ GraphQL Support
 - ✅ gRPC Support
-- 🔜 WebSocket Support
 - 🔜 Request Validation
 - 🔜 Transformation
 - 🔜 Field Encryption
@@ -41,7 +40,6 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 REST:
 - Multipart form handling
 - File upload support
-- WebSocket support
 - SSE support
 
 SOAP:
