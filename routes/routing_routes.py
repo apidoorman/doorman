@@ -6,7 +6,6 @@ See https://github.com/pypeople-dev/doorman for more information
 
 from typing import List
 from fastapi import APIRouter, Depends, Request
-from fastapi_jwt_auth import AuthJWT
 
 from models.create_routing_model import CreateRoutingModel
 from models.response_model import ResponseModel
@@ -28,9 +27,6 @@ logger = logging.getLogger("doorman.gateway")
 
 @routing_router.post("",
     description="Add routing",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -45,13 +41,15 @@ logger = logging.getLogger("doorman.gateway")
         }
     }
 )
-async def create_routing(api_data: CreateRoutingModel, request: Request, Authorize: AuthJWT = Depends()):
+async def create_routing(api_data: CreateRoutingModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
+        if not await platform_role_required_bool(username, 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -77,9 +75,6 @@ async def create_routing(api_data: CreateRoutingModel, request: Request, Authori
 
 @routing_router.put("/{client_key}",
     description="Update routing",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -94,13 +89,15 @@ async def create_routing(api_data: CreateRoutingModel, request: Request, Authori
         }
     }
 )
-async def update_routing(client_key: str, api_data: UpdateRoutingModel, request: Request, Authorize: AuthJWT = Depends()):
+async def update_routing(client_key: str, api_data: UpdateRoutingModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
+        if not await platform_role_required_bool(username, 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -126,9 +123,6 @@ async def update_routing(client_key: str, api_data: UpdateRoutingModel, request:
 
 @routing_router.delete("/{client_key}",
     description="Delete routing",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -143,13 +137,15 @@ async def update_routing(client_key: str, api_data: UpdateRoutingModel, request:
         }
     }
 )
-async def delete_routing(client_key: str, request: Request, Authorize: AuthJWT = Depends()):
+async def delete_routing(client_key: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
+        if not await platform_role_required_bool(username, 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -175,18 +171,17 @@ async def delete_routing(client_key: str, request: Request, Authorize: AuthJWT =
 
 @routing_router.get("/all",
     description="Get all routings",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=List[RoutingModelResponse]
 )
-async def get_routings(request: Request, Authorize: AuthJWT = Depends(), page: int = 1, page_size: int = 10):
+async def get_routings(request: Request, page: int = 1, page_size: int = 10):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
+        if not await platform_role_required_bool(username, 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -212,18 +207,17 @@ async def get_routings(request: Request, Authorize: AuthJWT = Depends(), page: i
 
 @routing_router.get("/{client_key}",
     description="Get routing",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=RoutingModelResponse
 )
-async def get_routing(client_key: str, request: Request, Authorize: AuthJWT = Depends()):
+async def get_routing(client_key: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_routings'):
+        if not await platform_role_required_bool(username, 'manage_routings'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={

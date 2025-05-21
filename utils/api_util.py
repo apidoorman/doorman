@@ -10,6 +10,7 @@ async def get_api(api_key, api_name_version):
             return None
         api.pop('_id', None)
         doorman_cache.set_cache('api_cache', api_key, api)
+        doorman_cache.set_cache('api_id_cache', api_name_version, api_key)
     return api
 
 async def get_api_endpoints(api_id):

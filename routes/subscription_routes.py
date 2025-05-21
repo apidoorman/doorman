@@ -5,7 +5,6 @@ See https://github.com/pypeople-dev/doorman for more information
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request
-from fastapi_jwt_auth import AuthJWT
 
 from models.response_model import ResponseModel
 from services.subscription_service import SubscriptionService
@@ -25,9 +24,6 @@ logger = logging.getLogger("doorman.gateway")
 
 @subscription_router.post("/subscribe",
     description="Subscribe to API",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -42,13 +38,15 @@ logger = logging.getLogger("doorman.gateway")
         }
     }
 )
-async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: AuthJWT = Depends()):
+async def subscribe_api(api_data: SubscribeModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version, api_data.username):
+        if not await group_required(request, api_data.api_name + '/' + api_data.api_version, api_data.username):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -83,9 +81,6 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
 
 @subscription_router.post("/unsubscribe",
     description="Unsubscribe from API",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -100,13 +95,15 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
         }
     }
 )
-async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize: AuthJWT = Depends()):
+async def unsubscribe_api(api_data: SubscribeModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await group_required(None, Authorize, api_data.api_name + '/' + api_data.api_version, api_data.username):
+        if not await group_required(request, api_data.api_name + '/' + api_data.api_version, api_data.username):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -141,9 +138,6 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
 
 @subscription_router.get("/subscriptions",
     description="Get current user's subscriptions",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -161,13 +155,14 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
         }
     }
 )
-async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = Depends()):
+async def subscriptions_for_current_user(request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        username = Authorize.get_jwt_subject()
         return process_response(await SubscriptionService.get_user_subscriptions(username, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
@@ -185,9 +180,6 @@ async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = 
 
 @subscription_router.get("/subscriptions/{user_id}",
     description="Get user's subscriptions",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -205,11 +197,13 @@ async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = 
         }
     }
 )
-async def subscriptions_for_user_by_id(user_id: str, request: Request, Authorize: AuthJWT = Depends()):
+async def subscriptions_for_user_by_id(user_id: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await SubscriptionService.get_user_subscriptions(user_id, request_id))
     except Exception as e:

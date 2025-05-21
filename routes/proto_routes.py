@@ -5,9 +5,14 @@ See https://github.com/pypeople-dev/doorman for more information
 """
 
 from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
-from fastapi_jwt_auth import AuthJWT
 from werkzeug.utils import secure_filename
 from pathlib import Path
+
+from models.response_model import ResponseModel
+from utils.auth_util import auth_required
+from utils.response_util import process_response
+from utils.role_util import platform_role_required_bool
+
 import os
 import re
 import logging
@@ -16,16 +21,10 @@ import time
 from datetime import datetime
 import subprocess
 
-from models.response_model import ResponseModel
-from utils.auth_util import auth_required
-from utils.response_util import process_response
-from utils.role_util import platform_role_required_bool
-
 proto_router = APIRouter()
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
-# Define project root as a constant
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 def sanitize_filename(filename: str):
@@ -74,9 +73,6 @@ def get_safe_proto_path(api_name: str, api_version: str):
 
 @proto_router.post("/{api_name}/{api_version}",
     description="Upload proto file",
-    dependencies=[
-        Depends(auth_required) 
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -90,21 +86,21 @@ def get_safe_proto_path(api_name: str, api_version: str):
             }
         }
     })
-async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = File(...), Authorize: AuthJWT = Depends()):
+async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = File(...), request: Request = None):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username}")
         logger.info(f"{request_id} | Endpoint: POST /proto/{api_name}/{api_version}")
-        
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
+        if not await platform_role_required_bool(username, 'manage_apis'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={"request_id": request_id},
                 error_code="AUTH001",
                 error_message="User does not have permission to manage APIs"
             ).dict(), "rest")
-
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
         content = await file.read()
         proto_content = content.decode('utf-8')
@@ -172,9 +168,6 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
 
 @proto_router.get("/{api_name}/{api_version}",
     description="Get proto file",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -189,14 +182,15 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
         }
     }
 )
-async def get_proto_file(api_name: str, api_version: str, request: Request, Authorize: AuthJWT = Depends()):
+async def get_proto_file(api_name: str, api_version: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
-    logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
-    logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}")
+    payload = await auth_required(request)
+    username = payload.get("sub")
+    logger.info(f"{request_id} | Username: {username} | From: {request.client.host}")
     logger.info(f"{request_id} | Endpoint: {request.method} {request.url.path}")
     try:
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
+        if not await platform_role_required_bool(username, 'manage_apis'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={"request_id": request_id},
@@ -239,9 +233,6 @@ async def get_proto_file(api_name: str, api_version: str, request: Request, Auth
 
 @proto_router.put("/{api_name}/{api_version}",
     description="Update proto file",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -256,13 +247,15 @@ async def get_proto_file(api_name: str, api_version: str, request: Request, Auth
         }
     }
 )
-async def update_proto_file(api_name: str, api_version: str, request: Request, proto_file: UploadFile = File(...), Authorize: AuthJWT = Depends()):
+async def update_proto_file(api_name: str, api_version: str, request: Request, proto_file: UploadFile = File(...)):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
+        if not await platform_role_required_bool(username, 'manage_apis'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={"request_id": request_id},
@@ -314,9 +307,6 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
 
 @proto_router.delete("/{api_name}/{api_version}",
     description="Delete proto file",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -331,13 +321,15 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
         }
     }
 )
-async def delete_proto_file(api_name: str, api_version: str, request: Request, Authorize: AuthJWT = Depends()):
+async def delete_proto_file(api_name: str, api_version: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_apis'):
+        if not await platform_role_required_bool(username, 'manage_apis'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={"request_id": request_id},

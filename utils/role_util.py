@@ -6,7 +6,6 @@ See https://github.com/pypeople-dev/doorman for more information
 
 import logging
 from fastapi import HTTPException
-from fastapi_jwt_auth.exceptions import MissingTokenError
 from utils.database import role_collection, user_collection
 from utils.doorman_cache_util import doorman_cache
 
@@ -61,8 +60,6 @@ async def platform_role_required_bool(username, action):
         if not await validate_platform_role(user.get('role'), action):
             raise HTTPException(status_code=403, detail="You do not have the correct role for this")
         return True
-    except MissingTokenError:
-        raise HTTPException(status_code=401, detail="Missing token")
     except HTTPException as e:
         return False
     except Exception as e:
