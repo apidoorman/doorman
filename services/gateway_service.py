@@ -14,7 +14,6 @@ import time
 import httpx
 import aiohttp
 from typing import Dict
-import asyncio
 import grpc
 from google.protobuf.json_format import MessageToDict
 import importlib
@@ -24,6 +23,11 @@ from utils import token_util
 from utils.gateway_utils import get_headers
 from utils.doorman_cache_util import doorman_cache
 from utils.validation_util import validation_util
+from gql import Client, gql
+from gql.transport.aiohttp import AIOHTTPTransport
+
+import logging
+logging.getLogger('gql').setLevel(logging.WARNING)
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
@@ -285,9 +289,6 @@ class GatewayService:
 
     @staticmethod
     async def graphql_gateway(username, request, request_id, start_time, path, url=None, retry=0):
-        """
-        External GraphQL gateway using gql client for optimized GraphQL handling.
-        """
         logger.info(f"{request_id} | GraphQL gateway processing request")
         current_time = backend_end_time = None
         try:
@@ -332,97 +333,34 @@ class GatewayService:
                     await validation_util.validate_graphql_request(api.get('api_id'), query, variables)
                 except Exception as e:
                     return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
-            async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
+            transport = AIOHTTPTransport(url=url, headers=headers)
+            async with Client(transport=transport, fetch_schema_from_transport=True) as session:
                 try:
-                    response = await client.post(
-                        url,
-                        json=body,
-                        headers=headers
-                    )
+                    result = await session.execute(gql(query), variable_values=variables)
                     backend_end_time = time.time() * 1000
-                    if response is None:
-                        logger.error(f"{request_id} | No response received from server")
-                        return GatewayService.error_response(request_id, 'GTW006', 'No response received from server', status=500)
-                    if not isinstance(response.status_code, int):
-                        logger.error(f"{request_id} | Invalid response status code: {response.status_code}")
-                        return GatewayService.error_response(request_id, 'GTW006', 'Invalid response status code', status=500)
-                    if response.status_code in [500, 502, 503, 504] and retry > 0:
+                    if retry > 0:
                         logger.error(f"{request_id} | GraphQL gateway failed retrying")
                         return await GatewayService.graphql_gateway(username, request, request_id, start_time, path, url, retry - 1)
-                    if response.status_code == 404:
-                        return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
-                    if response.status_code == 429:
-                        retry_after = response.headers.get('Retry-After', '1')
-                        try:
-                            retry_after = int(retry_after)
-                        except ValueError:
-                            retry_after = 1
-                        logger.warning(f"{request_id} | Rate limited, retrying after {retry_after} seconds")
-                        await asyncio.sleep(retry_after)
-                        return await GatewayService.graphql_gateway(username, request, request_id, start_time, path, url, retry)
-                    try:
-                        if not response.content:
-                            logger.error(f"{request_id} | Empty response content")
-                            return GatewayService.error_response(request_id, 'GTW013', 'Empty response content', status=500)
-                            
-                        response_content = response.json()
-                        if not isinstance(response_content, dict):
-                            logger.error(f"{request_id} | Invalid response format: not a JSON object")
-                            return GatewayService.error_response(request_id, 'GTW013', 'Invalid response format', status=500)
-                        if 'errors' in response_content:
-                            logger.error(f"{request_id} | GraphQL errors: {json.dumps(response_content['errors'])}")
-                            return ResponseModel(
-                                status_code=400,
-                                response_headers={"request_id": request_id},
-                                response=response_content
-                            ).dict()
-                        return ResponseModel(
-                            status_code=200,
-                            response_headers={"request_id": request_id},
-                            response=response_content
-                        ).dict()
-                    except json.JSONDecodeError as e:
-                        logger.error(f"{request_id} | Failed to parse GraphQL response: {str(e)}")
-                        return GatewayService.error_response(request_id, 'GTW013', 'Invalid JSON response', status=500)
-                    except Exception as e:
-                        logger.error(f"{request_id} | Failed to process GraphQL response: {str(e)}")
-                        return GatewayService.error_response(request_id, 'GTW013', 'Error processing response', status=500)
-                except httpx.ConnectError as e:
-                    error_msg = str(e)
-                    if "nodename nor servname provided" in error_msg:
-                        error_msg = f"Unable to resolve hostname for {url}. Please check the API server configuration."
-                    elif "Cannot connect to host" in error_msg:
-                        error_msg = f"Unable to connect to {url}. Please check if the API server is running and accessible."
-                    elif "Timeout" in error_msg:
-                        error_msg = f"Request timed out while connecting to {url}. Please try again later."
-                    else:
-                        error_msg = f"Error connecting to {url}: {error_msg}"
-                    logger.error(f"{request_id} | GraphQL gateway failed with code GTW006: {error_msg}")
-                    return GatewayService.error_response(request_id, 'GTW006', error_msg, status=500)
+                    logger.info(f"{request_id} | GraphQL gateway status code: 200")
+                    response_headers = {"request_id": request_id}
+                    for key, value in headers.items():
+                        if key.lower() in allowed_headers:
+                            response_headers[key] = value
+                    return ResponseModel(
+                        status_code=200,
+                        response_headers=response_headers,
+                        response=result
+                    ).dict()
                 except Exception as e:
-                    error_msg = f"Unexpected error: {str(e)}"
-                    logger.error(f"{request_id} | GraphQL gateway failed with code GTW006: {error_msg}")
+                    if retry > 0:
+                        logger.error(f"{request_id} | GraphQL gateway failed retrying")
+                        return await GatewayService.graphql_gateway(username, request, request_id, start_time, path, url, retry - 1)
+                    error_msg = str(e)[:255] if len(str(e)) > 255 else str(e)
                     return GatewayService.error_response(request_id, 'GTW006', error_msg, status=500)
-            logger.info(f"{request_id} | GraphQL gateway status code: {response.status_code}")
-            response_headers = {"request_id": request_id}
-            for key, value in response.headers.items():
-                if key.lower() in allowed_headers:
-                    response_headers[key] = value
-            return ResponseModel(
-                status_code=response.status_code,
-                response_headers=response_headers,
-                response=response_content
-            ).dict()
-        except httpx.TimeoutException:
-            return ResponseModel(
-                status_code=504,
-                response_headers={"request_id": request_id},
-                error_code="GTW010",
-                error_message="Gateway timeout"
-            ).dict()
         except Exception as e:
             logger.error(f"{request_id} | GraphQL gateway failed with code GTW006: {str(e)}")
-            return GatewayService.error_response(request_id, 'GTW006', 'Internal server error', status=500)
+            error_msg = str(e)[:255] if len(str(e)) > 255 else str(e)
+            return GatewayService.error_response(request_id, 'GTW006', error_msg, status=500)
         finally:
             if current_time:
                 logger.info(f"{request_id} | Gateway time {current_time - start_time}ms")
@@ -496,7 +434,6 @@ class GatewayService:
                 generated_dir = os.path.join(project_root, 'generated')
                 if generated_dir not in sys.path:
                     sys.path.insert(0, generated_dir)
-                
                 try:
                     pb2_module = importlib.import_module(f"{module_name}_pb2")
                     service_module = importlib.import_module(f"{module_name}_pb2_grpc")
