@@ -1,8 +1,9 @@
 from fastapi import Request, HTTPException
-from fastapi_jwt_auth import AuthJWT
+from jose import jwt, JWTError
 from utils.doorman_cache_util import doorman_cache
 from services.user_service import UserService
 from utils.database import user_collection
+from utils.auth_util import auth_required
 
 import asyncio
 import time
@@ -23,8 +24,9 @@ def duration_to_seconds(duration: str) -> int:
         duration = duration[:-1]
     return mapping.get(duration.lower(), 60)
 
-async def limit_and_throttle(Authorize: AuthJWT, request: Request):
-    username = Authorize.get_jwt_subject()
+async def limit_and_throttle(request: Request):
+    payload = await auth_required(request)
+    username = payload.get("sub")
     redis_client = request.app.state.redis
     user = doorman_cache.get_cache("user_cache", username)
     if not user:

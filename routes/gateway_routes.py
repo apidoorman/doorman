@@ -4,11 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-from fastapi import APIRouter, Request, Depends
-from fastapi_jwt_auth import AuthJWT
-from slowapi.errors import RateLimitExceeded
+from fastapi import APIRouter, HTTPException, Request, Depends
 
 from models.response_model import ResponseModel
+from utils import api_util
 from utils.doorman_cache_util import doorman_cache
 from utils.limit_throttle_util import limit_and_throttle
 from utils.auth_util import auth_required
@@ -18,12 +17,14 @@ from utils.role_util import platform_role_required_bool
 from utils.subscription_util import subscription_required
 from utils.health_check_util import check_mongodb, check_redis, get_memory_usage, get_active_connections, get_uptime
 from services.gateway_service import GatewayService
-from models.request_model import RequestModel
+from utils.validation_util import validation_util
 
 import uuid
 import time
 import logging
 import json
+import re
+from datetime import datetime
 
 gateway_router = APIRouter()
 
@@ -31,84 +32,42 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 @gateway_router.api_route("/status", methods=["GET"],
-    description="Check if the gateway is online and all dependencies are healthy",
-    responses={
-        200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "healthy",
-                        "version": "0.0.1",
-                        "dependencies": {
-                            "mongodb": "connected",
-                            "redis": "connected",
-                            "cache": "operational"
-                        },
-                        "metrics": {
-                            "memory_usage": "45%",
-                            "active_connections": 10,
-                            "uptime": "2h 15m"
-                        }
-                    }
-                }
-            }
-        },
-        503: {
-            "description": "Service Unavailable",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "unhealthy",
-                        "version": "0.0.1",
-                        "dependencies": {
-                            "mongodb": "disconnected",
-                            "redis": "connected",
-                            "cache": "operational"
-                        },
-                        "metrics": {
-                            "memory_usage": "45%",
-                            "active_connections": 10,
-                            "uptime": "2h 15m"
-                        }
-                    }
-                }
-            }
-        }
-    }
-)
-async def rest_gateway_status():
+    description="Check if the gateway is online and healthy",
+    response_model=ResponseModel)
+async def status():
+    """Check if the gateway is online and healthy"""
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
-        mongodb_status = "connected" if await check_mongodb() else "disconnected"
-        redis_status = "connected" if await check_redis() else "disconnected"
-        metrics = {
-            "memory_usage": get_memory_usage(),
-            "active_connections": get_active_connections(),
-            "uptime": get_uptime()
-        }
-        status = "healthy" if mongodb_status == "connected" and redis_status == "connected" else "unhealthy"
-        response = {
-            "status": status,
-            "version": "0.0.1",
-            "dependencies": {
+        mongodb_status = await check_mongodb()
+        redis_status = await check_redis()
+        memory_usage = await get_memory_usage()
+        active_connections = await get_active_connections()
+        uptime = await get_uptime()
+        return ResponseModel(
+            status_code=200,
+            response_headers={"request_id": request_id},
+            response={
+                "status": "online",
                 "mongodb": mongodb_status,
                 "redis": redis_status,
-                "cache": "operational" if doorman_cache.is_operational() else "degraded"
-            },
-            "metrics": metrics
-        }
-        return process_response(ResponseModel(
-            status_code=200 if status == "healthy" else 503,
-            response=response
-        ).dict(), "rest")
+                "memory_usage": memory_usage,
+                "active_connections": active_connections,
+                "uptime": uptime
+            }
+        ).dict()
     except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        return process_response(ResponseModel(
-            status_code=503,
-            error_code="HLT001",
-            error_message="Health check failed"
-        ).dict(), "rest")
-    
+        logger.error(f"{request_id} | Status check failed: {str(e)}")
+        return ResponseModel(
+            status_code=500,
+            response_headers={"request_id": request_id},
+            error_code="GTW006",
+            error_message="Internal server error"
+        ).dict()
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Status check time {end_time - start_time}ms")
+
 @gateway_router.api_route("/caches", methods=["DELETE"],
     description="Clear all caches",
     dependencies=[
@@ -127,9 +86,11 @@ async def rest_gateway_status():
         }
     }
 )
-async def clear_all_caches(Authorize: AuthJWT = Depends()):
+async def clear_all_caches(request: Request):
     try:
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_gateway'):
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        if not await platform_role_required_bool(username, 'manage_gateway'):
             return process_response(ResponseModel(
                 status_code=403,
                 error_code="GTW008",
@@ -147,259 +108,185 @@ async def clear_all_caches(Authorize: AuthJWT = Depends()):
             error_message="An unexpected error occurred"
             ).dict(), "rest")
 
-@gateway_router.api_route(
-    "/rest/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-    description="REST API gateway",
-    dependencies=[
-        Depends(auth_required),
-        Depends(subscription_required)
-    ],
-    include_in_schema=False
-)
-async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
-    await group_required(request, Authorize, path)
-    request_id = str(uuid.uuid4())
-    start_time = time.time() * 1000
-    logger.info(f"{request_id} | Time: {time.strftime('%Y-%m-%d %H:%M:%S')}:{int(time.time() * 1000) % 1000}ms")
-    logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-    logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-    try:
-        await limit_and_throttle(Authorize, request)
-        content_type = request.headers.get("Content-Type", "")
-        if "application/json" in content_type:
-            body = await request.json()
-        elif "application/xml" in content_type or "text/xml" in content_type:
-            body = (await request.body()).decode("utf-8")
-        else:
-            try:
-                body = await request.json()
-            except Exception:
-                body = None
-        request_model = RequestModel(
-            method=request.method,
-            path=path,
-            headers=dict(request.headers),
-            body=body,
-            query_params=dict(request.query_params),
-            identity=Authorize.get_jwt_subject()
-        )
-        return process_response(await GatewayService.rest_gateway(Authorize, request_model, request_id, start_time), "rest")
-    except RateLimitExceeded as e:
-        return process_response(ResponseModel(
-            status_code=429,
-            response_headers={
-                "request_id": request_id
-            },
-            error_code="GTW009",
-            error_message="Rate limit exceeded"
-            ).dict(), "rest")
-    except ValueError:
-        return process_response(ResponseModel(
-            status_code=500,
-            response_headers={
-                "request_id": request_id
-            },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-            ).dict(), "rest")
-    finally:
-        end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-
-@gateway_router.api_route(
-    "/soap/{path:path}",
-    methods=["POST"],
-    description="SOAP API gateway",
-    dependencies=[
-        Depends(auth_required),
-        Depends(subscription_required)
-    ],
-    include_in_schema=False
-)
-async def soap_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
-    await group_required(request, Authorize, path)
-    request_id = str(uuid.uuid4())
-    start_time = time.time() * 1000
-    logger.info(f"{request_id} | Time: {time.strftime('%Y-%m-%d %H:%M:%S')}:{int(time.time() * 1000) % 1000}ms")
-    logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-    logger.info(f"{request_id} | Endpoint: POST {path}")
-    try:
-        await limit_and_throttle(Authorize, request)
-        response_payload = await GatewayService.soap_gateway(path, Authorize, request, request_id, start_time)
-        return process_response(response_payload, "soap")
-    except RateLimitExceeded:
-        return process_response(ResponseModel(
-            status_code=429,
-            response_headers={"request_id": request_id},
-            error_code="GTW009",
-            error_message="Rate limit exceeded"
-        ).dict(), "soap")
-    except ValueError:
-        return process_response(ResponseModel(
-            status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-        ).dict(), "soap")
-    finally:
-        end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-
-@gateway_router.api_route(
-    "/graphql/{api_name}",
-    methods=["POST"],
-    description="GraphQL API gateway",
-    dependencies=[
-        Depends(auth_required),
-        Depends(subscription_required)
-    ],
-    include_in_schema=False
-)
-async def graphql_gateway(api_name: str, request: Request, Authorize: AuthJWT = Depends()):
-    request_id = str(uuid.uuid4())
-    start_time = time.time() * 1000
-    logger.info(f"{request_id} | Time: {time.strftime('%Y-%m-%d %H:%M:%S')}:{int(time.time() * 1000) % 1000}ms")
-    logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-    logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-    try:
-        await limit_and_throttle(Authorize, request)
-        body = await request.json()
-        if not isinstance(body, dict) or 'query' not in body:
-            return process_response(ResponseModel(
-                status_code=400,
-                response_headers={"request_id": request_id},
-                error_code="GTW011",
-                error_message="Invalid GraphQL request: missing query"
-            ).dict(), "graphql")
-        api_version = request.headers.get('X-API-Version', 'v1')
-        api_name_version = f'{api_name}/{api_version}'
-        await group_required(request, Authorize, api_name_version)
-        try:
-            request_model = RequestModel(
-                method=request.method,
-                path=f"{api_name}",
-                headers=dict(request.headers),
-                body=json.dumps(body),
-                query_params=dict(request.query_params),
-                identity=Authorize.get_jwt_subject()
-            )
-        except Exception as e:
-            logger.error(f"{request_id} | Failed to create request model: {str(e)}")
-            return process_response(ResponseModel(
-                status_code=500,
-                response_headers={"request_id": request_id},
-                error_code="GTW014",
-                error_message="Failed to process request"
-            ).dict(), "graphql")
-        return process_response(await GatewayService.graphql_gateway(Authorize, request_model, request_id, start_time), "graphql")
-    except RateLimitExceeded as e:
-        return process_response(ResponseModel(
-            status_code=429,
-            response_headers={
-                "request_id": request_id
-            },
-            error_code="GTW009",
-            error_message="Rate limit exceeded"
-            ).dict(), "graphql")
-    except ValueError:
-        return process_response(ResponseModel(
-            status_code=500,
-            response_headers={
-                "request_id": request_id
-            },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-            ).dict(), "graphql")
-    finally:
-        end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-
-@gateway_router.api_route(
-    "/grpc/{path:path}",
-    methods=["POST"],
-    description="gRPC API gateway",
-    dependencies=[
-        Depends(auth_required),
-        Depends(subscription_required)
-    ],
-    include_in_schema=False
-)
-async def grpc_gateway(path: str, request: Request, Authorize: AuthJWT = Depends()):
+@gateway_router.api_route("/rest/{path:path}", methods=["GET", "POST", "PUT", "DELETE"],
+    description="REST gateway endpoint",
+    response_model=ResponseModel)
+async def gateway(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        await subscription_required(request)
+        await group_required(request)
+        await limit_and_throttle(request)
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        api_name = path.split('/')[0]
-        api_version = request.headers.get('X-API-Version', 'v1')
-        api_path = f"{api_name}/{api_version}"
-        logger.info(f"{request_id} | Processing gRPC request for API: {api_path}")
-        try:
-            await group_required(request, Authorize, api_path)
-        except Exception as e:
-            logger.error(f"{request_id} | Group required check failed: {str(e)}")
-            return process_response(ResponseModel(
-                status_code=403,
-                response_headers={"request_id": request_id},
-                error_code="GTW013",
-                error_message="Access denied"
-            ).dict(), "grpc")
-        try:
-            await limit_and_throttle(Authorize, request)
-        except Exception as e:
-            logger.error(f"{request_id} | Rate limit check failed: {str(e)}")
-            return process_response(ResponseModel(
-                status_code=429,
-                response_headers={"request_id": request_id},
-                error_code="GTW009",
-                error_message="Rate limit exceeded"
-            ).dict(), "grpc")
-        try:
-            content_type = request.headers.get("Content-Type", "")
-            if "application/json" in content_type:
-                body = await request.json()
-            else:
-                try:
-                    body = await request.json()
-                except Exception as e:
-                    logger.error(f"{request_id} | Failed to parse request body: {str(e)}")
-                    return process_response(ResponseModel(
-                        status_code=400,
-                        response_headers={"request_id": request_id},
-                        error_code="GTW011",
-                        error_message="Invalid request body format"
-                    ).dict(), "grpc")
-        except Exception as e:
-            logger.error(f"{request_id} | Failed to read request body: {str(e)}")
-            return process_response(ResponseModel(
-                status_code=400,
-                response_headers={"request_id": request_id},
-                error_code="GTW011",
-                error_message="Failed to read request body"
-            ).dict(), "grpc")
-        request_model = RequestModel(
-            method=request.method,
-            path=path,
-            headers=dict(request.headers),
-            body=json.dumps(body) if body else None,
-            query_params=dict(request.query_params),
-            identity=Authorize.get_jwt_subject()
-        )
-        logger.info(f"{request_id} | Forwarding request to gRPC gateway service")
-        return process_response(await GatewayService.grpc_gateway(Authorize, request_model, request_id, start_time), "grpc")
-    except RateLimitExceeded as e:
-        logger.error(f"{request_id} | Rate limit exceeded: {str(e)}")
+        return process_response(await GatewayService.rest_gateway(username, request, request_id, start_time, path), "rest")
+    except HTTPException as e:
         return process_response(ResponseModel(
-            status_code=429,
+            status_code=e.status_code,
             response_headers={
                 "request_id": request_id
             },
-            error_code="GTW009",
-            error_message="Rate limit exceeded"
-            ).dict(), "grpc")
+            error_code=e.detail,
+            error_message=e.detail
+        ).dict(), "rest")
     except Exception as e:
-        logger.error(f"{request_id} | Unexpected error in gRPC gateway: {str(e)}")
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "rest")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@gateway_router.api_route("/soap/{path:path}", methods=["POST"],
+    description="SOAP gateway endpoint",
+    response_model=ResponseModel)
+async def soap_gateway(request: Request, path: str):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        await subscription_required(request)
+        await group_required(request)
+        await limit_and_throttle(request)
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        return process_response(await GatewayService.soap_gateway(username, request, request_id, start_time, path), "soap")
+    except HTTPException as e:
+        return process_response(ResponseModel(
+            status_code=e.status_code,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code=e.detail,
+            error_message=e.detail
+        ).dict(), "rest")
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "soap")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@gateway_router.api_route("/graphql/{path:path}", methods=["POST"],
+    description="GraphQL gateway endpoint",
+    response_model=ResponseModel)
+async def graphql_gateway(request: Request, path: str):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        if not request.headers.get('X-API-Version'):
+            raise HTTPException(status_code=400, detail="X-API-Version header is required")
+        await subscription_required(request)
+        await group_required(request)
+        await limit_and_throttle(request)
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        api_name = re.sub(r"^.*/", "",request.url.path)
+        api_key = doorman_cache.get_cache('api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        api = await api_util.get_api(api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        if api and api.get('validation_enabled'):
+            body = await request.json()
+            query = body.get('query')
+            variables = body.get('variables', {})
+            try:
+                await validation_util.validate_graphql_request(api.get('api_id'), query, variables)
+            except Exception as e:
+                return process_response(ResponseModel(
+                    status_code=400,
+                    response_headers={"request_id": request_id},
+                    error_code="GTW011",
+                    error_message=str(e)
+                ).dict(), "graphql")
+        return process_response(await GatewayService.graphql_gateway(username, request, request_id, start_time, path), "graphql")
+    except HTTPException as e:
+        return process_response(ResponseModel(
+            status_code=e.status_code,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code=e.detail,
+            error_message=e.detail
+        ).dict(), "rest")
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "graphql")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@gateway_router.api_route("/grpc/{path:path}", methods=["POST"],
+    description="gRPC gateway endpoint",
+    response_model=ResponseModel)
+async def grpc_gateway(request: Request, path: str):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        if not request.headers.get('X-API-Version'):
+            raise HTTPException(status_code=400, detail="X-API-Version header is required")
+        await subscription_required(request)
+        await group_required(request)
+        await limit_and_throttle(request)
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        api_name = re.sub(r"^.*/", "",request.url.path)
+        api_key = doorman_cache.get_cache('api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        api = await api_util.get_api(api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        if api and api.get('validation_enabled'):
+            body = await request.json()
+            request_data = json.loads(body.get('data', '{}'))
+            try:
+                await validation_util.validate_grpc_request(api.get('api_id'), request_data)
+            except Exception as e:
+                return process_response(ResponseModel(
+                    status_code=400,
+                    response_headers={"request_id": request_id},
+                    error_code="GTW011",
+                    error_message=str(e)
+                ).dict(), "grpc")
+        return process_response(await GatewayService.grpc_gateway(username, request, request_id, start_time, path), "grpc")
+    except HTTPException as e:
+        return process_response(ResponseModel(
+            status_code=e.status_code,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code=e.detail,
+            error_message=e.detail
+        ).dict(), "rest")
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={

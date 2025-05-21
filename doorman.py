@@ -8,8 +8,7 @@ from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi_jwt_auth import AuthJWT
-from fastapi_jwt_auth.exceptions import AuthJWTException
+from jose import jwt, JWTError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
@@ -83,22 +82,10 @@ logger.addHandler(log_file_handler)
 
 class Settings(BaseSettings):
     mongo_db_uri: str = os.getenv("MONGO_DB_URI")
-
-    authjwt_secret_key: str = os.getenv("JWT_SECRET_KEY")
-    authjwt_token_location: set = {"cookies"}
-    authjwt_cookie_secure: bool = https_only
-    authjwt_cookie_domain: str = domain
-    authjwt_cookie_path: str = "/"
-    authjwt_cookie_samesite: str = 'lax'
-    authjwt_cookie_csrf_protect: bool = https_only
-    authjwt_refresh_cookie_path: str = "/refresh"
-
-    authjwt_access_token_expires: timedelta = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRES_MINUTES", 15)))
-    authjwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", 30)))
-
-@AuthJWT.load_config
-def get_config():
-    return Settings()
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY")
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expires: timedelta = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRES_MINUTES", 15)))
+    jwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", 30)))
 
 async def automatic_purger(interval_seconds):
     while True:
@@ -114,12 +101,12 @@ async def startup_event():
     )
     asyncio.create_task(automatic_purger(1800))
 
-@doorman.exception_handler(AuthJWTException)
-async def authjwt_exception_handler(exc: AuthJWTException):
+@doorman.exception_handler(JWTError)
+async def jwt_exception_handler(exc: JWTError):
     return process_response(ResponseModel(
-        status_code=exc.status_code,
+        status_code=401,
         error_code="JWT001",
-        error_message=exc.message
+        error_message="Invalid token"
     ).dict(), "rest")
 
 @doorman.exception_handler(500)
@@ -169,7 +156,6 @@ def start():
         f.write(str(process.pid))
     logger.info(f"Starting doorman with PID {process.pid}.")
 
-
 def stop():
     if not os.path.exists(PID_FILE):
         logger.info("No running instance found")
@@ -206,6 +192,20 @@ def run():
         ssl_keyfile=os.getenv("SSL_KEYFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None
     )
 
+def main():
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    try:
+        uvicorn.run(
+            "doorman:doorman",
+            host=host,
+            port=port,
+            reload=os.getenv("DEBUG", "false").lower() == "true"
+        )
+    except Exception as e:
+        logger.error(f"Failed to start server: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "stop":
         stop()
@@ -214,4 +214,4 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "run":
         run()
     else:
-        print("Invalid command. Use 'start' or 'stop'.")
+        main()

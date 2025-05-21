@@ -30,10 +30,11 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - ✅ SOAP Support
 - ✅ GraphQL Support
 - ✅ gRPC Support
-- 🔜 Request Validation
+- ✅ Request Validation
 - 🔜 Transformation
 - 🔜 Field Encryption
 - 🔜 Orchestration
+- 🔜 Open-Soruce UI
 
 ## Coming Enhancements
 
@@ -43,7 +44,6 @@ REST:
 - SSE support
 
 SOAP:
-- WSDL validation
 - SOAP attachment handling
 - MTOM/DIME support
 - SOAP security
@@ -52,10 +52,8 @@ GraphQL:
 - Subscription support
 - File upload handling
 - Query batching
-- Schema validation
 
 gRPC:
-- Streaming support
 - gRPC-Web
 - Reflection
 - Health checks
@@ -123,6 +121,11 @@ DEV_RELOAD=False # Helpful when running in console for debug
 SSL_CERTFILE=./certs/localhost.crt # Update to your cert path if using HTTPS_ONlY
 SSL_KEYFILE=./certs/localhost.key # Update to your key path if using HTTPS_ONlY
 PID_FILE=Doorman.pid
+
+#UI
+ENABLE_UI=true
+UI_PORT=8501  # Optional, defaults to 8501
+API_BASE_URL=https://localhost:8000
 ```
 
 Create and give permissions to folders
