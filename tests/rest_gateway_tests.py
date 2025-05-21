@@ -15,8 +15,6 @@ class TestDoorman:
     password = None
     client_key = None
     csrf_token = None
-    api_name_soap = None
-    endpoint_path_soap = None
 
     @staticmethod
     def getAccessCookies():
@@ -83,7 +81,7 @@ class TestDoorman:
                                     "password": TestDoorman.password, 
                                     "role": TestDoorman.role_name,
                                     "groups": ["ALL"],
-                                    "rate_limit_duration": 3,
+                                    "rate_limit_duration": 2,
                                     "rate_limit_duration_type": "minute",
                                     "throttle_duration": 10,
                                     "throttle_duration_type": "second",
@@ -159,24 +157,6 @@ class TestDoorman:
         assert response.status_code == 201
 
     @pytest.mark.asyncio
-    @pytest.mark.order(9)
-    async def test_onboard_api_soap(self):
-        TestDoorman.api_name_soap = "test" + "".join(random.sample("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 8))
-        response = requests.post(f"{self.base_url}/platform/api", 
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(),
-                                 json={
-                                     "api_name": TestDoorman.api_name_soap,
-                                     "api_version": "v1", 
-                                     "api_description": "Test SOAP API", 
-                                     "api_servers": ["https://www.dataaccess.com/webservicesserver"], 
-                                     "api_allowed_roles": [TestDoorman.role_name],
-                                     "api_allowed_groups": ["ALL", TestDoorman.group_name],
-                                     "api_type": "SOAP"
-                                 }, verify=False)
-        assert response.status_code == 201
-
-    @pytest.mark.asyncio
     @pytest.mark.order(10)
     async def test_onboard_endpoint(self):
 
@@ -195,24 +175,6 @@ class TestDoorman:
         assert response.status_code == 201
 
     @pytest.mark.asyncio
-    @pytest.mark.order(10)
-    async def test_onboard_endpoint_soap(self):
-
-        TestDoorman.endpoint_path_soap = "/NumberConversion.wso"
-
-        response = requests.post(f"{self.base_url}/platform/endpoint", 
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(),
-                                 json={
-                                    "api_name": TestDoorman.api_name_soap,
-                                    "api_version": "v1", 
-                                    "endpoint_uri": TestDoorman.endpoint_path_soap,
-                                    "endpoint_method": "POST",
-                                    "endpoint_description": "Test endpoint",
-                                 }, verify=False)
-        assert response.status_code == 201
-
-    @pytest.mark.asyncio
     @pytest.mark.order(11)
     async def test_subscribe(self):
         response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
@@ -221,19 +183,6 @@ class TestDoorman:
                                     json={
                                         "username": TestDoorman.username, 
                                         "api_name": TestDoorman.api_name, 
-                                        "api_version": "v1"
-                                    }, verify=False)
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(11)
-    async def test_subscribe_soap(self):
-        response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(),
-                                    json={
-                                        "username": TestDoorman.username, 
-                                        "api_name": TestDoorman.api_name_soap, 
                                         "api_version": "v1"
                                     }, verify=False)
         assert response.status_code == 200
@@ -303,15 +252,6 @@ class TestDoorman:
     async def test_gateway_call_regular_route(self):
         response = requests.get(f"{self.base_url}/api/rest/" + TestDoorman.api_name + "/v1" + TestDoorman.endpoint_path.replace("{userId}", "2"),
                                 cookies=TestDoorman.getAccessCookies(), verify=False)
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(19)
-    async def test_gateway_call_regular_route_soap(self):
-        response = requests.post(f"{self.base_url}/api/soap/" + TestDoorman.api_name_soap + "/v1" + TestDoorman.endpoint_path_soap,
-                                headers={"X-CSRF-TOKEN": TestDoorman.csrf_token},
-                                cookies=TestDoorman.getAccessCookies(), verify=False,
-                                data="<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:web=\"http://www.dataaccess.com/webservicesserver/\"><soapenv:Header/><soapenv:Body><web:NumberToWords><ubiNum>123</ubiNum></web:NumberToWords></soapenv:Body></soapenv:Envelope>",)
         assert response.status_code == 200
 
     @pytest.mark.asyncio

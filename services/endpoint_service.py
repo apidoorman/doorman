@@ -7,6 +7,7 @@ See https://github.com/pypeople-dev/doorman for more information
 from models.create_endpoint_validation_model import CreateEndpointValidationModel
 from models.response_model import ResponseModel
 from models.update_endpoint_model import UpdateEndpointModel
+from models.update_endpoint_validation_model import UpdateEndpointValidationModel
 from utils.database import endpoint_collection, api_collection, endpoint_validation_collection
 from utils.cache_manager_util import cache_manager
 from utils.doorman_cache_util import doorman_cache
@@ -308,3 +309,95 @@ class EndpointService:
             status_code=201,
             message="Endpoint validation created successfully"
         ).dict()
+
+    @staticmethod
+    async def get_endpoint_validation(endpoint_id, request_id):
+        """
+        Get an endpoint validation by endpoint ID.
+        """
+        logger.info(request_id + " | Getting endpoint validation: " + endpoint_id)
+        validation = doorman_cache.get_cache('endpoint_validation_cache', endpoint_id)
+        if not validation:
+            validation = endpoint_validation_collection.find_one({
+                'endpoint_id': endpoint_id
+            })
+            if not validation:
+                logger.error(request_id + " | Endpoint validation retrieval failed with code END018")
+                return ResponseModel(
+                    status_code=400,
+                    error_code="END018",
+                    error_message="Endpoint validation does not exist"
+                ).dict()
+        logger.info(request_id + " | Endpoint validation retrieval successful")
+        return ResponseModel(
+            status_code=200,
+            response=validation
+        ).dict()
+        
+    @staticmethod
+    async def delete_endpoint_validation(endpoint_id, request_id):
+        """
+        Delete an endpoint validation by endpoint ID.
+        """
+        logger.info(request_id + " | Deleting endpoint validation: " + endpoint_id)
+        delete_result = endpoint_validation_collection.delete_one({
+            'endpoint_id': endpoint_id
+        })
+        if not delete_result.acknowledged:
+            logger.error(request_id + " | Endpoint validation deletion failed with code END019")
+            return ResponseModel(
+                status_code=400,
+                error_code="END019",
+                error_message="Unable to delete endpoint validation"
+            ).dict()
+        logger.info(request_id + " | Endpoint validation deletion successful")
+        return ResponseModel(
+            status_code=200,
+            message="Endpoint validation deleted successfully"
+        ).dict() 
+
+    @staticmethod
+    async def update_endpoint_validation(endpoint_id, data: UpdateEndpointValidationModel, request_id):
+        """
+        Update an endpoint validation by endpoint ID.
+        """
+        logger.info(request_id + " | Updating endpoint validation: " + endpoint_id)
+        if not data.validation_enabled:
+            logger.error(request_id + " | Validation enabled is required")
+            return ResponseModel(
+                status_code=400,
+                error_code="END020",
+                error_message="Validation enabled is required"
+            ).dict()
+        if not data.validation_schema:
+            logger.error(request_id + " | Validation schema is required")
+            return ResponseModel(
+                status_code=400,
+                error_code="END021",
+                error_message="Validation schema is required"
+            ).dict()
+        if not endpoint_collection.find_one({
+            'endpoint_id': endpoint_id
+        }):
+            logger.error(request_id + " | Endpoint does not exist")
+            return ResponseModel(
+                status_code=400,
+                error_code="END022",
+                error_message="Endpoint does not exist"
+            ).dict()
+        update_result = endpoint_validation_collection.update_one({
+            'endpoint_id': endpoint_id
+        }, {
+            '$set': {
+                'validation_enabled': data.validation_enabled,
+                'validation_schema': data.validation_schema
+            }
+        })
+        if not update_result.acknowledged:
+            logger.error(request_id + " | Endpoint validation update failed with code END023")
+            return ResponseModel(
+                status_code=400,
+                error_code="END023",
+                error_message="Unable to update endpoint validation"
+            ).dict()
+        logger.info(request_id + " | Endpoint validation updated successfully")

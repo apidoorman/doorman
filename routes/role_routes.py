@@ -6,7 +6,6 @@ See https://github.com/pypeople-dev/doorman for more information
 
 from typing import List
 from fastapi import APIRouter, Depends, Request
-from fastapi_jwt_auth import AuthJWT
 
 from models.response_model import ResponseModel
 from models.role_model_response import RoleModelResponse
@@ -28,9 +27,6 @@ logger = logging.getLogger("doorman.gateway")
 
 @role_router.post("",
     description="Add role",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -45,13 +41,15 @@ logger = logging.getLogger("doorman.gateway")
         }
     }
 )
-async def create_role(api_data: CreateRoleModel, request: Request, Authorize: AuthJWT = Depends()):
+async def create_role(api_data: CreateRoleModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
+        if not await platform_role_required_bool(username, 'manage_roles'):
             logger.error(f"{request_id} | User does not have permission to create roles")
             return process_response(ResponseModel(
                 status_code=403,
@@ -61,7 +59,7 @@ async def create_role(api_data: CreateRoleModel, request: Request, Authorize: Au
                 error_code="ROLE009",
                 error_message="You do not have permission to create roles"
             ).dict(), "rest")
-        #if api_data.manage_gateway and not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_gateway'):
+        #if api_data.manage_gateway and not await platform_role_required_bool(username, 'manage_gateway'):
             #logger.error(f"{request_id} | User does not have permission to create a gateway manager role")
             #return process_response(ResponseModel(
             #    status_code=403,
@@ -85,9 +83,6 @@ async def create_role(api_data: CreateRoleModel, request: Request, Authorize: Au
     
 @role_router.put("/{role_name}",
     description="Update role",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -102,13 +97,15 @@ async def create_role(api_data: CreateRoleModel, request: Request, Authorize: Au
         }
     }
 )
-async def update_role(role_name: str, api_data: UpdateRoleModel, request: Request, Authorize: AuthJWT = Depends()):
+async def update_role(role_name: str, api_data: UpdateRoleModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
+        if not await platform_role_required_bool(username, 'manage_roles'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -134,9 +131,6 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
 
 @role_router.delete("/{role_name}",
     description="Delete role",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -151,13 +145,15 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
         }
     }
 )
-async def delete_role(role_name: str, request: Request, Authorize: AuthJWT = Depends()):
+async def delete_role(role_name: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_roles'):
+        if not await platform_role_required_bool(username, 'manage_roles'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -183,16 +179,15 @@ async def delete_role(role_name: str, request: Request, Authorize: AuthJWT = Dep
 
 @role_router.get("/all",
     description="Get all roles",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=List[RoleModelResponse]
 )
-async def get_roles(request: Request, Authorize: AuthJWT = Depends(), page: int = 1, page_size: int = 10):
+async def get_roles(request: Request, page: int = 1, page_size: int = 10):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await RoleService.get_roles(page, page_size, request_id), "rest")
     except Exception as e:
@@ -211,16 +206,15 @@ async def get_roles(request: Request, Authorize: AuthJWT = Depends(), page: int 
 
 @role_router.get("/{role_name}",
     description="Get role",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=RoleModelResponse
 )
-async def get_role(role_name: str, request: Request, Authorize: AuthJWT = Depends()):
+async def get_role(role_name: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await RoleService.get_role(role_name, request_id), "rest")
     except Exception as e:
