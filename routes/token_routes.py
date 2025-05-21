@@ -6,7 +6,6 @@ See https://github.com/pypeople-dev/doorman for more information
 
 from typing import List
 from fastapi import APIRouter, Depends, Request
-from fastapi_jwt_auth import AuthJWT
 
 from models.response_model import ResponseModel
 from models.user_tokens_model import UserTokenModel
@@ -28,9 +27,6 @@ logger = logging.getLogger("doorman.gateway")
 
 @token_router.post("",
     description="Create a token",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         201: {
@@ -45,13 +41,15 @@ logger = logging.getLogger("doorman.gateway")
         }
     }
 )
-async def create_token(token_data: TokenModel, request: Request, Authorize: AuthJWT = Depends()):
+async def create_token(token_data: TokenModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_tokens'):
             return process_response(
                 ResponseModel(
                     status_code=403,
@@ -75,9 +73,6 @@ async def create_token(token_data: TokenModel, request: Request, Authorize: Auth
 
 @token_router.put("/{api_token_group}",
     description="Update a token",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -92,13 +87,15 @@ async def create_token(token_data: TokenModel, request: Request, Authorize: Auth
         }
     }
 )
-async def update_token(api_token_group:str, token_data: TokenModel, request: Request, Authorize: AuthJWT = Depends()):
+async def update_token(api_token_group:str, token_data: TokenModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_tokens'):
             return process_response(
                 ResponseModel(
                     status_code=403,
@@ -122,9 +119,6 @@ async def update_token(api_token_group:str, token_data: TokenModel, request: Req
 
 @token_router.delete("/{api_token_group}",
     description="Update a token",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -139,13 +133,15 @@ async def update_token(api_token_group:str, token_data: TokenModel, request: Req
         }
     }
 )
-async def delete_token(api_token_group:str, request: Request, Authorize: AuthJWT = Depends()):
+async def delete_token(api_token_group:str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_tokens'):
             return process_response(
                 ResponseModel(
                     status_code=403,
@@ -169,9 +165,6 @@ async def delete_token(api_token_group:str, request: Request, Authorize: AuthJWT
 
 @token_router.post("/{username}",
     description="Add tokens",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -186,13 +179,15 @@ async def delete_token(api_token_group:str, request: Request, Authorize: AuthJWT
         }
     }
 )
-async def add_user_tokens(token_data: TokenModel, request: Request, Authorize: AuthJWT = Depends()):
+async def add_user_tokens(token_data: TokenModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_tokens'):
             return process_response(
                 ResponseModel(
                     status_code=403,
@@ -216,18 +211,17 @@ async def add_user_tokens(token_data: TokenModel, request: Request, Authorize: A
 
 @token_router.get("/all",
     description="Get all user tokens",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=List[UserTokenModel]
 )
-async def get_roles(request: Request, Authorize: AuthJWT = Depends(), page: int = 1, page_size: int = 10):
+async def get_roles(request: Request, page: int = 1, page_size: int = 10):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_tokens'):
             return process_response(
                 ResponseModel(
                     status_code=403,
@@ -251,18 +245,14 @@ async def get_roles(request: Request, Authorize: AuthJWT = Depends(), page: int 
 
 @token_router.get("/{username}",
     description="Get tokens for a user",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=UserTokenModel
 )
-async def get_tokens(username: str, request: Request, Authorize: AuthJWT = Depends()):
+async def get_tokens(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not Authorize.get_jwt_subject == username and not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_tokens'):
+        payload = await auth_required(request)
+        if not payload.get("sub") == username and not await platform_role_required_bool(payload.get("sub"), 'manage_tokens'):
             return process_response(
                 ResponseModel(
                     status_code=403,

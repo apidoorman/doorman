@@ -7,7 +7,7 @@ See https://github.com/pypeople-dev/doorman for more information
 from pydantic import BaseModel, Field
 from models.validation_schema_model import ValidationSchema
 
-class CreateEndpointValidationModel(BaseModel):
+class EndpointValidationModelResponse(BaseModel):
     
     endpoint_id: str = Field(..., description="Unique identifier for the endpoint, auto-generated", example="1299f720-e619-4628-b584-48a6570026cf")
     validation_enabled: bool = Field(..., description="Whether the validation is enabled", example=True)

@@ -6,7 +6,6 @@ See https://github.com/pypeople-dev/doorman for more information
 
 from typing import List
 from fastapi import APIRouter, Depends, Request
-from fastapi_jwt_auth import AuthJWT
 
 from models.group_model_response import GroupModelResponse
 from models.response_model import ResponseModel
@@ -28,9 +27,6 @@ logger = logging.getLogger("doorman.gateway")
 
 @group_router.post("",
     description="Add group",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -45,13 +41,15 @@ logger = logging.getLogger("doorman.gateway")
         }
     }
 )
-async def create_group(api_data: CreateGroupModel, request: Request, Authorize: AuthJWT = Depends()):
+async def create_group(api_data: CreateGroupModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
+        if not await platform_role_required_bool(username, 'manage_groups'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -77,9 +75,6 @@ async def create_group(api_data: CreateGroupModel, request: Request, Authorize: 
 
 @group_router.put("/{group_name}",
     description="Update group",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -94,13 +89,15 @@ async def create_group(api_data: CreateGroupModel, request: Request, Authorize: 
         }
     }
 )
-async def update_group(group_name: str, api_data: UpdateGroupModel, request: Request, Authorize: AuthJWT = Depends()):
+async def update_group(group_name: str, api_data: UpdateGroupModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
+        if not await platform_role_required_bool(username, 'manage_groups'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -126,9 +123,6 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
 
 @group_router.delete("/{group_name}",
     description="Delete group",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -143,13 +137,15 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
         }
     }
 )
-async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = Depends()):
+async def delete_group(group_name: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
+        if not await platform_role_required_bool(username, 'manage_groups'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -175,16 +171,15 @@ async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = D
 
 @group_router.get("/all",
     description="Get all groups",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=List[GroupModelResponse]
 )
-async def get_groups(request: Request, Authorize: AuthJWT = Depends(), page: int = 1, page_size: int = 10):
+async def get_groups(request: Request, page: int = 1, page_size: int = 10):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await GroupService.get_groups(page, page_size, request_id), "rest")
     except Exception as e:
@@ -201,19 +196,17 @@ async def get_groups(request: Request, Authorize: AuthJWT = Depends(), page: int
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-
 @group_router.get("/{group_name}",
     description="Get group",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=GroupModelResponse
 )
-async def get_group(group_name: str, request: Request, Authorize: AuthJWT = Depends()):
+async def get_group(group_name: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return process_response(await GroupService.get_group(group_name, request_id), "rest")
     except Exception as e:
