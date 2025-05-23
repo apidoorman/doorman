@@ -10,56 +10,17 @@
 ![Last Commit](https://img.shields.io/github/last-commit/apidoorman/doorman)
 ![GitHub issues](https://img.shields.io/github/issues/apidoorman/doorman)
 
-A lightweight API gateway for AI, REST, SOAP, GraphQL, and gRPC APIs. Fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.
-
 🔗 [doorman.so](https://doorman.so)
 
-No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. 🐍
-
+# Doorman API Gateway
+A lightweight API gateway for AI, REST, SOAP, GraphQL, and gRPC APIs. No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. This is your application’s gateway to the world. 🐍
 
 ## Features
-- ✅ Authentication & Authorization
-- ✅ Dynamic Routing
-- ✅ Role & Group Management
-- ✅ Rate Limiting & Throttling
-- ✅ Logging files
-- ✅ Caching with Redis
-- ✅ MongoDB Integration
-- ✅ REST Support
-- ✅ AI Support
-- ✅ SOAP Support
-- ✅ GraphQL Support
-- ✅ gRPC Support
-- ✅ Request Validation
-- 🔜 Transformation
-- 🔜 Field Encryption
-- 🔜 Orchestration
-- 🔜 Open-Soruce UI
+Doorman supports authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, and mongodb. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
+
 
 ## Coming Enhancements
-
-REST:
-- Multipart form handling
-- File upload support
-- SSE support
-
-SOAP:
-- SOAP attachment handling
-- MTOM/DIME support
-- SOAP security
-
-GraphQL:
-- Subscription support
-- File upload handling
-- Query batching
-
-gRPC:
-- gRPC-Web
-- Reflection
-- Health checks
-
-## Releases
-- [v0.0.1 - Initial testing release](https://github.com/apidoorman/doorman/releases) (TBD)
+Doorman will soon support transformation, field encryption, orchestration, and a new open-source ui. More features to be announced.
 
 
 ## Documentation
@@ -70,8 +31,8 @@ gRPC:
 🔗 [OpenAPI swagger](https://doorman.so/openapi.json)
 
 
-## Installation
-Ensure you have a MongoDB server and redis running.
+## Get Started
+Doorman is simple to setup. Just have redis and mongo db running. Then follow the few steps below.
 
 Clone Doorman repository
 
@@ -85,7 +46,7 @@ Install requirements
   pip install -r requirements.txt
 ```
 
-Set environment variables
+Set environment variables in a .env file
 ```bash
 # Startup admin should be used for setup only
 STARTUP_ADMIN_EMAIL=admin@localhost.com
@@ -121,11 +82,6 @@ DEV_RELOAD=False # Helpful when running in console for debug
 SSL_CERTFILE=./certs/localhost.crt # Update to your cert path if using HTTPS_ONlY
 SSL_KEYFILE=./certs/localhost.key # Update to your key path if using HTTPS_ONlY
 PID_FILE=Doorman.pid
-
-#UI
-ENABLE_UI=true
-UI_PORT=8501  # Optional, defaults to 8501
-API_BASE_URL=https://localhost:8000
 ```
 
 Create and give permissions to folders
@@ -146,7 +102,7 @@ Stop Doorman background process
   python doorman.py stop
 ```
 
-Run Doorman console instance
+Run Doorman console instance for debugging
     
 ```bash
   python doorman.py run
