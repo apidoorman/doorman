@@ -258,7 +258,7 @@ class GatewayService:
             backend_end_time = time.time() * 1000
             if http_response.status_code in [500, 502, 503, 504] and retry > 0:
                 logger.error(f"{request_id} | SOAP gateway failed retrying")
-                return await GatewayService.soap_gateway(path, username, request, request_id, start_time, path, url, retry - 1)
+                return await GatewayService.soap_gateway(username, request, request_id, start_time, path, url, retry - 1)
             if http_response.status_code == 404:
                 return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
             logger.info(f"{request_id} | SOAP gateway status code: {http_response.status_code}")
@@ -483,7 +483,7 @@ class GatewayService:
                 status_code = e.code()
                 if status_code == grpc.StatusCode.UNAVAILABLE and retry > 0:
                     logger.error(f"{request_id} | gRPC gateway failed retrying")
-                    return await GatewayService.grpc_gateway(Authorize, request, request_id, start_time, api_name, url, retry - 1)
+                    return await GatewayService.grpc_gateway(username, request, request_id, start_time, api_name, url, retry - 1)
                 error_message = e.details()
                 logger.error(f"{request_id} | gRPC error: {error_message}")
                 return ResponseModel(
