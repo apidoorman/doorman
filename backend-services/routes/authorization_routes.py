@@ -84,7 +84,13 @@ async def authorization(request: Request):
             response={"access_token": access_token}
         ).dict(), "rest")
         response.delete_cookie("access_token_cookie")
-        response.set_cookie(key="access_token_cookie", value=access_token, httponly=True)
+        response.set_cookie(
+            key="access_token_cookie",
+            value=access_token,
+            httponly=True,
+            secure=True,
+            samesite="Lax"
+        )
         return response
     except HTTPException as e:
         return process_response(ResponseModel(
@@ -151,7 +157,13 @@ async def extended_authorization(request: Request):
             },
             response={"refresh_token": refresh_token}
         ).dict(), "rest")
-        response.set_cookie(key="access_token_cookie", value=refresh_token, httponly=True)
+        response.set_cookie(
+            key="access_token_cookie",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="Lax"
+        )
         return response
     except HTTPException as e:
         return process_response(ResponseModel(
