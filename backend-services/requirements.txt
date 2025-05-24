@@ -9,8 +9,8 @@ python-dotenv>=1.0.1
 email-validator>=2.1.0.post1
 
 # FastAPI and server
-fastapi==0.95.2  # Pinned to specific version for compatibility
-starlette>=0.27.0,<0.28.0  # Compatible with FastAPI 0.95.2
+fastapi>=0.100.0  # Updated for compatibility with newer Starlette
+starlette>=0.40.0  # Updated to fix DoS vulnerability
 pydantic>=1.10.13,<2.0.0  # Keep v1 for compatibility
 uvicorn[standard]>=0.27.1
 aiohttp>=3.9.3
