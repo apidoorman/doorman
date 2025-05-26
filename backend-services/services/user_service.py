@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
+from typing import List
 from fastapi import HTTPException
 from models.response_model import ResponseModel
 from utils import password_util
@@ -326,3 +327,33 @@ class UserService:
             )
             doorman_cache.set_cache('user_subscription_cache', username, user_subscriptions)
         logger.info(f"{request_id} | Purge successful")
+
+
+    @staticmethod
+    async def get_all_users(page, page_size, request_id):
+        """
+        Get all users.
+        """
+        logger.info(f"{request_id} | Getting all users: Page={page} Page Size={page_size}")
+        skip = (page - 1) * page_size
+        cursor = user_collection.find().sort('username', 1).skip(skip).limit(page_size)
+        users = cursor.to_list(length=None)
+        if not users:
+            logger.error(f"{request_id} | User retrieval failed with code USR004")
+            return ResponseModel(
+                status_code=400,
+                error_code='USR004',
+                error_message='No users found'
+            ).dict()
+        for user in users:
+            if user.get('_id'): del user['_id']
+            if user.get('password'): del user['password']
+            for key, value in user.items():
+                if isinstance(value, bytes):
+                    user[key] = value.decode('utf-8')
+        logger.info(f"{request_id} | User retrieval successful")
+        print(users)
+        return ResponseModel(
+            status_code=200,
+            response={'users': users}
+        ).dict()
