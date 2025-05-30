@@ -42,18 +42,13 @@ const handleLogout = () => {
 };
 
 const UsersPage = () => {
-  const [theme, setTheme] = useState('light');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('username');
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  }, []);
+  useEffect(() => {}, []);
 
   useEffect(() => {
     fetchUsers();

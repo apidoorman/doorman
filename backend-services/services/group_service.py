@@ -179,16 +179,6 @@ class GroupService:
         skip = (page - 1) * page_size
         cursor = group_collection.find().sort('group_name', 1).skip(skip).limit(page_size)
         groups = cursor.to_list(length=None)
-        if not groups:
-            logger.error(request_id + " | Groups retrieval failed with code GRP002")
-            return ResponseModel(
-                status_code=404,
-                response_headers={
-                    "request_id": request_id
-                },
-                error_code='GRP002',
-                error_message='No groups found'
-            ).dict()
         for group in groups:
             if group.get('_id'): del group['_id']
         logger.info(request_id + " | Groups retrieval successful")
