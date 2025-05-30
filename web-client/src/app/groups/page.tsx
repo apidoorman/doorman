@@ -1,10 +1,12 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import Link from 'next/link';
 import './groups.css';
 
 interface Group {
+  group_name: ReactNode;
+  group_description: ReactNode;
   id: string;
   name: string;
   description: string;
@@ -66,12 +68,20 @@ const GroupsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/platform/groups`);
+      const response = await fetch(`http://localhost:3002/platform/group/all`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to load groups');
       }
       const data = await response.json();
-      setGroups(data);
+      const groupList = Array.isArray(data) ? data : (data.groups || data.response?.groups || []);
+      setGroups(groupList);
     } catch (err) {
       setError('Failed to load groups. Please try again later.');
       setGroups([]);
@@ -186,21 +196,13 @@ const GroupsPage = () => {
                   <tr>
                     <th>Name</th>
                     <th>Description</th>
-                    <th>Members</th>
-                    <th>Created By</th>
-                    <th>Created At</th>
-                    <th>Last Updated</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groups.map((group) => (
                     <tr key={group.id}>
-                      <td>{group.name}</td>
-                      <td>{group.description}</td>
-                      <td>{group.memberCount}</td>
-                      <td>{group.createdBy}</td>
-                      <td>{new Date(group.createdAt).toLocaleDateString()}</td>
-                      <td>{new Date(group.lastUpdated).toLocaleDateString()}</td>
+                      <td>{group.group_name}</td>
+                      <td>{group.group_description}</td>
                     </tr>
                   ))}
                 </tbody>

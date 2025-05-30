@@ -10,6 +10,8 @@ interface UserSettings {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
+  originalUsername: string;
+  originalEmail: string;
 }
 
 const menuItems = [
@@ -44,6 +46,8 @@ const SettingsPage = () => {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
+    originalUsername: '',
+    originalEmail: '',
   });
 
   useEffect(() => {
@@ -57,7 +61,14 @@ const SettingsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/user/settings');
+      const response = await fetch('http://localhost:3002/platform/user/me', {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to load user settings');
       }
@@ -66,6 +77,8 @@ const SettingsPage = () => {
         ...prev,
         username: data.username,
         email: data.email,
+        originalUsername: data.username,
+        originalEmail: data.email,
       }));
     } catch (err) {
       setError('Failed to load user settings. Please try again later.');
@@ -87,23 +100,63 @@ const SettingsPage = () => {
     setError(null);
     setSuccess(null);
 
-    if (settings.newPassword !== settings.confirmPassword) {
-      setError('New passwords do not match');
-      return;
-    }
-
     try {
       setLoading(true);
-      const response = await fetch('/api/user/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings),
-      });
 
-      if (!response.ok) {
-        throw new Error('Failed to update settings');
+      // Update user info if username or email changed
+      if (settings.username !== settings.originalUsername || settings.email !== settings.originalEmail) {
+        const userInfoResponse = await fetch(`http://localhost:3002/platform/user/${settings.originalUsername}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          },
+          body: JSON.stringify({
+            username: settings.username,
+            email: settings.email
+          })
+        });
+
+        if (!userInfoResponse.ok) {
+          const errorData = await userInfoResponse.json();
+          throw new Error(errorData.error_message || 'Failed to update user info');
+        }
+
+        // Update original values after successful update
+        setSettings(prev => ({
+          ...prev,
+          originalUsername: settings.username,
+          originalEmail: settings.email
+        }));
+      }
+
+      // Update password if new password is provided
+      if (settings.newPassword) {
+        if (settings.newPassword !== settings.confirmPassword) {
+          setError('New passwords do not match');
+          return;
+        }
+
+        const passwordResponse = await fetch(`http://localhost:3002/platform/user/${settings.username}/update-password`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          },
+          body: JSON.stringify({
+            old_password: settings.currentPassword,
+            new_password: settings.newPassword
+          })
+        });
+
+        if (!passwordResponse.ok) {
+          const errorData = await passwordResponse.json();
+          throw new Error(errorData.error_message || 'Failed to update password');
+        }
       }
 
       setSuccess('Settings updated successfully');
@@ -114,7 +167,7 @@ const SettingsPage = () => {
         confirmPassword: '',
       }));
     } catch (err) {
-      setError('Failed to update settings. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to update settings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -240,6 +293,8 @@ const SettingsPage = () => {
                     Save Changes
                   </button>
                 </div>
+                <br />
+                <div className="update-warning">Warning: Any settings changes will log you out.</div>
               </form>
             </div>
           )}

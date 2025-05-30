@@ -194,16 +194,6 @@ class RoutingService:
         skip = (page - 1) * page_size
         cursor = routing_collection.find().sort('client_key', 1).skip(skip).limit(page_size)
         routings = cursor.to_list(length=None)
-        if not routings:
-            logger.error(request_id + " | Routing retrieval failed with code RTG002")
-            return ResponseModel(
-                status_code=404,
-                response_headers={
-                    "request_id": request_id
-                },
-                error_code='RTG002',
-                error_message='No routings found'
-            ).dict()
         for route in routings:
             if route.get('_id'): del route['_id']
         logger.info(request_id + " | Routing retrieval successful")

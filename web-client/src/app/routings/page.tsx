@@ -55,12 +55,20 @@ const RoutingsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/platform/routings`);
+      const response = await fetch(`http://localhost:3002/platform/routing/all`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to load routings');
       }
       const data = await response.json();
-      setRoutings(data);
+      const routingList = Array.isArray(data) ? data : (data.routings || data.response?.routings || []);
+      setRoutings(routingList);
     } catch (err) {
       setError('Failed to load routings. Please try again later.');
       setRoutings([]);

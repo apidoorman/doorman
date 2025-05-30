@@ -338,13 +338,6 @@ class UserService:
         skip = (page - 1) * page_size
         cursor = user_collection.find().sort('username', 1).skip(skip).limit(page_size)
         users = cursor.to_list(length=None)
-        if not users:
-            logger.error(f"{request_id} | User retrieval failed with code USR004")
-            return ResponseModel(
-                status_code=400,
-                error_code='USR004',
-                error_message='No users found'
-            ).dict()
         for user in users:
             if user.get('_id'): del user['_id']
             if user.get('password'): del user['password']
@@ -352,7 +345,6 @@ class UserService:
                 if isinstance(value, bytes):
                     user[key] = value.decode('utf-8')
         logger.info(f"{request_id} | User retrieval successful")
-        print(users)
         return ResponseModel(
             status_code=200,
             response={'users': users}

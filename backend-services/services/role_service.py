@@ -177,16 +177,6 @@ class RoleService:
         skip = (page - 1) * page_size
         cursor = role_collection.find().sort('role_name', 1).skip(skip).limit(page_size)
         roles = cursor.to_list(length=None)
-        if not roles:
-            logger.error(request_id + " | Roles retrieval failed with code ROLE003")
-            return ResponseModel(
-                status_code=404,
-                response_headers={
-                    "request_id": request_id
-                },
-                error_code='ROLE003',
-                error_message='No roles found'
-            ).dict()
         for role in roles:
             if role.get('_id'): del role['_id']
         logger.info(request_id + " | Roles retrieval successful")

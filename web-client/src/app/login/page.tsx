@@ -60,6 +60,9 @@ const LoginPage = () => {
   return (
     <div className="login-page">
       <div className="container">
+        <div className="doorman-logo">
+          Doorman
+        </div>
         <div className="content">
           <div className="copy">
             <h1 className="title">Login</h1>
