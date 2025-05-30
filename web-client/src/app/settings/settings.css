@@ -263,3 +263,12 @@ body, html {
 .theme-mode-icon-settings:hover {
   opacity: 0.8;
 }
+
+.update-warning {
+  padding: 5px;
+  font-size: 12px;
+  color: #92400e;
+  background-color: #f59e0b;
+  border-radius: 5px;
+  margin-top: 10px;
+}

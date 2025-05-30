@@ -180,13 +180,6 @@ class ApiService:
         skip = (page - 1) * page_size
         cursor = api_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
         apis = cursor.to_list(length=None)
-        if not apis:
-            logger.error(request_id + " | APIs retrieval failed with code API004")
-            return ResponseModel(
-                status_code=400, 
-                error_code='API004', 
-                error_message='No APIs found'
-                ).dict()
         for api in apis:
             if api.get('_id'): del api['_id']
         logger.info(request_id + " | APIs retrieval successful")
