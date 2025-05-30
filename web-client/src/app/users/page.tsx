@@ -5,13 +5,19 @@ import Link from 'next/link';
 import './users.css';
 
 interface User {
-  id: string;
   username: string;
   email: string;
   role: string;
-  status: string;
-  lastLogin: string;
-  createdAt: string;
+  groups: string[];
+  rate_limit_duration: number;
+  rate_limit_duration_type: string;
+  throttle_duration: number;
+  throttle_duration_type: string;
+  throttle_wait_duration: number;
+  throttle_wait_duration_type: string;
+  throttle_queue_limit: number | null;
+  custom_attributes: Record<string, string>;
+  active: boolean;
 }
 
 const menuItems = [
@@ -36,18 +42,13 @@ const handleLogout = () => {
 };
 
 const UsersPage = () => {
-  const [theme, setTheme] = useState('light');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('username');
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  }, []);
+  useEffect(() => {}, []);
 
   useEffect(() => {
     fetchUsers();
@@ -57,12 +58,19 @@ const UsersPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/platform/users`);
+      const response = await fetch(`http://localhost:3002/platform/user/all?page=1&page_size=10`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to load users');
       }
       const data = await response.json();
-      setUsers(data);
+      setUsers(data.users);
     } catch (err) {
       setError('Failed to load users. Please try again later.');
       setUsers([]);
@@ -73,7 +81,6 @@ const UsersPage = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Implement search functionality
   };
 
   const handleSort = (sortField: string) => {
@@ -84,7 +91,7 @@ const UsersPage = () => {
       } else if (sortField === 'role') {
         return a.role.localeCompare(b.role);
       } else if (sortField === 'status') {
-        return a.status.localeCompare(b.status);
+        return a.active ? 1 : -1;
       }
       return 0;
     });
@@ -178,20 +185,26 @@ const UsersPage = () => {
                     <th>Username</th>
                     <th>Email</th>
                     <th>Role</th>
+                    <th>Groups</th>
+                    <th>Rate Limit</th>
+                    <th>Throttle</th>
                     <th>Status</th>
-                    <th>Last Login</th>
-                    <th>Created At</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.id}>
+                    <tr key={user.username}>
                       <td>{user.username}</td>
                       <td>{user.email}</td>
                       <td>{user.role}</td>
-                      <td>{user.status}</td>
-                      <td>{new Date(user.lastLogin).toLocaleDateString()}</td>
-                      <td>{new Date(user.createdAt).toLocaleDateString()}</td>
+                      <td>{user.groups.join(', ')}</td>
+                      <td>{`${user.rate_limit_duration} ${user.rate_limit_duration_type}`}</td>
+                      <td>{`${user.throttle_duration} ${user.throttle_duration_type}`}</td>
+                      <td>
+                        <span className={`status-badge ${user.active ? 'active' : 'inactive'}`}>
+                          {user.active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

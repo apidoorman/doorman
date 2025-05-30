@@ -1,10 +1,16 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Key, ReactNode } from 'react';
 import Link from 'next/link';
 import './apis.css';
 
 interface API {
+  api_version: ReactNode;
+  api_type: ReactNode;
+  api_description: ReactNode;
+  api_path: ReactNode;
+  api_id: Key | null | undefined;
+  api_name: ReactNode;
   id: string;
   name: string;
   version: string;
@@ -57,12 +63,20 @@ const APIsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/platform/apis`);
+      const response = await fetch(`http://localhost:3002/platform/api/all`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to load APIs');
       }
       const data = await response.json();
-      setApis(data);
+      const apiList = Array.isArray(data) ? data : (data.apis || data.response?.apis || []);
+      setApis(apiList);
     } catch (err) {
       setError('Failed to load APIs. Please try again later.');
       setApis([]);
@@ -79,12 +93,10 @@ const APIsPage = () => {
   const handleSort = (sortField: string) => {
     setSortBy(sortField);
     const sortedApis = [...apis].sort((a, b) => {
-      if (sortField === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortField === 'version') {
-        return a.version.localeCompare(b.version);
-      } else if (sortField === 'status') {
-        return a.status.localeCompare(b.status);
+      if (sortField === 'api_name') {
+        return (a.api_name as string).localeCompare(b.api_name as string);
+      } else if (sortField === 'api_version') {
+        return (a.api_version as string).localeCompare(b.api_version as string);
       }
       return 0;
     });
@@ -107,13 +119,13 @@ const APIsPage = () => {
         <aside className="apis-sidebar">
           <div className="apis-sidebar-title">Menu</div>
           <ul className="apis-sidebar-list">
-            {menuItems.map((item, idx) => (
+            {menuItems.map((item) => (
               item.href ? (
-                <li key={item.label} className={`apis-sidebar-item${idx === 1 ? ' active' : ''}`}>
+                <li key={`menu-${item.label}`} className={`apis-sidebar-item${item.label === 'APIs' ? ' active' : ''}`}>
                   <Link href={item.href} style={{ color: 'inherit', textDecoration: 'none', display: 'block', width: '100%' }}>{item.label}</Link>
                 </li>
               ) : (
-                <li key={item.label} className={`apis-sidebar-item${idx === 1 ? ' active' : ''}`}>{item.label}</li>
+                <li key={`menu-${item.label}`} className={`apis-sidebar-item${item.label === 'APIs' ? ' active' : ''}`}>{item.label}</li>
               )
             ))}
           </ul>
@@ -144,20 +156,23 @@ const APIsPage = () => {
             </form>
             <div className="apis-sort-group">
               <button 
-                className={`apis-sort-btn ${sortBy === 'name' ? 'active' : ''}`}
-                onClick={() => handleSort('name')}
+                key="sort-name"
+                className={`apis-sort-btn ${sortBy === 'api_name' ? 'active' : ''}`}
+                onClick={() => handleSort('api_name')}
               >
                 Name
               </button>
               <button 
-                className={`apis-sort-btn ${sortBy === 'version' ? 'active' : ''}`}
-                onClick={() => handleSort('version')}
+                key="sort-version"
+                className={`apis-sort-btn ${sortBy === 'api_version' ? 'active' : ''}`}
+                onClick={() => handleSort('api_version')}
               >
                 Version
               </button>
               <button 
-                className={`apis-sort-btn ${sortBy === 'status' ? 'active' : ''}`}
-                onClick={() => handleSort('status')}
+                key="sort-type"
+                className={`apis-sort-btn ${sortBy === 'api_type' ? 'active' : ''}`}
+                onClick={() => handleSort('api_type')}
               >
                 Status
               </button>
@@ -184,23 +199,21 @@ const APIsPage = () => {
                   <tr>
                     <th>Name</th>
                     <th>Version</th>
+                    <th>Path</th>
                     <th>Description</th>
-                    <th>Status</th>
-                    <th>Endpoints</th>
-                    <th>Last Updated</th>
+                    <th>Type</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {apis.map((api) => (
-                    <tr key={api.id}>
-                      <td>{api.name}</td>
+                  {apis.map((api, index) => (
+                    <tr key={api.api_id || `${api.api_name}-${api.api_version}-${index}`}>
+                      <td>{api.api_name}</td>
                       <td>
-                        <span className="apis-version-badge">{api.version}</span>
+                        <span className="apis-version-badge">{api.api_version}</span>
                       </td>
-                      <td>{api.description}</td>
-                      <td>{api.status}</td>
-                      <td>{api.endpoints}</td>
-                      <td>{new Date(api.lastUpdated).toLocaleDateString()}</td>
+                      <td>{api.api_path}</td>
+                      <td>{api.api_description}</td>
+                      <td>{api.api_type}</td>
                     </tr>
                   ))}
                 </tbody>
