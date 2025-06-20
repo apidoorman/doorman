@@ -2,13 +2,13 @@
 :root {
   --primary: #000b0f;
   --secondary: #ffffff;
-  --accent: #3b82f6;
+  --accent: #c8cbcf;
   --text: #18181b;
   --text-light: #6b7280;
   --background: #fafbfc;
   --card-bg: #ffffff;
   --border: #e5e7eb;
-  --gradient-start: #3b82f6;
+  --gradient-start: #808285;
   --gradient-end: #8b5cf6;
 }
 
@@ -87,24 +87,25 @@ body, html {
 .email,
 .password {
   width: 100%;
-  padding: 0.8rem;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-size: 0.875rem;
   transition: border-color 0.15s ease-in-out;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
 }
 
 .email:focus,
 .password:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #a7a7a7;
+  box-shadow: 0 0 0 3px rgba(132, 136, 143, 0.1);
 }
 
 .button {
   width: 100%;
   padding: 0.75rem;
-  background-color: #3b82f6;
+  background-color: #c4bfbf;
   color: white;
   border: none;
   border-radius: 4px;
@@ -115,7 +116,7 @@ body, html {
 }
 
 .button:hover {
-  background-color: #2563eb;
+  background-color: #909090;
 }
 
 .error-message {
@@ -151,7 +152,7 @@ body, html {
 }
 
 .link {
-  color: #3b82f6;
+  color: #3e3e3e;
   text-decoration: none;
 }
 
