@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import './users.css';
 
 interface User {
@@ -42,7 +43,9 @@ const handleLogout = () => {
 };
 
 const UsersPage = () => {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,10 +73,12 @@ const UsersPage = () => {
         throw new Error('Failed to load users');
       }
       const data = await response.json();
+      setAllUsers(data.users);
       setUsers(data.users);
     } catch (err) {
       setError('Failed to load users. Please try again later.');
       setUsers([]);
+      setAllUsers([]);
     } finally {
       setLoading(false);
     }
@@ -81,6 +86,18 @@ const UsersPage = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!searchTerm.trim()) {
+      setUsers(allUsers);
+      return;
+    }
+    
+    const filteredUsers = allUsers.filter(user => 
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.groups.some(group => group.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+    setUsers(filteredUsers);
   };
 
   const handleSort = (sortField: string) => {
@@ -96,6 +113,12 @@ const UsersPage = () => {
       return 0;
     });
     setUsers(sortedUsers);
+  };
+
+  const handleUserClick = (user: User) => {
+    // Store user data in sessionStorage for the detail page
+    sessionStorage.setItem('selectedUser', JSON.stringify(user));
+    router.push(`/user/${user.username}`);
   };
 
   return (
@@ -144,8 +167,8 @@ const UsersPage = () => {
             </form>
             <div className="users-sort-group">
               <button 
-                className={`users-sort-btn ${sortBy === 'name' ? 'active' : ''}`}
-                onClick={() => handleSort('name')}
+                className={`users-sort-btn ${sortBy === 'username' ? 'active' : ''}`}
+                onClick={() => handleSort('username')}
               >
                 Name
               </button>
@@ -193,13 +216,19 @@ const UsersPage = () => {
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.username}>
+                    <tr 
+                      key={user.username} 
+                      onClick={() => handleUserClick(user)}
+                      style={{ cursor: 'pointer' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
+                    >
                       <td>{user.username}</td>
                       <td>{user.email}</td>
                       <td>{user.role}</td>
-                      <td>{user.groups.join(', ')}</td>
-                      <td>{`${user.rate_limit_duration} ${user.rate_limit_duration_type}`}</td>
-                      <td>{`${user.throttle_duration} ${user.throttle_duration_type}`}</td>
+                      <td>{user.groups.length > 0 ? user.groups[0] : ''}</td>
+                      <td>{`${user.rate_limit_duration} ${user.rate_limit_duration_type}${user.rate_limit_duration_type.endsWith('minute') || user.rate_limit_duration_type.endsWith('second') || user.rate_limit_duration_type.endsWith('hour') ? 's' : ''}`}</td>
+                      <td>{`${user.throttle_duration} ${user.throttle_duration_type}${user.throttle_duration_type.endsWith('minute') || user.throttle_duration_type.endsWith('second') || user.throttle_duration_type.endsWith('hour') ? 's' : ''}`}</td>
                       <td>
                         <span className={`status-badge ${user.active ? 'active' : 'inactive'}`}>
                           {user.active ? 'Active' : 'Inactive'}
