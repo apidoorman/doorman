@@ -121,6 +121,13 @@ const UsersPage = () => {
     router.push(`/user/${user.username}`);
   };
 
+  const formatDuration = (duration: number | null | undefined, durationType: string | null | undefined) => {
+    if (!duration || !durationType) return 'Not set';
+    
+    const plural = duration !== 1 && (durationType.endsWith('minute') || durationType.endsWith('second') || durationType.endsWith('hour')) ? 's' : '';
+    return `${duration} ${durationType}${plural}`;
+  };
+
   return (
     <>
       <div className="users-topbar">
@@ -163,7 +170,9 @@ const UsersPage = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               <button type="submit" className="users-search-btn">Search</button>
-              <button type="button" className="users-add-btn">Add User</button>
+              <Link href="/users/add" className="users-add-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                Add User
+              </Link>
             </form>
             <div className="users-sort-group">
               <button 
@@ -227,8 +236,8 @@ const UsersPage = () => {
                       <td>{user.email}</td>
                       <td>{user.role}</td>
                       <td>{user.groups.length > 0 ? user.groups[0] : ''}</td>
-                      <td>{`${user.rate_limit_duration} ${user.rate_limit_duration_type}${user.rate_limit_duration_type.endsWith('minute') || user.rate_limit_duration_type.endsWith('second') || user.rate_limit_duration_type.endsWith('hour') ? 's' : ''}`}</td>
-                      <td>{`${user.throttle_duration} ${user.throttle_duration_type}${user.throttle_duration_type.endsWith('minute') || user.throttle_duration_type.endsWith('second') || user.throttle_duration_type.endsWith('hour') ? 's' : ''}`}</td>
+                      <td>{formatDuration(user.rate_limit_duration, user.rate_limit_duration_type)}</td>
+                      <td>{formatDuration(user.throttle_duration, user.throttle_duration_type)}</td>
                       <td>
                         <span className={`status-badge ${user.active ? 'active' : 'inactive'}`}>
                           {user.active ? 'Active' : 'Inactive'}
