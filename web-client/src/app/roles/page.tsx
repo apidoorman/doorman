@@ -200,8 +200,8 @@ const RolesPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {roles.map((role) => (
-                    <tr key={role.id}>
+                  {roles.map((role, index) => (
+                    <tr key={`${role.id}-${index}`}>
                       <td>{role.role_name}</td>
                       <td>{role.role_description}</td>
                     </tr>
