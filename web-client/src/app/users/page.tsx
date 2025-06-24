@@ -118,7 +118,7 @@ const UsersPage = () => {
   const handleUserClick = (user: User) => {
     // Store user data in sessionStorage for the detail page
     sessionStorage.setItem('selectedUser', JSON.stringify(user));
-    router.push(`/user/${user.username}`);
+    router.push(`/users/${user.username}`);
   };
 
   const formatDuration = (duration: number | null | undefined, durationType: string | null | undefined) => {
