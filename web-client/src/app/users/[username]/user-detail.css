@@ -274,12 +274,12 @@ body, html {
 }
 
 .error-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  gap: 16px;
+  height: 50px;
+  margin-bottom: 24px;
+  align-items: left;
+  justify-content: left;
+  display: left;
+  max-width: 800px;
 }
 
 .error-message {
