@@ -219,7 +219,7 @@ const RoutingsPage = () => {
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
                     >
-                      <td><b>{routing.routing_name}</b></td>
+                      <td>{routing.routing_name}</td>
                       <td>{routing.client_key}</td>
                       <td>{routing.routing_description || 'No description'}</td>
                       <td>
