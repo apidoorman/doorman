@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import './routings.css';
 
 interface Routing {
-  id: string;
-  name: string;
-  active: boolean;
-  host: string;
-  lastUpdated: string;
+  routing_name: string;
+  routing_servers: string[];
+  routing_description: string;
+  client_key: string;
 }
 
 const menuItems = [
@@ -34,12 +34,14 @@ const handleLogout = () => {
 };
 
 const RoutingsPage = () => {
+  const router = useRouter();
   const [theme, setTheme] = useState('light');
   const [routings, setRoutings] = useState<Routing[]>([]);
+  const [allRoutings, setAllRoutings] = useState<Routing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name');
+  const [sortBy, setSortBy] = useState('routing_name');
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -55,7 +57,7 @@ const RoutingsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`http://localhost:3002/platform/routing/all`, {
+      const response = await fetch(`http://localhost:3002/platform/routing/all?page=1&page_size=10`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
@@ -68,10 +70,12 @@ const RoutingsPage = () => {
       }
       const data = await response.json();
       const routingList = Array.isArray(data) ? data : (data.routings || data.response?.routings || []);
+      setAllRoutings(routingList);
       setRoutings(routingList);
     } catch (err) {
       setError('Failed to load routings. Please try again later.');
       setRoutings([]);
+      setAllRoutings([]);
     } finally {
       setLoading(false);
     }
@@ -79,22 +83,39 @@ const RoutingsPage = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Implement search functionality
+    if (!searchTerm.trim()) {
+      setRoutings(allRoutings);
+      return;
+    }
+    
+    const filteredRoutings = allRoutings.filter(routing => 
+      routing.routing_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      routing.routing_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      routing.client_key.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      routing.routing_servers.some(server => server.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+    setRoutings(filteredRoutings);
   };
 
   const handleSort = (sortField: string) => {
     setSortBy(sortField);
     const sortedRoutings = [...routings].sort((a, b) => {
-      if (sortField === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortField === 'host') {
-        return a.host.localeCompare(b.host);
-      } else if (sortField === 'active') {
-        return (a.active === b.active) ? 0 : a.active ? -1 : 1;
+      if (sortField === 'routing_name') {
+        return a.routing_name.localeCompare(b.routing_name);
+      } else if (sortField === 'client_key') {
+        return a.client_key.localeCompare(b.client_key);
+      } else if (sortField === 'servers') {
+        return a.routing_servers.length - b.routing_servers.length;
       }
       return 0;
     });
     setRoutings(sortedRoutings);
+  };
+
+  const handleRoutingClick = (routing: Routing) => {
+    // Store routing data in sessionStorage for the detail page
+    sessionStorage.setItem('selectedRouting', JSON.stringify(routing));
+    router.push(`/routings/${routing.client_key}`);
   };
 
   return (
@@ -139,26 +160,28 @@ const RoutingsPage = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               <button type="submit" className="routings-search-btn">Search</button>
-              <button type="button" className="routings-add-btn">Add Routing</button>
+              <Link href="/routings/add" className="routings-add-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                Add Routing
+              </Link>
             </form>
             <div className="routings-sort-group">
               <button 
-                className={`routings-sort-btn ${sortBy === 'name' ? 'active' : ''}`}
-                onClick={() => handleSort('name')}
+                className={`routings-sort-btn ${sortBy === 'routing_name' ? 'active' : ''}`}
+                onClick={() => handleSort('routing_name')}
               >
                 Name
               </button>
               <button 
-                className={`routings-sort-btn ${sortBy === 'host' ? 'active' : ''}`}
-                onClick={() => handleSort('host')}
+                className={`routings-sort-btn ${sortBy === 'client_key' ? 'active' : ''}`}
+                onClick={() => handleSort('client_key')}
               >
-                Host
+                Key
               </button>
               <button 
-                className={`routings-sort-btn ${sortBy === 'active' ? 'active' : ''}`}
-                onClick={() => handleSort('active')}
+                className={`routings-sort-btn ${sortBy === 'servers' ? 'active' : ''}`}
+                onClick={() => handleSort('servers')}
               >
-                Status
+                Servers
               </button>
             </div>
           </div>
@@ -181,21 +204,29 @@ const RoutingsPage = () => {
               <table className="routings-table">
                 <thead>
                   <tr>
-                    <th>Id</th>
                     <th>Name</th>
-                    <th>Active</th>
-                    <th>Host</th>
-                    <th>Last Updated</th>
+                    <th>Client Key</th>
+                    <th>Description</th>
+                    <th>Servers</th>
                   </tr>
                 </thead>
                 <tbody>
                   {routings.map((routing) => (
-                    <tr key={routing.id}>
-                      <td>{routing.id}</td>
-                      <td><b>{routing.name}</b></td>
-                      <td><span className="routings-active-badge">{routing.active ? 'True' : 'False'}</span></td>
-                      <td>{routing.host}</td>
-                      <td>{new Date(routing.lastUpdated).toLocaleDateString()}</td>
+                    <tr 
+                      key={routing.client_key} 
+                      onClick={() => handleRoutingClick(routing)}
+                      style={{ cursor: 'pointer' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
+                    >
+                      <td>{routing.routing_name}</td>
+                      <td>{routing.client_key}</td>
+                      <td>{routing.routing_description || 'No description'}</td>
+                      <td>
+                        <span className="routings-servers-badge">
+                          {routing.routing_servers.length} server{routing.routing_servers.length !== 1 ? 's' : ''}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
