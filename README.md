@@ -1,5 +1,5 @@
 
-![Logo](https://i.ibb.co/ymdCSZvx/Doorman-Git-Hub.png)
+![Logo](https://i.ibb.co/mMcR63Q/doorman-logo-grn.png)
 
 ##
 
@@ -10,25 +10,25 @@
 ![Last Commit](https://img.shields.io/github/last-commit/apidoorman/doorman)
 ![GitHub issues](https://img.shields.io/github/issues/apidoorman/doorman)
 
-🔗 [doorman.so](https://doorman.so)
+##
 
 # Doorman API Gateway
-A lightweight API gateway for AI, REST, SOAP, GraphQL, and gRPC APIs. No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. This is your application’s gateway to the world. 🐍
+A lightweight API gateway built for AI, REST, SOAP, GraphQL, and gRPC APIs. No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. This is your application’s gateway to the world. 🐍
+
+![Example](https://i.ibb.co/nZK8Pd9/example-dashboard-light.png)
 
 ## Features
-Doorman supports authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, and mongodb. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
+Doorman supports user management, authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, and mongodb. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
 
 
 ## Coming Enhancements
-Doorman will soon support transformation, field encryption, orchestration, and a new open-source ui. More features to be announced.
+Doorman will soon support transformation, field encryption, and orchestration. More features to be announced.
 
 
 ## Documentation
-🔗 [API documentation](https://doorman.so/docs)
-
-🔗 [Postman collection](https://doorman.so/doorman-postman-collection.json)
-
-🔗 [OpenAPI swagger](https://doorman.so/openapi.json)
+[API Documentation](https://doorman.so/docs)
+| [Postman collection](https://doorman.so/doorman-postman-collection.json)
+| [OpenAPI swagger](https://doorman.so/openapi.json)
 
 
 ## Get Started
@@ -108,10 +108,6 @@ Run Doorman console instance for debugging
   python doorman.py run
 ```
 
-## Report Issues
-If you run into any bugs or issues. Please email them to:
-jelohsi+haj3mkpsbath11ztqled@app.trello.com
-
 
 ## License Information
 The contents of this repository are property of doorman.so.
@@ -125,5 +121,7 @@ Review the Apache License 2.0 for valid authorization of use.
 This project is under active development and is not yet ready for production environments.
 
 Use at your own risk. By using this software, you agree to the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0) and any annotations found in the source code.
+
+##
 
 We welcome contributors and testers!
