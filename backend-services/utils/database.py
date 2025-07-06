@@ -71,6 +71,19 @@ class Database:
                     "manage_gateway": True,
                     "manage_subscriptions": True
                 })
+            if not self.db.groups.find_one({"group_name": "admin"}):
+                self.db.groups.insert_one({
+                    "group_name": "admin",
+                    "group_description": "Administrator group with full access",
+                    "api_access": []
+                })
+            
+            if not self.db.groups.find_one({"group_name": "ALL"}):
+                self.db.groups.insert_one({
+                    "group_name": "ALL",
+                    "group_description": "Default group with access to all APIs",
+                    "api_access": []
+                })
 
     def create_indexes(self):
         self.db.apis.create_indexes([

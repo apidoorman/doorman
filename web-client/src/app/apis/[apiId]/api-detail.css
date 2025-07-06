@@ -401,12 +401,7 @@
 }
 
 .error-container {
-  height: 50px;
   margin-bottom: 24px;
-  align-items: left;
-  justify-content: left;
-  display: left;
-  max-width: 800px;
 }
 
 .error-message {
