@@ -1,20 +1,21 @@
 'use client'
 
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import './roles.css';
 
 interface Role {
-  role_description: ReactNode;
-  role_permissions: ReactNode;
-  role_name: ReactNode;
-  id: string;
-  name: string;
-  description: string;
-  permissions: string[];
-  userCount: number;
-  createdAt: string;
-  lastUpdated: string;
+  role_name: string;
+  role_description: string;
+  manage_users?: boolean;
+  manage_apis?: boolean;
+  manage_endpoints?: boolean;
+  manage_groups?: boolean;
+  manage_roles?: boolean;
+  manage_routings?: boolean;
+  manage_gateway?: boolean;
+  manage_subscriptions?: boolean;
 }
 
 const menuItems = [
@@ -30,15 +31,6 @@ const menuItems = [
   { label: 'Settings', href: '/settings' },
 ];
 
-const roles = [
-  {
-    name: 'Client',
-    description: 'Client role',
-    users: 3,
-    permissions: 'Read, Write',
-  },
-];
-
 const handleLogout = () => {
   localStorage.clear();
   sessionStorage.clear();
@@ -48,12 +40,14 @@ const handleLogout = () => {
 };
 
 const RolesPage = () => {
+  const router = useRouter();
   const [theme, setTheme] = useState('light');
   const [roles, setRoles] = useState<Role[]>([]);
+  const [allRoles, setAllRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name');
+  const [sortBy, setSortBy] = useState('role_name');
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -69,7 +63,7 @@ const RolesPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`http://localhost:3002/platform/role/all`, {
+      const response = await fetch(`http://localhost:3002/platform/role/all?page=1&page_size=10`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
@@ -81,11 +75,13 @@ const RolesPage = () => {
         throw new Error('Failed to load roles');
       }
       const data = await response.json();
-      const roleList = Array.isArray(data) ? data : (data.roles || data.response?.roles || []);
-      setRoles(roleList);
+      
+      setAllRoles(data.roles);
+      setRoles(data.roles);
     } catch (err) {
       setError('Failed to load roles. Please try again later.');
       setRoles([]);
+      setAllRoles([]);
     } finally {
       setLoading(false);
     }
@@ -93,22 +89,41 @@ const RolesPage = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Implement search functionality
+    if (!searchTerm.trim()) {
+      setRoles(allRoles);
+      return;
+    }
+    
+    const filteredRoles = allRoles.filter(role => 
+      role.role_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      role.role_description?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setRoles(filteredRoles);
   };
 
   const handleSort = (sortField: string) => {
     setSortBy(sortField);
     const sortedRoles = [...roles].sort((a, b) => {
-      if (sortField === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortField === 'userCount') {
-        return b.userCount - a.userCount;
-      } else if (sortField === 'createdAt') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (sortField === 'role_name') {
+        return a.role_name.localeCompare(b.role_name);
+      } else if (sortField === 'permissions') {
+        const aPerms = Object.values(a).filter(val => typeof val === 'boolean' && val).length;
+        const bPerms = Object.values(b).filter(val => typeof val === 'boolean' && val).length;
+        return bPerms - aPerms;
       }
       return 0;
     });
     setRoles(sortedRoles);
+  };
+
+  const handleRoleClick = (role: Role) => {
+    // Store role data in sessionStorage for the detail page
+    sessionStorage.setItem('selectedRole', JSON.stringify(role));
+    router.push(`/roles/${role.role_name}`);
+  };
+
+  const getPermissionCount = (role: Role) => {
+    return Object.values(role).filter(val => typeof val === 'boolean' && val).length;
   };
 
   return (
@@ -153,26 +168,22 @@ const RolesPage = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               <button type="submit" className="roles-search-btn">Search</button>
-              <button type="button" className="roles-add-btn">Add Role</button>
+              <Link href="/roles/add" className="roles-add-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                Add Role
+              </Link>
             </form>
             <div className="roles-sort-group">
               <button 
-                className={`roles-sort-btn ${sortBy === 'name' ? 'active' : ''}`}
-                onClick={() => handleSort('name')}
+                className={`roles-sort-btn ${sortBy === 'role_name' ? 'active' : ''}`}
+                onClick={() => handleSort('role_name')}
               >
                 Name
               </button>
               <button 
-                className={`roles-sort-btn ${sortBy === 'users' ? 'active' : ''}`}
-                onClick={() => handleSort('users')}
+                className={`roles-sort-btn ${sortBy === 'permissions' ? 'active' : ''}`}
+                onClick={() => handleSort('permissions')}
               >
-                Users
-              </button>
-              <button 
-                className={`roles-sort-btn ${sortBy === 'created' ? 'active' : ''}`}
-                onClick={() => handleSort('created')}
-              >
-                Created
+                Permissions
               </button>
             </div>
           </div>
@@ -197,13 +208,25 @@ const RolesPage = () => {
                   <tr>
                     <th>Name</th>
                     <th>Description</th>
+                    <th>Permissions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {roles.map((role, index) => (
-                    <tr key={`${role.id}-${index}`}>
-                      <td>{role.role_name}</td>
-                      <td>{role.role_description}</td>
+                  {roles.map((role) => (
+                    <tr 
+                      key={role.role_name} 
+                      onClick={() => handleRoleClick(role)}
+                      style={{ cursor: 'pointer' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
+                    >
+                      <td><b>{role.role_name}</b></td>
+                      <td>{role.role_description || 'No description'}</td>
+                      <td>
+                        <span className="roles-permissions-badge">
+                          {getPermissionCount(role)} permission{getPermissionCount(role) !== 1 ? 's' : ''}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

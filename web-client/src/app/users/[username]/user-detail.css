@@ -274,21 +274,15 @@ body, html {
 }
 
 .error-container {
-  height: 50px;
   margin-bottom: 24px;
-  align-items: left;
-  justify-content: left;
-  display: left;
-  max-width: 800px;
 }
 
 .error-message {
-  background: #fef2f2;
-  color: #dc2626;
-  padding: 16px 24px;
+  padding: 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
   border-radius: 8px;
-  border: 1px solid #fecaca;
-  font-weight: 500;
+  margin-bottom: 1rem;
 }
 
 .edit-button {
