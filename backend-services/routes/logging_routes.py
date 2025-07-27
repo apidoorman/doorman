@@ -21,7 +21,6 @@ import io
 
 logging_router = APIRouter()
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.logging")
 
 @logging_router.get("/logs",
@@ -80,6 +79,7 @@ async def get_logs(
     try:
         payload = await auth_required(request)
         username = payload.get("sub")
+        
         logger.info(f"{request_id_param} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id_param} | Endpoint: {request.method} {str(request.url.path)}")
         
