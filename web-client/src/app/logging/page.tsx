@@ -28,23 +28,15 @@ const handleLogout = () => {
 
 interface Log {
   timestamp: string;
+  request_id?: string;
   level: string;
   message: string;
   source: string;
   user?: string;
-  api?: string;
   endpoint?: string;
-  requestId?: string;
-  group?: string;
-  role?: string;
-  statusCode?: number;
   method?: string;
   ipAddress?: string;
   responseTime?: number;
-  requestSize?: number;
-  responseSize?: number;
-  protocol?: string;
-  userAgent?: string;
 }
 
 interface FilterState {
@@ -53,49 +45,46 @@ interface FilterState {
   startTime: string;
   endTime: string;
   user: string;
-  api: string;
   endpoint: string;
-  requestId: string;
-  group: string;
-  role: string;
-  statusCode: string;
+  request_id: string;
   method: string;
   ipAddress: string;
   minResponseTime: string;
   maxResponseTime: string;
-  protocol: string;
+  level: string;
 }
 
+
+
 export default function LogsPage() {
-  const [theme, setTheme] = useState('light');
+
   const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
-  const [filters, setFilters] = useState<FilterState>({
-    startDate: '',
-    endDate: '',
-    startTime: '',
-    endTime: '',
-    user: '',
-    api: '',
-    endpoint: '',
-    requestId: '',
-    group: '',
-    role: '',
-    statusCode: '',
-    method: '',
-    ipAddress: '',
-    minResponseTime: '',
-    maxResponseTime: '',
-    protocol: ''
+  const [exporting, setExporting] = useState(false);
+  const [filters, setFilters] = useState<FilterState>(() => {
+    // Set default to last 30 minutes
+    const now = new Date();
+    const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+    
+    return {
+      startDate: now.toISOString().split('T')[0], // Always use today's date
+      endDate: now.toISOString().split('T')[0],   // Always use today's date
+      startTime: thirtyMinutesAgo.toTimeString().slice(0, 5),
+      endTime: now.toTimeString().slice(0, 5),
+      user: '',
+      endpoint: '',
+      request_id: '',
+      method: '',
+      ipAddress: '',
+      minResponseTime: '',
+      maxResponseTime: '',
+      level: ''
+    };
   });
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  }, []);
+
 
   useEffect(() => {
     fetchLogs();
@@ -112,24 +101,40 @@ export default function LogsPage() {
       if (filters.startTime) queryParams.append('start_time', filters.startTime);
       if (filters.endTime) queryParams.append('end_time', filters.endTime);
       if (filters.user) queryParams.append('user', filters.user);
-      if (filters.api) queryParams.append('api', filters.api);
       if (filters.endpoint) queryParams.append('endpoint', filters.endpoint);
-      if (filters.requestId) queryParams.append('request_id', filters.requestId);
-      if (filters.group) queryParams.append('group', filters.group);
-      if (filters.role) queryParams.append('role', filters.role);
-      if (filters.statusCode) queryParams.append('status_code', filters.statusCode);
+      if (filters.request_id) queryParams.append('request_id', filters.request_id);
       if (filters.method) queryParams.append('method', filters.method);
       if (filters.ipAddress) queryParams.append('ip_address', filters.ipAddress);
       if (filters.minResponseTime) queryParams.append('min_response_time', filters.minResponseTime);
       if (filters.maxResponseTime) queryParams.append('max_response_time', filters.maxResponseTime);
-      if (filters.protocol) queryParams.append('protocol', filters.protocol);
+      if (filters.level) queryParams.append('level', filters.level);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/platform/logs?${queryParams.toString()}`);
+      const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002';
+      const url = `${serverUrl}/platform/logging/logs?${queryParams.toString()}`;
+      console.log('Fetching logs with URL:', url);
+      console.log('Filters:', filters);
+      
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
       if (!response.ok) {
-        throw new Error('Failed to fetch logs');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error_message || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
       }
-      const data = await response.json();
-      setLogs(data);
+      const responseData = await response.json();
+      
+      // Handle the response format
+      if (responseData && responseData.logs) {
+        setLogs(responseData.logs);
+      } else if (responseData && Array.isArray(responseData)) {
+        // Fallback for array format
+        setLogs(responseData);
+      } else {
+        // No logs found or unexpected format
+        setLogs([]);
+        console.warn('Unexpected response format:', responseData);
+      }
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -147,6 +152,65 @@ export default function LogsPage() {
       ...prev,
       [name]: value
     }));
+  };
+
+  const clearFilters = () => {
+    const now = new Date();
+    const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+    
+    setFilters({
+      startDate: now.toISOString().split('T')[0], // Always use today's date
+      endDate: now.toISOString().split('T')[0],   // Always use today's date
+      startTime: thirtyMinutesAgo.toTimeString().slice(0, 5),
+      endTime: now.toTimeString().slice(0, 5),
+      user: '',
+      endpoint: '',
+      request_id: '',
+      method: '',
+      ipAddress: '',
+      minResponseTime: '',
+      maxResponseTime: '',
+      level: ''
+    });
+  };
+
+  const exportLogs = async (format: 'json' | 'csv') => {
+    try {
+      setExporting(true);
+      const queryParams = new URLSearchParams();
+      queryParams.append('format', format);
+      if (filters.startDate) queryParams.append('start_date', filters.startDate);
+      if (filters.endDate) queryParams.append('end_date', filters.endDate);
+      if (filters.user) queryParams.append('user', filters.user);
+      if (filters.endpoint) queryParams.append('endpoint', filters.endpoint);
+      if (filters.level) queryParams.append('level', filters.level);
+
+      const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002';
+      const response = await fetch(`${serverUrl}/platform/logging/logs/download?${queryParams.toString()}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to export logs');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `logs_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An unknown error occurred during export');
+      }
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -175,10 +239,28 @@ export default function LogsPage() {
         <main className="logs-main">
           <div className="logs-header">
             <h1>Logs</h1>
-            <button className="refresh-button" onClick={fetchLogs}>
-              <span className="refresh-icon">↻</span>
-              Refresh
-            </button>
+            <div className="logs-header-controls">
+              <div className="export-buttons">
+                <button 
+                  className="export-button"
+                  onClick={() => exportLogs('json')}
+                  disabled={exporting}
+                >
+                  {exporting ? 'Exporting...' : 'Export JSON'}
+                </button>
+                <button 
+                  className="export-button"
+                  onClick={() => exportLogs('csv')}
+                  disabled={exporting}
+                >
+                  {exporting ? 'Exporting...' : 'Export CSV'}
+                </button>
+              </div>
+              <button className="refresh-button" onClick={fetchLogs}>
+                <span className="refresh-icon">↻</span>
+                Refresh
+              </button>
+            </div>
           </div>
 
           <div className="filters-container">
@@ -225,13 +307,21 @@ export default function LogsPage() {
               </div>
             </div>
             
-            <button 
-              className="more-filters-button"
-              onClick={() => setShowMoreFilters(!showMoreFilters)}
-            >
-              {showMoreFilters ? 'Show Less Filters' : 'More Filters'}
-              <span className={`more-filters-icon ${showMoreFilters ? 'expanded' : ''}`}>▼</span>
-            </button>
+            <div className="filter-buttons">
+              <button 
+                className="more-filters-button"
+                onClick={() => setShowMoreFilters(!showMoreFilters)}
+              >
+                {showMoreFilters ? 'Show Less Filters' : 'More Filters'}
+                <span className={`more-filters-icon ${showMoreFilters ? 'expanded' : ''}`}>▼</span>
+              </button>
+              <button 
+                className="clear-filters-button"
+                onClick={clearFilters}
+              >
+                Clear Filters
+              </button>
+            </div>
 
             {showMoreFilters && (
               <div className="more-filters-section">
@@ -247,17 +337,6 @@ export default function LogsPage() {
                   />
                 </div>
                 <div className="filter-group">
-                  <label htmlFor="api">API</label>
-                  <input
-                    type="text"
-                    id="api"
-                    name="api"
-                    placeholder="Filter by API"
-                    value={filters.api}
-                    onChange={handleFilterChange}
-                  />
-                </div>
-                <div className="filter-group">
                   <label htmlFor="endpoint">Endpoint</label>
                   <input
                     type="text"
@@ -269,46 +348,13 @@ export default function LogsPage() {
                   />
                 </div>
                 <div className="filter-group">
-                  <label htmlFor="requestId">Request ID</label>
+                  <label htmlFor="request_id">Request ID</label>
                   <input
                     type="text"
-                    id="requestId"
-                    name="requestId"
+                    id="request_id"
+                    name="request_id"
                     placeholder="Filter by request ID"
-                    value={filters.requestId}
-                    onChange={handleFilterChange}
-                  />
-                </div>
-                <div className="filter-group">
-                  <label htmlFor="group">Group</label>
-                  <input
-                    type="text"
-                    id="group"
-                    name="group"
-                    placeholder="Filter by group"
-                    value={filters.group}
-                    onChange={handleFilterChange}
-                  />
-                </div>
-                <div className="filter-group">
-                  <label htmlFor="role">Role</label>
-                  <input
-                    type="text"
-                    id="role"
-                    name="role"
-                    placeholder="Filter by role"
-                    value={filters.role}
-                    onChange={handleFilterChange}
-                  />
-                </div>
-                <div className="filter-group">
-                  <label htmlFor="statusCode">Status Code</label>
-                  <input
-                    type="text"
-                    id="statusCode"
-                    name="statusCode"
-                    placeholder="e.g., 200, 404, 500"
-                    value={filters.statusCode}
+                    value={filters.request_id}
                     onChange={handleFilterChange}
                   />
                 </div>
@@ -364,18 +410,18 @@ export default function LogsPage() {
                   />
                 </div>
                 <div className="filter-group">
-                  <label htmlFor="protocol">Protocol</label>
+                  <label htmlFor="level">Log Level</label>
                   <select
-                    id="protocol"
-                    name="protocol"
-                    value={filters.protocol}
+                    id="level"
+                    name="level"
+                    value={filters.level}
                     onChange={handleFilterChange}
                   >
-                    <option value="">All Protocols</option>
-                    <option value="HTTP">HTTP</option>
-                    <option value="HTTPS">HTTPS</option>
-                    <option value="HTTP/2">HTTP/2</option>
-                    <option value="HTTP/3">HTTP/3</option>
+                    <option value="">All Levels</option>
+                    <option value="ERROR">Error</option>
+                    <option value="WARNING">Warning</option>
+                    <option value="INFO">Info</option>
+                    <option value="DEBUG">Debug</option>
                   </select>
                 </div>
               </div>
@@ -387,6 +433,8 @@ export default function LogsPage() {
               {error}
             </div>
           )}
+
+
 
           {loading ? (
             <div className="loading-spinner">
@@ -404,26 +452,22 @@ export default function LogsPage() {
                   <thead>
                     <tr>
                       <th>Timestamp</th>
+                      <th>Request ID</th>
                       <th>Level</th>
                       <th>Message</th>
                       <th>Source</th>
                       <th>User</th>
-                      <th>API</th>
                       <th>Endpoint</th>
                       <th>Method</th>
-                      <th>Status</th>
                       <th>Response Time</th>
                       <th>IP Address</th>
-                      <th>Protocol</th>
-                      <th>Request ID</th>
-                      <th>Group</th>
-                      <th>Role</th>
                     </tr>
                   </thead>
                   <tbody>
                     {logs.map((log, index) => (
                       <tr key={index} className={`log-row ${log.level.toLowerCase()}`}>
                         <td>{format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss')}</td>
+                        <td>{log.request_id || '-'}</td>
                         <td>
                           <span className={`log-level ${log.level.toLowerCase()}`}>
                             {log.level}
@@ -432,20 +476,14 @@ export default function LogsPage() {
                         <td>{log.message}</td>
                         <td>{log.source}</td>
                         <td>{log.user || '-'}</td>
-                        <td>{log.api || '-'}</td>
                         <td>{log.endpoint || '-'}</td>
                         <td>{log.method || '-'}</td>
                         <td>
-                          <span className={`status-code ${log.statusCode ? (log.statusCode >= 200 && log.statusCode < 300 ? 'success' : log.statusCode >= 400 ? 'error' : 'warning') : ''}`}>
-                            {log.statusCode || '-'}
+                          <span className={`status-code ${log.responseTime ? (log.responseTime < 100 ? 'success' : log.responseTime < 500 ? 'warning' : 'error') : ''}`}>
+                            {log.responseTime ? `${log.responseTime}ms` : '-'}
                           </span>
                         </td>
-                        <td>{log.responseTime ? `${log.responseTime}ms` : '-'}</td>
                         <td>{log.ipAddress || '-'}</td>
-                        <td>{log.protocol || '-'}</td>
-                        <td>{log.requestId || '-'}</td>
-                        <td>{log.group || '-'}</td>
-                        <td>{log.role || '-'}</td>
                       </tr>
                     ))}
                   </tbody>

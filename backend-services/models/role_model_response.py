@@ -19,6 +19,8 @@ class RoleModelResponse(BaseModel):
     manage_routings: Optional[bool] = Field(None, description="Permission to manage routings", example=True)
     manage_gateway: Optional[bool] = Field(None, description="Permission to manage gateway", example=True)
     manage_subscriptions: Optional[bool] = Field(None, description="Permission to manage subscriptions", example=True)
+    view_logs: Optional[bool] = Field(None, description="Permission to view logs", example=True)
+    export_logs: Optional[bool] = Field(None, description="Permission to export logs", example=True)
 
     class Config:
         arbitrary_types_allowed = True
