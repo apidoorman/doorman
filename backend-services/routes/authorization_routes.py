@@ -19,7 +19,6 @@ import logging
 
 authorization_router = APIRouter()
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 @authorization_router.post("/authorization",

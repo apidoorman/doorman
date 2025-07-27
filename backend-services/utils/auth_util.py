@@ -16,7 +16,6 @@ from utils.doorman_cache_util import doorman_cache
 
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
