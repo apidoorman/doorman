@@ -22,7 +22,6 @@ import logging
 
 routing_router = APIRouter()
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 @routing_router.post("",
