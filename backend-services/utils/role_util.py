@@ -41,6 +41,10 @@ async def validate_platform_role(role_name, action):
             return True
         elif action == "manage_subscriptions" and role.get("manage_subscriptions"):
             return True
+        elif action == "view_logs" and role.get("view_logs"):
+            return True
+        elif action == "export_logs" and role.get("export_logs"):
+            return True
         return False
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")

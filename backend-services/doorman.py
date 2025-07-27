@@ -31,6 +31,7 @@ from routes.endpoint_routes import endpoint_router
 from routes.gateway_routes import gateway_router
 from routes.routing_routes import routing_router
 from routes.proto_routes import proto_router
+from routes.logging_routes import logging_router
 
 import multiprocessing
 import logging
@@ -137,6 +138,7 @@ doorman.include_router(role_router, prefix="/platform/role", tags=["Role"])
 doorman.include_router(subscription_router, prefix="/platform/subscription", tags=["Subscription"])
 doorman.include_router(routing_router, prefix="/platform/routing", tags=["Routing"])
 doorman.include_router(proto_router, prefix="/platform/proto", tags=["Proto"])
+doorman.include_router(logging_router, prefix="/platform/logging", tags=["Logging"])
 
 def start():
     if os.path.exists(PID_FILE):

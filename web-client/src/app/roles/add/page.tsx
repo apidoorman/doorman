@@ -1,49 +1,27 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import '../roles.css';
+import React, { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import Layout from '@/components/Layout'
 
 interface CreateRoleData {
-  role_name: string;
-  role_description: string;
-  manage_users: boolean;
-  manage_apis: boolean;
-  manage_endpoints: boolean;
-  manage_groups: boolean;
-  manage_roles: boolean;
-  manage_routings: boolean;
-  manage_gateway: boolean;
-  manage_subscriptions: boolean;
+  role_name: string
+  role_description: string
+  manage_users: boolean
+  manage_apis: boolean
+  manage_endpoints: boolean
+  manage_groups: boolean
+  manage_roles: boolean
+  manage_routings: boolean
+  manage_gateway: boolean
+  manage_subscriptions: boolean
 }
 
-const menuItems = [
-  { label: 'Dashboard', href: '/dashboard' },
-  { label: 'APIs', href: '/apis' },
-  { label: 'Routings', href: '/routings' },
-  { label: 'Users', href: '/users' },
-  { label: 'Groups', href: '/groups' },
-  { label: 'Roles', href: '/roles' },
-  { label: 'Monitor', href: '/monitor' },
-  { label: 'Logs', href: '/logging' },
-  { label: 'Security', href: '/security' },
-  { label: 'Settings', href: '/settings' },
-];
-
-const handleLogout = () => {
-  localStorage.clear();
-  sessionStorage.clear();
-  setTimeout(() => {
-    window.location.replace('/');
-  }, 50);
-};
-
 const AddRolePage = () => {
-  const router = useRouter();
-  const [theme, setTheme] = useState('light');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState<CreateRoleData>({
     role_name: '',
     role_description: '',
@@ -55,29 +33,23 @@ const AddRolePage = () => {
     manage_routings: false,
     manage_gateway: false,
     manage_subscriptions: false
-  });
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  }, []);
+  })
 
   const handleInputChange = (field: keyof CreateRoleData, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     
     if (!formData.role_name.trim()) {
-      setError('Role name is required');
-      return;
+      setError('Role name is required')
+      return
     }
 
     try {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      setError(null)
 
       const response = await fetch('http://localhost:3002/platform/role', {
         method: 'POST',
@@ -88,195 +60,155 @@ const AddRolePage = () => {
           'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
         },
         body: JSON.stringify(formData)
-      });
+      })
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error_message || 'Failed to create role');
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to create role')
       }
 
-      // Redirect back to roles list after successful creation
-      router.push('/roles');
+      router.push('/roles')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create role');
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Failed to create role. Please try again.')
+      }
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  const permissions = [
+    { key: 'manage_users', label: 'Manage Users', description: 'Create, edit, and delete user accounts' },
+    { key: 'manage_apis', label: 'Manage APIs', description: 'Create, edit, and delete API configurations' },
+    { key: 'manage_endpoints', label: 'Manage Endpoints', description: 'Configure API endpoints and validations' },
+    { key: 'manage_groups', label: 'Manage Groups', description: 'Create, edit, and delete user groups' },
+    { key: 'manage_roles', label: 'Manage Roles', description: 'Create, edit, and delete user roles' },
+    { key: 'manage_routings', label: 'Manage Routings', description: 'Configure API routing and load balancing' },
+    { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
+    { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' }
+  ]
 
   return (
-    <>
-      <div className="roles-topbar">
-        Doorman
-      </div>
-      <div className="roles-root">
-        <aside className="roles-sidebar">
-          <div className="roles-sidebar-title">Menu</div>
-          <ul className="roles-sidebar-list">
-            {menuItems.map((item, idx) => (
-              item.href ? (
-                <li key={item.label} className={`roles-sidebar-item${idx === 5 ? ' active' : ''}`}>
-                  <Link href={item.href} style={{ color: 'inherit', textDecoration: 'none', display: 'block', width: '100%' }}>{item.label}</Link>
-                </li>
-              ) : (
-                <li key={item.label} className={`roles-sidebar-item${idx === 5 ? ' active' : ''}`}>{item.label}</li>
-              )
-            ))}
-          </ul>
-          <button className="roles-logout-btn" onClick={handleLogout}>
-            Logout
-          </button>
-        </aside>
-        <main className="roles-main">
-          <div className="roles-header-row">
-            <Link href="/roles" className="back-button" style={{ textDecoration: 'none', display: 'inline-block' }}>
-              <span className="back-arrow">←</span>
-              Back to Roles
-            </Link>
-            <h1 className="roles-title">Add Role</h1>
+    <Layout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Add Role</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              Create a new user role with specific permissions
+            </p>
           </div>
+        </div>
 
-          {error && (
-            <div className="error-container">
-              <div className="error-message">
-                {error}
+        {/* Error Message */}
+        {error && (
+          <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
+            <div className="flex">
+              <svg className="h-5 w-5 text-error-400 dark:text-error-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="ml-3">
+                <p className="text-sm text-error-700 dark:text-error-300">{error}</p>
               </div>
             </div>
-          )}
-
-          <div className="add-role-form">
-            <form onSubmit={handleSubmit}>
-              <div className="form-section">
-                <h2 className="section-title">Basic Information</h2>
-                <div className="form-group">
-                  <label className="form-label">Role Name *</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formData.role_name}
-                    onChange={(e) => handleInputChange('role_name', e.target.value)}
-                    placeholder="Enter role name"
-                    maxLength={50}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Description</label>
-                  <textarea
-                    className="form-input"
-                    value={formData.role_description}
-                    onChange={(e) => handleInputChange('role_description', e.target.value)}
-                    placeholder="Enter role description"
-                    maxLength={255}
-                    rows={3}
-                  />
-                </div>
-              </div>
-
-              <div className="form-section">
-                <h2 className="section-title">Permissions</h2>
-                <div className="permissions-grid">
-                  <div className="permission-item">
-                    <label className="permission-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.manage_users}
-                        onChange={(e) => handleInputChange('manage_users', e.target.checked)}
-                      />
-                      <span className="permission-text">Manage Users</span>
-                    </label>
-                  </div>
-                  <div className="permission-item">
-                    <label className="permission-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.manage_apis}
-                        onChange={(e) => handleInputChange('manage_apis', e.target.checked)}
-                      />
-                      <span className="permission-text">Manage APIs</span>
-                    </label>
-                  </div>
-                  <div className="permission-item">
-                    <label className="permission-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.manage_endpoints}
-                        onChange={(e) => handleInputChange('manage_endpoints', e.target.checked)}
-                      />
-                      <span className="permission-text">Manage Endpoints</span>
-                    </label>
-                  </div>
-                  <div className="permission-item">
-                    <label className="permission-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.manage_groups}
-                        onChange={(e) => handleInputChange('manage_groups', e.target.checked)}
-                      />
-                      <span className="permission-text">Manage Groups</span>
-                    </label>
-                  </div>
-                  <div className="permission-item">
-                    <label className="permission-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.manage_roles}
-                        onChange={(e) => handleInputChange('manage_roles', e.target.checked)}
-                      />
-                      <span className="permission-text">Manage Roles</span>
-                    </label>
-                  </div>
-                  <div className="permission-item">
-                    <label className="permission-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.manage_routings}
-                        onChange={(e) => handleInputChange('manage_routings', e.target.checked)}
-                      />
-                      <span className="permission-text">Manage Routings</span>
-                    </label>
-                  </div>
-                  <div className="permission-item">
-                    <label className="permission-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.manage_gateway}
-                        onChange={(e) => handleInputChange('manage_gateway', e.target.checked)}
-                      />
-                      <span className="permission-text">Manage Gateway</span>
-                    </label>
-                  </div>
-                  <div className="permission-item">
-                    <label className="permission-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.manage_subscriptions}
-                        onChange={(e) => handleInputChange('manage_subscriptions', e.target.checked)}
-                      />
-                      <span className="permission-text">Manage Subscriptions</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-actions">
-                <Link href="/roles" className="cancel-button" style={{ textDecoration: 'none', display: 'inline-block' }}>
-                  Cancel
-                </Link>
-                <button
-                  type="submit"
-                  className="save-button"
-                  disabled={loading}
-                >
-                  {loading ? 'Creating...' : 'Create Role'}
-                </button>
-              </div>
-            </form>
           </div>
-        </main>
-      </div>
-    </>
-  );
-};
+        )}
 
-export default AddRolePage; 
+        {/* Form */}
+        <div className="card max-w-2xl">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="role_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Role Name *
+              </label>
+              <input
+                type="text"
+                id="role_name"
+                name="role_name"
+                className="input"
+                placeholder="Enter role name"
+                value={formData.role_name}
+                onChange={(e) => handleInputChange('role_name', e.target.value)}
+                disabled={loading}
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="role_description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description
+              </label>
+              <textarea
+                id="role_description"
+                name="role_description"
+                rows={4}
+                className="input resize-none"
+                placeholder="Describe the purpose of this role..."
+                value={formData.role_description}
+                onChange={(e) => handleInputChange('role_description', e.target.value)}
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Optional description of the role's purpose
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+                Permissions
+              </label>
+              <div className="space-y-3">
+                {permissions.map((permission) => (
+                  <div key={permission.key} className="flex items-start space-x-3">
+                    <input
+                      type="checkbox"
+                      id={permission.key}
+                      name={permission.key}
+                      checked={formData[permission.key as keyof CreateRoleData] as boolean}
+                      onChange={(e) => handleInputChange(permission.key as keyof CreateRoleData, e.target.checked)}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded mt-1"
+                      disabled={loading}
+                    />
+                    <div className="flex-1">
+                      <label htmlFor={permission.key} className="block text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                        {permission.label}
+                      </label>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {permission.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn btn-primary flex-1"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="spinner mr-2"></div>
+                    Creating Role...
+                  </div>
+                ) : (
+                  'Create Role'
+                )}
+              </button>
+              <Link href="/roles" className="btn btn-secondary flex-1">
+                Cancel
+              </Link>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+export default AddRolePage 
