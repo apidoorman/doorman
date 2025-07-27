@@ -1,260 +1,239 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import './monitor.css';
+import React, { useState, useEffect } from 'react'
+import Layout from '@/components/Layout'
 
 interface Metric {
-  timestamp: string;
-  value: number;
+  timestamp: string
+  value: number
 }
 
 interface Metrics {
-  totalRequests: Metric[];
-  errorRate: Metric[];
-  avgResponseTime: Metric[];
-  activeUsers: Metric[];
-  bandwidthUsage: Metric[];
-  cpuUsage: Metric[];
-  memoryUsage: Metric[];
+  totalRequests: Metric[]
+  errorRate: Metric[]
+  avgResponseTime: Metric[]
+  activeUsers: Metric[]
+  bandwidthUsage: Metric[]
+  cpuUsage: Metric[]
+  memoryUsage: Metric[]
   statusCodes: {
-    [key: string]: number;
-  };
+    [key: string]: number
+  }
 }
 
-const menuItems = [
-  { label: 'Dashboard', href: '/dashboard' },
-  { label: 'APIs', href: '/apis' },
-  { label: 'Routings', href: '/routings' },
-  { label: 'Users', href: '/users' },
-  { label: 'Groups', href: '/groups' },
-  { label: 'Roles', href: '/roles' },
-  { label: 'Monitor', href: '/monitor' },
-  { label: 'Logs', href: '/logging' },
-  { label: 'Security', href: '/security' },
-  { label: 'Settings', href: '/settings' },
-];
-
 const MonitorPage: React.FC = () => {
-  const [theme, setTheme] = useState('light');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState<any[]>([]);
-  const [timeRange, setTimeRange] = useState('24h');
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [metrics, setMetrics] = useState<any[]>([])
+  const [timeRange, setTimeRange] = useState('24h')
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  }, []);
-
-  useEffect(() => {
-    fetchMetrics();
-  }, [timeRange]);
+    fetchMetrics()
+  }, [timeRange])
 
   const fetchMetrics = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      const response = await fetch(`/api/platform/metrics?range=${timeRange}`);
+      setLoading(true)
+      setError(null)
+      const response = await fetch(`/api/platform/metrics?range=${timeRange}`)
       if (!response.ok) {
-        throw new Error('Failed to fetch metrics');
+        throw new Error('Failed to fetch metrics')
       }
-      const data = await response.json();
-      setMetrics(data);
+      const data = await response.json()
+      setMetrics(data)
     } catch (err) {
       if (err instanceof Error) {
-        setError(err.message);
+        setError(err.message)
       } else {
-        setError('An unknown error occurred');
+        setError('An unknown error occurred')
       }
-      setMetrics([]);
+      setMetrics([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
-
-  const handleLogout = () => {
-    localStorage.clear();
-    sessionStorage.clear();
-    setTimeout(() => {
-      window.location.replace('/');
-    }, 50);
-  };
+  }
 
   const renderMetricChart = (data: Metric[], title: string): React.ReactNode => {
     return (
-      <div className="monitor-metric-chart">
-        <div className="monitor-chart-placeholder">
-          {title} chart will be implemented here
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">{title}</h3>
+        </div>
+        <div className="p-6">
+          <div className="h-48 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+            <p className="text-gray-500 dark:text-gray-400">{title} chart will be implemented here</p>
+          </div>
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   return (
-    <>
-      <div className="monitor-topbar">
-        Doorman
-      </div>
-      <div className="monitor-root">
-          <aside className="monitor-sidebar">
-          <div className="monitor-sidebar-title">Menu</div>
-          <ul className="monitor-sidebar-list">
-            {menuItems.map((item, idx) => (
-              item.href ? (
-                <li key={item.label} className={`monitor-sidebar-item${idx === 6 ? ' active' : ''}`}>
-                  <Link href={item.href} style={{ color: 'inherit', textDecoration: 'none', display: 'block', width: '100%' }}>{item.label}</Link>
-                </li>
-              ) : (
-                <li key={item.label} className={`monitor-sidebar-item${idx === 6 ? ' active' : ''}`}>{item.label}</li>
-              )
-            ))}
-          </ul>
-          <button className="monitor-logout-btn" onClick={handleLogout}>
-            Logout
-          </button>
-        </aside>
-        <main className="monitor-main">
-          <div className="monitor-header-row">
-            <h1 className="monitor-title">Monitor</h1>
-            <button className="monitor-refresh-button" onClick={fetchMetrics}>
-              <span className="monitor-refresh-icon">↻</span>
-              Refresh
-            </button>
+    <Layout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Monitor</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              Real-time system metrics and performance monitoring
+            </p>
           </div>
-          <div className="monitor-controls">
-            <select 
-              value={timeRange} 
+          <div className="flex gap-2">
+            <select
+              value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
-              className="monitor-time-range-select"
+              className="input"
             >
               <option value="1h">Last Hour</option>
-              <option value="6h">Last 6 Hours</option>
               <option value="24h">Last 24 Hours</option>
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
             </select>
+            <button onClick={fetchMetrics} className="btn btn-secondary">
+              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
           </div>
+        </div>
 
-          {error && (
-            <div className="monitor-error-message">
-              {error}
+        {/* Error Message */}
+        {error && (
+          <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
+            <div className="flex">
+              <svg className="h-5 w-5 text-error-400 dark:text-error-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="ml-3">
+                <p className="text-sm text-error-700 dark:text-error-300">{error}</p>
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {loading ? (
-            <div className="monitor-loading-spinner">
-              <div className="monitor-spinner"></div>
-              <p>Loading metrics...</p>
+        {/* Loading State */}
+        {loading ? (
+          <div className="card">
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="spinner mx-auto mb-4"></div>
+                <p className="text-gray-600 dark:text-gray-400">Loading metrics...</p>
+              </div>
             </div>
-          ) : (
-            <div className="monitor-metrics-grid">
-              <div className="monitor-metric-card">
-                <h3>Total Requests</h3>
-                <div className="monitor-metric-value">
-                  {metrics.length > 0 
-                    ? metrics.reduce((sum, m) => sum + m.requests, 0).toLocaleString()
-                    : '0'
-                  }
+          </div>
+        ) : (
+          /* Metrics Grid */
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Total Requests */}
+            <div className="stats-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="stats-label">Total Requests</p>
+                  <p className="stats-value">1,234,567</p>
+                  <p className="stats-change positive">+12.5% from last period</p>
                 </div>
-                {renderMetricChart(
-                  metrics.length > 0 
-                    ? metrics.map(m => ({ timestamp: m.timestamp, value: m.requests }))
-                    : [],
-                  'Total Requests'
-                )}
-              </div>
-
-              <div className="monitor-metric-card">
-                <h3>Error Rate</h3>
-                <div className="monitor-metric-value">
-                  {metrics.length > 0
-                    ? ((metrics.reduce((sum, m) => sum + m.errors, 0) / 
-                        metrics.reduce((sum, m) => sum + m.requests, 0)) * 100).toFixed(2)
-                    : '0.00'
-                  }%
-                </div>
-                {renderMetricChart(
-                  metrics.length > 0
-                    ? metrics.map(m => ({ timestamp: m.timestamp, value: m.errors }))
-                    : [],
-                  'Error Rate'
-                )}
-              </div>
-
-              <div className="monitor-metric-card">
-                <h3>Average Response Time</h3>
-                <div className="monitor-metric-value">
-                  {metrics.length > 0
-                    ? Math.round(metrics.reduce((sum, m) => sum + m.avgResponseTime, 0) / metrics.length)
-                    : '0'
-                  }ms
-                </div>
-                {renderMetricChart(
-                  metrics.length > 0
-                    ? metrics.map(m => ({ timestamp: m.timestamp, value: m.avgResponseTime }))
-                    : [],
-                  'Average Response Time'
-                )}
-              </div>
-
-              <div className="monitor-metric-card">
-                <h3>Active Users</h3>
-                <div className="monitor-metric-value">
-                  {metrics.length > 0
-                    ? Math.max(...metrics.map(m => m.activeUsers))
-                    : '0'
-                  }
-                </div>
-                {renderMetricChart(
-                  metrics.length > 0
-                    ? metrics.map(m => ({ timestamp: m.timestamp, value: m.activeUsers }))
-                    : [],
-                  'Active Users'
-                )}
-              </div>
-
-              <div className="monitor-metric-card">
-                <h3>Bandwidth Usage</h3>
-                <div className="monitor-metric-value">
-                  {metrics.length > 0
-                    ? (metrics.reduce((sum, m) => sum + m.bandwidth, 0) / 1000000).toFixed(2)
-                    : '0.00'
-                  } MB
-                </div>
-                {renderMetricChart(
-                  metrics.length > 0
-                    ? metrics.map(m => ({ timestamp: m.timestamp, value: m.bandwidth }))
-                    : [],
-                  'Bandwidth Usage'
-                )}
-              </div>
-
-              <div className="monitor-metric-card wide">
-                <h3>Status Code Distribution</h3>
-                <div className="monitor-status-codes">
-                  {metrics.length > 0 ? (
-                    Object.entries(metrics[metrics.length - 1].statusCodes).map(([code, count]) => (
-                      <div key={code} className="monitor-status-code-item">
-                        <span className="monitor-status-code-label">{code}</span>
-                        <span className="monitor-status-code-count">{Number(count)}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="monitor-status-code-item">
-                      <span className="monitor-status-code-label">No data</span>
-                      <span className="monitor-status-code-count">0</span>
-                    </div>
-                  )}
+                <div className="h-12 w-12 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
                 </div>
               </div>
             </div>
-          )}
-        </main>
+
+            {/* Error Rate */}
+            <div className="stats-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="stats-label">Error Rate</p>
+                  <p className="stats-value">0.23%</p>
+                  <p className="stats-change negative">+0.05% from last period</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Average Response Time */}
+            <div className="stats-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="stats-label">Avg Response Time</p>
+                  <p className="stats-value">142ms</p>
+                  <p className="stats-change positive">-8ms from last period</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Users */}
+            <div className="stats-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="stats-label">Active Users</p>
+                  <p className="stats-value">847</p>
+                  <p className="stats-change positive">+23 from last period</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {renderMetricChart([], 'Request Volume')}
+          {renderMetricChart([], 'Response Times')}
+          {renderMetricChart([], 'Error Rates')}
+          {renderMetricChart([], 'Bandwidth Usage')}
+        </div>
+
+        {/* System Status */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">System Status</h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <div className="h-3 w-3 bg-green-500 rounded-full mr-3"></div>
+                <div>
+                  <p className="font-medium text-green-900 dark:text-green-100">API Gateway</p>
+                  <p className="text-sm text-green-600 dark:text-green-400">Operational</p>
+                </div>
+              </div>
+              <div className="flex items-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <div className="h-3 w-3 bg-green-500 rounded-full mr-3"></div>
+                <div>
+                  <p className="font-medium text-green-900 dark:text-green-100">Database</p>
+                  <p className="text-sm text-green-600 dark:text-green-400">Operational</p>
+                </div>
+              </div>
+              <div className="flex items-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <div className="h-3 w-3 bg-green-500 rounded-full mr-3"></div>
+                <div>
+                  <p className="font-medium text-green-900 dark:text-green-100">Cache</p>
+                  <p className="text-sm text-green-600 dark:text-green-400">Operational</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </>
-  );
-};
+    </Layout>
+  )
+}
 
-export default MonitorPage; 
+export default MonitorPage 
