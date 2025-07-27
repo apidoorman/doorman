@@ -16,6 +16,8 @@ interface Role {
   manage_routings?: boolean;
   manage_gateway?: boolean;
   manage_subscriptions?: boolean;
+  view_logs?: boolean;
+  export_logs?: boolean;
 }
 
 const menuItems = [
@@ -346,7 +348,9 @@ const RoleDetailPage = () => {
                     { key: 'manage_roles', label: 'Manage Roles' },
                     { key: 'manage_routings', label: 'Manage Routings' },
                     { key: 'manage_gateway', label: 'Manage Gateway' },
-                    { key: 'manage_subscriptions', label: 'Manage Subscriptions' }
+                    { key: 'manage_subscriptions', label: 'Manage Subscriptions' },
+                    { key: 'view_logs', label: 'View Logs' },
+                    { key: 'export_logs', label: 'Export Logs' }
                   ].map(({ key, label }) => (
                     <div key={key} className="permission-item">
                       {isEditing ? (

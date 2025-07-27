@@ -29,7 +29,7 @@ const menuItems = [
   { label: 'Groups', href: '/groups' },
   { label: 'Roles', href: '/roles' },
   { label: 'Monitor', href: '/monitor' },
-  { label: 'Logs', href: '/logs' },
+  { label: 'Logs', href: '/logging' },
   { label: 'Security', href: '/security' },
   { label: 'Settings', href: '/settings' },
 ];
