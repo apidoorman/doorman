@@ -13,7 +13,6 @@ from models.create_role_model import CreateRoleModel
 from pymongo.errors import DuplicateKeyError
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 class RoleService:

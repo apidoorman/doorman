@@ -14,7 +14,6 @@ from models.create_api_model import CreateApiModel
 
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 class ApiService:

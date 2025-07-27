@@ -22,7 +22,6 @@ from utils.role_util import platform_role_required_bool
 
 token_router = APIRouter()
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 @token_router.post("",
