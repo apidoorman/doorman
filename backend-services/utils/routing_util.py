@@ -3,7 +3,6 @@ from utils.database import routing_collection
 
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 async def get_client_routing(client_key):

@@ -11,7 +11,6 @@ from services.user_service import UserService
 from utils.database import api_collection
 from utils.auth_util import auth_required
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 async def group_required(request: Request = None, full_path: str = None, user_to_subscribe = None):

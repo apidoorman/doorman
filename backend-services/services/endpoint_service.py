@@ -16,7 +16,6 @@ from models.create_endpoint_model import CreateEndpointModel
 import uuid
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 class EndpointService:
