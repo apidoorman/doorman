@@ -1,68 +1,40 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import './roles.css';
+import React, { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import Layout from '@/components/Layout'
 
 interface Role {
-  role_name: string;
-  role_description: string;
-  manage_users?: boolean;
-  manage_apis?: boolean;
-  manage_endpoints?: boolean;
-  manage_groups?: boolean;
-  manage_roles?: boolean;
-  manage_routings?: boolean;
-  manage_gateway?: boolean;
-  manage_subscriptions?: boolean;
+  role_name: string
+  role_description: string
+  manage_users?: boolean
+  manage_apis?: boolean
+  manage_endpoints?: boolean
+  manage_groups?: boolean
+  manage_roles?: boolean
+  manage_routings?: boolean
+  manage_gateway?: boolean
+  manage_subscriptions?: boolean
 }
 
-const menuItems = [
-  { label: 'Dashboard', href: '/dashboard' },
-  { label: 'APIs', href: '/apis' },
-  { label: 'Routings', href: '/routings' },
-  { label: 'Users', href: '/users' },
-  { label: 'Groups', href: '/groups' },
-  { label: 'Roles', href: '/roles' },
-  { label: 'Monitor', href: '/monitor' },
-  { label: 'Logs', href: '/logging' },
-  { label: 'Security', href: '/security' },
-  { label: 'Settings', href: '/settings' },
-];
-
-const handleLogout = () => {
-  localStorage.clear();
-  sessionStorage.clear();
-  setTimeout(() => {
-    window.location.replace('/');
-  }, 50);
-};
-
 const RolesPage = () => {
-  const router = useRouter();
-  const [theme, setTheme] = useState('light');
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [allRoles, setAllRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('role_name');
+  const router = useRouter()
+  const [roles, setRoles] = useState<Role[]>([])
+  const [allRoles, setAllRoles] = useState<Role[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sortBy, setSortBy] = useState('role_name')
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  }, []);
-
-  useEffect(() => {
-    fetchRoles();
-  }, []);
+    fetchRoles()
+  }, [])
 
   const fetchRoles = async () => {
     try {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      setError(null)
       const response = await fetch(`http://localhost:3002/platform/role/all?page=1&page_size=10`, {
         credentials: 'include',
         headers: {
@@ -70,173 +42,219 @@ const RolesPage = () => {
           'Content-Type': 'application/json',
           'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
         }
-      });
+      })
       if (!response.ok) {
-        throw new Error('Failed to load roles');
+        throw new Error('Failed to load roles')
       }
-      const data = await response.json();
+      const data = await response.json()
       
-      setAllRoles(data.roles);
-      setRoles(data.roles);
+      setAllRoles(data.roles)
+      setRoles(data.roles)
     } catch (err) {
-      setError('Failed to load roles. Please try again later.');
-      setRoles([]);
-      setAllRoles([]);
+      setError('Failed to load roles. Please try again later.')
+      setRoles([])
+      setAllRoles([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     if (!searchTerm.trim()) {
-      setRoles(allRoles);
-      return;
+      setRoles(allRoles)
+      return
     }
     
     const filteredRoles = allRoles.filter(role => 
       role.role_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       role.role_description?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setRoles(filteredRoles);
-  };
+    )
+    setRoles(filteredRoles)
+  }
 
   const handleSort = (sortField: string) => {
-    setSortBy(sortField);
+    setSortBy(sortField)
     const sortedRoles = [...roles].sort((a, b) => {
       if (sortField === 'role_name') {
-        return a.role_name.localeCompare(b.role_name);
+        return a.role_name.localeCompare(b.role_name)
       } else if (sortField === 'permissions') {
-        const aPerms = Object.values(a).filter(val => typeof val === 'boolean' && val).length;
-        const bPerms = Object.values(b).filter(val => typeof val === 'boolean' && val).length;
-        return bPerms - aPerms;
+        const aPerms = Object.values(a).filter(val => typeof val === 'boolean' && val).length
+        const bPerms = Object.values(b).filter(val => typeof val === 'boolean' && val).length
+        return bPerms - aPerms
       }
-      return 0;
-    });
-    setRoles(sortedRoles);
-  };
+      return 0
+    })
+    setRoles(sortedRoles)
+  }
 
   const handleRoleClick = (role: Role) => {
-    // Store role data in sessionStorage for the detail page
-    sessionStorage.setItem('selectedRole', JSON.stringify(role));
-    router.push(`/roles/${role.role_name}`);
-  };
+    sessionStorage.setItem('selectedRole', JSON.stringify(role))
+    router.push(`/roles/${role.role_name}`)
+  }
 
   const getPermissionCount = (role: Role) => {
-    return Object.values(role).filter(val => typeof val === 'boolean' && val).length;
-  };
+    return Object.values(role).filter(val => typeof val === 'boolean' && val).length
+  }
 
   return (
-    <>
-      <div className="roles-topbar">
-      Doorman
-      </div>
-      <div className="roles-root">
-        <aside className="roles-sidebar">
-          <div className="roles-sidebar-title">Menu</div>
-          <ul className="roles-sidebar-list">
-            {menuItems.map((item, idx) => (
-              item.href ? (
-                <li key={item.label} className={`roles-sidebar-item${idx === 5 ? ' active' : ''}`}>
-                  <Link href={item.href} style={{ color: 'inherit', textDecoration: 'none', display: 'block', width: '100%' }}>{item.label}</Link>
-                </li>
-              ) : (
-                <li key={item.label} className={`roles-sidebar-item${idx === 5 ? ' active' : ''}`}>{item.label}</li>
-              )
-            ))}
-          </ul>
-          <button className="roles-logout-btn" onClick={handleLogout}>
-            Logout
-          </button>
-        </aside>
-        <main className="roles-main">
-          <div className="roles-header-row">
-            <h1 className="roles-title">Roles</h1>
-            <button className="refresh-button" onClick={fetchRoles}>
-              <span className="refresh-icon">↻</span>
-              Refresh
-            </button>
+    <Layout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Roles</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              Manage user roles and permissions
+            </p>
           </div>
+          <Link href="/roles/add" className="btn btn-primary">
+            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Role
+          </Link>
+        </div>
 
-          <div className="roles-controls">
-            <form className="roles-search-box" onSubmit={handleSearch}>
-              <input
-                type="text"
-                className="roles-search-input"
-                placeholder="Search roles..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <button type="submit" className="roles-search-btn">Search</button>
-              <Link href="/roles/add" className="roles-add-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
-                Add Role
-              </Link>
+        {/* Search and Filters */}
+        <div className="card">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <form onSubmit={handleSearch} className="flex-1">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search roles by name or description..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
             </form>
-            <div className="roles-sort-group">
-              <button 
-                className={`roles-sort-btn ${sortBy === 'role_name' ? 'active' : ''}`}
+            
+            <div className="flex gap-2">
+              <button
                 onClick={() => handleSort('role_name')}
+                className={`btn ${sortBy === 'role_name' ? 'btn-primary' : 'btn-secondary'}`}
               >
                 Name
               </button>
-              <button 
-                className={`roles-sort-btn ${sortBy === 'permissions' ? 'active' : ''}`}
+              <button
                 onClick={() => handleSort('permissions')}
+                className={`btn ${sortBy === 'permissions' ? 'btn-primary' : 'btn-secondary'}`}
               >
                 Permissions
               </button>
             </div>
           </div>
+        </div>
 
-          {error && (
-            <div className="error-container">
-              <div className="error-message">
-                {error}
+        {/* Error Message */}
+        {error && (
+          <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
+            <div className="flex">
+              <svg className="h-5 w-5 text-error-400 dark:text-error-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="ml-3">
+                <p className="text-sm text-error-700 dark:text-error-300">{error}</p>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {loading ? (
-            <div className="loading-spinner">
-              <div className="spinner"></div>
-              <p>Loading roles...</p>
+        {/* Loading State */}
+        {loading ? (
+          <div className="card">
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="spinner mx-auto mb-4"></div>
+                <p className="text-gray-600 dark:text-gray-400">Loading roles...</p>
+              </div>
             </div>
-          ) : (
-            <div className="roles-table-panel">
-              <table className="roles-table">
+          </div>
+        ) : (
+          /* Roles Table */
+          <div className="card">
+            <div className="overflow-x-auto">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Name</th>
                     <th>Description</th>
                     <th>Permissions</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {roles.map((role) => (
                     <tr 
-                      key={role.role_name} 
+                      key={role.role_name}
                       onClick={() => handleRoleClick(role)}
-                      style={{ cursor: 'pointer' }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
+                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
                     >
-                      <td><b>{role.role_name}</b></td>
-                      <td>{role.role_description || 'No description'}</td>
                       <td>
-                        <span className="roles-permissions-badge">
+                        <div className="flex items-center">
+                          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center mr-3">
+                            <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">{role.role_name}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                          {role.role_description || 'No description'}
+                        </p>
+                      </td>
+                      <td>
+                        <span className="badge badge-warning">
                           {getPermissionCount(role)} permission{getPermissionCount(role) !== 1 ? 's' : ''}
                         </span>
+                      </td>
+                      <td>
+                        <button className="btn btn-ghost btn-sm">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </main>
-      </div>
-    </>
-  );
-};
 
-export default RolesPage;
+            {/* Empty State */}
+            {roles.length === 0 && !loading && (
+              <div className="text-center py-12">
+                <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                  <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No roles found</h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">
+                  {searchTerm ? 'Try adjusting your search terms.' : 'Get started by creating your first user role.'}
+                </p>
+                <Link href="/roles/add" className="btn btn-primary">
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Role
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Layout>
+  )
+}
+
+export default RolesPage
