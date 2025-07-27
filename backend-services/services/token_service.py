@@ -13,7 +13,6 @@ from pymongo.errors import PyMongoError
 import logging
 from typing import Optional
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 class TokenService:

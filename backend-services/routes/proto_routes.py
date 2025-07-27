@@ -22,7 +22,6 @@ from datetime import datetime
 import subprocess
 
 proto_router = APIRouter()
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()

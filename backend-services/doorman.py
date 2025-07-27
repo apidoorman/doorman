@@ -77,9 +77,21 @@ log_file_handler = RotatingFileHandler(
     encoding="utf-8"
 )
 log_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger = logging.getLogger("doorman.gateway")
-logger.setLevel(logging.INFO)
-logger.addHandler(log_file_handler)
+
+# Configure all doorman loggers to use the same handler and prevent propagation
+def configure_logger(logger_name):
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False  # Prevent propagation to root logger
+    # Remove any existing handlers to avoid duplicates
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    logger.addHandler(log_file_handler)
+    return logger
+
+# Configure main loggers
+gateway_logger = configure_logger("doorman.gateway")
+logging_logger = configure_logger("doorman.logging")
 
 class Settings(BaseSettings):
     mongo_db_uri: str = os.getenv("MONGO_DB_URI")
@@ -92,7 +104,7 @@ async def automatic_purger(interval_seconds):
     while True:
         await asyncio.sleep(interval_seconds)
         await purge_expired_tokens()
-        logging.info("Expired JWTs purged from blacklist.")
+        gateway_logger.info("Expired JWTs purged from blacklist.")
 
 @doorman.on_event("startup")
 async def startup_event():
@@ -156,11 +168,11 @@ def start():
                                    preexec_fn=os.setsid)
     with open(PID_FILE, "w") as f:
         f.write(str(process.pid))
-    logger.info(f"Starting doorman with PID {process.pid}.")
+    gateway_logger.info(f"Starting doorman with PID {process.pid}.")
 
 def stop():
     if not os.path.exists(PID_FILE):
-        logger.info("No running instance found")
+        gateway_logger.info("No running instance found")
         return
     with open(PID_FILE, "r") as f:
         pid = int(f.read())
@@ -181,7 +193,7 @@ def run():
     max_threads = multiprocessing.cpu_count()
     env_threads = int(os.getenv("THREADS", max_threads))
     num_threads = min(env_threads, max_threads)
-    logger.info(f"Started doorman with {num_threads} threads on port {server_port}")
+    gateway_logger.info(f"Started doorman with {num_threads} threads on port {server_port}")
     uvicorn.run(
         "doorman:doorman",
         host="0.0.0.0",
@@ -205,7 +217,7 @@ def main():
             reload=os.getenv("DEBUG", "false").lower() == "true"
         )
     except Exception as e:
-        logger.error(f"Failed to start server: {str(e)}")
+        gateway_logger.error(f"Failed to start server: {str(e)}")
         raise
 
 if __name__ == "__main__":

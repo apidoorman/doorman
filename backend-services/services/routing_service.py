@@ -14,7 +14,6 @@ from pymongo.errors import DuplicateKeyError
 import uuid
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 class RoutingService:

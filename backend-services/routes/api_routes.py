@@ -21,7 +21,6 @@ import uuid
 import time
 
 api_router = APIRouter() 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 @api_router.post("",

@@ -29,7 +29,6 @@ from gql.transport.aiohttp import AIOHTTPTransport
 import logging
 logging.getLogger('gql').setLevel(logging.WARNING)
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 class GatewayService:

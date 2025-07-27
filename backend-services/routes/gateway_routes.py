@@ -28,7 +28,6 @@ from datetime import datetime
 
 gateway_router = APIRouter()
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 @gateway_router.api_route("/status", methods=["GET"],
