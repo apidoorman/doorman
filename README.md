@@ -1,5 +1,5 @@
 
-![Logo](https://i.ibb.co/mMcR63Q/doorman-logo-grn.png)
+![Logo](https://i.ibb.co/VpDyBMnk/doorman-gateway-logo.png)
 
 ##
 
@@ -15,21 +15,13 @@
 # Doorman API Gateway
 A lightweight API gateway built for AI, REST, SOAP, GraphQL, and gRPC APIs. No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. This is your application’s gateway to the world. 🐍
 
-![Example](https://i.ibb.co/nZK8Pd9/example-dashboard-light.png)
+![Example](https://i.ibb.co/9dkgPLP/dashboardpage.png)
 
 ## Features
 Doorman supports user management, authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, and mongodb. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
 
-
 ## Coming Enhancements
 Doorman will soon support transformation, field encryption, and orchestration. More features to be announced.
-
-
-## Documentation
-[API Documentation](https://doorman.so/docs)
-| [Postman collection](https://doorman.so/doorman-postman-collection.json)
-| [OpenAPI swagger](https://doorman.so/openapi.json)
-
 
 ## Get Started
 Doorman is simple to setup. Just have redis and mongo db running. Then follow the few steps below.
@@ -104,6 +96,21 @@ Run Doorman console instance for debugging
 ```bash
   python doorman.py run
 ```
+
+## Web UI
+Utilize the built in web interface for ease of use!
+
+![Create APIs](https://i.ibb.co/j9vQJGL0/apispage.png)
+
+![Custom Routings](https://i.ibb.co/D0CCYGJ/routespage.png)
+
+![Edit Roles](https://i.ibb.co/jk2F7vk8/rolespage.png)
+
+![Add Groups](https://i.ibb.co/1G3jMPvG/groupspage.png)
+
+![User Management](https://i.ibb.co/3y2xVTv5/userspage.png)
+
+![Advanced Logs](https://i.ibb.co/BKvVhW4B/logspage.png)
 
 
 ## License Information
