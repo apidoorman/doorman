@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface LayoutProps {
@@ -34,6 +34,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const { isAuthenticated, hasUIAccess, user, permissions, logout } = useAuth()
+  const router = useRouter()
+
+  // Redirect to login if not authenticated (except for login page)
+  useEffect(() => {
+    if (pathname !== '/login' && (!isAuthenticated || !hasUIAccess)) {
+      console.log('Layout - Redirecting to login:', { pathname, isAuthenticated, hasUIAccess })
+      router.push('/login')
+    }
+  }, [pathname, isAuthenticated, hasUIAccess, router])
 
   // Filter menu items based on user permissions
   const filteredMenuItems = menuItems.filter(item => {
