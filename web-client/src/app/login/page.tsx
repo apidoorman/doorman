@@ -53,9 +53,9 @@ const LoginPage = () => {
           console.log('Cookies after login:', document.cookie)
           
           // Small delay to ensure cookie is set, then check auth and redirect
-          setTimeout(() => {
+          setTimeout(async () => {
             console.log('Login - Checking auth after cookie set...')
-            checkAuth()
+            await checkAuth()
             
             // Additional delay to ensure auth state is updated
             setTimeout(() => {
