@@ -75,6 +75,13 @@ async def authorization(request: Request):
                 error_message="User is not active"
             ))
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, False)
+        
+        # Debug logging
+        logger.info(f"Login successful for user: {user['username']}")
+        logger.info(f"User data: {user}")
+        logger.info(f"User role: {user.get('role')}")
+        logger.info(f"User ui_access: {user.get('ui_access')}")
+        
         response = process_response(ResponseModel(
             status_code=200,
             response_headers={
@@ -86,9 +93,11 @@ async def authorization(request: Request):
         response.set_cookie(
             key="access_token_cookie",
             value=access_token,
-            httponly=True,
-            secure=True,
-            samesite="Lax"
+            httponly=False,  # Set to False for debugging
+            secure=False,  # Set to False for HTTP development
+            samesite="Lax",
+            path="/",
+            max_age=1800  # 30 minutes
         )
         return response
     except HTTPException as e:
@@ -159,9 +168,11 @@ async def extended_authorization(request: Request):
         response.set_cookie(
             key="access_token_cookie",
             value=refresh_token,
-            httponly=True,
-            secure=True,
-            samesite="Lax"
+            httponly=False,  # Set to False for debugging
+            secure=False,  # Set to False for HTTP development
+            samesite="Lax",
+            path="/",
+            max_age=604800  # 7 days
         )
         return response
     except HTTPException as e:
