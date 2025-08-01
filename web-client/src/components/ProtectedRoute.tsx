@@ -22,14 +22,10 @@ export function ProtectedRoute({
   useEffect(() => {
     if (redirecting) return;
 
-    if (!isAuthenticated) {
+    // Check if user is not authenticated or doesn't have UI access
+    if (!isAuthenticated || !hasUIAccess) {
       setRedirecting(true);
-      router.push('/login')
-      return
-    }
-
-    if (!hasUIAccess) {
-      setRedirecting(true);
+      console.log('ProtectedRoute - Redirecting to login:', { isAuthenticated, hasUIAccess })
       router.push('/login')
       return
     }
