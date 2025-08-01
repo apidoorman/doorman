@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/AuthContext'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -10,12 +11,20 @@ const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [theme, setTheme] = useState('light')
   const router = useRouter()
+  const { checkAuth, isAuthenticated } = useAuth()
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light'
     setTheme(savedTheme)
     document.documentElement.classList.toggle('dark', savedTheme === 'dark')
   }, [])
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard')
+    }
+  }, [isAuthenticated, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,9 +44,25 @@ const LoginPage = () => {
 
       if (authResponse.ok) {
         const data = await authResponse.json()
+        console.log('Login response:', data)
+        
         if (data.access_token) {
-          document.cookie = `access_token_cookie=${data.access_token}; path=/; domain=localhost`
-          router.push('/dashboard')
+          // The backend already sets the cookie via the response
+          // Wait a moment for the cookie to be set, then check auth and redirect
+          console.log('Login successful, waiting for cookie to be set...')
+          console.log('Cookies after login:', document.cookie)
+          
+          // Small delay to ensure cookie is set, then check auth and redirect
+          setTimeout(() => {
+            console.log('Login - Checking auth after cookie set...')
+            checkAuth()
+            
+            // Additional delay to ensure auth state is updated
+            setTimeout(() => {
+              console.log('Login - Redirecting to dashboard...')
+              router.push('/dashboard')
+            }, 200)
+          }, 200)
         } else {
           setErrorMessage('Login successful but no access token received')
         }
