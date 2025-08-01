@@ -11,7 +11,7 @@ from fastapi import HTTPException, Request
 from jose import jwt, JWTError
 
 from utils.auth_blacklist import jwt_blacklist
-from utils.database import user_collection
+from utils.database import user_collection, role_collection
 from utils.doorman_cache_util import doorman_cache
 
 import logging
@@ -74,6 +74,55 @@ async def auth_required(request: Request):
 def create_access_token(data: dict, refresh: bool = False):
     to_encode = data.copy()
     expire = timedelta(minutes=30) if not refresh else timedelta(days=7)
-    to_encode.update({"exp": datetime.now(UTC) + expire, "jti": str(uuid.uuid4())})
+    
+    username = data.get("sub")
+    if not username:
+        logger.error("No username provided for token creation")
+        raise ValueError("Username is required for token creation")
+    
+    user = doorman_cache.get_cache('user_cache', username)
+    if not user:
+        user = user_collection.find_one({'username': username})
+        if user:
+            if user.get('_id'): del user['_id']
+            if user.get('password'): del user['password']
+            doorman_cache.set_cache('user_cache', username, user)
+    
+    if not user:
+        logger.error(f"User not found: {username}")
+        raise ValueError(f"User {username} not found")
+    
+    role_name = user.get("role")
+    role = None
+    if role_name:
+        role = doorman_cache.get_cache('role_cache', role_name)
+        if not role:
+            role = role_collection.find_one({'role_name': role_name})
+            if role:
+                if role.get('_id'): del role['_id']
+                doorman_cache.set_cache('role_cache', role_name, role)
+    
+    # Create accesses object with defaults
+    accesses = {
+        "ui_access": True,
+        'manage_users': role.get('manage_users', False) if role else False,
+        'manage_apis': role.get('manage_apis', False) if role else False,
+        'manage_endpoints': role.get('manage_endpoints', False) if role else False,
+        'manage_groups': role.get('manage_groups', False) if role else False,
+        'manage_roles': role.get('manage_roles', False) if role else False,
+        'manage_routings': role.get('manage_routings', False) if role else False,
+        'manage_gateway': role.get('manage_gateway', False) if role else False,
+        'manage_subscriptions': role.get('manage_subscriptions', False) if role else False,
+        'export_logs': role.get('export_logs', False) if role else False,
+        'view_logs': role.get('view_logs', False) if role else False,
+    }
+    
+    to_encode.update({
+        "exp": datetime.now(UTC) + expire,
+        "jti": str(uuid.uuid4()),
+        "accesses": accesses
+    })
+    
+    logger.info(f"Creating token for user {username} with accesses: {accesses}")
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

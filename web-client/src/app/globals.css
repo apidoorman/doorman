@@ -119,12 +119,12 @@
   
   /* Main content area */
   .main-content {
-    @apply lg:ml-64 pt-16 min-h-screen bg-gray-50 dark:bg-dark-bg;
+    @apply lg:ml-64 min-h-screen bg-gray-50 dark:bg-dark-bg;
   }
   
   /* Page header */
   .page-header {
-    @apply mb-6 flex items-center justify-between;
+    @apply mb-6 flex items-center justify-between pt-12 lg:pt-0;
   }
   
   .page-title {
