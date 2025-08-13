@@ -9,6 +9,11 @@ import json
 import os
 import threading
 from typing import Dict, Any, Optional
+import pickle
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import base64
 
 class MemoryCache:
     def __init__(self):
@@ -89,6 +94,61 @@ class MemoryCache:
             if expired_keys:
                 print(f"Cleaned up {len(expired_keys)} expired cache entries")
 
+    def _get_encryption_key(self) -> bytes:
+        env_key = os.getenv("CACHE_ENCRYPTION_KEY")
+        if not env_key:
+            raise ValueError("CACHE_ENCRYPTION_KEY environment variable is required for memory cache")
+        salt = b'pygate_cache_salt'
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(env_key.encode()))
+        return key
+    
+    def _encrypt_data(self, data: bytes) -> bytes:
+        f = Fernet(self._encryption_key)
+        return f.encrypt(data)
+    
+    def _decrypt_data(self, encrypted_data: bytes) -> bytes:
+        f = Fernet(self._encryption_key)
+        return f.decrypt(encrypted_data)
+    
+    def _save_cache(self):
+        try:
+            with self._lock:
+                cache_data = {}
+                current_time = self._get_current_time()
+                for key, entry in self._cache.items():
+                    if current_time < entry['expires_at']:
+                        cache_data[key] = entry
+                serialized_data = pickle.dumps(cache_data)
+                encrypted_data = self._encrypt_data(serialized_data)
+                temp_file = f"{self._dump_file}.tmp"
+                with open(temp_file, 'wb') as f:
+                    f.write(encrypted_data)
+                os.replace(temp_file, self._dump_file)
+        except Exception as e:
+            print(f"Warning: Failed to save cache to {self._dump_file}: {e}")
+    
+    def _load_cache(self):
+        try:
+            if os.path.exists(self._dump_file):
+                with open(self._dump_file, 'rb') as f:
+                    encrypted_data = f.read()
+                decrypted_data = self._decrypt_data(encrypted_data)
+                loaded_cache = pickle.loads(decrypted_data)
+                current_time = self._get_current_time()
+                with self._lock:
+                    for key, entry in loaded_cache.items():
+                        if current_time < entry['expires_at']:
+                            self._cache[key] = entry
+                print(f"Loaded {len(self._cache)} cache entries from {self._dump_file}")
+        except Exception as e:
+            print(f"Warning: Failed to load cache from {self._dump_file}: {e}")
+
     def _start_auto_save(self):
         def auto_save_worker():
             while not self._stop_auto_save.wait(self._min_dump_interval):
@@ -102,6 +162,13 @@ class MemoryCache:
                     self._last_cache_size = len(self._cache)
         self._auto_save_thread = threading.Thread(target=auto_save_worker, daemon=True)
         self._auto_save_thread.start()
+
+    def stop_auto_save(self):
+        """Stop the auto-save thread and perform final save."""
+        self._stop_auto_save.set()
+        if self._auto_save_thread:
+            self._auto_save_thread.join(timeout=5)
+        self._save_cache()
 
 class DoormanCacheManager:
     def __init__(self):
