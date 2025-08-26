@@ -16,6 +16,7 @@ interface CreateRoleData {
   manage_routings: boolean
   manage_gateway: boolean
   manage_subscriptions: boolean
+  manage_security: boolean
 }
 
 const AddRolePage = () => {
@@ -32,7 +33,8 @@ const AddRolePage = () => {
     manage_roles: false,
     manage_routings: false,
     manage_gateway: false,
-    manage_subscriptions: false
+    manage_subscriptions: false,
+    manage_security: false
   })
 
   const handleInputChange = (field: keyof CreateRoleData, value: any) => {
@@ -87,7 +89,8 @@ const AddRolePage = () => {
     { key: 'manage_roles', label: 'Manage Roles', description: 'Create, edit, and delete user roles' },
     { key: 'manage_routings', label: 'Manage Routings', description: 'Configure API routing and load balancing' },
     { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
-    { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' }
+    { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
+    { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' }
   ]
 
   return (
