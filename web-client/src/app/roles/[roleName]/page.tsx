@@ -16,6 +16,7 @@ interface Role {
   manage_routings?: boolean
   manage_gateway?: boolean
   manage_subscriptions?: boolean
+  manage_security?: boolean
   view_logs?: boolean
   export_logs?: boolean
 }
@@ -115,8 +116,10 @@ const RoleDetailPage = () => {
         throw new Error(errorData.error_message || 'Failed to update role')
       }
       
-      const updatedRole = await response.json()
-      setRole(updatedRole)
+      const updated = await response.json()
+      const rolePayload = updated?.response || updated
+      setRole(rolePayload)
+      setEditData(rolePayload)
       setIsEditing(false)
       setSuccess('Role updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -374,10 +377,11 @@ const RoleDetailPage = () => {
                     { key: 'manage_groups', label: 'Manage Groups', description: 'Create, edit, and delete user groups' },
                     { key: 'manage_roles', label: 'Manage Roles', description: 'Create, edit, and delete user roles' },
                     { key: 'manage_routings', label: 'Manage Routings', description: 'Configure API routing and load balancing' },
-                    { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
-                    { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
-                    { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
-                    { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }
+                  { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
+                  { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
+                  { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' },
+                  { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
+                  { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }
                   ].map(({ key, label, description }) => (
                     <div key={key} className="flex items-start space-x-3">
                       {isEditing ? (
