@@ -13,17 +13,21 @@ load_dotenv()
 
 class Database:
     def __init__(self):
+        self.memory_only = os.getenv("MEM_OR_REDIS", "MEM").upper() == "MEM"
+        if self.memory_only:
+            self.client = None
+            self.db = None
+            self.db_existed = False
+            print("Memory-only mode: MongoDB connection bypassed")
+            return
         mongo_hosts = os.getenv("MONGO_DB_HOSTS")
         replica_set_name = os.getenv("MONGO_REPLICA_SET_NAME")
-
         host_list = [host.strip() for host in mongo_hosts.split(',') if host.strip()]
         self.db_existed = True
-
         if len(host_list) > 1 and replica_set_name:
             connection_uri = f"mongodb://{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
         else:
             connection_uri = f"mongodb://{','.join(host_list)}/doorman"
-
         self.client = MongoClient(
             connection_uri,
             serverSelectionTimeoutMS=5000,
@@ -31,8 +35,10 @@ class Database:
             minPoolSize=5
         )
         self.db = self.client.get_database()
-
     def initialize_collections(self):
+        if self.memory_only:
+            print("Memory-only mode: Skipping MongoDB collection initialization")
+            return
         collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'token_defs', 'user_tokens', 'endpoint_validations']
         for collection in collections:
             if collection not in self.db.list_collection_names():
@@ -77,7 +83,6 @@ class Database:
                     "group_description": "Administrator group with full access",
                     "api_access": []
                 })
-            
             if not self.db.groups.find_one({"group_name": "ALL"}):
                 self.db.groups.insert_one({
                     "group_name": "ALL",
@@ -86,59 +91,77 @@ class Database:
                 })
 
     def create_indexes(self):
+        if self.memory_only:
+            print("Memory-only mode: Skipping MongoDB index creation")
+            return
         self.db.apis.create_indexes([
             IndexModel([("api_id", ASCENDING)], unique=True),
             IndexModel([("name", ASCENDING), ("version", ASCENDING)])
         ])
-
         self.db.endpoints.create_indexes([
             IndexModel([("endpoint_method", ASCENDING), ("api_name", ASCENDING), ("api_version", ASCENDING), ("endpoint_uri", ASCENDING)], unique=True),
         ])
-
         self.db.users.create_indexes([
             IndexModel([("username", ASCENDING)], unique=True),
             IndexModel([("email", ASCENDING)], unique=True)
         ])
-
         self.db.groups.create_indexes([
             IndexModel([("group_name", ASCENDING)], unique=True)
         ])
-
         self.db.roles.create_indexes([
             IndexModel([("role_name", ASCENDING)], unique=True)
         ])
-
         self.db.subscriptions.create_indexes([
             IndexModel([("username", ASCENDING)], unique=True)
         ])
-
         self.db.routings.create_indexes([
             IndexModel([("client_key", ASCENDING)], unique=True)
         ])
-
         self.db.token_defs.create_indexes([
             IndexModel([("api_token_group", ASCENDING)], unique=True),
             IndexModel([("username", ASCENDING)], unique=True)
         ])
-
         self.db.endpoint_validations.create_indexes([
             IndexModel([("endpoint_id", ASCENDING)], unique=True)
         ])
+    
+    def is_memory_only(self) -> bool:
+        return self.memory_only
+    
+    def get_mode_info(self) -> dict:
+        return {
+            'mode': 'memory_only' if self.memory_only else 'mongodb',
+            'mongodb_connected': not self.memory_only and self.client is not None,
+            'collections_available': not self.memory_only,
+            'cache_backend': os.getenv("MEM_OR_REDIS", "REDIS")
+        }
 
 database = Database()
-
 database.initialize_collections()
 database.create_indexes()
-
-db = database.db
-mongodb_client = database.client
-api_collection = db.apis
-endpoint_collection = db.endpoints
-group_collection = db.groups
-role_collection = db.roles
-routing_collection = db.routings
-subscriptions_collection = db.subscriptions
-user_collection = db.users
-token_def_collection = db.token_defs
-user_token_collection = db.user_tokens
-endpoint_validation_collection = db.endpoint_validations
+if database.memory_only:
+    db = None
+    mongodb_client = None
+    api_collection = None
+    endpoint_collection = None
+    group_collection = None
+    role_collection = None
+    routing_collection = None
+    subscriptions_collection = None
+    user_collection = None
+    token_def_collection = None
+    user_token_collection = None
+    endpoint_validation_collection = None
+else:
+    db = database.db
+    mongodb_client = database.client
+    api_collection = db.apis
+    endpoint_collection = db.endpoints
+    group_collection = db.groups
+    role_collection = db.roles
+    routing_collection = db.routings
+    subscriptions_collection = db.subscriptions
+    user_collection = db.users
+    token_def_collection = db.token_defs
+    user_token_collection = db.user_tokens
+    endpoint_validation_collection = db.endpoint_validations
