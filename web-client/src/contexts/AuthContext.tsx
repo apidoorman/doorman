@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       // Check with backend auth status endpoint
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/authorization/status`, {
+      const response = await fetch(`${'http://localhost:3002'}/platform/authorization/status`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',

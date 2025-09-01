@@ -159,7 +159,6 @@ class GroupService:
         ).dict()
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def group_exists(data):
         """
         Check if a group exists.
@@ -169,7 +168,6 @@ class GroupService:
         return False
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_groups(page=1, page_size=10, request_id=None):
         """
         Get all groups.
@@ -187,7 +185,6 @@ class GroupService:
         ).dict()
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_group(group_name, request_id):
         """
         Get a group by name.

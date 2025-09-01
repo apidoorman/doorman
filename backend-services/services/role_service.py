@@ -95,15 +95,25 @@ class RoleService:
         if not_null_data:
             update_result = role_collection.update_one({'role_name': role_name}, {'$set': not_null_data})
             if not update_result.acknowledged or update_result.modified_count == 0:
-                logger.error(request_id + " | Role update failed with code ROLE006")
-                return ResponseModel(
-                    status_code=400,
-                    error_code='ROLE006',
-                    error_message='Unable to update role'
-                ).dict()
+                # In some backends (memory), modified_count may be 0 when values are identical.
+                # Check if the role now reflects the requested values before failing.
+                current = role_collection.find_one({'role_name': role_name}) or {}
+                is_applied = all(current.get(k) == v for k, v in not_null_data.items())
+                if not is_applied:
+                    logger.error(request_id + " | Role update failed with code ROLE006")
+                    return ResponseModel(
+                        status_code=400,
+                        error_code='ROLE006',
+                        error_message='Unable to update role'
+                    ).dict()
+            # Fetch the updated role to return to clients that expect the object
+            updated_role = role_collection.find_one({'role_name': role_name}) or {}
+            if updated_role.get('_id'): del updated_role['_id']
+            doorman_cache.set_cache('role_cache', role_name, updated_role)
             logger.info(request_id + " | Role update successful")
             return ResponseModel(
                 status_code=200,
+                response=updated_role,
                 message='Role updated successfully'
             ).dict()
         else:
@@ -157,7 +167,6 @@ class RoleService:
 
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def role_exists(data):
         """
         Check if a role exists.
@@ -167,7 +176,6 @@ class RoleService:
         return False
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_roles(page=1, page_size=10, request_id=None):
         """
         Get all roles.
@@ -185,7 +193,6 @@ class RoleService:
         ).dict()
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_role(role_name, request_id):
         """
         Get a role by name.

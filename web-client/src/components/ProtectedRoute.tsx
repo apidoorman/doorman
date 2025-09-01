@@ -92,7 +92,8 @@ export function ProtectedRoute({
       'manage_roles': 'Role Management',
       'manage_routings': 'Routing Management',
       'manage_gateway': 'Gateway Management',
-      'manage_subscriptions': 'Subscription Management'
+      'manage_subscriptions': 'Subscription Management',
+      'manage_security': 'Security Management'
     }
 
     const permissionName = permissionMessages[requiredPermission] || requiredPermission

@@ -144,8 +144,19 @@ const UserDetailPage = () => {
         throw new Error(errorData.detail || 'Failed to update user')
       }
 
-      const updatedUser = await response.json()
-      setUser(updatedUser)
+      // Refresh from server to get the latest canonical data
+      const refreshed = await fetch(`http://localhost:3002/platform/user/${encodeURIComponent(username)}`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
+      const refreshedUser = await refreshed.json()
+      setUser(refreshedUser)
+      // Keep sessionStorage in sync for back-navigation
+      sessionStorage.setItem('selectedUser', JSON.stringify(refreshedUser))
       setIsEditing(false)
       setSuccess('User updated successfully!')
       setTimeout(() => setSuccess(null), 3000)

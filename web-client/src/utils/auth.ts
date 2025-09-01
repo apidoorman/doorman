@@ -11,6 +11,7 @@ interface JWTPayload {
     manage_routings: boolean
     manage_gateway: boolean
     manage_subscriptions: boolean
+    manage_security: boolean
   }
   exp: number
   jti: string
