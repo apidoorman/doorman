@@ -36,8 +36,10 @@ from routes.logging_routes import logging_router
 from routes.dashboard_routes import dashboard_router
 from routes.memory_routes import memory_router
 from routes.security_routes import security_router
+from routes.monitor_routes import monitor_router
 from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
 from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
+from utils.metrics_util import metrics_store
 from utils.database import database
 
 import multiprocessing
@@ -106,6 +108,51 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expires: timedelta = timedelta(minutes=int(os.getenv("ACCESS_TOKEN_EXPIRES_MINUTES", 15)))
     jwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", 30)))
+
+
+@doorman.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    start = asyncio.get_event_loop().time()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        # Record metrics for gateway requests only (under /api/*)
+        try:
+            if str(request.url.path).startswith("/api/"):
+                end = asyncio.get_event_loop().time()
+                duration_ms = (end - start) * 1000.0
+                status = getattr(response, 'status_code', 500) if response is not None else 500
+                username = None
+                api_key = None
+                # Try to extract username via auth payload
+                try:
+                    from utils.auth_util import auth_required as _auth_required
+                    payload = await _auth_required(request)
+                    username = payload.get('sub') if isinstance(payload, dict) else None
+                except Exception:
+                    pass
+                # Derive a coarse api_key from path
+                p = str(request.url.path)
+                if p.startswith('/api/rest/'):
+                    parts = p.split('/')
+                    try:
+                        idx = parts.index('rest')
+                        api_key = f"rest:{parts[idx+1]}" if len(parts) > idx+1 and parts[idx+1] else 'rest:unknown'
+                    except ValueError:
+                        api_key = 'rest:unknown'
+                elif p.startswith('/api/graphql/'):
+                    # Use last segment as name
+                    seg = p.rsplit('/', 1)[-1] or 'unknown'
+                    api_key = f"graphql:{seg}"
+                elif p.startswith('/api/soap/'):
+                    seg = p.rsplit('/', 1)[-1] or 'unknown'
+                    api_key = f"soap:{seg}"
+                metrics_store.record(status=status, duration_ms=duration_ms, username=username, api_key=api_key)
+        except Exception:
+            # Never break the request flow due to metrics errors
+            pass
 
 async def automatic_purger(interval_seconds):
     while True:
@@ -197,6 +244,7 @@ doorman.include_router(logging_router, prefix="/platform/logging", tags=["Loggin
 doorman.include_router(dashboard_router, prefix="/platform/dashboard", tags=["Dashboard"])
 doorman.include_router(memory_router, prefix="/platform", tags=["Memory"])
 doorman.include_router(security_router, prefix="/platform", tags=["Security"])
+doorman.include_router(monitor_router, prefix="/platform", tags=["Monitor"])
 
 def start():
     if os.path.exists(PID_FILE):

@@ -23,6 +23,10 @@ DEFAULTS = {
     "dump_path": os.getenv("MEM_DUMP_PATH", "generated/memory_dump.bin"),
 }
 
+# Persist settings to a small JSON file so memory-only mode
+# can restore across restarts (before any DB state exists).
+SETTINGS_FILE = os.getenv("SECURITY_SETTINGS_FILE", "generated/security_settings.json")
+
 
 def _get_collection():
     return db.settings if not database.memory_only else database.db.settings
@@ -43,9 +47,51 @@ def get_cached_settings() -> Dict[str, Any]:
     return _CACHE
 
 
+def _load_from_file() -> Optional[Dict[str, Any]]:
+    try:
+        if not os.path.exists(SETTINGS_FILE):
+            return None
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            data = f.read().strip()
+            if not data:
+                return None
+            import json
+            obj = json.loads(data)
+            # Only accept dicts that look like our settings
+            if isinstance(obj, dict):
+                return obj
+    except Exception as e:
+        logger.error("Failed to read settings file %s: %s", SETTINGS_FILE, e)
+    return None
+
+
+def _save_to_file(settings: Dict[str, Any]) -> None:
+    try:
+        os.makedirs(os.path.dirname(SETTINGS_FILE) or ".", exist_ok=True)
+        import json
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            f.write(json.dumps(settings, separators=(",", ":")))
+    except Exception as e:
+        logger.error("Failed to write settings file %s: %s", SETTINGS_FILE, e)
+
+
 async def load_settings() -> Dict[str, Any]:
     coll = _get_collection()
     doc = coll.find_one({"type": "security_settings"})
+    # In memory-only mode, the collection starts empty on fresh boot.
+    # Try to restore from settings file so we can locate the last dump path
+    # before DB state is restored from dump.
+    if not doc and database.memory_only:
+        file_obj = _load_from_file()
+        if file_obj:
+            # Seed in-memory collection with file settings for the runtime
+            try:
+                to_set = _merge_settings(file_obj)
+                coll.update_one({"type": "security_settings"}, {"$set": to_set})
+                doc = to_set
+            except Exception:
+                # If update fails for any reason, just continue with file data
+                doc = file_obj
     settings = _merge_settings(doc or {})
     _CACHE.update(settings)
     return settings
@@ -64,6 +110,8 @@ async def save_settings(partial: Dict[str, Any]) -> Dict[str, Any]:
     if not modified and not coll.find_one({"type": "security_settings"}):
         coll.insert_one(current)
     _CACHE.update(current)
+    # Always persist to file so memory-only mode can restore on next start
+    _save_to_file(_CACHE)
     await restart_auto_save_task()
     return current
 
@@ -72,7 +120,8 @@ async def _auto_save_loop(stop_event: asyncio.Event):
     while not stop_event.is_set():
         try:
             settings = get_cached_settings()
-            # Auto-save is ALWAYS enabled in memory-only mode; only frequency is configurable
+            # Auto-save triggers in memory-only mode when frequency > 0.
+            # (dumping is not supported in persistent DB mode)
             freq = int(settings.get("auto_save_frequency_seconds", 0) or 0)
             if database.memory_only and freq > 0:
                 try:

@@ -9,3 +9,7 @@ logs/
 **/.logs/
 venv/
 **/.venv/
+generated/
+**/.generated/
+data/
+**/.data/
