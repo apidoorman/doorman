@@ -109,8 +109,18 @@ const GroupDetailPage = () => {
         throw new Error(errorData.detail || 'Failed to update group')
       }
       
-      const updatedGroup = await response.json()
-      setGroup(updatedGroup)
+      // Refresh from server to get the latest canonical data
+      const refreshed = await fetch(`http://localhost:3002/platform/group/${encodeURIComponent(groupName)}`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
+      const refreshedGroup = await refreshed.json()
+      setGroup(refreshedGroup)
+      setEditData(refreshedGroup)
       setIsEditing(false)
       setSuccess('Group updated successfully!')
       setTimeout(() => setSuccess(null), 3000)

@@ -8,7 +8,7 @@ import Layout from '@/components/Layout'
 interface User {
   username: string
   email: string
-  is_active: boolean
+  active: boolean
   created_at: string
   last_login?: string
   roles?: string[]
@@ -78,7 +78,7 @@ const UsersPage = () => {
       } else if (sortField === 'email') {
         return a.email.localeCompare(b.email)
       } else if (sortField === 'status') {
-        return a.is_active === b.is_active ? 0 : a.is_active ? -1 : 1
+        return a.active === b.active ? 0 : a.active ? -1 : 1
       }
       return 0
     })
@@ -235,8 +235,8 @@ const UsersPage = () => {
                         </div>
                       </td>
                       <td>
-                        <span className={`badge ${user.is_active ? 'badge-success' : 'badge-error'}`}>
-                          {user.is_active ? 'Active' : 'Inactive'}
+                        <span className={`badge ${user.active ? 'badge-success' : 'badge-error'}`}>
+                          {user.active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       <td>
