@@ -5,7 +5,7 @@ Utilities to dump and restore in-memory database state with encryption.
 import os
 import json
 import base64
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime
 
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -77,6 +77,81 @@ def _split_dir_and_stem(path_hint: Optional[str]) -> tuple[str, str]:
     return dump_dir, stem
 
 
+BYTES_KEY_PREFIX = "__byteskey__:"
+
+
+def _to_jsonable(obj: Any) -> Any:
+    """Recursively convert arbitrary objects to JSON-serializable structures.
+
+    - bytes -> {"__type__": "bytes", "data": base64}
+    - set/tuple -> list
+    - dict/list recurse
+    - other unknown types -> str(obj)
+    """
+    if isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    if isinstance(obj, bytes):
+        return {"__type__": "bytes", "data": base64.b64encode(obj).decode("ascii")}
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            # Ensure keys are strings for JSON
+            if isinstance(k, bytes):
+                sk = BYTES_KEY_PREFIX + base64.b64encode(k).decode("ascii")
+            elif isinstance(k, (str, int, float, bool)) or k is None:
+                sk = str(k)
+            else:
+                try:
+                    sk = str(k)
+                except Exception:
+                    sk = "__invalid_key__"
+            out[sk] = _to_jsonable(v)
+        return out
+    if isinstance(obj, list):
+        return [_to_jsonable(v) for v in obj]
+    if isinstance(obj, tuple) or isinstance(obj, set):
+        return [_to_jsonable(v) for v in obj]
+    # Fallback to string representation for anything else
+    try:
+        return str(obj)
+    except Exception:
+        return None
+
+
+def _json_default(o: Any) -> Any:
+    if isinstance(o, bytes):
+        return {"__type__": "bytes", "data": base64.b64encode(o).decode("ascii")}
+    try:
+        # Attempt to stringify as a last resort
+        return str(o)
+    except Exception:
+        return None
+
+
+def _from_jsonable(obj: Any) -> Any:
+    """Inverse of _to_jsonable for the specific encodings we apply."""
+    if isinstance(obj, dict):
+        if obj.get("__type__") == "bytes" and isinstance(obj.get("data"), str):
+            try:
+                return base64.b64decode(obj["data"])
+            except Exception:
+                return b""
+        restored: dict[str, Any] = {}
+        for k, v in obj.items():
+            rk: Any = k
+            if isinstance(k, str) and k.startswith(BYTES_KEY_PREFIX):
+                b64 = k[len(BYTES_KEY_PREFIX):]
+                try:
+                    rk = base64.b64decode(b64)
+                except Exception:
+                    rk = k  # leave as-is if decode fails
+            restored[rk] = _from_jsonable(v)
+        return restored
+    if isinstance(obj, list):
+        return [_from_jsonable(v) for v in obj]
+    return obj
+
+
 def dump_memory_to_file(path: Optional[str] = None) -> str:
     if not database.memory_only:
         raise RuntimeError("Memory dump is only available in memory-only mode")
@@ -87,9 +162,10 @@ def dump_memory_to_file(path: Optional[str] = None) -> str:
     payload = {
         "version": 1,
         "created_at": datetime.utcnow().isoformat() + "Z",
-        "data": database.db.dump_data(),
+        # Ensure data is JSON-serializable by normalizing bytes, sets, tuples, etc.
+        "data": _to_jsonable(database.db.dump_data()),
     }
-    plaintext = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    plaintext = json.dumps(payload, separators=(",", ":"), default=_json_default).encode("utf-8")
     key = os.getenv("MEM_ENCRYPTION_KEY", "")
     blob = _encrypt_blob(plaintext, key)
     with open(dump_path, "wb") as f:
@@ -108,7 +184,8 @@ def restore_memory_from_file(path: Optional[str] = None) -> dict:
         blob = f.read()
     plaintext = _decrypt_blob(blob, key)
     payload = json.loads(plaintext.decode("utf-8"))
-    data = payload.get("data", {})
+    # Convert any encoded bytes or container types back to runtime shapes
+    data = _from_jsonable(payload.get("data", {}))
     database.db.load_data(data)
     return {"version": payload.get("version", 1), "created_at": payload.get("created_at")}
 

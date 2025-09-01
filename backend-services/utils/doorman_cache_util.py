@@ -127,6 +127,9 @@ class MemoryCache:
                 serialized_data = pickle.dumps(cache_data)
                 encrypted_data = self._encrypt_data(serialized_data)
                 temp_file = f"{self._dump_file}.tmp"
+                dump_dir = os.path.dirname(self._dump_file)
+                if dump_dir:
+                    os.makedirs(dump_dir, exist_ok=True)
                 with open(temp_file, 'wb') as f:
                     f.write(encrypted_data)
                 os.replace(temp_file, self._dump_file)
