@@ -120,7 +120,9 @@ const ApiDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/api/${apiId}`, {
+      const targetName = (api?.['api_name'] as string) || ''
+      const targetVersion = (api?.['api_version'] as string) || ''
+      const response = await fetch(`http://localhost:3002/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
@@ -136,8 +138,21 @@ const ApiDetailPage = () => {
         throw new Error(errorData.detail || 'Failed to update API')
       }
 
-      const updatedApi = await response.json()
-      setApi(updatedApi)
+      // Refresh from server to get the latest canonical data
+      if (!api) throw new Error('API context missing for refresh')
+      const name = (api as any).api_name as string
+      const version = (api as any).api_version as string
+      const refreshed = await fetch(`http://localhost:3002/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
+      const refreshedApi = await refreshed.json()
+      setApi(refreshedApi)
+      sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
       setIsEditing(false)
       setSuccess('API updated successfully!')
       setTimeout(() => setSuccess(null), 3000)

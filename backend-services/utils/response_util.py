@@ -10,12 +10,14 @@ def process_rest_response(response):
     try:
         processed_response = None
         if response.status_code == 200:
-            if response.message:
-                processed_response = {
-                    "message": response.message
-                    }
-            else:
+            # Prefer returning the actual response payload when present.
+            # Include message only when no response data is provided.
+            if getattr(response, 'response', None) is not None:
                 processed_response = response.response
+            elif response.message:
+                processed_response = {"message": response.message}
+            else:
+                processed_response = None
         elif response.status_code == 201:
             processed_response = {
                 "message": response.message

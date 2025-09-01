@@ -196,7 +196,6 @@ class EndpointService:
         ).dict()
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_endpoint(endpoint_method, api_name, api_version, endpoint_uri, request_id):
         """
         Get an endpoint by API name, version and URI.
@@ -228,7 +227,6 @@ class EndpointService:
         ).dict()
     
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_endpoints_by_name_version(api_name, api_version, request_id):
         """
         Get all endpoints by API name and version.

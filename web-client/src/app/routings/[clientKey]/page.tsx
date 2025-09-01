@@ -100,8 +100,18 @@ const RoutingDetailPage = () => {
         throw new Error(errorData.detail || 'Failed to update routing')
       }
 
-      const updatedRouting = await response.json()
-      setRouting(updatedRouting)
+      // Refresh from server to get the latest canonical data
+      const refreshed = await fetch(`http://localhost:3002/platform/routing/${encodeURIComponent(clientKey)}`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
+      const refreshedRouting = await refreshed.json()
+      setRouting(refreshedRouting)
+      sessionStorage.setItem('selectedRouting', JSON.stringify(refreshedRouting))
       setIsEditing(false)
       setSuccess('Routing updated successfully!')
       setTimeout(() => setSuccess(null), 3000)

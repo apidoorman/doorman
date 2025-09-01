@@ -17,7 +17,6 @@ logger = logging.getLogger("doorman.gateway")
 class SubscriptionService:
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def api_exists(api_name, api_version):
         """
         Check if an API exists.
@@ -39,7 +38,6 @@ class SubscriptionService:
         return api
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_user_subscriptions(username, request_id):
         """
         Get user subscriptions.
