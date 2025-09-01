@@ -24,7 +24,7 @@ interface Metrics {
 const MonitorPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [metrics, setMetrics] = useState<any[]>([])
+  const [metrics, setMetrics] = useState<any | null>(null)
   const [timeRange, setTimeRange] = useState('24h')
 
   useEffect(() => {
@@ -35,19 +35,27 @@ const MonitorPage: React.FC = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`/api/platform/metrics?range=${timeRange}`)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/monitor/metrics?range=${encodeURIComponent(timeRange)}` , {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch metrics')
       }
       const data = await response.json()
-      setMetrics(data)
+      const payload = data?.response || data
+      setMetrics(payload)
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message)
       } else {
         setError('An unknown error occurred')
       }
-      setMetrics([])
+      setMetrics(null)
     } finally {
       setLoading(false)
     }
@@ -131,8 +139,8 @@ const MonitorPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="stats-label">Total Requests</p>
-                  <p className="stats-value">1,234,567</p>
-                  <p className="stats-change positive">+12.5% from last period</p>
+                  <p className="stats-value">{metrics?.total_requests ?? 0}</p>
+                  <p className="stats-change">&nbsp;</p>
                 </div>
                 <div className="h-12 w-12 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
                   <svg className="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -147,8 +155,16 @@ const MonitorPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="stats-label">Error Rate</p>
-                  <p className="stats-value">0.23%</p>
-                  <p className="stats-change negative">+0.05% from last period</p>
+                  <p className="stats-value">
+                    {(() => {
+                      const series = metrics?.series || []
+                      const total = series.reduce((a: number, b: any) => a + (b.count || 0), 0)
+                      const errs = series.reduce((a: number, b: any) => a + (b.error_count || 0), 0)
+                      if (!total) return '0%'
+                      return `${((errs / total) * 100).toFixed(2)}%`
+                    })()}
+                  </p>
+                  <p className="stats-change">&nbsp;</p>
                 </div>
                 <div className="h-12 w-12 rounded-lg bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
                   <svg className="h-6 w-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,8 +179,8 @@ const MonitorPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="stats-label">Avg Response Time</p>
-                  <p className="stats-value">142ms</p>
-                  <p className="stats-change positive">-8ms from last period</p>
+                  <p className="stats-value">{Math.round(metrics?.avg_response_ms ?? 0)}ms</p>
+                  <p className="stats-change">&nbsp;</p>
                 </div>
                 <div className="h-12 w-12 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
                   <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -179,8 +195,8 @@ const MonitorPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="stats-label">Active Users</p>
-                  <p className="stats-value">847</p>
-                  <p className="stats-change positive">+23 from last period</p>
+                  <p className="stats-value">--</p>
+                  <p className="stats-change">&nbsp;</p>
                 </div>
                 <div className="h-12 w-12 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
                   <svg className="h-6 w-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -194,10 +210,37 @@ const MonitorPage: React.FC = () => {
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {renderMetricChart([], 'Request Volume')}
-          {renderMetricChart([], 'Response Times')}
-          {renderMetricChart([], 'Error Rates')}
-          {renderMetricChart([], 'Bandwidth Usage')}
+          <div className="card">
+            <div className="card-header"><h3 className="card-title">Status Codes</h3></div>
+            <div className="p-6">
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(metrics?.status_counts || {}).map(([code, count]) => (
+                  <div key={code} className="flex justify-between text-sm"><span>{code}</span><span>{count as any}</span></div>
+                ))}
+                {(!metrics || !metrics.status_counts || Object.keys(metrics.status_counts).length === 0) && (
+                  <p className="text-gray-500 dark:text-gray-400">No data</p>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-header"><h3 className="card-title">Request Volume (per minute)</h3></div>
+            <div className="p-6">
+              <div className="h-48 overflow-y-auto">
+                <ul className="text-sm space-y-1">
+                  {(metrics?.series || []).slice().reverse().map((pt: any) => (
+                    <li key={pt.timestamp} className="flex justify-between">
+                      <span>{new Date(pt.timestamp * 1000).toLocaleTimeString()}</span>
+                      <span>{pt.count} req • avg {Math.round(pt.avg_ms)}ms • {pt.error_count} errs</span>
+                    </li>
+                  ))}
+                </ul>
+                {(!metrics || !metrics.series || metrics.series.length === 0) && (
+                  <p className="text-gray-500 dark:text-gray-400">No data</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* System Status */}

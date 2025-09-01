@@ -116,8 +116,16 @@ const RoleDetailPage = () => {
         throw new Error(errorData.error_message || 'Failed to update role')
       }
       
-      const updated = await response.json()
-      const rolePayload = updated?.response || updated
+      // Refresh from server to get the latest canonical data
+      const refreshed = await fetch(`http://localhost:3002/platform/role/${encodeURIComponent(roleName)}`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
+      const rolePayload = await refreshed.json()
       setRole(rolePayload)
       setEditData(rolePayload)
       setIsEditing(false)
