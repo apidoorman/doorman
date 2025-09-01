@@ -44,6 +44,10 @@ Set environment variables in a .env file
 STARTUP_ADMIN_EMAIL=admin@localhost.com
 STARTUP_ADMIN_PASSWORD=SecPassword!12345
 
+# Set MEM for in memory cahching and platofmr data with encrypted data dumps
+MEM_OR_EXTERNAL=MEM
+MEM_ENCRYPTION_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
 # Mongo DB Config
 MONGO_DB_HOSTS=localhost:27017 # Comma separated
 MONGO_REPLICA_SET_NAME=rs0
@@ -52,6 +56,11 @@ MONGO_REPLICA_SET_NAME=rs0
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
+
+# Mem Cache Config
+CACHE_DUMP_INTERVAL=300
+CACHE_MIN_DUMP_INTERVAL=60
+CACHE_DUMP_FILE=data/doorman_data.enc
 
 # Authorization Config
 JWT_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
