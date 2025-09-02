@@ -49,6 +49,7 @@ import sys
 import subprocess
 import signal
 import uvicorn
+import time
 import asyncio
 
 from utils.response_util import process_response
@@ -187,6 +188,32 @@ async def startup_event():
     except Exception as e:
         gateway_logger.error(f"Memory mode restore failed: {e}")
 
+    # Register SIGUSR1 handler to force a memory dump (Unix only)
+    try:
+        if hasattr(signal, "SIGUSR1"):
+            loop = asyncio.get_event_loop()
+
+            async def _sigusr1_dump():
+                try:
+                    if not database.memory_only:
+                        gateway_logger.info("SIGUSR1 ignored: not in memory-only mode")
+                        return
+                    if not os.getenv("MEM_ENCRYPTION_KEY"):
+                        gateway_logger.error("SIGUSR1 dump skipped: MEM_ENCRYPTION_KEY not configured")
+                        return
+                    settings = get_cached_settings()
+                    path_hint = settings.get("dump_path")
+                    dump_path = await asyncio.to_thread(dump_memory_to_file, path_hint)
+                    gateway_logger.info(f"SIGUSR1: memory dump written to {dump_path}")
+                except Exception as e:
+                    gateway_logger.error(f"SIGUSR1 dump failed: {e}")
+
+            loop.add_signal_handler(signal.SIGUSR1, lambda: asyncio.create_task(_sigusr1_dump()))
+            gateway_logger.info("SIGUSR1 handler registered for on-demand memory dumps")
+    except NotImplementedError:
+        # add_signal_handler not supported on this platform/event loop
+        pass
+
 @doorman.on_event("shutdown")
 async def shutdown_event():
     # Stop auto-save task cleanly
@@ -265,9 +292,6 @@ def start():
     gateway_logger.info(f"Starting doorman with PID {process.pid}.")
 
 def stop():
-    if doorman_cache.cache_type == "MEM":
-        doorman_cache.force_save_cache()
-        doorman_cache.stop_cache_persistence()
     if not os.path.exists(PID_FILE):
         gateway_logger.info("No running instance found")
         return
@@ -277,7 +301,18 @@ def stop():
         if os.name == "nt":
             subprocess.call(["taskkill", "/F", "/PID", str(pid)])
         else:
+            # Send SIGTERM to allow graceful shutdown; FastAPI shutdown event
+            # writes a final encrypted memory dump in memory-only mode.
             os.killpg(pid, signal.SIGTERM)
+            # Wait briefly for graceful shutdown so the dump can complete
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                try:
+                    # Check if process group leader still exists
+                    os.kill(pid, 0)
+                    time.sleep(0.5)
+                except ProcessLookupError:
+                    break
         print(f"Stopping doorman with PID {pid}")
     except ProcessLookupError:
         print("Process already terminated")

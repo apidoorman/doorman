@@ -148,26 +148,6 @@ const AddRoutingPage = () => {
             </div>
 
             <div>
-              <label htmlFor="server_index" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Default Server Index
-              </label>
-              <input
-                type="number"
-                id="server_index"
-                name="server_index"
-                className="input"
-                placeholder="0"
-                value={formData.server_index || 0}
-                onChange={(e) => handleInputChange('server_index', parseInt(e.target.value))}
-                disabled={loading}
-                min="0"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Index of the default server in the list (0-based)
-              </p>
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Servers *
               </label>

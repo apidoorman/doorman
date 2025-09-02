@@ -9,7 +9,7 @@ interface API {
   api_version: React.ReactNode
   api_type: React.ReactNode
   api_description: React.ReactNode
-  api_path: React.ReactNode
+  api_servers?: string[]
   api_id: React.ReactNode
   api_name: React.ReactNode
   id: string
@@ -38,7 +38,7 @@ const APIsPage = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`http://localhost:3002/platform/api/all`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/api/all`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
@@ -73,7 +73,7 @@ const APIsPage = () => {
       (api.api_name as string)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (api.api_version as string)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (api.api_type as string)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (api.api_path as string)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ((api.api_servers || []).join(',').toLowerCase().includes(searchTerm.toLowerCase())) ||
       (api.api_description as string)?.toLowerCase().includes(searchTerm.toLowerCase())
     )
     setApis(filteredApis)
@@ -97,6 +97,12 @@ const APIsPage = () => {
   const handleApiClick = (api: API) => {
     sessionStorage.setItem('selectedApi', JSON.stringify(api))
     router.push(`/apis/${api.api_id}`)
+  }
+
+  const handleViewEndpoints = (e: React.MouseEvent, api: API) => {
+    e.stopPropagation()
+    sessionStorage.setItem('selectedApi', JSON.stringify(api))
+    router.push(`/apis/${api.api_id}/endpoints`)
   }
 
   return (
@@ -192,10 +198,10 @@ const APIsPage = () => {
                   <tr>
                     <th>Name</th>
                     <th>Version</th>
-                    <th>Path</th>
+                    <th>Servers</th>
                     <th>Description</th>
                     <th>Type</th>
-                    <th></th>
+                    <th className="w-56">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,9 +228,14 @@ const APIsPage = () => {
                         <span className="badge badge-primary">{api.api_version}</span>
                       </td>
                       <td>
-                        <code className="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                          {api.api_path}
-                        </code>
+                        {Array.isArray((api as any).api_servers) && (api as any).api_servers.length > 0 ? (
+                          <div className="text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate">
+                            {(api as any).api_servers.slice(0, 3).join(', ')}
+                            {(api as any).api_servers.length > 3 && ' …'}
+                          </div>
+                        ) : (
+                          <span className="text-gray-500 dark:text-gray-400 text-sm">None</span>
+                        )}
                       </td>
                       <td>
                         <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
@@ -241,12 +252,28 @@ const APIsPage = () => {
                           {api.api_type}
                         </span>
                       </td>
-                      <td>
-                        <button className="btn btn-ghost btn-sm">
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
+                      <td className="whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={(e) => handleViewEndpoints(e, api)}
+                            title="View endpoints for this API"
+                          >
+                            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            View Endpoints
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={(e) => { e.stopPropagation(); handleApiClick(api); }}
+                            title="Open API details"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
