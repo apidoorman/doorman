@@ -57,10 +57,10 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 
-# Mem Cache Config
-CACHE_DUMP_INTERVAL=300
-CACHE_MIN_DUMP_INTERVAL=60
-CACHE_DUMP_FILE=data/doorman_data.enc
+# Memory Dump Config (memory-only mode)
+# Base path/stem for encrypted in-memory database dumps (.bin). Timestamp is appended.
+# Example produces files like generated/memory_dump-YYYYMMDDTHHMMSSZ.bin
+MEM_DUMP_PATH=generated/memory_dump.bin
 
 # Authorization Config
 JWT_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
