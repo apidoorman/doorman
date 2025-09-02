@@ -13,10 +13,11 @@ const AddApiPage = () => {
     api_name: '',
     api_version: '',
     api_type: 'REST',
-    api_path: '',
+    api_servers: [] as string[],
     api_description: '',
     validation_enabled: false
   })
+  const [newServer, setNewServer] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,15 +57,27 @@ const AddApiPage = () => {
     }))
   }
 
+  const addServer = () => {
+    const value = newServer.trim()
+    if (!value) return
+    if (formData.api_servers.includes(value)) return
+    setFormData(prev => ({ ...prev, api_servers: [...prev.api_servers, value] }))
+    setNewServer('')
+  }
+
+  const removeServer = (index: number) => {
+    setFormData(prev => ({ ...prev, api_servers: prev.api_servers.filter((_, i) => i !== index) }))
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
         {/* Page Header */}
         <div className="page-header">
           <div>
-            <h1 className="page-title">Add New API</h1>
+            <h1 className="page-title">Add API</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Create a new API endpoint for your gateway
+              Define a new API and its default upstream servers
             </p>
           </div>
           <Link href="/apis" className="btn btn-secondary">
@@ -158,23 +171,37 @@ const AddApiPage = () => {
             </div>
 
             <div>
-              <label htmlFor="api_path" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                API Path *
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                API Servers
               </label>
-              <input
-                id="api_path"
-                name="api_path"
-                type="text"
-                required
-                className="input"
-                placeholder="e.g., https://api.example.com"
-                value={formData.api_path}
-                onChange={handleChange}
-                disabled={loading}
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                The base URL or path for your API
-              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="input flex-1"
+                  placeholder="e.g., http://localhost:8080"
+                  value={newServer}
+                  onChange={(e) => setNewServer(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addServer()}
+                  disabled={loading}
+                />
+                <button type="button" onClick={addServer} className="btn btn-secondary" disabled={loading}>Add</button>
+              </div>
+              <div className="mt-2 space-y-2">
+                {formData.api_servers.map((srv, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded">
+                    <span className="text-sm font-mono text-gray-800 dark:text-gray-200">{srv}</span>
+                    <button type="button" onClick={() => removeServer(idx)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                {formData.api_servers.length === 0 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">No servers added yet</p>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">These are the default upstreams for this API. You can override per-endpoint later.</p>
             </div>
 
             <div>
