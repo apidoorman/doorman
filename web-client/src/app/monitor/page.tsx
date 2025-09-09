@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { SERVER_URL } from '@/utils/config'
 import Layout from '@/components/Layout'
 
 interface Metric {
@@ -35,13 +36,9 @@ const MonitorPage: React.FC = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/monitor/metrics?range=${encodeURIComponent(timeRange)}` , {
+      const response = await fetch(`${SERVER_URL}/platform/monitor/metrics?range=${encodeURIComponent(timeRange)}` , {
         credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
+        headers: { 'Accept': 'application/json' }
       })
       if (!response.ok) {
         throw new Error('Failed to fetch metrics')

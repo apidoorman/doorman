@@ -12,7 +12,7 @@ from models.user_tokens_model import UserTokenModel
 from models.token_model import TokenModel
 from services.token_service import TokenService
 from utils.auth_util import auth_required
-from utils.response_util import process_response
+from utils.response_util import respond_rest, process_response
 
 import uuid
 import time
@@ -49,13 +49,13 @@ async def create_token(token_data: TokenModel, request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_tokens'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403,
                     error_code="TKN001",
                     error_message="You do not have permission to manage tokens",
-                ).dict(), "rest")
-        return process_response(await TokenService.create_token(token_data, request_id), "rest")
+                ))
+        return respond_rest(await TokenService.create_token(token_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -95,13 +95,13 @@ async def update_token(api_token_group:str, token_data: TokenModel, request: Req
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_tokens'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403,
                     error_code="TKN001",
                     error_message="You do not have permission to manage tokens",
-                ).dict(), "rest")
-        return process_response(await TokenService.update_token(api_token_group, token_data, request_id), "rest")
+                ))
+        return respond_rest(await TokenService.update_token(api_token_group, token_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -117,7 +117,7 @@ async def update_token(api_token_group:str, token_data: TokenModel, request: Req
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 @token_router.delete("/{api_token_group}",
-    description="Update a token",
+    description="Delete a token",
     response_model=ResponseModel,
     responses={
         200: {
@@ -141,13 +141,13 @@ async def delete_token(api_token_group:str, request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_tokens'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403,
                     error_code="TKN001",
                     error_message="You do not have permission to manage tokens",
-                ).dict(), "rest")
-        return process_response(await TokenService.update_token(api_token_group, request_id), "rest")
+                ))
+        return respond_rest(await TokenService.delete_token(api_token_group, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -163,7 +163,7 @@ async def delete_token(api_token_group:str, request: Request):
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
 @token_router.post("/{username}",
-    description="Add tokens",
+    description="Add tokens for a user",
     response_model=ResponseModel,
     responses={
         200: {
@@ -178,7 +178,7 @@ async def delete_token(api_token_group:str, request: Request):
         }
     }
 )
-async def add_user_tokens(token_data: TokenModel, request: Request):
+async def add_user_tokens(username: str, token_data: UserTokenModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -187,13 +187,13 @@ async def add_user_tokens(token_data: TokenModel, request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_tokens'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403,
                     error_code="TKN001",
                     error_message="You do not have permission to manage tokens",
-                ).dict(), "rest")
-        return process_response(await TokenService.add_tokens(token_data, request_id), "rest")
+                ))
+        return respond_rest(await TokenService.add_tokens(username, token_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -221,13 +221,13 @@ async def get_roles(request: Request, page: int = 1, page_size: int = 10):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_tokens'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403,
                     error_code="TKN002",
                     error_message="Unable to retrieve tokens for all user",
-                ).dict(), "rest")
-        return process_response(await TokenService.get_all_tokens(page, page_size, request_id), "rest")
+                ))
+        return respond_rest(await TokenService.get_all_tokens(page, page_size, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -252,23 +252,23 @@ async def get_tokens(username: str, request: Request):
     try:
         payload = await auth_required(request)
         if not payload.get("sub") == username and not await platform_role_required_bool(payload.get("sub"), 'manage_tokens'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403,
                     error_code="TKN003",
                     error_message="Unable to retrieve tokens for user",
-                ).dict(), "rest")
-        return process_response(await TokenService.get_user_tokens(username, request_id), "rest")
+                ))
+        return respond_rest(await TokenService.get_user_tokens(username, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
                 "request_id": request_id
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict(), "rest")
+            ))
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
