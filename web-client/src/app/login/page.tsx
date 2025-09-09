@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { SERVER_URL } from '@/utils/config'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -32,7 +33,7 @@ const LoginPage = () => {
     setErrorMessage('')
 
     try {
-      const authResponse = await fetch(`http://localhost:3002/platform/authorization`, {
+      const authResponse = await fetch(`${SERVER_URL}/platform/authorization`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -43,32 +44,14 @@ const LoginPage = () => {
       })
 
       if (authResponse.ok) {
-        const data = await authResponse.json()
+        const data = await authResponse.json().catch(() => ({}))
         console.log('Login response:', data)
-        
-        if (data.access_token) {
-          // The backend already sets the cookie via the response
-          // Wait a moment for the cookie to be set, then check auth and redirect
-          console.log('Login successful, waiting for cookie to be set...')
-          console.log('Cookies after login:', document.cookie)
-          
-          // Small delay to ensure cookie is set, then check auth and redirect
-          setTimeout(async () => {
-            console.log('Login - Checking auth after cookie set...')
-            await checkAuth()
-            
-            // Additional delay to ensure auth state is updated
-            setTimeout(() => {
-              console.log('Login - Redirecting to dashboard...')
-              router.push('/dashboard')
-            }, 200)
-          }, 200)
-        } else {
-          setErrorMessage('Login successful but no access token received')
-        }
+        // Server sets HttpOnly cookie; just verify via status and redirect
+        await checkAuth()
+        router.push('/dashboard')
       } else {
-        const errorData = await authResponse.json()
-        setErrorMessage(errorData.detail || 'Invalid email or password')
+        const err = await authResponse.json().catch(() => ({}))
+        setErrorMessage(err.error_message || err.message || 'Invalid email or password')
       }
     } catch (error) {
       console.error('Login error:', error)

@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { fetchJson } from '@/utils/http'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { SERVER_URL } from '@/utils/config'
 
 interface DashboardData {
   totalRequests: number
@@ -41,19 +43,9 @@ const Dashboard = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/dashboard`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to fetch dashboard data')
-      }
-      const data = await response.json()
-      setDashboardData(data)
+      const { fetchJson } = await import('@/utils/http')
+      const data = await fetchJson<DashboardData>(`${SERVER_URL}/platform/dashboard`)
+      setDashboardData(data as any)
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message)

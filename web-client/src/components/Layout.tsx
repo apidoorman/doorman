@@ -66,6 +66,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const handleLogout = () => {
     localStorage.clear()
     sessionStorage.clear()
+    // HttpOnly cookie; server-side invalidate via endpoint if needed
     document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
     window.location.href = '/login'
   }

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface UserSettings {
   username: string
@@ -35,12 +36,11 @@ const SettingsPage = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch('http://localhost:3002/platform/user/me', {
+      const response = await fetch(`${SERVER_URL}/platform/user/me`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       if (!response.ok) {
@@ -100,13 +100,12 @@ const SettingsPage = () => {
         return
       }
 
-      const response = await fetch('http://localhost:3002/platform/user/update', {
+      const response = await fetch(`${SERVER_URL}/platform/user/update`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(updateData)
       })

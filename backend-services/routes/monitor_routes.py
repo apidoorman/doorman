@@ -12,6 +12,7 @@ from utils.response_util import process_response
 from utils.metrics_util import metrics_store
 from utils.auth_util import auth_required
 from utils.role_util import platform_role_required_bool
+from utils.health_check_util import check_mongodb, check_redis
 
 monitor_router = APIRouter()
 logger = logging.getLogger("doorman.gateway")
@@ -53,3 +54,24 @@ async def get_metrics(request: Request, range: str = "24h"):
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
+
+@monitor_router.get("/monitor/liveness",
+    description="Kubernetes liveness probe endpoint (no auth)")
+async def liveness():
+    return {"status": "alive"}
+
+
+@monitor_router.get("/monitor/readiness",
+    description="Kubernetes readiness probe endpoint (no auth)")
+async def readiness():
+    try:
+        mongo_ok = await check_mongodb()
+        redis_ok = await check_redis()
+        ready = mongo_ok and redis_ok
+        return {
+            "status": "ready" if ready else "degraded",
+            "mongodb": mongo_ok,
+            "redis": redis_ok
+        }
+    except Exception:
+        return {"status": "degraded"}

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface Role {
   role_name: string
@@ -59,12 +60,11 @@ const RoleDetailPage = () => {
       }
 
       // Fetch from API if not in sessionStorage
-      const response = await fetch(`http://localhost:3002/platform/role/${encodeURIComponent(roleName)}`, {
+      const response = await fetch(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       
@@ -100,13 +100,12 @@ const RoleDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/role/${encodeURIComponent(roleName)}`, {
+      const response = await fetch(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(editData)
       })
@@ -117,12 +116,11 @@ const RoleDetailPage = () => {
       }
       
       // Refresh from server to get the latest canonical data
-      const refreshed = await fetch(`http://localhost:3002/platform/role/${encodeURIComponent(roleName)}`, {
+      const refreshed = await fetch(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       const rolePayload = await refreshed.json()
@@ -152,13 +150,12 @@ const RoleDetailPage = () => {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/role/${encodeURIComponent(roleName)}`, {
+      const response = await fetch(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, {
         method: 'DELETE',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       

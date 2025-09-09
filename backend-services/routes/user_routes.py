@@ -12,7 +12,7 @@ from models.response_model import ResponseModel
 from models.user_model_response import UserModelResponse
 from services.user_service import UserService
 from utils.auth_util import auth_required
-from utils.response_util import process_response
+from utils.response_util import respond_rest, process_response
 from utils.role_util import platform_role_required_bool
 from models.create_user_model import CreateUserModel
 from models.update_user_model import UpdateUserModel
@@ -51,13 +51,13 @@ async def create_user(user_data: CreateUserModel, request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_users'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403,
                     error_code="USR006",
                     error_message="Can only update your own information"
-                ).dict(), "rest")
-        return process_response(await UserService.create_user(user_data, request_id), "rest")
+                ))
+        return respond_rest(await UserService.create_user(user_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -97,13 +97,13 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not auth_username == username and not await platform_role_required_bool(auth_username, 'manage_users'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403,
                     error_code="USR006",
                     error_message="Can only update your own information"
-                ).dict(), "rest")
-        return process_response(await UserService.update_user(username, api_data, request_id), "rest")
+                ))
+        return respond_rest(await UserService.update_user(username, api_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -143,13 +143,13 @@ async def delete_user(username: str, request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not auth_username == username and not await platform_role_required_bool(auth_username, 'manage_users'):
-            return process_response(
+            return respond_rest(
                 ResponseModel(
                     status_code=403, 
                     error_code="USR007",
                     error_message="Can only delete your own account"
-                ).dict(), "rest")
-        return process_response(await UserService.delete_user(username, request_id), "rest")
+                ))
+        return respond_rest(await UserService.delete_user(username, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -189,15 +189,15 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not auth_username == username and not await platform_role_required_bool(auth_username, 'manage_users'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
                 },
                 error_code="USR006",
                 error_message="Can only update your own password"
-            ).dict(), "rest")
-        return process_response(await UserService.update_password(username, api_data, request_id), "rest")
+            ))
+        return respond_rest(await UserService.update_password(username, api_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -224,17 +224,17 @@ async def get_user_by_username(request: Request):
         auth_username = payload.get("sub")
         logger.info(f"{request_id} | Username: {auth_username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await UserService.get_user_by_username(auth_username, request_id), "rest")
+        return respond_rest(await UserService.get_user_by_username(auth_username, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
                 "request_id": request_id
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict(), "rest")
+            ))
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

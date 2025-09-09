@@ -2,17 +2,18 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { 
-  isAuthenticated, 
-  canAccessUI, 
-  canAccessPage, 
-  getCurrentUser, 
+import {
+  isAuthenticated,
+  canAccessUI,
+  canAccessPage,
+  getCurrentUser,
   getUserPermissions,
-  getTokenFromCookie,
   isTokenValid,
   hasUIAccess,
   isUserActive
 } from '@/utils/auth'
+import { fetchJson } from '@/utils/http'
+import { SERVER_URL } from '@/utils/config'
 
 interface AuthContextType {
   isAuthenticated: boolean
@@ -36,103 +37,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
 
   const checkAuth = async () => {
-    const token = getTokenFromCookie()
     console.log('=== AUTH CONTEXT DEBUG ===')
-    console.log('AuthContext checkAuth - token found:', !!token)
-    console.log('AuthContext checkAuth - token value:', token ? token.substring(0, 20) + '...' : 'None')
-    console.log('AuthContext checkAuth - all cookies:', document.cookie)
-    
-    if (!token) {
-      console.log('AuthContext - No token found, setting unauthenticated state')
+    try {
+      // Validate via backend using HttpOnly cookie (no client-side token reads)
+      await fetchJson(`${SERVER_URL}/platform/authorization/status`)
+
+      // If we reach here, token is valid
+      let user = null as any
+      let permissions: any = null
+      try {
+        user = await fetchJson(`${SERVER_URL}/platform/user/me`)
+        if (user?.role) {
+          try {
+            const role = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(user.role)}`)
+            // Role object is expected to contain permission booleans
+            permissions = role || null
+          } catch {}
+        }
+      } catch {}
+
+      setAuthState({
+        isAuthenticated: true,
+        hasUIAccess: true,
+        user,
+        permissions
+      })
+    } catch (error) {
+      console.warn('AuthContext - Not authenticated or status check failed:', error)
       setAuthState({
         isAuthenticated: false,
         hasUIAccess: false,
         user: null,
         permissions: null
       })
-      return
-    }
-
-    try {
-      // Check with backend auth status endpoint
-      const response = await fetch(`${'http://localhost:3002'}/platform/authorization/status`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        }
-      })
-
-      if (response.ok) {
-        // Token is valid according to backend
-        const tokenValid = isTokenValid(token)
-        const uiAccess = hasUIAccess(token)
-        const user = getCurrentUser(token)
-        const permissions = getUserPermissions(token)
-
-        console.log('AuthContext - Backend validation successful, token validation results:', {
-          tokenValid,
-          uiAccess,
-          user: user?.username,
-          hasPermissions: !!permissions,
-          permissions: permissions
-        })
-
-        console.log('AuthContext - Setting auth state:', {
-          isAuthenticated: tokenValid,
-          hasUIAccess: tokenValid && uiAccess,
-          user,
-          permissions
-        })
-
-        setAuthState({
-          isAuthenticated: tokenValid,
-          hasUIAccess: tokenValid && uiAccess,
-          user,
-          permissions
-        })
-
-        // If authenticated but no UI access, redirect to login
-        if (tokenValid && !uiAccess) {
-          console.log('AuthContext - User authenticated but no UI access, logging out')
-          logout()
-        }
-      } else {
-        // Token is invalid according to backend
-        console.log('AuthContext - Backend validation failed, token is invalid')
-        setAuthState({
-          isAuthenticated: false,
-          hasUIAccess: false,
-          user: null,
-          permissions: null
-        })
-        logout()
-      }
-    } catch (error) {
-      console.error('AuthContext - Error checking auth status:', error)
-      // Fallback to client-side validation
-      const tokenValid = isTokenValid(token)
-      const uiAccess = hasUIAccess(token)
-      const user = getCurrentUser(token)
-      const permissions = getUserPermissions(token)
-
-      setAuthState({
-        isAuthenticated: tokenValid,
-        hasUIAccess: tokenValid && uiAccess,
-        user,
-        permissions
-      })
-
-      // If authenticated but no UI access, redirect to login
-      if (tokenValid && !uiAccess) {
-        console.log('AuthContext - User authenticated but no UI access, logging out')
-        logout()
-      }
     }
   }
 
-  const logout = () => {
-    document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+  const logout = async () => {
+    try {
+      await fetch(`${SERVER_URL}/platform/authorization/invalidate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      })
+    } catch (e) {
+      console.warn('Logout invalidate failed (continuing):', e)
+    }
     setAuthState({
       isAuthenticated: false,
       hasUIAccess: false,
@@ -143,8 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const canAccessPagePermission = (permission: string) => {
-    const token = getTokenFromCookie()
-    return token ? canAccessPage(permission as any) : false
+    return !!(authState.isAuthenticated && authState.permissions && authState.permissions[permission])
   }
 
   useEffect(() => {

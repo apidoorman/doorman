@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface CreateUserData {
   username: string
@@ -115,13 +116,12 @@ const AddUserPage = () => {
       setLoading(true)
       setError(null)
 
-      const response = await fetch('http://localhost:3002/platform/user/', {
+      const response = await fetch(`${SERVER_URL}/platform/user/`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(formData)
       })
