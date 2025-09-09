@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface Role {
   role_name: string
@@ -35,21 +36,20 @@ const RolesPage = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`http://localhost:3002/platform/role/all?page=1&page_size=10`, {
+      const response = await fetch(`${SERVER_URL}/platform/role/all?page=1&page_size=10`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       if (!response.ok) {
         throw new Error('Failed to load roles')
       }
       const data = await response.json()
-      
-      setAllRoles(data.roles)
-      setRoles(data.roles)
+      const list = Array.isArray(data) ? data : (data.roles || data.response?.roles || [])
+      setAllRoles(Array.isArray(list) ? list : [])
+      setRoles(Array.isArray(list) ? list : [])
     } catch (err) {
       setError('Failed to load roles. Please try again later.')
       setRoles([])

@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from jose import jwt, JWTError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from contextlib import asynccontextmanager
 
 from redis.asyncio import Redis
 
@@ -36,6 +37,7 @@ from routes.logging_routes import logging_router
 from routes.dashboard_routes import dashboard_router
 from routes.memory_routes import memory_router
 from routes.security_routes import security_router
+from routes.token_routes import token_router
 from routes.monitor_routes import monitor_router
 from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
 from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
@@ -58,10 +60,112 @@ load_dotenv()
 
 PID_FILE = "doorman.pid"
 
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
+    # Startup
+    app.state.redis = Redis.from_url(
+        f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
+        decode_responses=True
+    )
+    # Background purger task
+    app.state._purger_task = asyncio.create_task(automatic_purger(1800))
+    # Load security settings and start auto-save loop (non-blocking)
+    try:
+        await load_settings()
+        await start_auto_save_task()
+    except Exception as e:
+        gateway_logger.error(f"Failed to initialize security settings auto-save: {e}")
+    # Minimal OpenAPI linting pass
+    try:
+        spec = app.openapi()
+        problems = []
+        for route in app.routes:
+            path = getattr(route, 'path', '')
+            if not path.startswith(('/platform', '/api')):
+                continue
+            if not getattr(route, 'description', None):
+                problems.append(f"Route {path} missing description")
+            # Response model presence (best effort)
+            if not getattr(route, 'response_model', None):
+                # Many routes return JSONResponse; warn to encourage consistency
+                problems.append(f"Route {path} missing response_model")
+        if problems:
+            gateway_logger.info("OpenAPI lint: \n" + "\n".join(problems[:50]))
+    except Exception as e:
+        gateway_logger.debug(f"OpenAPI lint skipped: {e}")
+    # If running in memory-only mode, try to restore from the most recent encrypted dump
+    try:
+        if database.memory_only:
+            settings = get_cached_settings()
+            hint = settings.get("dump_path")
+            latest_path = find_latest_dump_path(hint)
+            if latest_path and os.path.exists(latest_path):
+                info = restore_memory_from_file(latest_path)
+                gateway_logger.info(f"Memory mode: restored from dump {latest_path} (created_at={info.get('created_at')})")
+            else:
+                gateway_logger.info("Memory mode: no existing dump found to restore")
+    except Exception as e:
+        gateway_logger.error(f"Memory mode restore failed: {e}")
+
+    # Register SIGUSR1 handler to force a memory dump (Unix only)
+    try:
+        if hasattr(signal, "SIGUSR1"):
+            loop = asyncio.get_event_loop()
+
+            async def _sigusr1_dump():
+                try:
+                    if not database.memory_only:
+                        gateway_logger.info("SIGUSR1 ignored: not in memory-only mode")
+                        return
+                    if not os.getenv("MEM_ENCRYPTION_KEY"):
+                        gateway_logger.error("SIGUSR1 dump skipped: MEM_ENCRYPTION_KEY not configured")
+                        return
+                    settings = get_cached_settings()
+                    path_hint = settings.get("dump_path")
+                    dump_path = await asyncio.to_thread(dump_memory_to_file, path_hint)
+                    gateway_logger.info(f"SIGUSR1: memory dump written to {dump_path}")
+                except Exception as e:
+                    gateway_logger.error(f"SIGUSR1 dump failed: {e}")
+
+            loop.add_signal_handler(signal.SIGUSR1, lambda: asyncio.create_task(_sigusr1_dump()))
+            gateway_logger.info("SIGUSR1 handler registered for on-demand memory dumps")
+    except NotImplementedError:
+        # add_signal_handler not supported on this platform/event loop
+        pass
+
+    # Yield to run the application
+    try:
+        yield
+    finally:
+        # Shutdown
+        # Stop auto-save task cleanly
+        try:
+            await stop_auto_save_task()
+        except Exception as e:
+            gateway_logger.error(f"Failed to stop auto-save task: {e}")
+        # Always write a final encrypted memory dump when in memory-only mode
+        try:
+            if database.memory_only:
+                settings = get_cached_settings()
+                path = settings.get("dump_path")
+                dump_memory_to_file(path)
+                gateway_logger.info(f"Final memory dump written to {path}")
+        except Exception as e:
+            gateway_logger.error(f"Failed to write final memory dump: {e}")
+        # Cancel background purger task
+        try:
+            task = getattr(app.state, "_purger_task", None)
+            if task:
+                task.cancel()
+        except Exception:
+            pass
+
+
 doorman = FastAPI(
     title="doorman",
-    description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application's gateway to the world.",  # Optional: Add a description
-    version="0.0.1"
+    description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application's gateway to the world.",
+    version="0.0.1",
+    lifespan=app_lifespan,
 )
 
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
@@ -71,17 +175,64 @@ headers = os.getenv("ALLOW_HEADERS", "*").split(",")
 https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
 domain = os.getenv("COOKIE_DOMAIN", "localhost")
 
+def _safe_cors(origins, credentials):
+    # If credentials are allowed, avoid wildcard origins for security
+    if credentials and any(o.strip() == "*" for o in origins):
+        # Fallback to localhost only to avoid insecure wildcard+credentials
+        return ["http://localhost", "http://localhost:3000"]
+    # Optional strict mode: disallow wildcard entirely
+    if os.getenv("CORS_STRICT", "false").lower() == "true":
+        safe = [o for o in origins if o.strip() != "*"]
+        return safe if safe else ["http://localhost", "http://localhost:3000"]
+    return origins
+
 doorman.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=_safe_cors(origins, credentials),
     allow_credentials=credentials,
     allow_methods=methods,
     allow_headers=headers,
 )
 
-os.makedirs("logs", exist_ok=True)
+# Body size limit middleware (Content-Length based)
+MAX_BODY_SIZE = int(os.getenv("MAX_BODY_SIZE_BYTES", 1_048_576))  # 1MB default
+
+@doorman.middleware("http")
+async def body_size_limit(request: Request, call_next):
+    try:
+        cl = request.headers.get("content-length")
+        if cl and int(cl) > MAX_BODY_SIZE:
+            return process_response(ResponseModel(
+                status_code=413,
+                error_code="REQ001",
+                error_message="Request entity too large"
+            ).dict(), "rest")
+    except Exception:
+        pass
+    return await call_next(request)
+
+# Security headers (including HSTS when HTTPS is used)
+@doorman.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        if os.getenv("HTTPS_ONLY", "false").lower() == "true":
+            # 6 months HSTS with subdomains and preload
+            response.headers.setdefault("Strict-Transport-Security", "max-age=15552000; includeSubDomains; preload")
+    except Exception:
+        pass
+    return response
+
+# Ensure logs write to a stable, absolute path next to this file
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
 log_file_handler = RotatingFileHandler(
-    filename="logs/doorman.log",
+    filename=os.path.join(LOGS_DIR, "doorman.log"),
     maxBytes=10 * 1024 * 1024,
     backupCount=5,
     encoding="utf-8"
@@ -96,6 +247,20 @@ def configure_logger(logger_name):
     # Remove any existing handlers to avoid duplicates
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
+    class RedactFilter(logging.Filter):
+        SENSITIVE = ("access_token", "refresh_token", "password", "authorization", "cookie")
+        def filter(self, record: logging.LogRecord) -> bool:
+            try:
+                msg = str(record.getMessage())
+                redacted = msg
+                for s in self.SENSITIVE:
+                    redacted = redacted.replace(s, "[REDACTED]")
+                if redacted != msg:
+                    record.msg = redacted
+            except Exception:
+                pass
+            return True
+    log_file_handler.addFilter(RedactFilter())
     logger.addHandler(log_file_handler)
     return logger
 
@@ -161,75 +326,7 @@ async def automatic_purger(interval_seconds):
         await purge_expired_tokens()
         gateway_logger.info("Expired JWTs purged from blacklist.")
 
-@doorman.on_event("startup")
-async def startup_event():
-    doorman.state.redis = Redis.from_url(
-        f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
-        decode_responses=True
-    )
-    asyncio.create_task(automatic_purger(1800))
-    # Load security settings and start auto-save loop (non-blocking)
-    try:
-        await load_settings()
-        await start_auto_save_task()
-    except Exception as e:
-        gateway_logger.error(f"Failed to initialize security settings auto-save: {e}")
-    # If running in memory-only mode, try to restore from the most recent encrypted dump
-    try:
-        if database.memory_only:
-            settings = get_cached_settings()
-            hint = settings.get("dump_path")
-            latest_path = find_latest_dump_path(hint)
-            if latest_path and os.path.exists(latest_path):
-                info = restore_memory_from_file(latest_path)
-                gateway_logger.info(f"Memory mode: restored from dump {latest_path} (created_at={info.get('created_at')})")
-            else:
-                gateway_logger.info("Memory mode: no existing dump found to restore")
-    except Exception as e:
-        gateway_logger.error(f"Memory mode restore failed: {e}")
-
-    # Register SIGUSR1 handler to force a memory dump (Unix only)
-    try:
-        if hasattr(signal, "SIGUSR1"):
-            loop = asyncio.get_event_loop()
-
-            async def _sigusr1_dump():
-                try:
-                    if not database.memory_only:
-                        gateway_logger.info("SIGUSR1 ignored: not in memory-only mode")
-                        return
-                    if not os.getenv("MEM_ENCRYPTION_KEY"):
-                        gateway_logger.error("SIGUSR1 dump skipped: MEM_ENCRYPTION_KEY not configured")
-                        return
-                    settings = get_cached_settings()
-                    path_hint = settings.get("dump_path")
-                    dump_path = await asyncio.to_thread(dump_memory_to_file, path_hint)
-                    gateway_logger.info(f"SIGUSR1: memory dump written to {dump_path}")
-                except Exception as e:
-                    gateway_logger.error(f"SIGUSR1 dump failed: {e}")
-
-            loop.add_signal_handler(signal.SIGUSR1, lambda: asyncio.create_task(_sigusr1_dump()))
-            gateway_logger.info("SIGUSR1 handler registered for on-demand memory dumps")
-    except NotImplementedError:
-        # add_signal_handler not supported on this platform/event loop
-        pass
-
-@doorman.on_event("shutdown")
-async def shutdown_event():
-    # Stop auto-save task cleanly
-    try:
-        await stop_auto_save_task()
-    except Exception as e:
-        gateway_logger.error(f"Failed to stop auto-save task: {e}")
-    # Always write a final encrypted memory dump when in memory-only mode
-    try:
-        if database.memory_only:
-            settings = get_cached_settings()
-            path = settings.get("dump_path")
-            dump_memory_to_file(path)
-            gateway_logger.info(f"Final memory dump written to {path}")
-    except Exception as e:
-        gateway_logger.error(f"Failed to write final memory dump: {e}")
+## Startup/shutdown handled by lifespan above
 
 @doorman.exception_handler(JWTError)
 async def jwt_exception_handler(exc: JWTError):
@@ -272,6 +369,7 @@ doorman.include_router(dashboard_router, prefix="/platform/dashboard", tags=["Da
 doorman.include_router(memory_router, prefix="/platform", tags=["Memory"])
 doorman.include_router(security_router, prefix="/platform", tags=["Security"])
 doorman.include_router(monitor_router, prefix="/platform", tags=["Monitor"])
+doorman.include_router(token_router, prefix="/platform/token", tags=["Token"])
 
 def start():
     if os.path.exists(PID_FILE):

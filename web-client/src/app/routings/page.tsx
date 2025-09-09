@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface Routing {
   routing_name: string
@@ -29,18 +30,8 @@ const RoutingsPage = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`http://localhost:3002/platform/routing/all?page=1&page_size=10`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load routings')
-      }
-      const data = await response.json()
+      const { fetchJson } = await import('@/utils/http')
+      const data: any = await fetchJson(`${SERVER_URL}/platform/routing/all?page=1&page_size=10`)
       const routingList = Array.isArray(data) ? data : (data.routings || data.response?.routings || [])
       setAllRoutings(routingList)
       setRoutings(routingList)
@@ -64,7 +55,7 @@ const RoutingsPage = () => {
       routing.routing_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       routing.routing_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       routing.client_key.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      routing.routing_servers.some(server => server.toLowerCase().includes(searchTerm.toLowerCase()))
+      (routing.routing_servers || []).some(server => server.toLowerCase().includes(searchTerm.toLowerCase()))
     )
     setRoutings(filteredRoutings)
   }

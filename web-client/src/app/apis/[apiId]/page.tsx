@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface API {
   api_id: string
@@ -104,12 +105,11 @@ const ApiDetailPage = () => {
     const loadEndpoints = async () => {
       if (!api) return
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
+        const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
           credentials: 'include',
           headers: {
             'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+            'Content-Type': 'application/json'
           }
         })
         const data = await response.json()
@@ -158,13 +158,12 @@ const ApiDetailPage = () => {
       
       const targetName = (api?.['api_name'] as string) || ''
       const targetVersion = (api?.['api_version'] as string) || ''
-      const response = await fetch(`http://localhost:3002/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, {
+      const response = await fetch(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(editData)
       })
@@ -178,12 +177,11 @@ const ApiDetailPage = () => {
       if (!api) throw new Error('API context missing for refresh')
       const name = (api as any).api_name as string
       const version = (api as any).api_version as string
-      const refreshed = await fetch(`http://localhost:3002/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
+      const refreshed = await fetch(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       const refreshedApi = await refreshed.json()
@@ -279,25 +277,23 @@ const ApiDetailPage = () => {
     const key = `${ep.endpoint_method}:${ep.endpoint_uri}`
     setEpSaving(prev => ({ ...prev, [key]: true }))
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`, {
+      const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ endpoint_servers: servers })
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error_message || 'Failed to save endpoint servers')
       // refresh endpoints
-      const refreshed = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
+      const refreshed = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       const refreshedData = await refreshed.json()
@@ -348,13 +344,12 @@ const ApiDetailPage = () => {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/api/${apiId}`, {
+      const response = await fetch(`${SERVER_URL}/platform/api/${apiId}`, {
         method: 'DELETE',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
 

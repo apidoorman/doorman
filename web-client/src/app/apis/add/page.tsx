@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 const AddApiPage = () => {
   const router = useRouter()
@@ -25,13 +26,12 @@ const AddApiPage = () => {
     setError(null)
 
     try {
-      const response = await fetch('http://localhost:3002/platform/api', {
+      const response = await fetch(`${SERVER_URL}/platform/api`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
         },
         body: JSON.stringify(formData)
       })

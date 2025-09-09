@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -107,12 +108,11 @@ const SecurityPage = () => {
     try {
       setSettingsLoading(true)
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/security/settings`, {
+      const response = await fetch(`${SERVER_URL}/platform/security/settings`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       if (!response.ok) throw new Error('Failed to load security settings')
@@ -134,13 +134,12 @@ const SecurityPage = () => {
     try {
       setSettingsSaving(true)
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/security/settings`, {
+      const response = await fetch(`${SERVER_URL}/platform/security/settings`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(settings)
       })
@@ -160,13 +159,12 @@ const SecurityPage = () => {
   const handleDumpNow = async () => {
     try {
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/memory/dump`, {
+      const response = await fetch(`${SERVER_URL}/platform/memory/dump`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ path: settings.dump_path })
       })
@@ -182,13 +180,12 @@ const SecurityPage = () => {
   const handleRestore = async () => {
     try {
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/memory/restore`, {
+      const response = await fetch(`${SERVER_URL}/platform/memory/restore`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ path: restorePath || settings.dump_path })
       })
@@ -204,13 +201,12 @@ const SecurityPage = () => {
   const handleClearCaches = async () => {
     try {
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/api/caches`, {
+      const response = await fetch(`${SERVER_URL}/api/caches`, {
         method: 'DELETE',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       const data = await response.json()
