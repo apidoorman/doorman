@@ -21,12 +21,12 @@ logger = logging.getLogger("doorman.gateway")
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 
-async def validate_csrf_token(csrf_token: str, auth_token: str) -> bool:
+async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> bool:
     try:
-        csrf_payload = jwt.decode(csrf_token, SECRET_KEY, algorithms=[ALGORITHM])
-        auth_payload = jwt.decode(auth_token, SECRET_KEY, algorithms=[ALGORITHM])
-        return csrf_payload.get("sub") == auth_payload.get("sub")
-    except:
+        if not header_token or not cookie_token:
+            return False
+        return header_token == cookie_token
+    except Exception:
         return False
 
 async def auth_required(request: Request):
@@ -35,10 +35,9 @@ async def auth_required(request: Request):
     if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
     if os.getenv("HTTPS_ENABLED", "false").lower() == "true":
-        csrf_token = request.headers.get("X-CSRF-Token")
-        if not csrf_token:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        if not await validate_csrf_token(csrf_token, token):
+        csrf_header = request.headers.get("X-CSRF-Token")
+        csrf_cookie = request.cookies.get("csrf_token")
+        if not await validate_csrf_double_submit(csrf_header, csrf_cookie):
             raise HTTPException(status_code=401, detail="Invalid CSRF token")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

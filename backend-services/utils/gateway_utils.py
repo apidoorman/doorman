@@ -4,7 +4,7 @@ from typing import Dict, List
 from fastapi import Request
 
 
-async def sanitize_headers(value: str):
+def sanitize_headers(value: str):
     value = value.replace('\n', '').replace('\r', '')
     value = re.sub(r'<[^>]+>', '', value)
     return value

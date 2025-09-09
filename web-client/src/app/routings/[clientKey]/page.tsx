@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface Routing {
   routing_name: string
@@ -84,13 +85,12 @@ const RoutingDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/routing/${clientKey}`, {
+      const response = await fetch(`${SERVER_URL}/platform/routing/${clientKey}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(editData)
       })
@@ -101,12 +101,11 @@ const RoutingDetailPage = () => {
       }
 
       // Refresh from server to get the latest canonical data
-      const refreshed = await fetch(`http://localhost:3002/platform/routing/${encodeURIComponent(clientKey)}`, {
+      const refreshed = await fetch(`${SERVER_URL}/platform/routing/${encodeURIComponent(clientKey)}`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       const refreshedRouting = await refreshed.json()
@@ -173,13 +172,12 @@ const RoutingDetailPage = () => {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/routing/${clientKey}`, {
+      const response = await fetch(`${SERVER_URL}/platform/routing/${clientKey}`, {
         method: 'DELETE',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
 
