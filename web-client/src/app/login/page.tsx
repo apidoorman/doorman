@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { SERVER_URL } from '@/utils/config'
+import { postJson } from '@/utils/api'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -33,26 +34,15 @@ const LoginPage = () => {
     setErrorMessage('')
 
     try {
-      const authResponse = await fetch(`${SERVER_URL}/platform/authorization`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ email, password }),
-      })
-
-      if (authResponse.ok) {
-        const data = await authResponse.json().catch(() => ({}))
-        console.log('Login response:', data)
-        // Server sets HttpOnly cookie; just verify via status and redirect
-        await checkAuth()
-        router.push('/dashboard')
-      } else {
-        const err = await authResponse.json().catch(() => ({}))
-        setErrorMessage(err.error_message || err.message || 'Invalid email or password')
+      try {
+        await postJson(`${SERVER_URL}/platform/authorization`, { email, password })
+      } catch (e:any) {
+        setErrorMessage(e?.message || 'Invalid email or password')
+        setIsLoading(false)
+        return
       }
+      await checkAuth()
+      router.push('/dashboard')
     } catch (error) {
       console.error('Login error:', error)
       setErrorMessage('Network error. Please try again.')

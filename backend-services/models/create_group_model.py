@@ -11,7 +11,7 @@ class CreateGroupModel(BaseModel):
     
     group_name: str = Field(..., min_length=1, max_length=50, description="Name of the group", example="client-1-group")
     
-    group_description: Optional[str] = Field(None, min_length=1, max_length=255, description="Description of the group", example="Group for client 1")
+    group_description: Optional[str] = Field(None, max_length=255, description="Description of the group", example="Group for client 1")
     api_access: Optional[List[str]] = Field(default_factory=list, description="List of APIs the group can access", example=["customer/v1"])
 
     class Config:

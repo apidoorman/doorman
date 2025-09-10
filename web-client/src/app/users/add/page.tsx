@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
+import { postJson } from '@/utils/api'
 
 interface CreateUserData {
   username: string
@@ -116,20 +117,7 @@ const AddUserPage = () => {
       setLoading(true)
       setError(null)
 
-      const response = await fetch(`${SERVER_URL}/platform/user/`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error_message || 'Failed to create user')
-      }
+      await postJson(`${SERVER_URL}/platform/user/`, formData)
 
       // Redirect to users list after successful creation
       router.push('/users')
