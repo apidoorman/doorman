@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
 
 interface Routing {
@@ -21,24 +22,29 @@ const RoutingsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('routing_name')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [hasNext, setHasNext] = useState(false)
 
   useEffect(() => {
     fetchRoutings()
-  }, [])
+  }, [page, pageSize])
 
   const fetchRoutings = async () => {
     try {
       setLoading(true)
       setError(null)
       const { fetchJson } = await import('@/utils/http')
-      const data: any = await fetchJson(`${SERVER_URL}/platform/routing/all?page=1&page_size=10`)
+      const data: any = await fetchJson(`${SERVER_URL}/platform/routing/all?page=${page}&page_size=${pageSize}`)
       const routingList = Array.isArray(data) ? data : (data.routings || data.response?.routings || [])
       setAllRoutings(routingList)
       setRoutings(routingList)
+      setHasNext((routingList || []).length === pageSize)
     } catch (err) {
       setError('Failed to load routings. Please try again later.')
       setRoutings([])
       setAllRoutings([])
+      setHasNext(false)
     } finally {
       setLoading(false)
     }
@@ -224,6 +230,14 @@ const RoutingsPage = () => {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => { setPageSize(s); setPage(1) }}
+              hasNext={hasNext}
+            />
 
             {/* Empty State */}
             {routings.length === 0 && !loading && (

@@ -13,6 +13,7 @@ import {
   isUserActive
 } from '@/utils/auth'
 import { fetchJson } from '@/utils/http'
+import { postJson } from '@/utils/api'
 import { SERVER_URL } from '@/utils/config'
 
 interface AuthContextType {
@@ -75,11 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch(`${SERVER_URL}/platform/authorization/invalidate`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Accept': 'application/json' }
-      })
+      await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {})
     } catch (e) {
       console.warn('Logout invalidate failed (continuing):', e)
     }

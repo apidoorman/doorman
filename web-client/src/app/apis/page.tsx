@@ -4,7 +4,9 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { SERVER_URL } from '@/utils/config'
+import { getJson } from '@/utils/api'
 import Layout from '@/components/Layout'
+import Pagination from '@/components/Pagination'
 
 interface API {
   api_version: React.ReactNode
@@ -30,33 +32,85 @@ const APIsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('name')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [hasNext, setHasNext] = useState(false)
+  const [ignorePagingAllCache, setIgnorePagingAllCache] = useState<API[] | null>(null)
+  const [backendIgnoresPaging, setBackendIgnoresPaging] = useState(false)
 
   useEffect(() => {
     fetchApis()
-  }, [])
+  }, [page, pageSize])
 
   const fetchApis = async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${SERVER_URL}/platform/api/all`, {
-        credentials: 'include',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load APIs')
+      // Request using backend pagination
+      let fetched: any[] = []
+      try {
+        const data = await getJson<any>(`${SERVER_URL}/platform/api/all?page=${page}&page_size=${pageSize}`)
+        fetched = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
+      } catch {
+        fetched = []
       }
-      const data = await response.json()
-      const apiList = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
-      setAllApis(apiList)
-      setApis(apiList)
+
+      let display: any[] = fetched
+      let next = false
+      let ignores = false
+      // If backend ignored pagination and returned a larger list, paginate client-side
+      if (Array.isArray(fetched) && fetched.length > pageSize) {
+        ignores = true
+        const total = fetched.length
+        const start = (page - 1) * pageSize
+        const end = start + pageSize
+        display = fetched.slice(start, end)
+        next = end < total
+        setIgnorePagingAllCache(fetched as any)
+      } else if (Array.isArray(fetched)) {
+        next = fetched.length === pageSize
+        setIgnorePagingAllCache(null)
+      }
+      // De-duplicate by api_id if necessary
+      const seen = new Set<string>()
+      const unique = display.filter((a: any) => {
+        const id = String(a.api_id || `${a.api_name}/${a.api_version}`)
+        if (seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+      // Sort by api_name then version for a stable display
+      unique.sort((a: any, b: any) => String(a.api_name).localeCompare(String(b.api_name)) || String(a.api_version).localeCompare(String(b.api_version)))
+      setAllApis(unique)
+      setApis(unique)
+      setHasNext(next)
+      setBackendIgnoresPaging(ignores)
     } catch (err) {
       setError('Failed to load APIs. Please try again later.')
       setApis([])
       setAllApis([])
+      setHasNext(false)
     } finally {
       setLoading(false)
     }
+  }
+
+  const changePage = (p: number) => {
+    if (backendIgnoresPaging && ignorePagingAllCache) {
+      const start = (p - 1) * pageSize
+      const end = start + pageSize
+      const slice = ignorePagingAllCache.slice(start, end)
+      setApis(slice as any)
+      setPage(p)
+      setHasNext(end < ignorePagingAllCache.length)
+    } else {
+      setPage(p)
+    }
+  }
+
+  const changePageSize = (s: number) => {
+    setPageSize(s)
+    setPage(1)
   }
 
   const handleSearch = (e: React.FormEvent) => {
@@ -277,6 +331,14 @@ const APIsPage = () => {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              onPageChange={changePage}
+              onPageSizeChange={changePageSize}
+              hasNext={hasNext}
+            />
 
             {/* Empty State */}
             {apis.length === 0 && !loading && (

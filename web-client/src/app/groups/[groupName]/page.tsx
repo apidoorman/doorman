@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { fetchJson } from '@/utils/http'
 import { SERVER_URL } from '@/utils/config'
 
 interface Group {
@@ -51,19 +53,7 @@ const GroupDetailPage = () => {
       }
 
       // Fetch from API if not in sessionStorage
-      const response = await fetch(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to load group')
-      }
-      
-      const data = await response.json()
+      const data = await fetchJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
       setGroup(data)
       setEditData(data)
     } catch (err) {
@@ -93,32 +83,14 @@ const GroupDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(editData)
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to update group')
-      }
+      await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, editData)
       
       // Refresh from server to get the latest canonical data
-      const refreshed = await fetch(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      const refreshedGroup = await refreshed.json()
+      const refreshedGroup = await fetchJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
       setGroup(refreshedGroup)
       setEditData(refreshedGroup)
+      // Keep sessionStorage in sync for back-navigation
+      sessionStorage.setItem('selectedGroup', JSON.stringify(refreshedGroup))
       setIsEditing(false)
       setSuccess('Group updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -134,28 +106,12 @@ const GroupDetailPage = () => {
   }
 
   const handleDelete = async () => {
-    if (deleteConfirmation !== group?.group_name) {
-      setError('Group name does not match')
-      return
-    }
-
     try {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to delete group')
-      }
+      const { delJson } = await import('@/utils/api')
+      await delJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
       
       router.push('/groups')
     } catch (err) {
@@ -431,47 +387,18 @@ const GroupDetailPage = () => {
           </div>
         )}
 
-        {/* Delete Modal */}
-        {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="fixed inset-0 bg-black/50" onClick={() => setShowDeleteModal(false)}></div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 relative z-10">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Group</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                This action cannot be undone. This will permanently delete the group "{group?.group_name}".
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Please type <strong>{group?.group_name}</strong> to confirm.
-              </p>
-              <input
-                type="text"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="input w-full mb-4"
-                placeholder="Enter group name to confirm"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleDelete}
-                  disabled={deleteConfirmation !== group?.group_name || deleting}
-                  className="btn btn-error flex-1"
-                >
-                  {deleting ? (
-                    <div className="flex items-center justify-center">
-                      <div className="spinner mr-2"></div>
-                      Deleting...
-                    </div>
-                  ) : (
-                    'Delete Group'
-                  )}
-                </button>
-                <button onClick={() => setShowDeleteModal(false)} className="btn btn-secondary flex-1">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ConfirmModal
+          open={showDeleteModal}
+          title="Delete Group"
+          message={<>
+            This action cannot be undone. This will permanently delete the group "{group?.group_name}".
+          </>}
+          confirmLabel={deleting ? 'Deleting...' : 'Delete Group'}
+          cancelLabel="Cancel"
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={handleDelete}
+          
+        />
       </div>
     </Layout>
   )
