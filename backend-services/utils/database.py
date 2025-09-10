@@ -90,6 +90,94 @@ class Database:
                     "custom_attributes": {"custom_key": "custom_value"},
                     "active": True
                 })
+            # Demo data seeding: public APIs + endpoints (idempotent)
+            apis = self.db.apis
+            endpoints = self.db.endpoints
+            demo_apis = [
+                {
+                    "api_name": "customers", "api_version": "v1",
+                    "api_description": "Customers API", "api_allowed_roles": ["admin"],
+                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8080"],
+                    "api_type": "REST", "api_allowed_retry_count": 0
+                },
+                {
+                    "api_name": "orders", "api_version": "v1",
+                    "api_description": "Orders API", "api_allowed_roles": ["admin"],
+                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8081"],
+                    "api_type": "REST", "api_allowed_retry_count": 0
+                },
+                {
+                    "api_name": "billing", "api_version": "v1",
+                    "api_description": "Billing API", "api_allowed_roles": ["admin"],
+                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8082"],
+                    "api_type": "REST", "api_allowed_retry_count": 0
+                },
+                {
+                    "api_name": "weather", "api_version": "v1",
+                    "api_description": "Weather API", "api_allowed_roles": ["admin"],
+                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8083"],
+                    "api_type": "REST", "api_allowed_retry_count": 0
+                },
+                {
+                    "api_name": "news", "api_version": "v1",
+                    "api_description": "News API", "api_allowed_roles": ["admin"],
+                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8084"],
+                    "api_type": "REST", "api_allowed_retry_count": 0
+                },
+                {
+                    "api_name": "crypto", "api_version": "v1",
+                    "api_description": "Crypto Prices API", "api_allowed_roles": ["admin"],
+                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8085"],
+                    "api_type": "REST", "api_allowed_retry_count": 0
+                }
+            ]
+            for api in demo_apis:
+                if not apis.find_one({"api_name": api["api_name"], "api_version": api["api_version"]}):
+                    api_doc = dict(api)
+                    api_doc["api_id"] = str(uuid.uuid4())
+                    api_doc["api_path"] = f"/{api['api_name']}/{api['api_version']}"
+                    apis.insert_one(api_doc)
+                    # Seed 1-2 endpoints for each API
+                    for ep in [
+                        {"method": "GET", "uri": "/status", "desc": f"Get {api['api_name']} status"},
+                        {"method": "GET", "uri": "/list", "desc": f"List {api['api_name']}"}
+                    ]:
+                        if not endpoints.find_one({
+                            "api_name": api["api_name"], "api_version": api["api_version"],
+                            "endpoint_method": ep["method"], "endpoint_uri": ep["uri"]
+                        }):
+                            endpoints.insert_one({
+                                "api_name": api["api_name"],
+                                "api_version": api["api_version"],
+                                "endpoint_method": ep["method"],
+                                "endpoint_uri": ep["uri"],
+                                "endpoint_description": ep["desc"],
+                                "api_id": api_doc["api_id"],
+                                "endpoint_id": str(uuid.uuid4())
+                            })
+            # Seed a few gateway-like log entries so they appear in UI logging
+            try:
+                from datetime import datetime
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                logs_dir = os.path.join(base_dir, "logs")
+                os.makedirs(logs_dir, exist_ok=True)
+                log_path = os.path.join(logs_dir, "doorman.log")
+                now = datetime.now()
+                entries = []
+                samples = [
+                    ("customers", "/customers/v1/list"),
+                    ("orders", "/orders/v1/status"),
+                    ("weather", "/weather/v1/status"),
+                ]
+                for api_name, ep in samples:
+                    ts = now.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
+                    rid = str(uuid.uuid4())
+                    msg = f"{rid} | Username: admin | From: 127.0.0.1:54321 | Endpoint: GET {ep} | Total time: 42ms"
+                    entries.append(f"{ts} - doorman.gateway - INFO - {msg}\n")
+                with open(log_path, "a", encoding="utf-8") as lf:
+                    lf.writelines(entries)
+            except Exception:
+                pass
             print("Memory-only mode: Core data initialized (admin user/role/groups)")
             return
         collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'token_defs', 'user_tokens', 'endpoint_validations', 'settings']
@@ -143,6 +231,36 @@ class Database:
                     "group_description": "Default group with access to all APIs",
                     "api_access": []
                 })
+            # Demo data seeding for MongoDB: public APIs + endpoints when DB is new
+            apis = self.db.apis
+            endpoints = self.db.endpoints
+            if apis.count_documents({}) == 0:
+                demo_apis = [
+                    {"api_name": "customers", "api_version": "v1", "api_description": "Customers API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8080"], "api_type": "REST", "api_allowed_retry_count": 0},
+                    {"api_name": "orders", "api_version": "v1", "api_description": "Orders API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8081"], "api_type": "REST", "api_allowed_retry_count": 0},
+                    {"api_name": "billing", "api_version": "v1", "api_description": "Billing API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8082"], "api_type": "REST", "api_allowed_retry_count": 0},
+                    {"api_name": "weather", "api_version": "v1", "api_description": "Weather API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8083"], "api_type": "REST", "api_allowed_retry_count": 0},
+                    {"api_name": "news", "api_version": "v1", "api_description": "News API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8084"], "api_type": "REST", "api_allowed_retry_count": 0},
+                    {"api_name": "crypto", "api_version": "v1", "api_description": "Crypto Prices API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8085"], "api_type": "REST", "api_allowed_retry_count": 0}
+                ]
+                for api in demo_apis:
+                    api_doc = dict(api)
+                    api_doc["api_id"] = str(uuid.uuid4())
+                    api_doc["api_path"] = f"/{api['api_name']}/{api['api_version']}"
+                    apis.insert_one(api_doc)
+                    for ep in [
+                        {"method": "GET", "uri": "/status", "desc": f"Get {api['api_name']} status"},
+                        {"method": "GET", "uri": "/list", "desc": f"List {api['api_name']}"}
+                    ]:
+                        endpoints.insert_one({
+                            "api_name": api["api_name"],
+                            "api_version": api["api_version"],
+                            "endpoint_method": ep["method"],
+                            "endpoint_uri": ep["uri"],
+                            "endpoint_description": ep["desc"],
+                            "api_id": api_doc["api_id"],
+                            "endpoint_id": str(uuid.uuid4())
+                        })
 
     def create_indexes(self):
         if self.memory_only:

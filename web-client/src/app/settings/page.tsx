@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
+import { getJson, putJson } from '@/utils/api'
 
 interface UserSettings {
   username: string
@@ -35,18 +37,7 @@ const SettingsPage = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch('http://localhost:3002/platform/user/me', {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load user settings')
-      }
-      const data = await response.json()
+      const data = await getJson<any>(`${SERVER_URL}/platform/user/me`)
       setSettings(prev => ({
         ...prev,
         username: data.username,
@@ -80,40 +71,31 @@ const SettingsPage = () => {
     }
 
     try {
-      const updateData: any = {}
-      
-      if (settings.username !== settings.originalUsername) {
-        updateData.username = settings.username
+      // Track whether we made any change requests
+      let didChange = false
+
+      // 1) Profile updates (username/email) via PUT /platform/user/{username}
+      const profileUpdates: any = {}
+      if (settings.username && settings.username !== settings.originalUsername) {
+        profileUpdates.username = settings.username
       }
-      
-      if (settings.email !== settings.originalEmail) {
-        updateData.email = settings.email
+      if (settings.email && settings.email !== settings.originalEmail) {
+        profileUpdates.email = settings.email
       }
-      
-      if (settings.newPassword) {
-        updateData.current_password = settings.currentPassword
-        updateData.new_password = settings.newPassword
+      if (Object.keys(profileUpdates).length > 0) {
+        await putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(settings.originalUsername)}`, profileUpdates)
+        didChange = true
       }
 
-      if (Object.keys(updateData).length === 0) {
+      // 2) Password update via PUT /platform/user/{username}/update-password
+      if (settings.newPassword) {
+        await putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(settings.originalUsername)}/update-password`, { new_password: settings.newPassword })
+        didChange = true
+      }
+
+      if (!didChange) {
         setError('No changes to save')
         return
-      }
-
-      const response = await fetch('http://localhost:3002/platform/user/update', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        },
-        body: JSON.stringify(updateData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to update settings')
       }
 
       setSuccess('Settings updated successfully!')
@@ -125,7 +107,6 @@ const SettingsPage = () => {
         newPassword: '',
         confirmPassword: ''
       }))
-      
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       if (err instanceof Error) {

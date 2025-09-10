@@ -4,6 +4,8 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
+import { postJson } from '@/utils/api'
 
 interface CreateRoutingData {
   routing_name: string
@@ -53,21 +55,7 @@ const AddRoutingPage = () => {
       setLoading(true)
       setError(null)
 
-      const response = await fetch('http://localhost:3002/platform/routing/', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        },
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to create routing')
-      }
+      await postJson(`${SERVER_URL}/platform/routing/`, formData)
 
       router.push('/routings')
     } catch (err) {
@@ -144,26 +132,6 @@ const AddRoutingPage = () => {
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Optional description of the routing configuration
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="server_index" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Default Server Index
-              </label>
-              <input
-                type="number"
-                id="server_index"
-                name="server_index"
-                className="input"
-                placeholder="0"
-                value={formData.server_index || 0}
-                onChange={(e) => handleInputChange('server_index', parseInt(e.target.value))}
-                disabled={loading}
-                min="0"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Index of the default server in the list (0-based)
               </p>
             </div>
 

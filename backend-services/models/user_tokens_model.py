@@ -19,8 +19,7 @@ class UserTokenInformationModel(BaseModel):
 
 class UserTokenModel(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, description="Username of tokens owner", example="client-1")
-    users_tokens: Dict[str, UserTokenInformationModel] = Field(..., min_items=1, description="Tokens information. Key is the token group name")
+    users_tokens: Dict[str, UserTokenInformationModel] = Field(..., description="Tokens information. Key is the token group name")
     
     class Config:
         arbitrary_types_allowed = True
-

@@ -1,9 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { fetchJson } from '@/utils/http'
+import { SERVER_URL } from '@/utils/config'
 
 interface API {
   api_id: string
@@ -20,6 +23,16 @@ interface API {
   api_tokens_enabled: boolean
   api_token_group?: string
   api_path?: string
+}
+
+interface EndpointItem {
+  api_name: string
+  api_version: string
+  endpoint_method: string
+  endpoint_uri: string
+  endpoint_description?: string
+  endpoint_id?: string
+  endpoint_servers?: string[]
 }
 
 interface UpdateApiData {
@@ -52,6 +65,9 @@ const ApiDetailPage = () => {
   const [newGroup, setNewGroup] = useState('')
   const [newServer, setNewServer] = useState('')
   const [newHeader, setNewHeader] = useState('')
+  const [endpoints, setEndpoints] = useState<EndpointItem[]>([])
+  const [epNewServer, setEpNewServer] = useState<Record<string, string>>({})
+  const [epSaving, setEpSaving] = useState<Record<string, boolean>>({})
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
@@ -86,6 +102,28 @@ const ApiDetailPage = () => {
       setLoading(false)
     }
   }, [apiId])
+
+  useEffect(() => {
+    const loadEndpoints = async () => {
+      if (!api) return
+      try {
+        const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error_message || 'Failed to load endpoints')
+        setEndpoints(data.endpoints || [])
+      } catch (e) {
+        // endpoints optional; do not hard fail page
+        console.warn('Failed to load endpoints for API', e)
+      }
+    }
+    loadEndpoints()
+  }, [api])
 
   const handleBack = () => {
     router.push('/apis')
@@ -122,13 +160,12 @@ const ApiDetailPage = () => {
       
       const targetName = (api?.['api_name'] as string) || ''
       const targetVersion = (api?.['api_version'] as string) || ''
-      const response = await fetch(`http://localhost:3002/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, {
+      const response = await fetch(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(editData)
       })
@@ -142,15 +179,7 @@ const ApiDetailPage = () => {
       if (!api) throw new Error('API context missing for refresh')
       const name = (api as any).api_name as string
       const version = (api as any).api_version as string
-      const refreshed = await fetch(`http://localhost:3002/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      const refreshedApi = await refreshed.json()
+      const refreshedApi = await fetchJson(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`)
       setApi(refreshedApi)
       sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
       setIsEditing(false)
@@ -222,6 +251,58 @@ const ApiDetailPage = () => {
     }))
   }
 
+  const addEndpointServer = async (ep: EndpointItem) => {
+    const key = `${ep.endpoint_method}:${ep.endpoint_uri}`
+    const value = (epNewServer[key] || '').trim()
+    if (!value) return
+    const next = [...(ep.endpoint_servers || [])]
+    if (next.includes(value)) return
+    next.push(value)
+    await saveEndpointServers(ep, next)
+    setEpNewServer(prev => ({ ...prev, [key]: '' }))
+  }
+
+  const removeEndpointServer = async (ep: EndpointItem, index: number) => {
+    const next = (ep.endpoint_servers || []).filter((_, i) => i !== index)
+    await saveEndpointServers(ep, next)
+  }
+
+  const saveEndpointServers = async (ep: EndpointItem, servers: string[]) => {
+    if (!api) return
+    const key = `${ep.endpoint_method}:${ep.endpoint_uri}`
+    setEpSaving(prev => ({ ...prev, [key]: true }))
+    try {
+      const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ endpoint_servers: servers })
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error_message || 'Failed to save endpoint servers')
+      // refresh endpoints
+      const refreshed = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      })
+      const refreshedData = await refreshed.json()
+      setEndpoints(refreshedData.endpoints || [])
+      setSuccess('Endpoint servers updated')
+      setTimeout(() => setSuccess(null), 2000)
+    } catch (e:any) {
+      setError(e?.message || 'Failed to update endpoint')
+      setTimeout(() => setError(null), 3000)
+    } finally {
+      setEpSaving(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
   const addHeader = () => {
     if (newHeader.trim() && !editData.api_allowed_headers?.includes(newHeader.trim())) {
       setEditData(prev => ({
@@ -249,29 +330,13 @@ const ApiDetailPage = () => {
   }
 
   const handleDeleteConfirm = async () => {
-    if (deleteConfirmation !== api?.api_name) {
-      setError('API name does not match')
-      return
-    }
 
     try {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/api/${apiId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to delete API')
-      }
+      const { delJson } = await import('@/utils/api')
+      await delJson(`${SERVER_URL}/platform/api/${encodeURIComponent(apiId as string)}`)
 
       router.push('/apis')
     } catch (err) {
@@ -349,6 +414,12 @@ const ApiDetailPage = () => {
                   </svg>
                   Edit API
                 </button>
+                <Link href={`/apis/${encodeURIComponent(apiId)}/endpoints`} className="btn btn-secondary">
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  Manage Endpoints
+                </Link>
                 <button onClick={handleDeleteClick} className="btn btn-error">
                   <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -676,6 +747,7 @@ const ApiDetailPage = () => {
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Servers</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Used when no client routing or endpoint override is configured</p>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
@@ -714,6 +786,78 @@ const ApiDetailPage = () => {
                 
                 {(!isEditing ? api.api_servers : editData.api_servers)?.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No servers configured</p>
+                )}
+              </div>
+            </div>
+
+            {/* Endpoint Overrides */}
+            <div className="card lg:col-span-2">
+              <div className="card-header">
+                <h3 className="card-title">Endpoint Overrides</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Precedence: Routing (client-key) → Endpoint servers → API servers</p>
+              </div>
+              <div className="p-6 space-y-4">
+                {endpoints.length === 0 ? (
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">No endpoints found for this API.</p>
+                ) : (
+                  endpoints.map((ep) => {
+                    const key = `${ep.endpoint_method}:${ep.endpoint_uri}`
+                    const saving = !!epSaving[key]
+                    const enabled = (ep.endpoint_servers || []).length > 0
+                    return (
+                      <div key={key} className="border rounded-lg p-4 dark:border-gray-700">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">{ep.endpoint_method}</div>
+                            <div className="font-mono text-gray-900 dark:text-gray-100">{ep.endpoint_uri}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={enabled}
+                              onChange={async (e) => {
+                                const on = e.target.checked
+                                if (!on) {
+                                  await removeEndpointServer(ep, -1) // noop fallback
+                                  await saveEndpointServers(ep, [])
+                                }
+                              }}
+                            />
+                            <span className="text-sm text-gray-600 dark:text-gray-300">Use endpoint servers</span>
+                          </div>
+                        </div>
+                        <div className={`mt-3 space-y-2 ${enabled ? '' : 'opacity-60'}`}>
+                          {(ep.endpoint_servers || []).map((srv, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded">
+                              <span className="text-sm font-mono">{srv}</span>
+                              <button disabled={saving || !enabled} onClick={() => removeEndpointServer(ep, idx)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                          {(ep.endpoint_servers || []).length === 0 && (
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">No endpoint-specific servers. Using API servers.</p>
+                          )}
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <input
+                            type="text"
+                            value={epNewServer[key] || ''}
+                            onChange={(e) => setEpNewServer(prev => ({ ...prev, [key]: e.target.value }))}
+                            className={`input flex-1 ${enabled ? '' : 'opacity-60'}`}
+                            placeholder="Add endpoint server URL"
+                            onKeyPress={(e) => e.key === 'Enter' && enabled && addEndpointServer(ep)}
+                            disabled={!enabled}
+                          />
+                          <button disabled={saving || !enabled} onClick={() => addEndpointServer(ep)} className="btn btn-primary">
+                            {saving ? <div className="flex items-center"><div className="spinner mr-2"></div>Saving...</div> : 'Add'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })
                 )}
               </div>
             </div>
@@ -766,47 +910,19 @@ const ApiDetailPage = () => {
           </div>
         )}
 
-        {/* Delete Modal */}
-        {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="fixed inset-0 bg-black/50" onClick={handleDeleteCancel}></div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 relative z-10">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete API</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                This action cannot be undone. This will permanently delete the API "{api?.api_name}".
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Please type <strong>{api?.api_name}</strong> to confirm.
-              </p>
-              <input
-                type="text"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="input w-full mb-4"
-                placeholder="Enter API name to confirm"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleDeleteConfirm}
-                  disabled={deleteConfirmation !== api?.api_name || deleting}
-                  className="btn btn-error flex-1"
-                >
-                  {deleting ? (
-                    <div className="flex items-center justify-center">
-                      <div className="spinner mr-2"></div>
-                      Deleting...
-                    </div>
-                  ) : (
-                    'Delete API'
-                  )}
-                </button>
-                <button onClick={handleDeleteCancel} className="btn btn-secondary flex-1">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ConfirmModal
+          open={showDeleteModal}
+          title="Delete API"
+          message={<>
+            This action cannot be undone. This will permanently delete the API "{api?.api_name}".
+          </>}
+          confirmLabel={deleting ? 'Deleting...' : 'Delete API'}
+          cancelLabel="Cancel"
+          onCancel={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+          requireTextMatch={api?.api_name || ''}
+          inputPlaceholder="Enter API name to confirm"
+        />
       </div>
     </Layout>
   )

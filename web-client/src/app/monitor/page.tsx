@@ -1,7 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { SERVER_URL } from '@/utils/config'
+import { getJson } from '@/utils/api'
 import Layout from '@/components/Layout'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 interface Metric {
   timestamp: string
@@ -35,19 +38,7 @@ const MonitorPage: React.FC = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/monitor/metrics?range=${encodeURIComponent(timeRange)}` , {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to fetch metrics')
-      }
-      const data = await response.json()
-      const payload = data?.response || data
+      const payload = await getJson<any>(`${SERVER_URL}/platform/monitor/metrics?range=${encodeURIComponent(timeRange)}`)
       setMetrics(payload)
     } catch (err) {
       if (err instanceof Error) {
@@ -77,6 +68,7 @@ const MonitorPage: React.FC = () => {
   }
 
   return (
+    <ProtectedRoute requiredPermission="manage_gateway">
     <Layout>
       <div className="space-y-6">
         {/* Page Header */}
@@ -276,6 +268,7 @@ const MonitorPage: React.FC = () => {
         </div>
       </div>
     </Layout>
+    </ProtectedRoute>
   )
 }
 

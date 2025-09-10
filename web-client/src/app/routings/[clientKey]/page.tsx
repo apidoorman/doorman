@@ -1,9 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { fetchJson } from '@/utils/http'
+import { SERVER_URL } from '@/utils/config'
 
 interface Routing {
   routing_name: string
@@ -84,13 +87,12 @@ const RoutingDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/routing/${clientKey}`, {
+      const response = await fetch(`${SERVER_URL}/platform/routing/${clientKey}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(editData)
       })
@@ -101,15 +103,7 @@ const RoutingDetailPage = () => {
       }
 
       // Refresh from server to get the latest canonical data
-      const refreshed = await fetch(`http://localhost:3002/platform/routing/${encodeURIComponent(clientKey)}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      const refreshedRouting = await refreshed.json()
+      const refreshedRouting = await fetchJson(`${SERVER_URL}/platform/routing/${encodeURIComponent(clientKey)}`)
       setRouting(refreshedRouting)
       sessionStorage.setItem('selectedRouting', JSON.stringify(refreshedRouting))
       setIsEditing(false)
@@ -173,20 +167,8 @@ const RoutingDetailPage = () => {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/routing/${clientKey}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to delete routing')
-      }
+      const { delJson } = await import('@/utils/api')
+      await delJson(`${SERVER_URL}/platform/routing/${encodeURIComponent(clientKey)}`)
 
       router.push('/routings')
     } catch (err) {
@@ -460,47 +442,17 @@ const RoutingDetailPage = () => {
           </div>
         )}
 
-        {/* Delete Modal */}
-        {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="fixed inset-0 bg-black/50" onClick={handleDeleteCancel}></div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 relative z-10">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Routing</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                This action cannot be undone. This will permanently delete the routing "{routing?.routing_name}".
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Please type <strong>{routing?.routing_name}</strong> to confirm.
-              </p>
-              <input
-                type="text"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="input w-full mb-4"
-                placeholder="Enter routing name to confirm"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleDeleteConfirm}
-                  disabled={deleteConfirmation !== routing?.routing_name || deleting}
-                  className="btn btn-error flex-1"
-                >
-                  {deleting ? (
-                    <div className="flex items-center justify-center">
-                      <div className="spinner mr-2"></div>
-                      Deleting...
-                    </div>
-                  ) : (
-                    'Delete Routing'
-                  )}
-                </button>
-                <button onClick={handleDeleteCancel} className="btn btn-secondary flex-1">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ConfirmModal
+          open={showDeleteModal}
+          title="Delete Routing"
+          message={<>
+            This action cannot be undone. This will permanently delete the routing "{routing?.routing_name}".
+          </>}
+          confirmLabel={deleting ? 'Deleting...' : 'Delete Routing'}
+          cancelLabel="Cancel"
+          onCancel={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+        />
       </div>
     </Layout>
   )

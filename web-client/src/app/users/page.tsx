@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import Pagination from '@/components/Pagination'
+import { SERVER_URL } from '@/utils/config'
 
 interface User {
   username: string
@@ -22,34 +24,29 @@ const UsersPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('username')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [hasNext, setHasNext] = useState(false)
 
   useEffect(() => {
     fetchUsers()
-  }, [])
+  }, [page, pageSize])
 
   const fetchUsers = async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`http://localhost:3002/platform/user/all`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load users')
-      }
-      const data = await response.json()
+      const { fetchJson } = await import('@/utils/http')
+      const data: any = await fetchJson(`${SERVER_URL}/platform/user/all?page=${page}&page_size=${pageSize}`)
       const userList = Array.isArray(data) ? data : (data.users || data.response?.users || [])
       setAllUsers(userList)
       setUsers(userList)
+      setHasNext((userList || []).length === pageSize)
     } catch (err) {
       setError('Failed to load users. Please try again later.')
       setUsers([])
       setAllUsers([])
+      setHasNext(false)
     } finally {
       setLoading(false)
     }
@@ -256,6 +253,14 @@ const UsersPage = () => {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => { setPageSize(s); setPage(1) }}
+              hasNext={hasNext}
+            />
 
             {/* Empty State */}
             {users.length === 0 && !loading && (

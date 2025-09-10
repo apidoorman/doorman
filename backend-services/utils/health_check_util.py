@@ -8,7 +8,8 @@ import psutil
 import time
 import logging
 from datetime import timedelta
-from utils.database import mongodb_client
+from utils.database import mongodb_client, database
+from utils.doorman_cache_util import doorman_cache
 from redis.asyncio import Redis
 import os
 
@@ -18,6 +19,11 @@ START_TIME = time.time()
 
 async def check_mongodb():
     try:
+        # If running in memory-only mode, MongoDB is not required
+        if database.memory_only:
+            return True
+        if mongodb_client is None:
+            return False
         mongodb_client.admin.command('ping')
         return True
     except Exception as e:
@@ -26,11 +32,15 @@ async def check_mongodb():
 
 async def check_redis():
     try:
+        # If cache is memory-based, Redis is not required
+        if not getattr(doorman_cache, 'is_redis', False):
+            return True
         redis = Redis.from_url(
             f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
             decode_responses=True
         )
-        redis.ping()
+        # Properly await async ping
+        await redis.ping()
         return True
     except Exception as e:
         logger.error(f"Redis health check failed: {str(e)}")

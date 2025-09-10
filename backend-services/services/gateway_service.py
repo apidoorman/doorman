@@ -93,17 +93,10 @@ class GatewayService:
                     logger.error(f"{endpoints} | REST gateway failed with code GTW003")
                     return GatewayService.error_response(request_id, 'GTW003', 'Endpoint does not exist for the requested API')
                 client_key = request.headers.get('client-key')
-                if client_key:
-                    server = await routing_util.get_routing_info(client_key)
-                    if not server:
-                        return GatewayService.error_response(request_id, 'GTW007', 'Client key does not exist in routing')
-                    logger.info(f"{request_id} | REST gateway to: {server}")
-                else:
-                    server_index = doorman_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
-                    api_servers = api.get('api_servers') or []
-                    server = api_servers[server_index]
-                    doorman_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api_servers))
-                    logger.info(f"{request_id} | REST gateway to: {server}")
+                server = await routing_util.pick_upstream_server(api, request.method, endpoint_uri, client_key)
+                if not server:
+                    return GatewayService.error_response(request_id, 'GTW001', 'No upstream servers configured')
+                logger.info(f"{request_id} | REST gateway to: {server}")
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 method = request.method.upper()
                 retry = api.get('api_allowed_retry_count') or 0
@@ -213,15 +206,9 @@ class GatewayService:
                 if not any(re.fullmatch(regex_pattern.sub(r"([^/]+)", ep), composite) for ep in endpoints):
                     return GatewayService.error_response(request_id, 'GTW003', 'Endpoint does not exist for the requested API')
                 client_key = request.headers.get('client-key')
-                if client_key:
-                    server = await routing_util.get_routing_info(client_key)
-                    if not server:
-                        return GatewayService.error_response(request_id, 'GTW007', 'Client key does not exist in routing')
-                else:
-                    server_index = doorman_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
-                    api_servers = api.get('api_servers') or []
-                    server = api_servers[server_index]
-                    doorman_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api_servers))
+                server = await routing_util.pick_upstream_server(api, 'POST', endpoint_uri, client_key)
+                if not server:
+                    return GatewayService.error_response(request_id, 'GTW001', 'No upstream servers configured')
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 logger.info(f"{request_id} | SOAP gateway to: {url}")
                 retry = api.get('api_allowed_retry_count') or 0
@@ -302,10 +289,12 @@ class GatewayService:
                         logger.error(f"{request_id} | API not found: {api_path}")
                         return GatewayService.error_response(request_id, 'GTW001', f'API does not exist: {api_path}')
                 doorman_cache.set_cache('api_cache', api_path, api)
-                if not api.get('api_servers'):
-                    logger.error(f"{request_id} | No API servers configured for {api_path}")
-                    return GatewayService.error_response(request_id, 'GTW001', 'No API servers configured')
-                url = api.get('api_servers', [])[0].rstrip('/')
+                client_key = request.headers.get('client-key')
+                server = await routing_util.pick_upstream_server(api, 'POST', '/graphql', client_key)
+                if not server:
+                    logger.error(f"{request_id} | No upstream servers configured for {api_path}")
+                    return GatewayService.error_response(request_id, 'GTW001', 'No upstream servers configured')
+                url = server.rstrip('/')
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_tokens_enabled'):
                     if not await token_util.deduct_ai_token(api.get('api_token_group'), username):
@@ -396,10 +385,12 @@ class GatewayService:
                         logger.error(f"{request_id} | API not found: {api_path}")
                         return GatewayService.error_response(request_id, 'GTW001', f'API does not exist: {api_path}', status=404)
                 doorman_cache.set_cache('api_cache', api_path, api)
-                if not api.get('api_servers'):
-                    logger.error(f"{request_id} | No API servers configured for {api_path}")
-                    return GatewayService.error_response(request_id, 'GTW001', 'No API servers configured', status=404)
-                url = api.get('api_servers', [])[0].rstrip('/')
+                client_key = request.headers.get('client-key')
+                server = await routing_util.pick_upstream_server(api, 'POST', '/grpc', client_key)
+                if not server:
+                    logger.error(f"{request_id} | No upstream servers configured for {api_path}")
+                    return GatewayService.error_response(request_id, 'GTW001', 'No upstream servers configured', status=404)
+                url = server.rstrip('/')
                 if url.startswith('grpc://'):
                     url = url[7:]
                 retry = api.get('api_allowed_retry_count') or 0

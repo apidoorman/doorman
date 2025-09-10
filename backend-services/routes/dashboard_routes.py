@@ -9,7 +9,7 @@ from typing import Dict, List
 
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required
-from utils.response_util import process_response
+from utils.response_util import respond_rest
 from utils.database import user_collection, api_collection, subscriptions_collection
 from utils.metrics_util import metrics_store
 
@@ -93,20 +93,20 @@ async def get_dashboard_data(request: Request):
             "popularApis": popular_apis
         }
         
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=200,
             response_headers={"request_id": request_id},
             response=dashboard_data
-        ).dict(), "rest")
+        ))
         
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=500,
             response_headers={"request_id": request_id},
             error_code="GTW999",
             error_message="An unexpected error occurred"
-        ).dict(), "rest")
+        ))
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms") 

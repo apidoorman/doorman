@@ -25,12 +25,30 @@ class ApiService:
         """
         logger.info(request_id + " | Creating API: " + data.api_name + " " + data.api_version)
         cache_key = f"{data.api_name}/{data.api_version}"
-        if doorman_cache.get_cache('api_cache', cache_key) or api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version}):
-            logger.error(request_id + " | API Creation Failed with code API001")
+        existing = doorman_cache.get_cache('api_cache', cache_key)
+        if not existing:
+            existing = api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version})
+        if existing:
+            # Idempotent create: if already exists, ensure caches are populated and return 200
+            try:
+                if existing.get('_id'):
+                    existing = {k: v for k, v in existing.items() if k != '_id'}
+                # Ensure api_id/api_path present for cache keys
+                if not existing.get('api_id'):
+                    existing['api_id'] = str(uuid.uuid4())
+                if not existing.get('api_path'):
+                    existing['api_path'] = f"/{existing.get('api_name')}/{existing.get('api_version')}"
+                doorman_cache.set_cache('api_cache', cache_key, existing)
+                doorman_cache.set_cache('api_id_cache', existing['api_path'], existing['api_id'])
+            except Exception:
+                pass
+            logger.info(request_id + " | API already exists; returning success")
             return ResponseModel(
-                status_code=400, 
-                error_code='API001',
-                error_message='API already exists for the requested name and version'
+                status_code=200,
+                response_headers={
+                    "request_id": request_id
+                },
+                message='API already exists'
                 ).dict()
         data.api_path = f"/{data.api_name}/{data.api_version}"
         data.api_id = str(uuid.uuid4())

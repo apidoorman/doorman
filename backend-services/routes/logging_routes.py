@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from models.response_model import ResponseModel
 from services.logging_service import LoggingService
 from utils.auth_util import auth_required
-from utils.response_util import process_response
+from utils.response_util import respond_rest, process_response
 from utils.role_util import platform_role_required_bool
 
 import uuid
@@ -85,14 +85,14 @@ async def get_logs(
         
         # Check if user has permission to view logs
         if not await platform_role_required_bool(username, 'view_logs'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id_param
                 },
                 error_code="LOG001",
                 error_message="You do not have permission to view logs"
-            ).dict(), "rest")
+            ))
         
         logging_service = LoggingService()
         result = await logging_service.get_logs(
@@ -113,27 +113,27 @@ async def get_logs(
             request_id_param=request_id_param
         )
         
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=200,
             response_headers={
                 "request_id": request_id_param
             },
             response=result
-        ).dict(), "rest")
+        ))
         
     except HTTPException as e:
         # Re-raise HTTP exceptions (like 401 Unauthorized) as-is
         raise e
     except Exception as e:
         logger.critical(f"{request_id_param} | Unexpected error: {str(e)}", exc_info=True)
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
                 "request_id": request_id_param
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-        ).dict(), "rest")
+        ))
     finally:
         end_time_param = time.time() * 1000
         logger.info(f"{request_id_param} | Total time: {str(end_time_param - start_time_param)}ms")
@@ -153,19 +153,19 @@ async def get_log_files(request: Request):
         
         # Check if user has permission to view logs
         if not await platform_role_required_bool(username, 'view_logs'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
                 },
                 error_code="LOG005",
                 error_message="You do not have permission to view log files"
-            ).dict(), "rest")
+            ))
         
         logging_service = LoggingService()
         log_files = logging_service.get_available_log_files()
         
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=200,
             response_headers={
                 "request_id": request_id
@@ -174,21 +174,21 @@ async def get_log_files(request: Request):
                 "log_files": log_files,
                 "count": len(log_files)
             }
-        ).dict(), "rest")
+        ))
         
     except HTTPException as e:
         # Re-raise HTTP exceptions (like 401 Unauthorized) as-is
         raise e
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
                 "request_id": request_id
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-        ).dict(), "rest")
+        ))
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -237,25 +237,25 @@ async def get_log_statistics(request: Request):
         
         # Check if user has permission to view logs
         if not await platform_role_required_bool(username, 'view_logs'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
                 },
                 error_code="LOG002",
                 error_message="You do not have permission to view log statistics"
-            ).dict(), "rest")
+            ))
         
         logging_service = LoggingService()
         statistics = await logging_service.get_log_statistics(request_id)
         
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=200,
             response_headers={
                 "request_id": request_id
             },
-            data=statistics
-        ).dict(), "rest")
+            response=statistics
+        ))
         
     except HTTPException as e:
         # Re-raise HTTP exceptions (like 401 Unauthorized) as-is
@@ -341,13 +341,13 @@ async def export_logs(
             request_id=request_id
         )
         
-        return process_response(ResponseModel(
+        return respond_rest(ResponseModel(
             status_code=200,
             response_headers={
                 "request_id": request_id
             },
-            data=export_result
-        ).dict(), "rest")
+            response=export_result
+        ))
         
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)

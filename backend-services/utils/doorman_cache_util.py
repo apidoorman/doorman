@@ -9,27 +9,11 @@ import json
 import os
 import threading
 from typing import Dict, Any, Optional
-import pickle
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import base64
 
 class MemoryCache:
     def __init__(self):
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
-        self._dump_file = os.getenv("CACHE_DUMP_FILE", "cache_dump.enc")
-        self._encryption_key = self._get_encryption_key()
-        self._auto_save_thread = None
-        self._stop_auto_save = threading.Event()
-        self._dump_interval = int(os.getenv("CACHE_DUMP_INTERVAL", "300"))
-        self._min_dump_interval = int(os.getenv("CACHE_MIN_DUMP_INTERVAL", "60"))
-        self._last_dump_time = 0
-        self._cache_modified = False
-        self._last_cache_size = 0
-        self._load_cache()
-        self._start_auto_save()
     
     def setex(self, key: str, ttl: int, value: str):
         with self._lock:
@@ -37,8 +21,7 @@ class MemoryCache:
                 'value': value,
                 'expires_at': self._get_current_time() + ttl
             }
-            self._cache_modified = True
-    
+
     def get(self, key: str) -> Optional[str]:
         with self._lock:
             if key in self._cache:
@@ -54,7 +37,6 @@ class MemoryCache:
             for key in keys:
                 if key in self._cache:
                     self._cache.pop(key, None)
-                    self._cache_modified = True
     
     def keys(self, pattern: str) -> list:
         with self._lock:
@@ -77,9 +59,7 @@ class MemoryCache:
             return {
                 'total_entries': total_entries,
                 'active_entries': active_entries,
-                'expired_entries': expired_entries,
-                'dump_file': self._dump_file,
-                'auto_save_active': not self._stop_auto_save.is_set()
+                'expired_entries': expired_entries
             }
     
     def _cleanup_expired(self):
@@ -94,84 +74,9 @@ class MemoryCache:
             if expired_keys:
                 print(f"Cleaned up {len(expired_keys)} expired cache entries")
 
-    def _get_encryption_key(self) -> bytes:
-        env_key = os.getenv("MEM_ENCRYPTION_KEY")
-        if not env_key:
-            raise ValueError("MEM_ENCRYPTION_KEY environment variable is required for memory cache")
-        salt = b'pygate_cache_salt'
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(env_key.encode()))
-        return key
-    
-    def _encrypt_data(self, data: bytes) -> bytes:
-        f = Fernet(self._encryption_key)
-        return f.encrypt(data)
-    
-    def _decrypt_data(self, encrypted_data: bytes) -> bytes:
-        f = Fernet(self._encryption_key)
-        return f.decrypt(encrypted_data)
-    
-    def _save_cache(self):
-        try:
-            with self._lock:
-                cache_data = {}
-                current_time = self._get_current_time()
-                for key, entry in self._cache.items():
-                    if current_time < entry['expires_at']:
-                        cache_data[key] = entry
-                serialized_data = pickle.dumps(cache_data)
-                encrypted_data = self._encrypt_data(serialized_data)
-                temp_file = f"{self._dump_file}.tmp"
-                dump_dir = os.path.dirname(self._dump_file)
-                if dump_dir:
-                    os.makedirs(dump_dir, exist_ok=True)
-                with open(temp_file, 'wb') as f:
-                    f.write(encrypted_data)
-                os.replace(temp_file, self._dump_file)
-        except Exception as e:
-            print(f"Warning: Failed to save cache to {self._dump_file}: {e}")
-    
-    def _load_cache(self):
-        try:
-            if os.path.exists(self._dump_file):
-                with open(self._dump_file, 'rb') as f:
-                    encrypted_data = f.read()
-                decrypted_data = self._decrypt_data(encrypted_data)
-                loaded_cache = pickle.loads(decrypted_data)
-                current_time = self._get_current_time()
-                with self._lock:
-                    for key, entry in loaded_cache.items():
-                        if current_time < entry['expires_at']:
-                            self._cache[key] = entry
-                print(f"Loaded {len(self._cache)} cache entries from {self._dump_file}")
-        except Exception as e:
-            print(f"Warning: Failed to load cache from {self._dump_file}: {e}")
-
-    def _start_auto_save(self):
-        def auto_save_worker():
-            while not self._stop_auto_save.wait(self._min_dump_interval):
-                current_time = self._get_current_time()
-                if (self._cache_modified and 
-                    current_time - self._last_dump_time >= self._dump_interval and
-                    abs(len(self._cache) - self._last_cache_size) > 0):
-                    self._save_cache()
-                    self._last_dump_time = current_time
-                    self._cache_modified = False
-                    self._last_cache_size = len(self._cache)
-        self._auto_save_thread = threading.Thread(target=auto_save_worker, daemon=True)
-        self._auto_save_thread.start()
-
+    # No-op stubs to keep interface compatibility
     def stop_auto_save(self):
-        """Stop the auto-save thread and perform final save."""
-        self._stop_auto_save.set()
-        if self._auto_save_thread:
-            self._auto_save_thread.join(timeout=5)
-        self._save_cache()
+        return
 
 class DoormanCacheManager:
     def __init__(self):
@@ -284,13 +189,12 @@ class DoormanCacheManager:
             self.cache._cleanup_expired()
 
     def force_save_cache(self):
-        if not self.is_redis and hasattr(self.cache, '_save_cache'):
-            self.cache._save_cache()
+        # No-op: cache persistence removed
+        return
 
     def stop_cache_persistence(self):
-        """Stop the auto-save thread (memory cache only)."""
-        if not self.is_redis and hasattr(self.cache, 'stop_auto_save'):
-            self.cache.stop_auto_save()
+        """No-op: cache persistence removed."""
+        return
 
     @staticmethod
     def is_operational():

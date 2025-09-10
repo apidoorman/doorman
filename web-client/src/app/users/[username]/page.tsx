@@ -1,9 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { fetchJson } from '@/utils/http'
+import { PROTECTED_USERS, SERVER_URL } from '@/utils/config'
 
 interface User {
   username: string
@@ -55,6 +58,7 @@ const UserDetailPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const isProtected = PROTECTED_USERS.includes((username || '').toLowerCase())
 
   useEffect(() => {
     const userData = sessionStorage.getItem('selectedUser')
@@ -128,32 +132,14 @@ const UserDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/user/${username}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        },
-        body: JSON.stringify(editData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to update user')
+      if (isProtected) {
+        setError('Editing this user is disabled by policy')
+        return
       }
+      await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`, editData)
 
       // Refresh from server to get the latest canonical data
-      const refreshed = await fetch(`http://localhost:3002/platform/user/${encodeURIComponent(username)}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      const refreshedUser = await refreshed.json()
+      const refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
       setUser(refreshedUser)
       // Keep sessionStorage in sync for back-navigation
       sessionStorage.setItem('selectedUser', JSON.stringify(refreshedUser))
@@ -230,29 +216,16 @@ const UserDetailPage = () => {
   }
 
   const handleDeleteConfirm = async () => {
-    if (deleteConfirmation !== user?.username) {
-      setError('Username does not match')
-      return
-    }
-
     try {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/user/${username}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to delete user')
+      if (isProtected) {
+        setError('Deleting this user is disabled by policy')
+        return
       }
+      const { delJson } = await import('@/utils/api')
+      await delJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
 
       router.push('/users')
     } catch (err) {
@@ -324,13 +297,13 @@ const UserDetailPage = () => {
           <div className="flex gap-2">
             {!isEditing ? (
               <>
-                <button onClick={handleEdit} className="btn btn-primary">
+                <button onClick={handleEdit} disabled={isProtected} className="btn btn-primary disabled:opacity-50">
                   <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                   Edit User
                 </button>
-                <button onClick={handleDeleteClick} className="btn btn-error">
+                <button onClick={handleDeleteClick} disabled={isProtected} className="btn btn-error disabled:opacity-50">
                   <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
@@ -398,6 +371,18 @@ const UserDetailPage = () => {
 
         {user && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {isProtected && (
+              <div className="rounded-lg bg-warning-50 border border-warning-200 p-4 dark:bg-warning-900/20 dark:border-warning-800">
+                <div className="flex">
+                  <svg className="h-5 w-5 text-warning-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.22 19h13.56A2 2 0 0020.6 16.2L13.9 4.8a2 2 0 00-3.48 0L3.4 16.2A2 2 0 005.22 19z" />
+                  </svg>
+                  <div className="ml-3">
+                    <p className="text-sm text-warning-800 dark:text-warning-200">This account is protected by policy and cannot be edited or deleted.</p>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Basic Information */}
             <div className="card">
               <div className="card-header">
@@ -739,47 +724,18 @@ const UserDetailPage = () => {
           </div>
         )}
 
-        {/* Delete Modal */}
-        {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="fixed inset-0 bg-black/50" onClick={handleDeleteCancel}></div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 relative z-10">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete User</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                This action cannot be undone. This will permanently delete the user "{user?.username}".
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Please type <strong>{user?.username}</strong> to confirm.
-              </p>
-              <input
-                type="text"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="input w-full mb-4"
-                placeholder="Enter username to confirm"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleDeleteConfirm}
-                  disabled={deleteConfirmation !== user?.username || deleting}
-                  className="btn btn-error flex-1"
-                >
-                  {deleting ? (
-                    <div className="flex items-center justify-center">
-                      <div className="spinner mr-2"></div>
-                      Deleting...
-                    </div>
-                  ) : (
-                    'Delete User'
-                  )}
-                </button>
-                <button onClick={handleDeleteCancel} className="btn btn-secondary flex-1">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ConfirmModal
+          open={showDeleteModal}
+          title="Delete User"
+          message={<>
+            This action cannot be undone. This will permanently delete the user "{user?.username}".
+          </>}
+          confirmLabel={deleting ? 'Deleting...' : 'Delete User'}
+          cancelLabel="Cancel"
+          onCancel={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+          
+        />
       </div>
     </Layout>
   )

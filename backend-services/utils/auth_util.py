@@ -10,7 +10,7 @@ import uuid
 from fastapi import HTTPException, Request
 from jose import jwt, JWTError
 
-from utils.auth_blacklist import jwt_blacklist
+from utils.auth_blacklist import jwt_blacklist, is_user_revoked
 from utils.database import user_collection, role_collection
 from utils.doorman_cache_util import doorman_cache
 
@@ -21,12 +21,12 @@ logger = logging.getLogger("doorman.gateway")
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 
-async def validate_csrf_token(csrf_token: str, auth_token: str) -> bool:
+async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> bool:
     try:
-        csrf_payload = jwt.decode(csrf_token, SECRET_KEY, algorithms=[ALGORITHM])
-        auth_payload = jwt.decode(auth_token, SECRET_KEY, algorithms=[ALGORITHM])
-        return csrf_payload.get("sub") == auth_payload.get("sub")
-    except:
+        if not header_token or not cookie_token:
+            return False
+        return header_token == cookie_token
+    except Exception:
         return False
 
 async def auth_required(request: Request):
@@ -34,11 +34,12 @@ async def auth_required(request: Request):
     token = request.cookies.get("access_token_cookie")
     if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    if os.getenv("HTTPS_ENABLED", "false").lower() == "true":
-        csrf_token = request.headers.get("X-CSRF-Token")
-        if not csrf_token:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        if not await validate_csrf_token(csrf_token, token):
+    # Enforce CSRF on HTTPS deployments; support both env flags for consistency
+    https_enabled = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
+    if https_enabled:
+        csrf_header = request.headers.get("X-CSRF-Token")
+        csrf_cookie = request.cookies.get("csrf_token")
+        if not await validate_csrf_double_submit(csrf_header, csrf_cookie):
             raise HTTPException(status_code=401, detail="Invalid CSRF token")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -46,6 +47,8 @@ async def auth_required(request: Request):
         jti = payload.get("jti")
         if not username or not jti:
             raise HTTPException(status_code=401, detail="Invalid token")
+        if is_user_revoked(username):
+            raise HTTPException(status_code=401, detail="Token has been revoked")
         if username in jwt_blacklist:
             timed_heap = jwt_blacklist[username]
             for _, token_jti in timed_heap.heap:

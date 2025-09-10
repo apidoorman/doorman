@@ -48,21 +48,8 @@ export function decodeJWT(token: string): JWTPayload | null {
 }
 
 export function getTokenFromCookie(): string | null {
-  const cookies = document.cookie.split(';')
-  const tokenCookie = cookies.find(cookie => cookie.trim().startsWith('access_token_cookie='))
-  const token = tokenCookie ? tokenCookie.split('=')[1] : null
-  
-  // Debug logging
-  if (typeof window !== 'undefined') {
-    console.log('=== AUTH DEBUG ===')
-    console.log('All cookies:', document.cookie)
-    console.log('Cookie array:', cookies)
-    console.log('Found token cookie:', tokenCookie)
-    console.log('Token value:', token ? token.substring(0, 50) + '...' : 'None')
-    console.log('Token length:', token ? token.length : 0)
-  }
-  
-  return token
+  // HttpOnly cookie cannot be read from client; return null to avoid misuse
+  return null
 }
 
 export function isTokenValid(token: string): boolean {

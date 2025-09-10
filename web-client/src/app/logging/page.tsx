@@ -1,9 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import Pagination from '@/components/Pagination'
+import { getCookie } from '@/utils/http'
+import { SERVER_URL } from '@/utils/config'
 import { format } from 'date-fns'
 import { ChangeEvent } from 'react'
 import Layout from '@/components/Layout'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Log {
   timestamp: string
@@ -49,9 +54,16 @@ interface GroupedLogs {
   expanded_logs?: Log[] // Store all logs for this request when expanded
 }
 
+type OverrideKey = string // `${method}|${api_name}|${api_version}|${endpoint_uri}`
+
 export default function LogsPage() {
+  const { permissions } = useAuth()
+  const canExport = !!permissions?.export_logs
   const [logs, setLogs] = useState<Log[]>([])
   const [groupedLogs, setGroupedLogs] = useState<GroupedLogs[]>([])
+  const [logsPage, setLogsPage] = useState(1)
+  const [logsPageSize, setLogsPageSize] = useState(10)
+  const [logsHasNext, setLogsHasNext] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showMoreFilters, setShowMoreFilters] = useState(false)
@@ -80,24 +92,65 @@ export default function LogsPage() {
     }
   })
 
+  const [overrideMap, setOverrideMap] = useState<Record<OverrideKey, boolean>>({})
+
+  const ensureEndpointOverridesLoaded = async (apiPath: string) => {
+    try {
+      const parts = apiPath.replace(/^\//, '').split('/')
+      if (parts.length < 2) return
+      const api_name = parts[0]
+      const api_version = parts[1]
+      const keyPrefix = `${api_name}|${api_version}|`
+      if (Object.keys(overrideMap).some(k => k.includes(keyPrefix))) return
+      const { fetchJson } = await import('@/utils/http')
+      const responseData: any = await fetchJson(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api_name)}/${encodeURIComponent(api_version)}`)
+      const data = responseData
+      const eps: any[] = data.endpoints || []
+      const next: Record<OverrideKey, boolean> = {}
+      eps.forEach(ep => {
+        const k: OverrideKey = `${ep.endpoint_method}|${ep.api_name}|${ep.api_version}|${ep.endpoint_uri}`
+        next[k] = Array.isArray(ep.endpoint_servers) && ep.endpoint_servers.length > 0
+      })
+      setOverrideMap(prev => ({ ...prev, ...next }))
+    } catch {}
+  }
+
+  const toQueryParams = (f: FilterState) => {
+    const qp = new URLSearchParams()
+    const map: Record<string,string> = {
+      startDate: 'start_date',
+      endDate: 'end_date',
+      startTime: 'start_time',
+      endTime: 'end_time',
+      request_id: 'request_id',
+      ipAddress: 'ip_address',
+      minResponseTime: 'min_response_time',
+      maxResponseTime: 'max_response_time',
+      user: 'user',
+      endpoint: 'endpoint',
+      method: 'method',
+      level: 'level'
+    }
+    Object.entries(f).forEach(([k,v]) => {
+      if (!v) return
+      const key = (map as any)[k] || k
+      qp.append(key, v)
+    })
+    return qp
+  }
+
   const fetchLogs = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
       
-      const queryParams = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) queryParams.append(key, value)
-      })
+      const queryParams = toQueryParams(filters)
+      queryParams.append('limit', String(logsPageSize))
+      queryParams.append('offset', String((logsPage - 1) * logsPageSize))
       
-      const response = await fetch(`http://localhost:3002/platform/logging/logs?${queryParams}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
+      const { fetchJson } = await import('@/utils/http')
+      const csrf = getCookie('csrf_token')
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept':'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }})
       
       if (!response.ok) {
         throw new Error('Failed to fetch logs')
@@ -111,10 +164,18 @@ export default function LogsPage() {
       
       const data = await response.json()
       const logList = data.response?.logs || data.logs || []
+      const hasMore = (data.response?.has_more ?? data.has_more) ?? (Array.isArray(logList) && logList.length === logsPageSize)
       setLogs(logList)
+      setLogsHasNext(!!hasMore)
       
       // Get unique request IDs from the filtered results
-      const uniqueRequestIds = [...new Set(logList.map((log: Log) => log.request_id).filter((id): id is string => id !== undefined && id !== null))]
+      const uniqueRequestIds: string[] = Array.from(
+        new Set<string>(
+          logList
+            .map((log: Log): string | undefined => log.request_id)
+            .filter((id: string | undefined): id is string => typeof id === 'string' && id.length > 0)
+        )
+      )
       
       // Fetch complete data for each request ID to get user and response time info
       const completeLogs: Log[] = []
@@ -125,14 +186,8 @@ export default function LogsPage() {
             completeQueryParams.append('request_id', requestId)
             completeQueryParams.append('limit', '1000')
             
-            const completeResponse = await fetch(`http://localhost:3002/platform/logging/logs?${completeQueryParams}`, {
-              credentials: 'include',
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-              }
-            })
+            const csrf2 = getCookie('csrf_token')
+            const completeResponse = await fetch(`${SERVER_URL}/platform/logging/logs?${completeQueryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf2 ? { 'X-CSRF-Token': csrf2 } : {}) }})
             
             if (completeResponse.ok) {
               const completeData = await completeResponse.json()
@@ -155,7 +210,7 @@ export default function LogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [filters])
+  }, [filters, logsPage, logsPageSize])
 
   const fetchLogsForRequestId = useCallback(async (requestId: string) => {
     try {
@@ -166,14 +221,8 @@ export default function LogsPage() {
       queryParams.append('request_id', requestId)
       queryParams.append('limit', '1000') // Get a large number to ensure we get all logs
       
-      const response = await fetch(`http://localhost:3002/platform/logging/logs?${queryParams}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
+      const csrf3 = getCookie('csrf_token')
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf3 ? { 'X-CSRF-Token': csrf3 } : {}) }})
       
       if (!response.ok) {
         throw new Error('Failed to fetch logs for request ID')
@@ -259,6 +308,11 @@ export default function LogsPage() {
         const responseTimeLog = sortedLogs.find(log => log.response_time)
         const userLog = sortedLogs.find(log => log.user)
         const endpointLog = sortedLogs.find(log => log.endpoint && log.method)
+        const apiHintLog = sortedLogs.find(log => log.api)?.api
+        if (apiHintLog) {
+          // Best effort: load endpoint override info for this API path
+          ensureEndpointOverridesLoaded(apiHintLog as string)
+        }
         const hasError = sortedLogs.some(log => log.level.toLowerCase() === 'error')
         
         return {
@@ -315,6 +369,7 @@ export default function LogsPage() {
   }
 
   const handleSearch = () => {
+    setLogsPage(1)
     setHasSearched(true)
   }
 
@@ -340,19 +395,12 @@ export default function LogsPage() {
   const exportLogs = async (format: 'json' | 'csv') => {
     try {
       setExporting(true)
-      const queryParams = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) queryParams.append(key, value)
-      })
+      const queryParams = toQueryParams(filters)
       queryParams.append('format', format)
       
-      const response = await fetch(`http://localhost:3002/platform/logging/logs/export?${queryParams}`, {
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs/export?${queryParams}`, {
         credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
       })
       
       if (!response.ok) {
@@ -392,6 +440,7 @@ export default function LogsPage() {
   }
 
   return (
+    <ProtectedRoute requiredPermission="view_logs">
     <Layout>
       <div className="space-y-6">
         {/* Page Header */}
@@ -403,26 +452,30 @@ export default function LogsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => exportLogs('json')}
-              disabled={exporting}
-              className="btn btn-secondary"
-            >
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Export JSON
-            </button>
-            <button
-              onClick={() => exportLogs('csv')}
-              disabled={exporting}
-              className="btn btn-secondary"
-            >
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-              Export CSV
-            </button>
+            {canExport && (
+              <>
+                <button
+                  onClick={() => exportLogs('json')}
+                  disabled={exporting}
+                  className="btn btn-secondary"
+                >
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export JSON
+                </button>
+                <button
+                  onClick={() => exportLogs('csv')}
+                  disabled={exporting}
+                  className="btn btn-secondary"
+                >
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export CSV
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -658,6 +711,7 @@ export default function LogsPage() {
                     <th>Duration</th>
                     <th>User</th>
                     <th>Endpoint</th>
+                    <th>Routing</th>
                     <th>Method</th>
                     <th>Response Time</th>
                     <th>Status</th>
@@ -708,6 +762,26 @@ export default function LogsPage() {
                           </p>
                         </td>
                         <td>
+                          {(() => {
+                            if (!group.endpoint || !group.method) return '-'
+                            const m = (group.endpoint || '').match(/^\/?([^/]+\/v\d+)(?:\/(.*))?$/)
+                            if (!m) return '-'
+                            const apiPath = m[1]
+                            const epUri = '/' + (m[2] || '')
+                            const parts = apiPath.split('/')
+                            if (parts.length < 2) return '-'
+                            const api_name = parts[0]
+                            const api_version = parts[1]
+                            const k: OverrideKey = `${group.method}|${api_name}|${api_version}|${epUri}`
+                            const hasOverride = !!overrideMap[k]
+                            return (
+                              <span className={`badge ${hasOverride ? 'badge-primary' : 'badge-gray'}`} title="Routing precedence: client-key → endpoint → API">
+                                {hasOverride ? 'Endpoint override' : 'API default'}
+                              </span>
+                            )
+                          })()}
+                        </td>
+                        <td>
                           <span className={`badge ${group.method === 'GET' ? 'badge-success' : group.method === 'POST' ? 'badge-primary' : 'badge-warning'}`}>
                             {group.method || '-'}
                           </span>
@@ -727,7 +801,7 @@ export default function LogsPage() {
                       {/* Expanded logs for this request */}
                       {expandedRequests.has(group.request_id) && (
                         <tr>
-                          <td colSpan={9} className="p-0">
+                          <td colSpan={10} className="p-0">
                             <div className="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
                               <div className="p-4">
                                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
@@ -741,7 +815,7 @@ export default function LogsPage() {
                                   </div>
                                 ) : (
                                   <div className="space-y-2">
-                                    {(group.expanded_logs || group.logs).map((log, index) => (
+                                    {((group.expanded_logs || group.logs) || []).map((log, index) => (
                                       <div key={index} className="flex items-start space-x-4 p-2 bg-white dark:bg-gray-900 rounded border">
                                         <div className="flex-shrink-0">
                                           <span className={`badge ${getLevelBgColor(log.level)}`}>
@@ -773,6 +847,14 @@ export default function LogsPage() {
               </table>
             </div>
 
+            <Pagination
+              page={logsPage}
+              pageSize={logsPageSize}
+              onPageChange={setLogsPage}
+              onPageSizeChange={(s) => { setLogsPageSize(s); setLogsPage(1) }}
+              hasNext={logsHasNext}
+            />
+
             {/* Empty State */}
             {!hasSearched ? (
               <div className="text-center py-12">
@@ -803,5 +885,6 @@ export default function LogsPage() {
         )}
       </div>
     </Layout>
+    </ProtectedRoute>
   )
-} 
+}
