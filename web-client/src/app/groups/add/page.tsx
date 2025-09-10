@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
+import { postJson } from '@/utils/api'
 
 interface CreateGroupData {
   group_name: string
@@ -56,20 +57,7 @@ const AddGroupPage = () => {
       setLoading(true)
       setError(null)
 
-      const response = await fetch(`${SERVER_URL}/platform/group`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to create group')
-      }
+      await postJson(`${SERVER_URL}/platform/group`, formData)
 
       router.push('/groups')
     } catch (err) {

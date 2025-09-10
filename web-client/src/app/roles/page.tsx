@@ -4,7 +4,9 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
+import { getJson } from '@/utils/api'
 
 interface Role {
   role_name: string
@@ -27,33 +29,35 @@ const RolesPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('role_name')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [hasNext, setHasNext] = useState(false)
 
   useEffect(() => {
     fetchRoles()
-  }, [])
+  }, [page, pageSize])
 
   const fetchRoles = async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${SERVER_URL}/platform/role/all?page=1&page_size=10`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load roles')
-      }
-      const data = await response.json()
-      const list = Array.isArray(data) ? data : (data.roles || data.response?.roles || [])
-      setAllRoles(Array.isArray(list) ? list : [])
-      setRoles(Array.isArray(list) ? list : [])
+      const data = await getJson<any>(`${SERVER_URL}/platform/role/all?page=${page}&page_size=${pageSize}`)
+      const items: any[] = Array.isArray(data) ? data : (data.roles || data.response?.roles || [])
+      const seen = new Set<string>()
+      const unique = items.filter((r: any) => {
+        const key = String(r.role_name)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      }).sort((a: any, b: any) => String(a.role_name).localeCompare(String(b.role_name)))
+      setAllRoles(unique)
+      setRoles(unique)
+      setHasNext((items || []).length === pageSize)
     } catch (err) {
       setError('Failed to load roles. Please try again later.')
       setRoles([])
       setAllRoles([])
+      setHasNext(false)
     } finally {
       setLoading(false)
     }
@@ -229,6 +233,14 @@ const RolesPage = () => {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => { setPageSize(s); setPage(1) }}
+              hasNext={hasNext}
+            />
 
             {/* Empty State */}
             {roles.length === 0 && !loading && (

@@ -10,7 +10,7 @@ import uuid
 from fastapi import HTTPException, Request
 from jose import jwt, JWTError
 
-from utils.auth_blacklist import jwt_blacklist
+from utils.auth_blacklist import jwt_blacklist, is_user_revoked
 from utils.database import user_collection, role_collection
 from utils.doorman_cache_util import doorman_cache
 
@@ -34,7 +34,9 @@ async def auth_required(request: Request):
     token = request.cookies.get("access_token_cookie")
     if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    if os.getenv("HTTPS_ENABLED", "false").lower() == "true":
+    # Enforce CSRF on HTTPS deployments; support both env flags for consistency
+    https_enabled = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
+    if https_enabled:
         csrf_header = request.headers.get("X-CSRF-Token")
         csrf_cookie = request.cookies.get("csrf_token")
         if not await validate_csrf_double_submit(csrf_header, csrf_cookie):
@@ -45,6 +47,8 @@ async def auth_required(request: Request):
         jti = payload.get("jti")
         if not username or not jti:
             raise HTTPException(status_code=401, detail="Invalid token")
+        if is_user_revoked(username):
+            raise HTTPException(status_code=401, detail="Token has been revoked")
         if username in jwt_blacklist:
             timed_heap = jwt_blacklist[username]
             for _, token_jti in timed_heap.heap:

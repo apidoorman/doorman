@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { fetchJson } from '@/utils/http'
 import { SERVER_URL } from '@/utils/config'
 
 interface Role {
@@ -60,19 +62,7 @@ const RoleDetailPage = () => {
       }
 
       // Fetch from API if not in sessionStorage
-      const response = await fetch(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to load role')
-      }
-      
-      const data = await response.json()
+      const data = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
       setRole(data)
       setEditData(data)
     } catch (err) {
@@ -100,32 +90,14 @@ const RoleDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(editData)
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error_message || 'Failed to update role')
-      }
+      await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, editData)
       
       // Refresh from server to get the latest canonical data
-      const refreshed = await fetch(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      const rolePayload = await refreshed.json()
+      const rolePayload = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
       setRole(rolePayload)
       setEditData(rolePayload)
+      // Keep sessionStorage in sync for back-navigation
+      sessionStorage.setItem('selectedRole', JSON.stringify(rolePayload))
       setIsEditing(false)
       setSuccess('Role updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -150,18 +122,8 @@ const RoleDetailPage = () => {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to delete role')
-      }
+      const { delJson } = await import('@/utils/api')
+      await delJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
       
       router.push('/roles')
     } catch (err) {
@@ -381,10 +343,12 @@ const RoleDetailPage = () => {
                     { key: 'manage_endpoints', label: 'Manage Endpoints', description: 'Configure API endpoints and validations' },
                     { key: 'manage_groups', label: 'Manage Groups', description: 'Create, edit, and delete user groups' },
                     { key: 'manage_roles', label: 'Manage Roles', description: 'Create, edit, and delete user roles' },
-                    { key: 'manage_routings', label: 'Manage Routings', description: 'Configure API routing and load balancing' },
+                  { key: 'manage_routings', label: 'Manage Routings', description: 'Configure API routing and load balancing' },
                   { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
                   { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
                   { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' },
+                  { key: 'manage_tokens', label: 'Manage Tokens', description: 'Manage API tokens and user token balances' },
+                  { key: 'manage_auth', label: 'Manage Auth', description: 'Revoke tokens and enable/disable users' },
                   { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
                   { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }
                   ].map(({ key, label, description }) => (
@@ -427,47 +391,18 @@ const RoleDetailPage = () => {
           </div>
         )}
 
-        {/* Delete Modal */}
-        {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="fixed inset-0 bg-black/50" onClick={() => setShowDeleteModal(false)}></div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 relative z-10">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Role</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                This action cannot be undone. This will permanently delete the role "{role?.role_name}".
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Please type <strong>{role?.role_name}</strong> to confirm.
-              </p>
-              <input
-                type="text"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="input w-full mb-4"
-                placeholder="Enter role name to confirm"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleDelete}
-                  disabled={deleteConfirmation !== role?.role_name || deleting}
-                  className="btn btn-error flex-1"
-                >
-                  {deleting ? (
-                    <div className="flex items-center justify-center">
-                      <div className="spinner mr-2"></div>
-                      Deleting...
-                    </div>
-                  ) : (
-                    'Delete Role'
-                  )}
-                </button>
-                <button onClick={() => setShowDeleteModal(false)} className="btn btn-secondary flex-1">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ConfirmModal
+          open={showDeleteModal}
+          title="Delete Role"
+          message={<>
+            This action cannot be undone. This will permanently delete the role "{role?.role_name}".
+          </>}
+          confirmLabel={deleting ? 'Deleting...' : 'Delete Role'}
+          cancelLabel="Cancel"
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirm={handleDelete}
+          
+        />
       </div>
     </Layout>
   )

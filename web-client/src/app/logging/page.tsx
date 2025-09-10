@@ -1,11 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import Pagination from '@/components/Pagination'
 import { getCookie } from '@/utils/http'
 import { SERVER_URL } from '@/utils/config'
 import { format } from 'date-fns'
 import { ChangeEvent } from 'react'
 import Layout from '@/components/Layout'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Log {
   timestamp: string
@@ -54,8 +57,13 @@ interface GroupedLogs {
 type OverrideKey = string // `${method}|${api_name}|${api_version}|${endpoint_uri}`
 
 export default function LogsPage() {
+  const { permissions } = useAuth()
+  const canExport = !!permissions?.export_logs
   const [logs, setLogs] = useState<Log[]>([])
   const [groupedLogs, setGroupedLogs] = useState<GroupedLogs[]>([])
+  const [logsPage, setLogsPage] = useState(1)
+  const [logsPageSize, setLogsPageSize] = useState(10)
+  const [logsHasNext, setLogsHasNext] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showMoreFilters, setShowMoreFilters] = useState(false)
@@ -137,6 +145,8 @@ export default function LogsPage() {
       setError(null)
       
       const queryParams = toQueryParams(filters)
+      queryParams.append('limit', String(logsPageSize))
+      queryParams.append('offset', String((logsPage - 1) * logsPageSize))
       
       const { fetchJson } = await import('@/utils/http')
       const csrf = getCookie('csrf_token')
@@ -154,10 +164,18 @@ export default function LogsPage() {
       
       const data = await response.json()
       const logList = data.response?.logs || data.logs || []
+      const hasMore = (data.response?.has_more ?? data.has_more) ?? (Array.isArray(logList) && logList.length === logsPageSize)
       setLogs(logList)
+      setLogsHasNext(!!hasMore)
       
       // Get unique request IDs from the filtered results
-      const uniqueRequestIds = [...new Set(logList.map((log: Log) => log.request_id).filter((id): id is string => id !== undefined && id !== null))]
+      const uniqueRequestIds: string[] = Array.from(
+        new Set<string>(
+          logList
+            .map((log: Log): string | undefined => log.request_id)
+            .filter((id: string | undefined): id is string => typeof id === 'string' && id.length > 0)
+        )
+      )
       
       // Fetch complete data for each request ID to get user and response time info
       const completeLogs: Log[] = []
@@ -192,7 +210,7 @@ export default function LogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [filters])
+  }, [filters, logsPage, logsPageSize])
 
   const fetchLogsForRequestId = useCallback(async (requestId: string) => {
     try {
@@ -351,6 +369,7 @@ export default function LogsPage() {
   }
 
   const handleSearch = () => {
+    setLogsPage(1)
     setHasSearched(true)
   }
 
@@ -421,6 +440,7 @@ export default function LogsPage() {
   }
 
   return (
+    <ProtectedRoute requiredPermission="view_logs">
     <Layout>
       <div className="space-y-6">
         {/* Page Header */}
@@ -432,26 +452,30 @@ export default function LogsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => exportLogs('json')}
-              disabled={exporting}
-              className="btn btn-secondary"
-            >
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Export JSON
-            </button>
-            <button
-              onClick={() => exportLogs('csv')}
-              disabled={exporting}
-              className="btn btn-secondary"
-            >
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-              Export CSV
-            </button>
+            {canExport && (
+              <>
+                <button
+                  onClick={() => exportLogs('json')}
+                  disabled={exporting}
+                  className="btn btn-secondary"
+                >
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export JSON
+                </button>
+                <button
+                  onClick={() => exportLogs('csv')}
+                  disabled={exporting}
+                  className="btn btn-secondary"
+                >
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export CSV
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -823,6 +847,14 @@ export default function LogsPage() {
               </table>
             </div>
 
+            <Pagination
+              page={logsPage}
+              pageSize={logsPageSize}
+              onPageChange={setLogsPage}
+              onPageSizeChange={(s) => { setLogsPageSize(s); setLogsPage(1) }}
+              hasNext={logsHasNext}
+            />
+
             {/* Empty State */}
             {!hasSearched ? (
               <div className="text-center py-12">
@@ -853,5 +885,6 @@ export default function LogsPage() {
         )}
       </div>
     </Layout>
+    </ProtectedRoute>
   )
-} 
+}

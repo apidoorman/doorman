@@ -4,7 +4,9 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
+import { getJson } from '@/utils/api'
 
 interface Group {
   group_name: string
@@ -20,33 +22,35 @@ const GroupsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('group_name')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [hasNext, setHasNext] = useState(false)
 
   useEffect(() => {
     fetchGroups()
-  }, [])
+  }, [page, pageSize])
 
   const fetchGroups = async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${SERVER_URL}/platform/group/all?page=1&page_size=10`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load groups')
-      }
-      const data = await response.json()
-      const list = Array.isArray(data) ? data : (data.groups || data.response?.groups || [])
-      setAllGroups(Array.isArray(list) ? list : [])
-      setGroups(Array.isArray(list) ? list : [])
+      const data = await getJson<any>(`${SERVER_URL}/platform/group/all?page=${page}&page_size=${pageSize}`)
+      const items: any[] = Array.isArray(data) ? data : (data.groups || data.response?.groups || [])
+      const seen = new Set<string>()
+      const unique = items.filter((g: any) => {
+        const key = String(g.group_name)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      }).sort((a: any, b: any) => String(a.group_name).localeCompare(String(b.group_name)))
+      setAllGroups(unique)
+      setGroups(unique)
+      setHasNext((items || []).length === pageSize)
     } catch (err) {
       setError('Failed to load groups. Please try again later.')
       setGroups([])
       setAllGroups([])
+      setHasNext(false)
     } finally {
       setLoading(false)
     }
@@ -217,6 +221,14 @@ const GroupsPage = () => {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => { setPageSize(s); setPage(1) }}
+              hasNext={hasNext}
+            />
 
             {/* Empty State */}
             {groups.length === 0 && !loading && (
