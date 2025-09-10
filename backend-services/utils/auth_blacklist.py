@@ -2,6 +2,22 @@ from datetime import datetime, timedelta
 import heapq
 
 jwt_blacklist = {}
+revoked_all_users = set()
+
+def revoke_all_for_user(username: str):
+    try:
+        revoked_all_users.add(username)
+    except Exception:
+        pass
+
+def unrevoke_all_for_user(username: str):
+    try:
+        revoked_all_users.discard(username)
+    except Exception:
+        pass
+
+def is_user_revoked(username: str) -> bool:
+    return username in revoked_all_users
 
 class TimedHeap:
     def __init__(self, purge_after=timedelta(hours=1)):

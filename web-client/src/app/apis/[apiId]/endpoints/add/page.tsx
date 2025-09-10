@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
+import { postJson } from '@/utils/api'
 
 export default function AddEndpointPage() {
   const params = useParams()
@@ -62,17 +63,7 @@ export default function AddEndpointPage() {
       if (useOverride && servers.length > 0) {
         body.endpoint_servers = servers
       }
-      const response = await fetch(`${SERVER_URL}/platform/endpoint`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error_message || 'Failed to create endpoint')
+      await postJson(`${SERVER_URL}/platform/endpoint`, body)
       setSuccess('Endpoint created')
       setTimeout(() => setSuccess(null), 1500)
       router.push(`/apis/${encodeURIComponent(apiId)}/endpoints`)

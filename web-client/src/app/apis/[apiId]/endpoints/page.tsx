@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
+import { getJson } from '@/utils/api'
+import ConfirmModal from '@/components/ConfirmModal'
 
 interface EndpointItem {
   api_name: string
@@ -32,6 +34,146 @@ export default function ApiEndpointsPage() {
   const [working, setWorking] = useState<Record<string, boolean>>({})
   const [epNewServer, setEpNewServer] = useState<Record<string, string>>({})
 
+  // Endpoint validation state per endpoint_id
+  type EpValidation = {
+    loading: boolean
+    exists: boolean
+    enabled: boolean
+    schemaText: string
+    saving: boolean
+    error: string | null
+  }
+  const [validationByEndpoint, setValidationByEndpoint] = useState<Record<string, EpValidation>>({})
+
+  const ensureValidationLoaded = async (ep: EndpointItem) => {
+    const eid = ep.endpoint_id
+    if (!eid) return
+    if (validationByEndpoint[eid]?.loading === false && validationByEndpoint[eid] !== undefined) return
+    setValidationByEndpoint(prev => ({
+      ...prev,
+      [eid]: { loading: true, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: null }
+    }))
+    try {
+      const resp = await fetch(`${SERVER_URL}/platform/endpoint/validation/${encodeURIComponent(eid)}`, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      })
+      if (resp.ok) {
+        const data = await resp.json().catch(() => ({}))
+        const payload = data.response || data
+        const enabled = !!payload.validation_enabled
+        const schema = payload.validation_schema || {}
+        setValidationByEndpoint(prev => ({
+          ...prev,
+          [eid]: {
+            loading: false,
+            exists: true,
+            enabled,
+            schemaText: JSON.stringify(schema, null, 2),
+            saving: false,
+            error: null
+          }
+        }))
+      } else if (resp.status === 404) {
+        setValidationByEndpoint(prev => ({
+          ...prev,
+          [eid]: { loading: false, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: null }
+        }))
+      } else {
+        setValidationByEndpoint(prev => ({
+          ...prev,
+          [eid]: { loading: false, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: 'Failed to load validation' }
+        }))
+      }
+    } catch (e) {
+      setValidationByEndpoint(prev => ({
+        ...prev,
+        [eid]: { loading: false, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: 'Failed to load validation' }
+      }))
+    }
+  }
+
+  const saveValidation = async (ep: EndpointItem) => {
+    const eid = ep.endpoint_id
+    if (!eid) return
+    const cur = validationByEndpoint[eid]
+    if (!cur) return
+    setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...cur, saving: true, error: null } }))
+    try {
+      let schema: any = {}
+      try { schema = JSON.parse(cur.schemaText || '{}') } catch { throw new Error('Schema must be valid JSON') }
+      const body = JSON.stringify({ validation_enabled: !!cur.enabled, validation_schema: schema })
+      const url = `${SERVER_URL}/platform/endpoint/validation/${encodeURIComponent(eid)}`
+      const resp = await fetch(url, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.error_message || 'Failed to save validation')
+      }
+      setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, exists: true } }))
+      setSuccess('Validation saved')
+      setTimeout(() => setSuccess(null), 2000)
+    } catch (e:any) {
+      setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, error: e?.message || 'Failed to save validation' } }))
+    }
+  }
+
+  const createValidation = async (ep: EndpointItem) => {
+    const eid = ep.endpoint_id
+    if (!eid) return
+    const cur = validationByEndpoint[eid]
+    if (!cur) return
+    setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...cur, saving: true, error: null } }))
+    try {
+      let schema: any = {}
+      try { schema = JSON.parse(cur.schemaText || '{}') } catch { throw new Error('Schema must be valid JSON') }
+      const body = JSON.stringify({ endpoint_id: eid, validation_enabled: !!cur.enabled, validation_schema: schema })
+      const resp = await fetch(`${SERVER_URL}/platform/endpoint/validation`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.error_message || 'Failed to create validation')
+      }
+      setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, exists: true } }))
+      setSuccess('Validation created')
+      setTimeout(() => setSuccess(null), 2000)
+    } catch (e:any) {
+      setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, error: e?.message || 'Failed to create validation' } }))
+    }
+  }
+
+  const deleteValidation = async (ep: EndpointItem) => {
+    const eid = ep.endpoint_id
+    if (!eid) return
+    const cur = validationByEndpoint[eid]
+    if (!cur) return
+    setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...cur, saving: true, error: null } }))
+    try {
+      const resp = await fetch(`${SERVER_URL}/platform/endpoint/validation/${encodeURIComponent(eid)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.error_message || 'Failed to delete validation')
+      }
+      setValidationByEndpoint(prev => ({ ...prev, [eid]: { loading: false, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: null } }))
+      setSuccess('Validation deleted')
+      setTimeout(() => setSuccess(null), 2000)
+    } catch (e:any) {
+      setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, error: e?.message || 'Failed to delete validation' } }))
+    }
+  }
+
   useEffect(() => {
     // Try to read API selection from session storage to display name/version for breadcrumbs
     try {
@@ -49,7 +191,14 @@ export default function ApiEndpointsPage() {
     setError(null)
     try {
       if (!apiName || !apiVersion) {
-        // Fallback: fetch from server using apiId? Backend doesn’t have by-id endpoint list; rely on session.
+        // Fallback: find API by id via listing
+        const data = await getJson<any>(`${SERVER_URL}/platform/api/all`)
+        const list = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
+        const found = (list || []).find((a:any) => String(a.api_id) === String(apiId))
+        if (found) {
+          setApiName(found.api_name || '')
+          setApiVersion(found.api_version || '')
+        }
       }
       const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(apiName)}/${encodeURIComponent(apiVersion)}` ,{
         credentials: 'include',
@@ -58,9 +207,16 @@ export default function ApiEndpointsPage() {
           'Content-Type': 'application/json'
         }
       })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error_message || 'Failed to load endpoints')
-      const list = data.endpoints || []
+      const data = await response.json().catch(() => ({}))
+      let list: any[] = []
+      if (response.ok) {
+        list = data.endpoints || data.response?.endpoints || []
+      } else if (response.status === 400 && (data.error_code === 'END005' || data.error_message?.toLowerCase().includes('no endpoints'))) {
+        // No endpoints yet for this API; treat as empty without surfacing an error
+        list = []
+      } else {
+        throw new Error(data.error_message || 'Failed to load endpoints')
+      }
       setEndpoints(list)
       setAllEndpoints(list)
     } catch (e:any) {
@@ -80,6 +236,9 @@ export default function ApiEndpointsPage() {
 
   const keyFor = (ep: EndpointItem) => `${ep.endpoint_method}:${ep.endpoint_uri}`
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [endpointToDelete, setEndpointToDelete] = useState<EndpointItem | null>(null)
 
   const filtered = useMemo(() => {
     const t = searchTerm.trim().toLowerCase()
@@ -106,19 +265,14 @@ export default function ApiEndpointsPage() {
     setWorking(prev => ({ ...prev, [k]: true }))
     setError(null)
     try {
-      const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error_message || 'Failed to delete endpoint')
+      const { delJson } = await import('@/utils/api')
+      await delJson(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`)
       await loadEndpoints()
       setSuccess('Endpoint deleted')
       setTimeout(() => setSuccess(null), 2000)
+      setShowDeleteModal(false)
+      setDeleteConfirmation('')
+      setEndpointToDelete(null)
     } catch (e:any) {
       setError(e?.message || 'Failed to delete endpoint')
     } finally {
@@ -126,22 +280,20 @@ export default function ApiEndpointsPage() {
     }
   }
 
+  const handleDeleteClick = (ep: EndpointItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setEndpointToDelete(ep)
+    setDeleteConfirmation('')
+    setShowDeleteModal(true)
+  }
+
   const saveEndpointServers = async (ep: EndpointItem, servers: string[]) => {
     const k = keyFor(ep)
     setWorking(prev => ({ ...prev, [k]: true }))
     setError(null)
     try {
-      const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ endpoint_servers: servers })
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error_message || 'Failed to update endpoint')
+      const { putJson } = await import('@/utils/api')
+      await putJson(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`, { endpoint_servers: servers })
       await loadEndpoints()
       setSuccess('Endpoint servers updated')
       setTimeout(() => setSuccess(null), 2000)
@@ -293,7 +445,7 @@ export default function ApiEndpointsPage() {
                                       <span className="text-sm text-gray-700 dark:text-gray-300">Use endpoint servers</span>
                                     </div>
                                     <div className="flex-1" />
-                                    <button onClick={(e) => { e.stopPropagation(); deleteEndpoint(ep) }} className="btn btn-error btn-sm">Delete Endpoint</button>
+                                    <button onClick={(e) => handleDeleteClick(ep, e)} className="btn btn-error btn-sm">Delete Endpoint</button>
                                   </div>
                                   <div className={`${hasOverride ? '' : 'opacity-60'}`}>
                                     <div className="text-sm font-medium mb-1">Endpoint Servers (override API servers)</div>
@@ -317,6 +469,72 @@ export default function ApiEndpointsPage() {
                                       <button disabled={saving || !hasOverride} onClick={() => addEndpointServer(ep)} className="btn btn-secondary">{saving ? <div className="flex items-center"><div className="spinner mr-2"></div>Saving...</div> : 'Add'}</button>
                                     </div>
                                   </div>
+                                  {/* Validation */}
+                                  {ep.endpoint_id && (
+                                    <div className="mt-4 p-3 rounded border bg-white dark:bg-gray-900">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <input
+                                            type="checkbox"
+                                            checked={!!validationByEndpoint[ep.endpoint_id]?.enabled}
+                                            onChange={(e) => {
+                                              const v = validationByEndpoint[ep.endpoint_id!] || { loading:false, exists:false, enabled:false, schemaText:'{\n}\n', saving:false, error:null }
+                                              setValidationByEndpoint(prev => ({ ...prev, [ep.endpoint_id!]: { ...v, enabled: e.target.checked } }))
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onFocus={() => ensureValidationLoaded(ep)}
+                                          />
+                                          <span className="text-sm font-medium">Validation Enabled</span>
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {validationByEndpoint[ep.endpoint_id]?.exists ? 'Configured' : 'Not configured'}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs text-gray-500 mb-1">Validation Schema (JSON)</label>
+                                        <textarea
+                                          className="input font-mono text-xs h-32"
+                                          value={validationByEndpoint[ep.endpoint_id!]?.schemaText || '{\n}\n'}
+                                          onChange={(e) => {
+                                            const v = validationByEndpoint[ep.endpoint_id!] || { loading:false, exists:false, enabled:false, schemaText:'{\n}\n', saving:false, error:null }
+                                            setValidationByEndpoint(prev => ({ ...prev, [ep.endpoint_id!]: { ...v, schemaText: e.target.value } }))
+                                          }}
+                                          onFocus={() => ensureValidationLoaded(ep)}
+                                        />
+                                      </div>
+                                      {validationByEndpoint[ep.endpoint_id!]?.error && (
+                                        <div className="mt-2 text-xs text-error-600">{validationByEndpoint[ep.endpoint_id!]?.error}</div>
+                                      )}
+                                      <div className="mt-2 flex gap-2">
+                                        {validationByEndpoint[ep.endpoint_id!]?.exists ? (
+                                          <button
+                                            className="btn btn-secondary btn-sm"
+                                            disabled={validationByEndpoint[ep.endpoint_id!]?.saving}
+                                            onClick={(e) => { e.stopPropagation(); saveValidation(ep) }}
+                                          >
+                                            {validationByEndpoint[ep.endpoint_id!]?.saving ? 'Saving...' : 'Save'}
+                                          </button>
+                                        ) : (
+                                          <button
+                                            className="btn btn-secondary btn-sm"
+                                            disabled={validationByEndpoint[ep.endpoint_id!]?.saving}
+                                            onClick={(e) => { e.stopPropagation(); createValidation(ep) }}
+                                          >
+                                            {validationByEndpoint[ep.endpoint_id!]?.saving ? 'Saving...' : 'Create'}
+                                          </button>
+                                        )}
+                                        {validationByEndpoint[ep.endpoint_id!]?.exists && (
+                                          <button
+                                            className="btn btn-error btn-sm"
+                                            disabled={validationByEndpoint[ep.endpoint_id!]?.saving}
+                                            onClick={(e) => { e.stopPropagation(); deleteValidation(ep) }}
+                                          >
+                                            Delete
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </td>
@@ -331,6 +549,19 @@ export default function ApiEndpointsPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!showDeleteModal && !!endpointToDelete}
+        title="Delete Endpoint"
+        message={<>
+          This action cannot be undone. This will permanently delete endpoint
+          <span className="font-mono"> {endpointToDelete?.endpoint_method} {endpointToDelete?.endpoint_uri}</span>.
+        </>}
+        confirmLabel="Delete Endpoint"
+        cancelLabel="Cancel"
+        onCancel={() => setShowDeleteModal(false)}
+        onConfirm={() => endpointToDelete && deleteEndpoint(endpointToDelete)}
+      />
     </Layout>
   )
 }

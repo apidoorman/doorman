@@ -40,7 +40,8 @@ class TokenService:
         """
         Create a token.
         """
-        logger.info(request_id + " | Creating Token: " + data.api_token_group)
+        # Avoid logging token group or secrets in clear text
+        logger.info(request_id + " | Creating token definition")
         validation_error = TokenService._validate_token_data(data)
         if validation_error:
             logger.error(request_id + f" | Token creation failed with code {validation_error.error_code}")
@@ -85,7 +86,8 @@ class TokenService:
         """
         Update an API on the platform.
         """
-        logger.info(request_id + " | Updating token: " + api_token_group)
+        # Avoid logging token group or secrets in clear text
+        logger.info(request_id + " | Updating token definition")
         validation_error = TokenService._validate_token_data(data)
         if validation_error:
             logger.error(request_id + f" | Token update failed with code {validation_error.error_code}")
@@ -148,7 +150,8 @@ class TokenService:
         """
         Delete a token.
         """
-        logger.info(request_id + " | Deleting token: " + api_token_group)
+        # Avoid logging token group or secrets in clear text
+        logger.info(request_id + " | Deleting token definition")
         try:
             token = doorman_cache.get_cache('token_def_cache', api_token_group)
             if not token:
