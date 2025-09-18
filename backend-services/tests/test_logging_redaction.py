@@ -1,22 +1,25 @@
-import os
-import time
 import logging
+from types import SimpleNamespace
 
 
-def test_logging_redaction_filters_sensitive_values(tmp_path):
-    # Use the configured doorman logger
+def test_logging_redaction_filters_sensitive_values():
+    # Retrieve the redaction filter attached to the logger's handler
     logger = logging.getLogger("doorman.gateway")
-    # Write a unique log line with secrets
-    secret = "supersecretvalue"
-    logger.info(f"Authorization: Bearer {secret}; password=\"{secret}\"; access_token=\"{secret}\"")
-    # Give handler a moment to flush
-    time.sleep(0.05)
-    # Locate log file
-    base_dir = os.path.join(os.path.dirname(__file__), os.pardir)
-    logs_dir = os.path.realpath(os.path.join(base_dir, "logs"))
-    log_path = os.path.join(logs_dir, "doorman.log")
-    with open(log_path, "r", encoding="utf-8") as f:
-        tail = f.read()[-2000:]
-    assert secret not in tail
-    assert "[REDACTED]" in tail
+    filt = None
+    for h in logger.handlers:
+        if h.filters:
+            filt = h.filters[0]
+            break
+    assert filt is not None, "Redaction filter not configured"
 
+    # Create a synthetic log record and apply the filter without writing to disk
+    secret = "supersecretvalue"
+    record = logging.LogRecord(
+        name="doorman.gateway", level=logging.INFO, pathname=__file__, lineno=1,
+        msg=f"Authorization: Bearer {secret}; password=\"{secret}\"; access_token=\"{secret}\"", args=(), exc_info=None
+    )
+    ok = filt.filter(record)
+    assert ok is True
+    out = str(record.msg)
+    assert secret not in out
+    assert "[REDACTED]" in out

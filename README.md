@@ -118,8 +118,9 @@ npm run dev
 ```
 
 Defaults
-- Backend: http://localhost:5001
-- Web: http://localhost:3000 (set NEXT_PUBLIC_SERVER_URL accordingly)
+- Backend: http://localhost:5001 (or set PORT in backend .env)
+- Web: http://localhost:3000
+- Frontend config: set `web-client/.env.local` → `NEXT_PUBLIC_SERVER_URL=http://localhost:3002` if your backend runs on 3002
 
 ## Docker
 - Compose up: `docker compose up --build`
