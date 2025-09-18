@@ -29,9 +29,12 @@ const MonitorPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [metrics, setMetrics] = useState<any | null>(null)
   const [timeRange, setTimeRange] = useState('24h')
+  const [liveness, setLiveness] = useState<string | null>(null)
+  const [readiness, setReadiness] = useState<{ status: string; mongodb?: boolean; redis?: boolean } | null>(null)
 
   useEffect(() => {
     fetchMetrics()
+    fetchProbes()
   }, [timeRange])
 
   const fetchMetrics = async () => {
@@ -49,6 +52,23 @@ const MonitorPage: React.FC = () => {
       setMetrics(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchProbes = async () => {
+    try {
+      const liveResp = await fetch(`${SERVER_URL}/platform/monitor/liveness`, { credentials: 'include' })
+      const live = await liveResp.json().catch(() => ({}))
+      setLiveness(live?.status || null)
+    } catch {
+      setLiveness(null)
+    }
+    try {
+      const readyResp = await fetch(`${SERVER_URL}/platform/monitor/readiness`, { credentials: 'include' })
+      const ready = await readyResp.json().catch(() => ({}))
+      setReadiness({ status: ready?.status, mongodb: ready?.mongodb, redis: ready?.redis })
+    } catch {
+      setReadiness(null)
     }
   }
 
@@ -96,6 +116,7 @@ const MonitorPage: React.FC = () => {
               </svg>
               Refresh
             </button>
+            <button onClick={fetchProbes} className="btn btn-outline">Check Probes</button>
           </div>
         </div>
 
@@ -126,6 +147,25 @@ const MonitorPage: React.FC = () => {
         ) : (
           /* Metrics Grid */
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Health Probes */}
+            <div className="card">
+              <div className="card-header"><h3 className="card-title">Health Probes</h3></div>
+              <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="stats-label">Liveness</p>
+                  <p className={`stats-value ${liveness === 'alive' ? 'text-green-600' : 'text-red-600'}`}>{liveness || 'unknown'}</p>
+                </div>
+                <div>
+                  <p className="stats-label">Readiness</p>
+                  <p className={`stats-value ${readiness?.status === 'ready' ? 'text-green-600' : 'text-yellow-600'}`}>{readiness?.status || 'unknown'}</p>
+                </div>
+                <div>
+                  <p className="stats-label">Dependencies</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">MongoDB: {readiness?.mongodb ? 'ok' : 'degraded'}</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">Redis: {readiness?.redis ? 'ok' : 'degraded'}</p>
+                </div>
+              </div>
+            </div>
             {/* Total Requests */}
             <div className="stats-card">
               <div className="flex items-center justify-between">
