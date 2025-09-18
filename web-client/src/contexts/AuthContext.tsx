@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
 
   const checkAuth = async () => {
-    console.log('=== AUTH CONTEXT DEBUG ===')
+    if (DEBUG) console.log('=== AUTH CONTEXT DEBUG ===')
     try {
       // Validate via backend using HttpOnly cookie (no client-side token reads)
       await fetchJson(`${SERVER_URL}/platform/authorization/status`)
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         permissions
       })
     } catch (error) {
-      console.warn('AuthContext - Not authenticated or status check failed:', error)
+      if (DEBUG) console.warn('AuthContext - Not authenticated or status check failed:', error)
       setAuthState({
         isAuthenticated: false,
         hasUIAccess: false,
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await checkAuth()
     } catch (e) {
       // Silently ignore; refresh requires a valid token and may fail if session already expired
-      console.warn('AuthContext - Token refresh failed or not applicable:', e)
+      if (DEBUG) console.warn('AuthContext - Token refresh failed or not applicable:', e)
     }
   }
 
@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {})
     } catch (e) {
-      console.warn('Logout invalidate failed (continuing):', e)
+      if (DEBUG) console.warn('Logout invalidate failed (continuing):', e)
     }
     setAuthState({
       isAuthenticated: false,
@@ -109,20 +109,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Initial auth check with a small delay to ensure cookies are set after login
     const timer = setTimeout(() => {
-      console.log('AuthContext - Initial auth check')
+      if (DEBUG) console.log('AuthContext - Initial auth check')
       checkAuth()
     }, 200)
     
     // Check auth every minute
     const interval = setInterval(() => {
-      console.log('AuthContext - Periodic auth check')
+      if (DEBUG) console.log('AuthContext - Periodic auth check')
       checkAuth()
     }, 60000)
 
     // Proactively refresh token every 10 minutes while logged in
     const refreshInterval = setInterval(() => {
       if (authState.isAuthenticated) {
-        console.log('AuthContext - Proactive token refresh')
+        if (DEBUG) console.log('AuthContext - Proactive token refresh')
         refreshAuth()
       }
     }, 10 * 60 * 1000)
@@ -159,3 +159,5 @@ export function useAuth() {
   }
   return context
 } 
+'use client'
+const DEBUG = process.env.NODE_ENV !== 'production'

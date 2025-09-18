@@ -1,0 +1,47 @@
+version: '3.9'
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend-services/Dockerfile
+    environment:
+      PORT: 5001
+      MEM_OR_EXTERNAL: MEM
+      JWT_SECRET_KEY: dev-secret-change
+      STARTUP_ADMIN_EMAIL: admin@localhost
+      STARTUP_ADMIN_PASSWORD: password1
+      ALLOWED_ORIGINS: http://localhost:3000
+      HTTPS_ONLY: "false"
+      HTTPS_ENABLED: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+    depends_on:
+      - redis
+    ports:
+      - "5001:5001"
+    volumes:
+      - backend_generated:/app/generated
+      - backend_logs:/app/logs
+
+  web:
+    build:
+      context: .
+      dockerfile: web-client/Dockerfile
+    environment:
+      NEXT_PUBLIC_SERVER_URL: http://backend:5001
+      NODE_ENV: production
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  backend_generated:
+  backend_logs:
+
