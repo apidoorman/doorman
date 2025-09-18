@@ -46,6 +46,7 @@ from utils.database import database
 
 import multiprocessing
 import logging
+import json
 import re
 import os
 import sys
@@ -241,7 +242,22 @@ log_file_handler = RotatingFileHandler(
     backupCount=5,
     encoding="utf-8"
 )
-log_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+if os.getenv("LOG_FORMAT", "plain").lower() == "json":
+    class JSONFormatter(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            payload = {
+                "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                "name": record.name,
+                "level": record.levelname,
+                "message": record.getMessage(),
+            }
+            try:
+                return json.dumps(payload, ensure_ascii=False)
+            except Exception:
+                return f'{payload}'
+    log_file_handler.setFormatter(JSONFormatter())
+else:
+    log_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 
 # Configure all doorman loggers to use the same handler and prevent propagation
 def configure_logger(logger_name):
@@ -435,6 +451,12 @@ def run():
     max_threads = multiprocessing.cpu_count()
     env_threads = int(os.getenv("THREADS", max_threads))
     num_threads = min(env_threads, max_threads)
+    try:
+        if database.memory_only and num_threads != 1:
+            gateway_logger.info("Memory-only mode detected; forcing single worker to avoid divergent state")
+            num_threads = 1
+    except Exception:
+        pass
     gateway_logger.info(f"Started doorman with {num_threads} threads on port {server_port}")
     uvicorn.run(
         "doorman:doorman",

@@ -121,9 +121,40 @@ Defaults
 - Backend: http://localhost:5001
 - Web: http://localhost:3000 (set NEXT_PUBLIC_SERVER_URL accordingly)
 
+## Docker
+- Compose up: `docker compose up --build`
+- Services: backend (`:5001`), web (`:3000`), redis (`:6379`)
+- Secrets: set `JWT_SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `MEM_ENCRYPTION_KEY` via env/secret manager (avoid checking into git)
+- Override backend envs: `docker compose run -e KEY=value backend ...`
+- Reset volumes/logs: `docker compose down -v`
+
+Smoke checks
+- Liveness: `curl -s http://localhost:5001/platform/monitor/liveness` → `{ "status": "alive" }`
+- Readiness: `curl -s http://localhost:5001/platform/monitor/readiness` → `{ status: "ready", ... }`
+- Auth login: `curl -s -c cookies.txt -H 'Content-Type: application/json' -d '{"email":"admin@localhost","password":"password1"}' http://localhost:5001/platform/authorization`
+- Auth status: `curl -s -b cookies.txt http://localhost:5001/platform/authorization/status`
+- One-liner: `BASE_URL=http://localhost:5001 STARTUP_ADMIN_EMAIL=admin@localhost STARTUP_ADMIN_PASSWORD=password1 bash scripts/smoke.sh`
+
+Production notes
+- Use Redis in production (`MEM_OR_EXTERNAL=REDIS`) for distributed rate limiting.
+- In memory-only mode, run a single worker: `THREADS=1`.
+- Optional: set `LOG_FORMAT=json` for structured logs.
+
 Production security defaults
 - Set `CORS_STRICT=true` and explicitly whitelist your origins via `ALLOWED_ORIGINS`.
 - Enable `HTTPS_ONLY=true` and `HTTPS_ENABLED=true` so cookies are Secure and CSRF validation is enforced.
+
+Quick go-live checklist
+- Start stack: `docker compose up --build`
+- Verify health:
+  - `curl -s http://localhost:5001/platform/monitor/liveness` → `{ "status": "alive" }`
+  - `curl -s http://localhost:5001/platform/monitor/readiness` → `{ status: "ready", ... }`
+- Smoke auth:
+  - `curl -s -c cookies.txt -H 'Content-Type: application/json' -d '{"email":"admin@localhost","password":"password1"}' http://localhost:5001/platform/authorization`
+  - `curl -s -b cookies.txt http://localhost:5001/platform/authorization/status`
+- Web: Ensure `web-client/.env.local` has `NEXT_PUBLIC_SERVER_URL=http://localhost:5001`, then `npm run build && npm start` (or use compose service `web`).
+
+Optional: run `bash scripts/smoke.sh` (uses `BASE_URL`, `STARTUP_ADMIN_EMAIL`, `STARTUP_ADMIN_PASSWORD`).
 ```
 
 ## Web UI
