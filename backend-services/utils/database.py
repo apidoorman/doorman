@@ -18,7 +18,11 @@ class Database:
     def __init__(self):
         # If running in memory-only mode, use in-memory collections so the
         # application can still function (e.g., admin login) without MongoDB.
-        self.memory_only = os.getenv("MEM_OR_REDIS", "MEM").upper() == "MEM"
+        # Unified flag: MEM_OR_EXTERNAL (MEM|REDIS). Backward-compatible alias: MEM_OR_REDIS.
+        mem_flag = os.getenv("MEM_OR_EXTERNAL")
+        if mem_flag is None:
+            mem_flag = os.getenv("MEM_OR_REDIS", "MEM")
+        self.memory_only = str(mem_flag).upper() == "MEM"
         if self.memory_only:
             self.client = None
             self.db_existed = False
@@ -306,7 +310,7 @@ class Database:
             'mode': 'memory_only' if self.memory_only else 'mongodb',
             'mongodb_connected': not self.memory_only and self.client is not None,
             'collections_available': not self.memory_only,
-            'cache_backend': os.getenv("MEM_OR_REDIS", "REDIS")
+            'cache_backend': os.getenv("MEM_OR_EXTERNAL", os.getenv("MEM_OR_REDIS", "REDIS"))
         }
 
 class InMemoryInsertResult:

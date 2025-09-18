@@ -8,6 +8,7 @@ from models.response_model import ResponseModel
 from models.token_model import TokenModel
 from models.user_tokens_model import UserTokenModel
 from utils.database import token_def_collection, user_token_collection
+from utils.token_util import encrypt_value, decrypt_value
 from utils.doorman_cache_util import doorman_cache
 from pymongo.errors import PyMongoError
 
@@ -55,6 +56,9 @@ class TokenService:
                     error_message='Token group already exists'
                 ).dict()
             token_data_dict = data.dict()
+            # Encrypt at-rest secret key
+            if token_data_dict.get('api_key') is not None:
+                token_data_dict['api_key'] = encrypt_value(token_data_dict['api_key'])
             insert_result = token_def_collection.insert_one(token_data_dict)
             if not insert_result.acknowledged:
                 logger.error(request_id + " | Token creation failed with code TKN002")
@@ -113,6 +117,8 @@ class TokenService:
             else:
                 doorman_cache.delete_cache('token_def_cache', api_token_group)
             not_null_data = {k: v for k, v in data.dict().items() if v is not None}
+            if 'api_key' in not_null_data:
+                not_null_data['api_key'] = encrypt_value(not_null_data['api_key'])
             if not_null_data:
                 update_result = token_def_collection.update_one(
                     {'api_token_group': api_token_group},
@@ -198,9 +204,17 @@ class TokenService:
                     error_message='Username in body does not match path'
                 ).dict()
             doc = user_token_collection.find_one({'username': username})
-            payload = {'username': username, 'users_tokens': data.users_tokens}
+            # Encrypt any user_api_key values at-rest
+            users_tokens = data.users_tokens or {}
+            secured_tokens = {}
+            for group, info in users_tokens.items():
+                info = dict(info or {})
+                if 'user_api_key' in info and info['user_api_key'] is not None:
+                    info['user_api_key'] = encrypt_value(info['user_api_key'])
+                secured_tokens[group] = info
+            payload = {'username': username, 'users_tokens': secured_tokens}
             if doc:
-                user_token_collection.update_one({'username': username}, {'$set': {'users_tokens': data.users_tokens}})
+                user_token_collection.update_one({'username': username}, {'$set': {'users_tokens': secured_tokens}})
             else:
                 user_token_collection.insert_one(payload)
             # Clear cache if any layered in future
@@ -225,6 +239,13 @@ class TokenService:
             items = cursor.to_list(length=None)
             for it in items:
                 if it.get('_id'): del it['_id']
+                # Decrypt values for response (backward-compatible if plaintext)
+                ut = it.get('users_tokens') or {}
+                for g, info in ut.items():
+                    if isinstance(info, dict) and 'user_api_key' in info:
+                        dec = decrypt_value(info.get('user_api_key'))
+                        if dec is not None:
+                            info['user_api_key'] = dec
             return ResponseModel(
                 status_code=200,
                 response={'user_tokens': items}
@@ -249,6 +270,13 @@ class TokenService:
                     error_message='User tokens not found'
                 ).dict()
             if doc.get('_id'): del doc['_id']
+            # Decrypt values for response
+            ut = doc.get('users_tokens') or {}
+            for g, info in ut.items():
+                if isinstance(info, dict) and 'user_api_key' in info:
+                    dec = decrypt_value(info.get('user_api_key'))
+                    if dec is not None:
+                        info['user_api_key'] = dec
             return ResponseModel(
                 status_code=200,
                 response=doc

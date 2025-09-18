@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "/Users/mitch/Documents/Mitchell/git/pygate/backend-services/doorman.py", line 9, in <module>
-    from fastapi import FastAPI, Request
-ModuleNotFoundError: No module named 'fastapi'

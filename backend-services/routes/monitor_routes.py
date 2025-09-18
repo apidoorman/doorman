@@ -20,6 +20,7 @@ logger = logging.getLogger("doorman.gateway")
 
 @monitor_router.get("/monitor/metrics",
     description="Get aggregated gateway metrics",
+    response_model=ResponseModel,
 )
 async def get_metrics(request: Request, range: str = "24h"):
     request_id = str(uuid.uuid4())

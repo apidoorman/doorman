@@ -21,6 +21,10 @@ logger = logging.getLogger("doorman.gateway")
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 
+def is_jwt_configured() -> bool:
+    """Return True if a JWT secret key is configured."""
+    return bool(os.getenv("JWT_SECRET_KEY"))
+
 async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> bool:
     try:
         if not header_token or not cookie_token:

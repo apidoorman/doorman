@@ -24,7 +24,7 @@ Doorman supports user management, authentication, authorizaiton, dynamic routing
 Doorman will soon support transformation, field encryption, and orchestration. More features to be announced.
 
 ## Get Started
-Doorman is simple to setup. Just have redis and mongo db running. Then follow the few steps below.
+Doorman is simple to setup. In production you should run Redis and (optionally) MongoDB. In memory-only mode, Doorman persists encrypted dumps to disk for quick restarts.
 
 Clone Doorman repository
 
@@ -32,21 +32,23 @@ Clone Doorman repository
   git clone https://github.com/apidoorman/doorman.git
 ```
 
-Install requirements
+Install requirements (backend)
 
 ```bash
+  cd backend-services
   pip install -r requirements.txt
 ```
 
-Set environment variables in a .env file
+Set environment variables in a .env file (see backend-services/.env.example)
 ```bash
 # Startup admin should be used for setup only
 STARTUP_ADMIN_EMAIL=admin@localhost.com
 STARTUP_ADMIN_PASSWORD=SecPassword!12345
 
-# Set MEM for in memory cahching and platofmr data with encrypted data dumps
+# Cache/database mode (unified flag)
+# MEM for in-memory cache + in-memory DB; REDIS to use Redis-backed cache (DB can still be memory-only)
 MEM_OR_EXTERNAL=MEM
-MEM_ENCRYPTION_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+MEM_ENCRYPTION_KEY=32+char-secret-used-to-encrypt-dumps
 
 # Mongo DB Config
 MONGO_DB_HOSTS=localhost:27017 # Comma separated
@@ -63,7 +65,8 @@ REDIS_DB=0
 MEM_DUMP_PATH=generated/memory_dump.bin
 
 # Authorization Config
-JWT_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+JWT_SECRET_KEY=please-change-me # REQUIRED: app will fail to start without this
+TOKEN_ENCRYPTION_KEY=optional-secret-for-api-key-encryption
 
 # HTTP Config
 ALLOWED_ORIGINS=https://localhost:8443  # Comma separated
@@ -74,21 +77,21 @@ HTTPS_ONLY=True
 COOKIE_DOMAIN=localhost # should match your origin host name
 
 # Application Config
-PORT=8443
+PORT=5001
 THREADS=4
 DEV_RELOAD=False # Helpful when running in console for debug
-SSL_CERTFILE=./certs/localhost.crt # Update to your cert path if using HTTPS_ONlY
-SSL_KEYFILE=./certs/localhost.key # Update to your key path if using HTTPS_ONlY
-PID_FILE=Doorman.pid
+SSL_CERTFILE=./certs/localhost.crt # Update to your cert path if using HTTPS_ONLY
+SSL_KEYFILE=./certs/localhost.key # Update to your key path if using HTTPS_ONLY
+PID_FILE=doorman.pid
 ```
 
-Create and give permissions to folders
+Create and give permissions to folders (inside backend-services)
 
 ```
-mkdir -p proto generated && chmod 755 proto generated
+cd backend-services && mkdir -p proto generated && chmod 755 proto generated
 ```
 
-Start Doorman background process
+Start Doorman background process (from backend-services)
     
 ```bash
   python doorman.py start
@@ -104,6 +107,23 @@ Run Doorman console instance for debugging
     
 ```bash
   python doorman.py run
+
+Web client (Next.js)
+
+```bash
+cd web-client
+cp .env.local.example .env.local
+npm ci
+npm run dev
+```
+
+Defaults
+- Backend: http://localhost:5001
+- Web: http://localhost:3000 (set NEXT_PUBLIC_SERVER_URL accordingly)
+
+Production security defaults
+- Set `CORS_STRICT=true` and explicitly whitelist your origins via `ALLOWED_ORIGINS`.
+- Enable `HTTPS_ONLY=true` and `HTTPS_ENABLED=true` so cookies are Secure and CSRF validation is enforced.
 ```
 
 ## Web UI

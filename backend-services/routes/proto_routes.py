@@ -113,6 +113,15 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                 error_code="AUTH001",
                 error_message="User does not have permission to manage APIs"
             ).dict(), "rest")
+        # Restrict uploads to .proto extension only
+        original_name = file.filename or ""
+        if not original_name.lower().endswith('.proto'):
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={"request_id": request_id},
+                error_code="REQ003",
+                error_message="Only .proto files are allowed"
+            ).dict(), "rest")
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
         content = await file.read()
         proto_content = content.decode('utf-8')
@@ -273,6 +282,15 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
                 response_headers={"request_id": request_id},
                 error_code="API008",
                 error_message="You do not have permission to update proto files"
+            ).dict(), "rest")
+        # Restrict uploads to .proto extension only
+        original_name = proto_file.filename or ""
+        if not original_name.lower().endswith('.proto'):
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={"request_id": request_id},
+                error_code="REQ003",
+                error_message="Only .proto files are allowed"
             ).dict(), "rest")
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
         proto_path.write_bytes(await proto_file.read())

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend-services/requirements.txt
+      - name: Run backend tests
+        env:
+          MEM_OR_EXTERNAL: MEM
+          HTTPS_ONLY: 'false'
+          HTTPS_ENABLED: 'false'
+          STRICT_RESPONSE_ENVELOPE: 'false'
+          JWT_SECRET_KEY: test-secret-key-please-change
+          STARTUP_ADMIN_EMAIL: admin@doorman.so
+          STARTUP_ADMIN_PASSWORD: password1
+          MEM_ENCRYPTION_KEY: unit-test-key-32chars-abcdef123456!!
+          ALLOWED_HEADERS: '*'
+          ALLOW_HEADERS: '*'
+          ALLOW_METHODS: '*'
+          ALLOWED_ORIGINS: http://localhost:3000
+        working-directory: backend-services
+        run: pytest -q
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web-client/package-lock.json
+      - name: Install dependencies
+        working-directory: web-client
+        run: npm ci
+      - name: Build web client
+        working-directory: web-client
+        env:
+          NEXT_PUBLIC_SERVER_URL: http://localhost:5001
+        run: npm run build
+

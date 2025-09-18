@@ -8,6 +8,10 @@
     "start": "next start",
     "lint": "next lint"
   },
+  "engines": {
+    "node": ">=20 <21",
+    "npm": ">=10"
+  },
   "dependencies": {
     "clsx": "^2.1.0",
     "date-fns": "^4.1.0",

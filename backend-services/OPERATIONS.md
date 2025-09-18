@@ -9,8 +9,19 @@ Recommended production defaults (see `.env`):
 - HTTPS_ONLY=true — set `Secure` flag on cookies
 - HTTPS_ENABLED=true — enforce CSRF double-submit for cookie auth
 - CORS_STRICT=true — disallow wildcard origins; whitelist your domains via `ALLOWED_ORIGINS`
+- HTTPS_ONLY=true and HTTPS_ENABLED=true — set Secure cookies and enforce CSRF double-submit
 - MAX_BODY_SIZE_BYTES=1048576 — reject requests with Content-Length above 1 MB
 - STRICT_RESPONSE_ENVELOPE=true — platform APIs return consistent envelopes
+
+Unified cache/DB flags:
+
+- MEM_OR_EXTERNAL=MEM|REDIS — unified flag for cache/DB mode
+- MEM_OR_REDIS — deprecated alias still accepted for backward compatibility
+
+JWT/Token encryption:
+
+- JWT_SECRET_KEY — REQUIRED; gateway fails fast if missing at startup
+- TOKEN_ENCRYPTION_KEY — recommended; encrypts stored API keys and user API keys at rest
 
 Core variables:
 
@@ -27,7 +38,7 @@ Core variables:
 - CSRF: when HTTPS_ENABLED=true, clients must include `X-CSRF-Token` header matching `csrf_token` cookie on protected endpoints.
 - CORS: avoid wildcard with credentials; use explicit allowlists.
 - Logging: includes redaction filter to reduce token/password leakage. Avoid logging PII.
-- Rate limiting: Redis-based limiter; configure user limits in DB/role as needed.
+- Rate limiting: Redis-based limiter; if Redis is unavailable the gateway falls back to a process-local in-memory limiter (non-distributed). Configure user limits in DB/role as needed.
 - Request limits: global Content-Length check; per-route multipart (proto upload) size limits via MAX_MULTIPART_SIZE_BYTES.
 - Response envelopes: `STRICT_RESPONSE_ENVELOPE=true` makes platform API responses consistent for client parsing.
 
@@ -43,7 +54,7 @@ Core variables:
 1. Configure `.env` with production values (see above) or environment variables.
 2. Run behind an HTTPS-capable reverse proxy (or enable HTTPS in-process with `HTTPS_ONLY=true` and valid certs).
 3. Set ALLOWED_ORIGINS to your web client domains; set ALLOW_CREDENTIALS=true only when needed.
-4. Provision Redis (if using) and MongoDB (non-memory mode). In memory mode, enable encryption key for dumps.
+4. Provision Redis (recommended) and MongoDB (optional in memory-only mode). In memory mode, enable encryption key for dumps and consider TOKEN_ENCRYPTION_KEY for API keys.
 5. Rotate JWT_SECRET_KEY periodically; plan for key rotation and token invalidation.
 
 ## Runbooks

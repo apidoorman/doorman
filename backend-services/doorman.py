@@ -46,6 +46,7 @@ from utils.database import database
 
 import multiprocessing
 import logging
+import re
 import os
 import sys
 import subprocess
@@ -63,6 +64,9 @@ PID_FILE = "doorman.pid"
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     # Startup
+    # Security: JWT secret must be configured
+    if not os.getenv("JWT_SECRET_KEY"):
+        raise RuntimeError("JWT_SECRET_KEY is not configured. Set it before starting the server.")
     app.state.redis = Redis.from_url(
         f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
         decode_responses=True
@@ -248,15 +252,23 @@ def configure_logger(logger_name):
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
     class RedactFilter(logging.Filter):
-        SENSITIVE = ("access_token", "refresh_token", "password", "authorization", "cookie")
+        # Redact common credential/header value patterns
+        PATTERNS = [
+            re.compile(r'(?i)(authorization\s*[:=]\s*)([^;\r\n]+)'),
+            re.compile(r'(?i)(access[_-]?token\s*[\"\']?\s*[:=]\s*[\"\'])([^\"\']+)([\"\'])'),
+            re.compile(r'(?i)(refresh[_-]?token\s*[\"\']?\s*[:=]\s*[\"\'])([^\"\']+)([\"\'])'),
+            re.compile(r'(?i)(password\s*[\"\']?\s*[:=]\s*[\"\'])([^\"\']+)([\"\'])'),
+            re.compile(r'(?i)(cookie\s*[:=]\s*)([^;\r\n]+)'),
+            re.compile(r'(?i)(x-csrf-token\s*[:=]\s*)([^\s,;]+)'),
+        ]
         def filter(self, record: logging.LogRecord) -> bool:
             try:
                 msg = str(record.getMessage())
-                redacted = msg
-                for s in self.SENSITIVE:
-                    redacted = redacted.replace(s, "[REDACTED]")
-                if redacted != msg:
-                    record.msg = redacted
+                red = msg
+                for pat in self.PATTERNS:
+                    red = pat.sub(lambda m: (m.group(1) + "[REDACTED]" + (m.group(3) if m.lastindex and m.lastindex >=3 else "")), red)
+                if red != msg:
+                    record.msg = red
             except Exception:
                 pass
             return True
