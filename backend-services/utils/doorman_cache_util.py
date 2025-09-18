@@ -80,7 +80,11 @@ class MemoryCache:
 
 class DoormanCacheManager:
     def __init__(self):
-        self.cache_type = os.getenv("MEM_OR_EXTERNAL", "MEM").upper()
+        # Unified flag MEM_OR_EXTERNAL with backward-compatible alias MEM_OR_REDIS
+        cache_flag = os.getenv("MEM_OR_EXTERNAL")
+        if cache_flag is None:
+            cache_flag = os.getenv("MEM_OR_REDIS", "MEM")
+        self.cache_type = str(cache_flag).upper()
         if self.cache_type == "MEM":
             self.cache = MemoryCache()
             self.is_redis = False
