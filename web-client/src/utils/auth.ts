@@ -19,8 +19,10 @@ interface JWTPayload {
 
 export function decodeJWT(token: string): JWTPayload | null {
   try {
-    console.log('=== JWT DECODE ===')
-    console.log('Attempting to decode token:', token.substring(0, 50) + '...')
+    if (DEBUG) {
+      console.log('=== JWT DECODE ===')
+      console.log('Attempting to decode token:', token.substring(0, 50) + '...')
+    }
     
     const base64Url = token.split('.')[1]
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
@@ -32,17 +34,19 @@ export function decodeJWT(token: string): JWTPayload | null {
     )
     const payload = JSON.parse(jsonPayload)
     
-    console.log('JWT decode successful:', {
-      sub: payload.sub,
-      role: payload.role,
-      ui_access: payload.accesses?.ui_access,
-      accesses: payload.accesses,
-      exp: payload.exp
-    })
+    if (DEBUG) {
+      console.log('JWT decode successful:', {
+        sub: payload.sub,
+        role: payload.role,
+        ui_access: payload.accesses?.ui_access,
+        accesses: payload.accesses,
+        exp: payload.exp
+      })
+    }
     
     return payload
   } catch (error) {
-    console.error('Error decoding JWT:', error)
+    if (DEBUG) console.error('Error decoding JWT:', error)
     return null
   }
 }
@@ -53,27 +57,31 @@ export function getTokenFromCookie(): string | null {
 }
 
 export function isTokenValid(token: string): boolean {
-  console.log('=== TOKEN VALIDATION ===')
-  console.log('Validating token:', token.substring(0, 50) + '...')
+  if (DEBUG) {
+    console.log('=== TOKEN VALIDATION ===')
+    console.log('Validating token:', token.substring(0, 50) + '...')
+  }
   
   const payload = decodeJWT(token)
   if (!payload) {
-    console.log('Token decode failed')
+    if (DEBUG) console.log('Token decode failed')
     return false
   }
   
   const now = Math.floor(Date.now() / 1000)
   const isValid = payload.exp > now
   
-  console.log('Token validation results:', {
-    exp: payload.exp,
-    now,
-    isValid,
-    ui_access: payload.accesses?.ui_access,
-    accesses: payload.accesses,
-    username: payload.sub,
-    role: payload.role
-  })
+  if (DEBUG) {
+    console.log('Token validation results:', {
+      exp: payload.exp,
+      now,
+      isValid,
+      ui_access: payload.accesses?.ui_access,
+      accesses: payload.accesses,
+      username: payload.sub,
+      role: payload.role
+    })
+  }
   
   return isValid
 }
@@ -87,11 +95,13 @@ export function hasUIAccess(token: string): boolean {
   const payload = decodeJWT(token)
   const uiAccess = payload?.accesses?.ui_access === true
   
-  console.log('=== UI ACCESS CHECK ===')
-  console.log('Token payload:', payload)
-  console.log('Accesses object:', payload?.accesses)
-  console.log('UI access value:', payload?.accesses?.ui_access)
-  console.log('UI access result:', uiAccess)
+  if (DEBUG) {
+    console.log('=== UI ACCESS CHECK ===')
+    console.log('Token payload:', payload)
+    console.log('Accesses object:', payload?.accesses)
+    console.log('UI access value:', payload?.accesses?.ui_access)
+    console.log('UI access result:', uiAccess)
+  }
   
   return uiAccess
 }
@@ -100,11 +110,13 @@ export function hasPermission(token: string, permission: keyof JWTPayload['acces
   const payload = decodeJWT(token)
   const hasPerm = payload?.accesses?.[permission] === true
   
-  console.log('=== PERMISSION CHECK ===')
-  console.log('Checking permission:', permission)
-  console.log('Accesses object:', payload?.accesses)
-  console.log('Permission value:', payload?.accesses?.[permission])
-  console.log('Permission result:', hasPerm)
+  if (DEBUG) {
+    console.log('=== PERMISSION CHECK ===')
+    console.log('Checking permission:', permission)
+    console.log('Accesses object:', payload?.accesses)
+    console.log('Permission value:', payload?.accesses?.[permission])
+    console.log('Permission result:', hasPerm)
+  }
   
   return hasPerm
 }
@@ -130,6 +142,7 @@ export function isAuthenticated(): boolean {
 }
 
 export function canAccessUI(): boolean {
+const DEBUG = process.env.NODE_ENV !== 'production'
   const token = getTokenFromCookie()
   if (!token) return false
   
