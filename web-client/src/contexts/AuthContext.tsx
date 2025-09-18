@@ -16,6 +16,8 @@ import { fetchJson } from '@/utils/http'
 import { postJson } from '@/utils/api'
 import { SERVER_URL } from '@/utils/config'
 
+const DEBUG = process.env.NODE_ENV !== 'production'
+
 interface AuthContextType {
   isAuthenticated: boolean
   hasUIAccess: boolean
@@ -159,5 +161,3 @@ export function useAuth() {
   }
   return context
 } 
-'use client'
-const DEBUG = process.env.NODE_ENV !== 'production'

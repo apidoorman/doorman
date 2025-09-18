@@ -9,7 +9,7 @@ Recommended production defaults (see `.env`):
 - HTTPS_ONLY=true — set `Secure` flag on cookies
 - HTTPS_ENABLED=true — enforce CSRF double-submit for cookie auth
 - CORS_STRICT=true — disallow wildcard origins; whitelist your domains via `ALLOWED_ORIGINS`
-- HTTPS_ONLY=true and HTTPS_ENABLED=true — set Secure cookies and enforce CSRF double-submit
+- LOG_FORMAT=json — optional JSON log output for production log pipelines
 - MAX_BODY_SIZE_BYTES=1048576 — reject requests with Content-Length above 1 MB
 - STRICT_RESPONSE_ENVELOPE=true — platform APIs return consistent envelopes
 
@@ -56,6 +56,7 @@ Core variables:
 3. Set ALLOWED_ORIGINS to your web client domains; set ALLOW_CREDENTIALS=true only when needed.
 4. Provision Redis (recommended) and MongoDB (optional in memory-only mode). In memory mode, enable encryption key for dumps and consider TOKEN_ENCRYPTION_KEY for API keys.
 5. Rotate JWT_SECRET_KEY periodically; plan for key rotation and token invalidation.
+6. Memory-only mode requires a single worker (THREADS=1); multiple workers will have divergent in-memory state.
 
 ## Runbooks
 
