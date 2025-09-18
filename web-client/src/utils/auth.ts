@@ -17,6 +17,8 @@ interface JWTPayload {
   jti: string
 }
 
+const DEBUG = process.env.NODE_ENV !== 'production'
+
 export function decodeJWT(token: string): JWTPayload | null {
   try {
     if (DEBUG) {
@@ -142,7 +144,6 @@ export function isAuthenticated(): boolean {
 }
 
 export function canAccessUI(): boolean {
-const DEBUG = process.env.NODE_ENV !== 'production'
   const token = getTokenFromCookie()
   if (!token) return false
   
