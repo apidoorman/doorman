@@ -403,12 +403,22 @@ class InMemoryCollection:
 
     def update_one(self, query, update):
         set_data = update.get('$set', {}) if isinstance(update, dict) else {}
+        push_data = update.get('$push', {}) if isinstance(update, dict) else {}
         for i, d in enumerate(self._docs):
             if self._match(d, query):
                 updated = copy.deepcopy(d)
-                updated.update(set_data)
+                # Apply $set fields
+                if set_data:
+                    updated.update(set_data)
+                # Apply $push for list fields (create list if missing)
+                if push_data:
+                    for k, v in push_data.items():
+                        cur = updated.get(k)
+                        if cur is None or not isinstance(cur, list):
+                            updated[k] = [v]
+                        else:
+                            updated[k].append(v)
                 self._docs[i] = updated
-                # Report as modified to mimic successful update semantics
                 return InMemoryUpdateResult(1)
         return InMemoryUpdateResult(0)
 
