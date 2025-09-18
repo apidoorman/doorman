@@ -1,0 +1,42 @@
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_subscriptions_happy_and_invalid_payload(authed_client):
+    # Create simple API and subscribe current user
+    c = await authed_client.post(
+        "/platform/api",
+        json={
+            "api_name": "subapi",
+            "api_version": "v1",
+            "api_description": "sub api",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": ["http://u"],
+            "api_type": "REST",
+            "api_allowed_retry_count": 0,
+        },
+    )
+    assert c.status_code in (200, 201)
+
+    sub = await authed_client.post(
+        "/platform/subscription/subscribe",
+        json={"username": "admin", "api_name": "subapi", "api_version": "v1"},
+    )
+    assert sub.status_code in (200, 201)
+
+    # List subs for current user
+    ls = await authed_client.get("/platform/subscription/subscriptions")
+    assert ls.status_code == 200
+
+    # Unsubscribe
+    us = await authed_client.post(
+        "/platform/subscription/unsubscribe",
+        json={"username": "admin", "api_name": "subapi", "api_version": "v1"},
+    )
+    assert us.status_code in (200, 201)
+
+    # Invalid payload should 422 (missing fields)
+    bad = await authed_client.post("/platform/subscription/subscribe", json={"username": "admin"})
+    assert bad.status_code in (400, 422)
+

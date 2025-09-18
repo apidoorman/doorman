@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
 import { getJson, putJson } from '@/utils/api'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 
 interface UserSettings {
   username: string
@@ -19,6 +21,9 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const { refreshAuth } = useAuth()
+  const toast = useToast()
   const [settings, setSettings] = useState<UserSettings>({
     username: '',
     email: '',
@@ -127,6 +132,26 @@ const SettingsPage = () => {
             <p className="text-gray-600 dark:text-gray-400 mt-1">
               Manage your account settings and preferences
             </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={refreshing}
+              onClick={async () => {
+                try {
+                  setRefreshing(true)
+                  await refreshAuth()
+                  toast.success('Session extended')
+                } catch (e) {
+                  toast.error('Failed to extend session')
+                } finally {
+                  setRefreshing(false)
+                }
+              }}
+            >
+              {refreshing ? 'Extending…' : 'Extend Session'}
+            </button>
           </div>
         </div>
 

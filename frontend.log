@@ -1,0 +1,13 @@
+
+> doorman@0.1.0 dev
+> next dev --turbopack
+
+ ⚠ Port 3000 is in use by process 11838, using available port 3001 instead.
+   ▲ Next.js 15.5.2 (Turbopack)
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.1.52:3001
+
+ ✓ Starting...
+ ✓ Compiled middleware in 62ms
+ ✓ Ready in 821ms
+[?25h

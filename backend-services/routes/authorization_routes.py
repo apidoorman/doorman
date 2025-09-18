@@ -93,11 +93,12 @@ async def authorization(request: Request):
         # CSRF double-submit cookie (for HTTPS-enabled deployments)
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
+        _secure = os.getenv("HTTPS_ONLY", "false").lower() == "true"
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
             httponly=False,
-            secure=True,
+            secure=_secure,
             samesite="Strict",
             path="/",
             max_age=1800
@@ -106,7 +107,7 @@ async def authorization(request: Request):
             key="access_token_cookie",
             value=access_token,
             httponly=True,
-            secure=True,
+            secure=_secure,
             samesite="Strict",
             path="/",
             max_age=1800  # 30 minutes
@@ -369,11 +370,12 @@ async def extended_authorization(request: Request):
         # Refresh CSRF token as well to keep parity with new cookie
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
+        _secure = os.getenv("HTTPS_ONLY", "false").lower() == "true"
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
             httponly=False,
-            secure=True,
+            secure=_secure,
             samesite="Strict",
             path="/",
             max_age=604800
@@ -382,7 +384,7 @@ async def extended_authorization(request: Request):
             key="access_token_cookie",
             value=refresh_token,
             httponly=True,
-            secure=True,
+            secure=_secure,
             samesite="Strict",
             path="/",
             max_age=604800  # 7 days

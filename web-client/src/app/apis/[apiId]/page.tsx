@@ -5,7 +5,8 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
-import { fetchJson } from '@/utils/http'
+import { fetchJson, getCookie } from '@/utils/http'
+import { useToast } from '@/contexts/ToastContext'
 import { SERVER_URL } from '@/utils/config'
 
 interface API {
@@ -71,6 +72,74 @@ const ApiDetailPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const toast = useToast()
+
+  // Proto management state and helpers
+  type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean }
+  const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false })
+
+  const fetchWithCsrf = async (input: RequestInfo, init: RequestInit = {}) => {
+    const csrf = getCookie('csrf_token')
+    const headers: any = { ...(init.headers || {}), Accept: 'application/json' }
+    if (csrf) headers['X-CSRF-Token'] = csrf
+    const resp = await fetch(input, { credentials: 'include', ...init, headers })
+    const data = await resp.json().catch(() => ({} as any))
+    const payload = data && typeof data === 'object' && 'response' in data ? data.response : data
+    if (!resp.ok) {
+      const msg = (payload && (payload.error_message || payload.message)) || resp.statusText
+      throw new Error(msg)
+    }
+    return payload
+  }
+
+  const checkProto = async () => {
+    if (!api) return
+    setProto(prev => ({ ...prev, loading: true, error: null }))
+    try {
+      const payload = await fetchWithCsrf(`${SERVER_URL}/platform/proto/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}`)
+      setProto({ loading: false, exists: true, content: payload?.content || '', error: null, working: false, show: false })
+    } catch (e: any) {
+      const msg = String(e?.message || '')
+      if (msg.toLowerCase().includes('not found')) setProto({ loading: false, exists: false, content: undefined, error: null, working: false, show: false })
+      else setProto({ loading: false, exists: null, content: undefined, error: msg || 'Failed to check proto', working: false, show: false })
+    }
+  }
+
+  const uploadOrUpdateProto = async (file: File, mode: 'create' | 'update') => {
+    if (!api) return
+    setProto(prev => ({ ...prev, working: true, error: null }))
+    try {
+      const form = new FormData()
+      if (mode === 'create') form.append('file', file)
+      else form.append('proto_file', file)
+      const method = mode === 'create' ? 'POST' : 'PUT'
+      await fetchWithCsrf(`${SERVER_URL}/platform/proto/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}`, { method, body: form })
+      await checkProto()
+      setSuccess(mode === 'create' ? 'Proto uploaded' : 'Proto updated')
+      toast.success(mode === 'create' ? 'Proto uploaded' : 'Proto updated')
+      setTimeout(() => setSuccess(null), 2000)
+    } catch (e: any) {
+      setProto(prev => ({ ...prev, error: e?.message || 'Operation failed' }))
+    } finally {
+      setProto(prev => ({ ...prev, working: false }))
+    }
+  }
+
+  const deleteProto = async () => {
+    if (!api) return
+    setProto(prev => ({ ...prev, working: true, error: null }))
+    try {
+      await fetchWithCsrf(`${SERVER_URL}/platform/proto/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}`, { method: 'DELETE' })
+      setProto({ loading: false, exists: false, content: undefined, error: null, working: false, show: false })
+      setSuccess('Proto deleted')
+      toast.success('Proto deleted')
+      setTimeout(() => setSuccess(null), 2000)
+    } catch (e: any) {
+      setProto(prev => ({ ...prev, error: e?.message || 'Delete failed' }))
+    } finally {
+      setProto(prev => ({ ...prev, working: false }))
+    }
+  }
 
   useEffect(() => {
     const apiData = sessionStorage.getItem('selectedApi')
@@ -98,8 +167,38 @@ const ApiDetailPage = () => {
         setLoading(false)
       }
     } else {
-      setError('No API data found')
-      setLoading(false)
+      // Fallback: resolve API by id from server list
+      (async () => {
+        try {
+          const data = await fetchJson(`${SERVER_URL}/platform/api/all?page=1&page_size=1000`)
+          const list = Array.isArray(data) ? data : (data as any).apis || (data as any).response?.apis || []
+          const found = (list as any[]).find((a: any) => String(a.api_id) === String(apiId))
+          if (found) {
+            setApi(found)
+            setEditData({
+              api_name: found.api_name,
+              api_version: found.api_version,
+              api_description: found.api_description,
+              api_allowed_roles: [...(found.api_allowed_roles || [])],
+              api_allowed_groups: [...(found.api_allowed_groups || [])],
+              api_servers: [...(found.api_servers || [])],
+              api_type: found.api_type,
+              api_allowed_retry_count: found.api_allowed_retry_count,
+              api_authorization_field_swap: found.api_authorization_field_swap,
+              api_allowed_headers: [...(found.api_allowed_headers || [])],
+              api_tokens_enabled: found.api_tokens_enabled,
+              api_token_group: found.api_token_group
+            })
+            setError(null)
+          } else {
+            setError('No API data found')
+          }
+        } catch (e) {
+          setError('Failed to load API data')
+        } finally {
+          setLoading(false)
+        }
+      })()
     }
   }, [apiId])
 
@@ -330,13 +429,26 @@ const ApiDetailPage = () => {
   }
 
   const handleDeleteConfirm = async () => {
-
     try {
       setDeleting(true)
       setError(null)
-      
       const { delJson } = await import('@/utils/api')
-      await delJson(`${SERVER_URL}/platform/api/${encodeURIComponent(apiId as string)}`)
+      let name = (api as any)?.api_name as string | undefined
+      let version = (api as any)?.api_version as string | undefined
+      if (!name || !version) {
+        // Fallback: resolve by id
+        try {
+          const data = await fetchJson(`${SERVER_URL}/platform/api/all?page=1&page_size=1000`)
+          const list = Array.isArray(data) ? data : (data as any).apis || (data as any).response?.apis || []
+          const found = (list as any[]).find((a: any) => String(a.api_id) === String(apiId))
+          if (found) {
+            name = found.api_name
+            version = found.api_version
+          }
+        } catch {}
+      }
+      if (!name || !version) throw new Error('API context missing for delete')
+      await delJson(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`)
 
       router.push('/apis')
     } catch (err) {
@@ -648,6 +760,40 @@ const ApiDetailPage = () => {
                     <p className="text-gray-900 dark:text-white">{api.api_authorization_field_swap || 'None'}</p>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* Proto Management */}
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Proto</h3>
+              </div>
+              <div className="p-6 space-y-4">
+                {proto.error && (
+                  <div className="rounded bg-error-50 border border-error-200 p-2 text-error-700 text-sm">{proto.error}</div>
+                )}
+                <div className="flex items-center gap-3">
+                  <button className="btn btn-secondary" onClick={checkProto} disabled={proto.loading}> {proto.loading ? 'Checking...' : 'Check Status'} </button>
+                  {proto.exists === true && <span className="text-success-700 dark:text-success-400">Present</span>}
+                  {proto.exists === false && <span className="text-error-700 dark:text-error-400">Missing</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="btn btn-secondary">
+                    Upload
+                    <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
+                      onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'create'); e.currentTarget.value = '' } }} />
+                  </label>
+                  <label className="btn btn-secondary">
+                    Replace
+                    <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
+                      onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'update'); e.currentTarget.value = '' } }} />
+                  </label>
+                  <button className="btn btn-error" onClick={deleteProto} disabled={proto.working || proto.exists !== true}>Delete</button>
+                  <button className="btn btn-ghost" onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} disabled={!proto.content}>{proto.show ? 'Hide' : 'View'}</button>
+                </div>
+                {proto.show && proto.content && (
+                  <pre className="text-xs whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 p-3 rounded max-h-64 overflow-auto">{proto.content}</pre>
+                )}
               </div>
             </div>
 

@@ -94,7 +94,7 @@ async def clear_all_caches(request: Request):
                 status_code=403,
                 error_code="GTW008",
                 error_message="You do not have permission to clear caches"
-            ))
+            ).dict(), "rest")
         doorman_cache.clear_all_caches()
         return process_response(ResponseModel(
             status_code=200,

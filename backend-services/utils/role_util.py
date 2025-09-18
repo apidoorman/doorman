@@ -11,7 +11,6 @@ from utils.doorman_cache_util import doorman_cache
 
 logger = logging.getLogger("doorman.gateway")
 
-@staticmethod
 async def validate_platform_role(role_name, action):
     """
     Get the platform roles from the cache or database.
@@ -52,6 +51,7 @@ async def validate_platform_role(role_name, action):
             return True
         return False
     except Exception as e:
+        logger.error(f"validate_platform_role error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 async def platform_role_required_bool(username, action):
