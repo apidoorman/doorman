@@ -156,7 +156,7 @@ Quick go-live checklist
 - Web: Ensure `web-client/.env.local` has `NEXT_PUBLIC_SERVER_URL=http://localhost:5001`, then `npm run build && npm start` (or use compose service `web`).
 
 Optional: run `bash scripts/smoke.sh` (uses `BASE_URL`, `STARTUP_ADMIN_EMAIL`, `STARTUP_ADMIN_PASSWORD`).
-```
+
 
 ## Web UI
 Utilize the built in web interface for ease of use!
