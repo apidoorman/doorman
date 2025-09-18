@@ -68,6 +68,9 @@ export default function LogsPage() {
   const [error, setError] = useState<string | null>(null)
   const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [filesLoading, setFilesLoading] = useState(false)
+  const [filesError, setFilesError] = useState<string | null>(null)
+  const [logFiles, setLogFiles] = useState<string[]>([])
   const [expandedRequests, setExpandedRequests] = useState<Set<string>>(new Set())
   const [loadingExpanded, setLoadingExpanded] = useState<Set<string>>(new Set())
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null)
@@ -211,6 +214,31 @@ export default function LogsPage() {
       setLoading(false)
     }
   }, [filters, logsPage, logsPageSize])
+
+  const fetchLogFiles = useCallback(async () => {
+    try {
+      setFilesLoading(true)
+      setFilesError(null)
+      const csrf = getCookie('csrf_token')
+      const resp = await fetch(`${SERVER_URL}/platform/logging/logs/files`, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }
+      })
+      if (!resp.ok) throw new Error('Failed to fetch log files')
+      const data = await resp.json().catch(() => ({}))
+      const files: string[] = data.response?.log_files || data.log_files || []
+      setLogFiles(files)
+    } catch (e:any) {
+      setFilesError(e?.message || 'Failed to fetch log files')
+      setLogFiles([])
+    } finally {
+      setFilesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchLogFiles().catch(() => {})
+  }, [fetchLogFiles])
 
   const fetchLogsForRequestId = useCallback(async (requestId: string) => {
     try {
@@ -397,33 +425,53 @@ export default function LogsPage() {
       setExporting(true)
       const queryParams = toQueryParams(filters)
       queryParams.append('format', format)
-      
-      const response = await fetch(`${SERVER_URL}/platform/logging/logs/export?${queryParams}`, {
-        credentials: 'include',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      // Use streaming download endpoint
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs/download?${queryParams}`, {
+        credentials: 'include'
       })
-      
-      if (!response.ok) {
-        throw new Error('Failed to export logs')
-      }
-      
-      const data = await response.json()
-      
-      // Create blob from the response data
-      const blob = new Blob([data.response?.data || data.data || ''], {
-        type: format === 'json' ? 'application/json' : 'text/csv'
-      })
-      
-      const url = window.URL.createObjectURL(blob)
+      if (!response.ok) throw new Error('Failed to download logs')
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') || ''
+      const match = /filename="?([^";]+)"?/i.exec(disposition)
+      const filename = match?.[1] || `logs-${new Date().toISOString().split('T')[0]}.${format}`
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = data.response?.filename || data.filename || `logs-${new Date().toISOString().split('T')[0]}.${format}`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
-      window.URL.revokeObjectURL(url)
+      URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (error) {
-      setError('Failed to export logs. Please try again later.')
+      setError('Failed to download logs. Please try again later.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const downloadLatest = async (format: 'json' | 'csv') => {
+    try {
+      setExporting(true)
+      const params = new URLSearchParams()
+      params.append('format', format)
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs/download?${params.toString()}`, {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error('Failed to download latest logs')
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') || ''
+      const match = /filename="?([^";]+)"?/i.exec(disposition)
+      const filename = match?.[1] || `logs-latest.${format === 'json' ? 'json' : 'csv'}`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (e) {
+      setError('Failed to download latest logs.')
     } finally {
       setExporting(false)
     }
@@ -451,40 +499,50 @@ export default function LogsPage() {
               View and analyze system logs and API requests
             </p>
           </div>
-          <div className="flex gap-2">
-            {canExport && (
-              <>
-                <button
-                  onClick={() => exportLogs('json')}
-                  disabled={exporting}
-                  className="btn btn-secondary"
-                >
-                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Export JSON
-                </button>
-                <button
-                  onClick={() => exportLogs('csv')}
-                  disabled={exporting}
-                  className="btn btn-secondary"
-                >
-                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Export CSV
-                </button>
-              </>
-            )}
-          </div>
+          <div className="flex gap-2" />
+          {logFiles.length > 0 && (
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex flex-wrap gap-2">
+                {logFiles.slice(0, 10).map((f, i) => (
+                  <span key={i} className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded font-mono">{f}</span>
+                ))}
+                {logFiles.length > 10 && <span className="italic">+{logFiles.length - 10} more</span>}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Filters */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Filters</h3>
-          </div>
-          <div className="p-6">
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Filters</h3>
+            </div>
+            <div className="p-6">
+              {/* Log files quick view and download controls */}
+              <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={fetchLogFiles} className="btn btn-secondary" disabled={filesLoading}>
+                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    {filesLoading ? 'Refreshing Files...' : 'Refresh Files'}
+                  </button>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {filesError ? <span className="text-error-600">{filesError}</span> : (
+                      <>
+                        <span className="mr-2">Available log files:</span>
+                        <span className="font-mono">{logFiles.length}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {canExport && (
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => exportLogs('json')} disabled={exporting} className="btn btn-secondary">Download JSON</button>
+                    <button onClick={() => exportLogs('csv')} disabled={exporting} className="btn btn-secondary">Download CSV</button>
+                    <button onClick={() => downloadLatest('json')} disabled={exporting} className="btn btn-outline">Latest JSON</button>
+                    <button onClick={() => downloadLatest('csv')} disabled={exporting} className="btn btn-outline">Latest CSV</button>
+                  </div>
+                )}
+              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

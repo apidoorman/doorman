@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
-import { getJson, postJson, putJson } from '@/utils/api'
+import { getJson, postJson, putJson, delJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -162,7 +162,7 @@ const SecurityPage = () => {
   const handleClearCaches = async () => {
     try {
       setError(null)
-      const data = await postJson<any>(`${SERVER_URL}/api/caches`, {})
+      await delJson<any>(`${SERVER_URL}/api/caches`)
       setSuccess('All gateway caches cleared')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
