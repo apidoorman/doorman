@@ -175,8 +175,21 @@ doorman = FastAPI(
 
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
-methods = os.getenv("ALLOW_METHODS", "GET, POST, PUT, DELETE").split(",")
-headers = os.getenv("ALLOW_HEADERS", "*").split(",")
+methods = [m.strip().upper() for m in os.getenv("ALLOW_METHODS", "GET, POST, PUT, DELETE, OPTIONS").split(",") if m.strip()]
+if "OPTIONS" not in methods:
+    methods.append("OPTIONS")
+raw_headers = [h.strip() for h in os.getenv("ALLOW_HEADERS", "*").split(",") if h.strip()]
+# Some browsers reject "*" for Access-Control-Allow-Headers with credentialed requests.
+# Provide a concrete, conservative default set if wildcard is configured.
+if any(h == "*" for h in raw_headers):
+    headers = [
+        "Accept",
+        "Content-Type",
+        "X-CSRF-Token",
+        "Authorization",
+    ]
+else:
+    headers = raw_headers
 https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
 domain = os.getenv("COOKIE_DOMAIN", "localhost")
 

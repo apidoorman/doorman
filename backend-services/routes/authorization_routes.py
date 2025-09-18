@@ -93,7 +93,8 @@ async def authorization(request: Request):
         # CSRF double-submit cookie (for HTTPS-enabled deployments)
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
-        _secure = os.getenv("HTTPS_ONLY", "false").lower() == "true"
+        # Use Secure cookies when HTTPS is enabled; allow insecure in local dev/tests
+        _secure = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
         _domain = os.getenv("COOKIE_DOMAIN", None)
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
@@ -375,7 +376,8 @@ async def extended_authorization(request: Request):
         # Refresh CSRF token as well to keep parity with new cookie
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
-        _secure = os.getenv("HTTPS_ONLY", "false").lower() == "true"
+        # Use Secure cookies when HTTPS is enabled; allow insecure in local dev/tests
+        _secure = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
         _domain = os.getenv("COOKIE_DOMAIN", None)
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
