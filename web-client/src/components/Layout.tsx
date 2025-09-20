@@ -26,6 +26,7 @@ const menuItems: MenuItem[] = [
   { label: 'Routings', href: '/routings', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4', permission: 'manage_routings' },
   { label: 'Logging', href: '/logging', icon: 'M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', permission: 'view_logs' },
   { label: 'Monitor', href: '/monitor', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', permission: 'manage_gateway' },
+  { label: 'Demo Seed', href: '/demo', icon: 'M12 4v16m8-8H4', permission: 'manage_gateway' },
   { label: 'Tokens', href: '/tokens', icon: 'M12 8c-1.657 0-3 1.343-3 3 0 2.239 3 5 3 5s3-2.761 3-5c0-1.657-1.343-3-3-3z M12 13a2 2 0 110-4 2 2 0 010 4z', permission: 'manage_tokens' },
   { label: 'Token Definitions', href: '/token-defs', icon: 'M5 13l4 4L19 7', permission: 'manage_tokens' },
   { label: 'Subscriptions', href: '/subscriptions', icon: 'M3 5h12M9 3v2m-6 4h12M9 9v2m-6 4h12m-6 0v2', permission: 'manage_subscriptions' },
@@ -83,26 +84,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <aside className={`sidebar ${sidebarOpen ? 'translate-x-0' : ''}`}>
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Doorman</h1>
           </div>
           
           {/* Menu Items */}
-          <div className="flex-1 p-4">
-            <nav className="space-y-2">
+          <div className="flex-1 p-3 overflow-y-auto no-scrollbar">
+            <nav className="space-y-1">
               {filteredMenuItems.map((item) => {
                 const isActive = pathname === item.href
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                    className={`flex items-center px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                       isActive
                         ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
                         : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white'
                     }`}
                   >
-                    <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
                     </svg>
                     {item.label}
@@ -113,19 +114,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
           
           {/* Bottom Actions */}
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
+          <div className="p-3 border-t border-gray-200 dark:border-gray-700 space-y-1.5">
             {/* Dark mode toggle */}
             <button
               onClick={toggleTheme}
-              className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-700 rounded-md transition-colors"
+              className="flex items-center w-full px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-700 rounded-md transition-colors"
               aria-label="Toggle dark mode"
             >
               {theme === 'light' ? (
-                <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                 </svg>
               ) : (
-                <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
               )}
@@ -135,9 +136,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {user && (
               <button
                 onClick={logout}
-                className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-700 rounded-md transition-colors"
+                className="flex items-center w-full px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-700 rounded-md transition-colors"
               >
-                <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
                 Logout
