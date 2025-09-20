@@ -193,6 +193,68 @@ class TokenService:
             ).dict()
 
     @staticmethod
+    async def list_token_defs(page: int, page_size: int, request_id):
+        """List token definitions (masked), paginated."""
+        logger.info(request_id + " | Listing token definitions")
+        try:
+            cursor = token_def_collection.find({}).sort('api_token_group', 1)
+            # In-memory collections support chaining skip/limit; pymongo cursor also does
+            if page and page_size:
+                cursor = cursor.skip(max((page - 1), 0) * page_size).limit(page_size)
+            items = []
+            for doc in cursor:
+                if doc.get('_id'):
+                    del doc['_id']
+                items.append({
+                    'api_token_group': doc.get('api_token_group'),
+                    'api_key_header': doc.get('api_key_header'),
+                    # do not return key; just whether present
+                    'api_key_present': bool(doc.get('api_key')),
+                    'token_tiers': doc.get('token_tiers', []),
+                })
+            return ResponseModel(
+                status_code=200,
+                response={'items': items}
+            ).dict()
+        except PyMongoError as e:
+            logger.error(request_id + f" | Token list failed with database error: {str(e)}")
+            return ResponseModel(
+                status_code=500,
+                error_code='TKN020',
+                error_message='Database error occurred while listing tokens'
+            ).dict()
+
+    @staticmethod
+    async def get_token_def(api_token_group: str, request_id):
+        """Get a single token definition (masked)."""
+        logger.info(request_id + " | Getting token definition")
+        try:
+            doc = token_def_collection.find_one({'api_token_group': api_token_group})
+            if not doc:
+                return ResponseModel(
+                    status_code=404,
+                    error_code='TKN021',
+                    error_message='Token definition not found'
+                ).dict()
+            if doc.get('_id'):
+                del doc['_id']
+            # mask key presence only
+            masked = {
+                'api_token_group': doc.get('api_token_group'),
+                'api_key_header': doc.get('api_key_header'),
+                'api_key_present': bool(doc.get('api_key')),
+                'token_tiers': doc.get('token_tiers', []),
+            }
+            return ResponseModel(status_code=200, response=masked).dict()
+        except PyMongoError as e:
+            logger.error(request_id + f" | Token fetch failed with database error: {str(e)}")
+            return ResponseModel(
+                status_code=500,
+                error_code='TKN022',
+                error_message='Database error occurred while retrieving token'
+            ).dict()
+
+    @staticmethod
     async def add_tokens(username: str, data: UserTokenModel, request_id):
         """Add or update a user's token balances for one or more groups."""
         logger.info(request_id + f" | Adding tokens for user: {username}")
