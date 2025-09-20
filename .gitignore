@@ -13,3 +13,6 @@ generated/
 **/.generated/
 data/
 **/.data/
+
+# Local-only demo seeders (do not commit)
+backend-services/scripts/seed_demo_data.py
