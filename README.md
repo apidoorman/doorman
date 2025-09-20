@@ -142,6 +142,7 @@ Run Doorman console instance for debugging
     
 ```bash
   python doorman.py run
+```
 
 Web client (Next.js)
 
@@ -149,7 +150,7 @@ Web client (Next.js)
 cd web-client
 cp .env.local.example .env.local
 npm ci
-npm run dev
+npm run dev OR npm run build
 ```
 
 Defaults
