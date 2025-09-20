@@ -15,7 +15,7 @@
 # Doorman API Gateway
 A lightweight API gateway built for AI, REST, SOAP, GraphQL, and gRPC APIs. No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. This is your application’s gateway to the world. 🐍
 
-![Example](https://i.ibb.co/9dkgPLP/dashboardpage.png)
+![Example](https://i.ibb.co/gZ7svz6P/doorman-dashboard-light.png)
 
 ## Features
 Doorman supports user management, authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, mongodb, and endpoint request payload validation. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
