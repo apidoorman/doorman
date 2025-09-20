@@ -111,13 +111,13 @@ const MonitorPage: React.FC = () => {
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
             </select>
-            <button onClick={fetchMetrics} className="btn btn-secondary">
+            <button onClick={() => { void fetchMetrics(); }} className="btn btn-secondary">
               <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               Refresh
             </button>
-            <button onClick={fetchProbes} className="btn btn-outline">Check Probes</button>
+            <button onClick={() => { void fetchProbes(); }} className="btn btn-outline">Check Probes</button>
           </div>
         </div>
 
@@ -261,9 +261,10 @@ const MonitorPage: React.FC = () => {
             <div className="p-6">
               <div className="h-48 overflow-y-auto">
                 <ul className="text-sm space-y-1">
-                  {Array.from((metrics?.series || []).entries())
+                  {((metrics?.series || []) as any[])
+                    .slice()
                     .reverse()
-                    .map(([idx, pt]: [number, any]) => (
+                    .map((pt: any, idx: number) => (
                       <li key={`${pt.timestamp}-${idx}`} className="flex justify-between">
                         <span>{new Date(pt.timestamp * 1000).toLocaleTimeString()}</span>
                         <span>
