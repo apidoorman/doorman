@@ -175,34 +175,16 @@ export default function TokensPage() {
           </div>
         </div>
 
-        {/* Token Definition */}
+        {/* Token Definitions CTA */}
         <div className="card">
-          <div className="card-header"><h3 className="card-title">Token Definition</h3></div>
-          <div className="p-6 space-y-4">
-            {form.error && <div className="text-sm text-error-600">{form.error}</div>}
-            {form.success && <div className="text-sm text-success-600">{form.success}</div>}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium">API Token Group</label>
-                <input className="input" value={form.api_token_group} onChange={e => setForm(f => ({ ...f, api_token_group: e.target.value }))} placeholder="ai-group-1" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">API Key Header</label>
-                <input className="input" value={form.api_key_header} onChange={e => setForm(f => ({ ...f, api_key_header: e.target.value }))} placeholder="x-api-key" />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium">API Key</label>
-                <input className="input" value={form.api_key} onChange={e => setForm(f => ({ ...f, api_key: e.target.value }))} placeholder="sk_live_xxx" />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium">Token Tiers (JSON)</label>
-                <textarea className="input font-mono text-xs h-40" value={form.token_tiers_text} onChange={e => setForm(f => ({ ...f, token_tiers_text: e.target.value }))} />
-              </div>
+          <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="card-title">Token Definitions</h3>
+              <p className="text-gray-600 dark:text-gray-400">Create and manage token groups, headers, and tiers</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={handleCreate} disabled={form.working} className="btn btn-primary">Create</button>
-              <button onClick={handleUpdate} disabled={form.working} className="btn btn-secondary">Update</button>
-              <button onClick={openDeleteModal} disabled={form.working} className="btn btn-error">Delete</button>
+              <a href="/token-defs" className="btn btn-secondary">View Definitions</a>
+              <a href="/token-defs/add" className="btn btn-primary">Add Definition</a>
             </div>
           </div>
         </div>
@@ -278,17 +260,7 @@ export default function TokensPage() {
         </div>
       </div>
 
-      <ConfirmModal
-        open={showDeleteModal}
-        title="Delete Token Definition"
-        message={<>
-          This action cannot be undone. This will permanently delete the token definition for group "{form.api_token_group.trim()}".
-        </>}
-        confirmLabel={form.working ? 'Deleting...' : 'Delete'}
-        cancelLabel="Cancel"
-        onCancel={() => setShowDeleteModal(false)}
-        onConfirm={handleDeleteConfirm}
-      />
+      {/* No delete modal needed on this page anymore */}
     </Layout>
     </ProtectedRoute>
   )

@@ -1,7 +1,7 @@
 """
 The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/doorman for more information
+See https://github.com/apidoorman/doorman for more information
 """
 
 from models.create_endpoint_validation_model import CreateEndpointValidationModel

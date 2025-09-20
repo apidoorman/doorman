@@ -121,6 +121,15 @@
   .main-content {
     @apply lg:ml-64 min-h-screen bg-gray-50 dark:bg-dark-bg;
   }
+
+  /* Hide scrollbars but allow scroll (sidebar/menu) */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
   
   /* Page header */
   .page-header {

@@ -1,7 +1,7 @@
 """
 The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/doorman for more information
+See https://github.com/apidoorman/doorman for more information
 """
 
 import os
@@ -118,21 +118,25 @@ class GatewayService:
             logger.info(f"{request_id} | REST gateway to: {url}")
             if api.get('api_authorization_field_swap'):
                 headers[api.get('Authorization')] = headers.get(api.get('api_authorization_field_swap'))
-            if api.get('validation_enabled'):
-                try:
-                    if content_type in ["application/json", "text/json"]:
+            # Endpoint-level payload validation (when configured)
+            try:
+                endpoint_doc = await api_util.get_endpoint(api, method, '/' + endpoint_uri.lstrip('/'))
+                endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
+                if endpoint_id:
+                    if "JSON" in content_type:
                         body = await request.json()
-                        await validation_util.validate_rest_request(api.get('api_id'), body)
-                    elif content_type in ["application/xml", "text/xml"]:
+                        await validation_util.validate_rest_request(endpoint_id, body)
+                    elif "XML" in content_type:
                         body = (await request.body()).decode("utf-8")
-                        await validation_util.validate_soap_request(api.get('api_id'), body)
-                except Exception as e:
-                    return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
+                        await validation_util.validate_soap_request(endpoint_id, body)
+            except Exception as e:
+                logger.error(f"{request_id} | Validation error: {e}")
+                return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
             async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
                 if method == "GET":
                     http_response = await client.get(url, params=query_params, headers=headers)
                 elif method in ("POST", "PUT", "DELETE"):
-                    if content_type in ["application/json", "text/json"]:
+                    if "JSON" in content_type:
                         body = await request.json()
                         http_response = await getattr(client, method.lower())(
                             url, json=body, params=query_params, headers=headers
@@ -232,11 +236,15 @@ class GatewayService:
             envelope = (await request.body()).decode("utf-8")
             if api.get('api_authorization_field_swap'):
                 headers[api.get('Authorization')] = headers.get(api.get('api_authorization_field_swap'))
-            if api.get('validation_enabled'):
-                try:
-                    await validation_util.validate_soap_request(api.get('api_id'), envelope)
-                except Exception as e:
-                    return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
+            # Endpoint-level payload validation (when configured)
+            try:
+                endpoint_doc = await api_util.get_endpoint(api, 'POST', '/' + endpoint_uri.lstrip('/'))
+                endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
+                if endpoint_id:
+                    await validation_util.validate_soap_request(endpoint_id, envelope)
+            except Exception as e:
+                logger.error(f"{request_id} | Validation error: {e}")
+                return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
             async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
                 http_response = await client.post(url, content=envelope, params=query_params, headers=headers)
             response_content = http_response.text
@@ -316,11 +324,14 @@ class GatewayService:
             body = await request.json()
             query = body.get('query')
             variables = body.get('variables', {})
-            if api.get('validation_enabled'):
-                try:
-                    await validation_util.validate_graphql_request(api.get('api_id'), query, variables)
-                except Exception as e:
-                    return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
+            # Endpoint-level payload validation (when configured)
+            try:
+                endpoint_doc = await api_util.get_endpoint(api, 'POST', '/graphql')
+                endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
+                if endpoint_id:
+                    await validation_util.validate_graphql_request(endpoint_id, query, variables)
+            except Exception as e:
+                return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
             transport = AIOHTTPTransport(url=url, headers=headers)
             async with Client(transport=transport, fetch_schema_from_transport=True) as session:
                 try:
@@ -371,6 +382,27 @@ class GatewayService:
                 api_path = f"{api_name}/{api_version}"
                 logger.info(f"{request_id} | Processing gRPC request for API: {api_path}")
                 logger.info(f"{request_id} | Processing gRPC request for API: {api_path}")
+                # Parse body early and run validation before proto checks
+                try:
+                    body = await request.json()
+                    if not isinstance(body, dict):
+                        logger.error(f"{request_id} | Invalid request body format")
+                        return GatewayService.error_response(request_id, 'GTW011', 'Invalid request body format', status=400)
+                except json.JSONDecodeError:
+                    logger.error(f"{request_id} | Invalid JSON in request body")
+                    return GatewayService.error_response(request_id, 'GTW011', 'Invalid JSON in request body', status=400)
+                # Load API and validate payload against endpoint schema if configured
+                api = doorman_cache.get_cache('api_cache', api_path)
+                if not api:
+                    api = await api_util.get_api(None, api_path)
+                if api:
+                    try:
+                        endpoint_doc = await api_util.get_endpoint(api, 'POST', '/grpc')
+                        endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
+                        if endpoint_id:
+                            await validation_util.validate_grpc_request(endpoint_id, body.get('message'))
+                    except Exception as e:
+                        return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
                 proto_filename = f"{api_name}_{api_version}.proto"
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 proto_dir = os.path.join(project_root, 'proto')
@@ -415,6 +447,14 @@ class GatewayService:
                 logger.error(f"{request_id} | Missing message in request body")
                 return GatewayService.error_response(request_id, 'GTW011', 'Missing message in request body', status=400)
             proto_filename = f"{api_name}_{api_version}.proto"
+            # Endpoint-level payload validation (when configured)
+            try:
+                endpoint_doc = await api_util.get_endpoint(api, 'POST', '/grpc')
+                endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
+                if endpoint_id:
+                    await validation_util.validate_grpc_request(endpoint_id, body.get('message'))
+            except Exception as e:
+                return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
             proto_path = os.path.join(proto_dir, proto_filename)
             if not os.path.exists(proto_path):
                 logger.error(f"{request_id} | Proto file not found: {proto_path}")
