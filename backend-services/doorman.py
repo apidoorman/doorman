@@ -38,6 +38,7 @@ from routes.dashboard_routes import dashboard_router
 from routes.memory_routes import memory_router
 from routes.security_routes import security_router
 from routes.token_routes import token_router
+from routes.demo_routes import demo_router
 from routes.monitor_routes import monitor_router
 from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
 from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
@@ -423,6 +424,7 @@ doorman.include_router(memory_router, prefix="/platform", tags=["Memory"])
 doorman.include_router(security_router, prefix="/platform", tags=["Security"])
 doorman.include_router(monitor_router, prefix="/platform", tags=["Monitor"])
 doorman.include_router(token_router, prefix="/platform/token", tags=["Token"])
+doorman.include_router(demo_router, prefix="/platform/demo", tags=["Demo"])
 
 def start():
     if os.path.exists(PID_FILE):
