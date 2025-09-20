@@ -192,6 +192,29 @@ Quick go-live checklist
 
 Optional: run `bash scripts/smoke.sh` (uses `BASE_URL`, `STARTUP_ADMIN_EMAIL`, `STARTUP_ADMIN_PASSWORD`).
 
+## Demo Data Seeder
+- Populate the platform with realistic random data (users, APIs, endpoints, roles, groups, tokens, subscriptions, logs, protos) for UI exploration.
+
+Run from repo root:
+
+```
+python backend-services/scripts/seed_demo_data.py --users 40 --apis 15 --endpoints 6 --protos 6 --logs 1500
+```
+
+Flags:
+- `--users` count (default 30)
+- `--apis` count (default 12)
+- `--endpoints` per-API (default 5)
+- `--groups` extra groups (default 6)
+- `--protos` proto files (default 5)
+- `--logs` log lines to append (default 1000)
+- `--seed` RNG seed for reproducibility
+
+Notes:
+- Works with memory-only or MongoDB modes. Metrics (for the dashboard) are in-memory and will reset on server restart; re-run the seeder to repopulate.
+- Admin user is preserved; additional roles/groups are added if missing.
+- Proto files are written under `backend-services/proto/` (no external tooling required to view in UI).
+
 
 ## License Information
 The contents of this repository are property of doorman.so.
