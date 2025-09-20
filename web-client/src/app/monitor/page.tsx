@@ -37,11 +37,12 @@ const MonitorPage: React.FC = () => {
     fetchProbes()
   }, [timeRange])
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = async (rangeOverride?: string) => {
     try {
       setLoading(true)
       setError(null)
-      const payload = await getJson<any>(`${SERVER_URL}/platform/monitor/metrics?range=${encodeURIComponent(timeRange)}`)
+      const range = rangeOverride ?? timeRange
+      const payload = await getJson<any>(`${SERVER_URL}/platform/monitor/metrics?range=${encodeURIComponent(range)}`)
       setMetrics(payload)
     } catch (err) {
       if (err instanceof Error) {
@@ -102,7 +103,7 @@ const MonitorPage: React.FC = () => {
           <div className="flex gap-2">
             <select
               value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
+              onChange={(e) => { const v = e.target.value; setTimeRange(v); fetchMetrics(v) }}
               className="input"
             >
               <option value="1h">Last Hour</option>
@@ -260,12 +261,16 @@ const MonitorPage: React.FC = () => {
             <div className="p-6">
               <div className="h-48 overflow-y-auto">
                 <ul className="text-sm space-y-1">
-                  {(metrics?.series || []).slice().reverse().map((pt: any) => (
-                    <li key={pt.timestamp} className="flex justify-between">
-                      <span>{new Date(pt.timestamp * 1000).toLocaleTimeString()}</span>
-                      <span>{pt.count} req • avg {Math.round(pt.avg_ms)}ms • {pt.error_count} errs</span>
-                    </li>
-                  ))}
+                  {Array.from((metrics?.series || []).entries())
+                    .reverse()
+                    .map(([idx, pt]: [number, any]) => (
+                      <li key={`${pt.timestamp}-${idx}`} className="flex justify-between">
+                        <span>{new Date(pt.timestamp * 1000).toLocaleTimeString()}</span>
+                        <span>
+                          {pt.count} req • avg {Math.round(pt.avg_ms)}ms • {pt.error_count} errs
+                        </span>
+                      </li>
+                    ))}
                 </ul>
                 {(!metrics || !metrics.series || metrics.series.length === 0) && (
                   <p className="text-gray-500 dark:text-gray-400">No data</p>
