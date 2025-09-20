@@ -1,7 +1,7 @@
 """
 The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/doorman for more information
+See https://github.com/apidoorman/doorman for more information
 """
 
 from datetime import datetime, timedelta
@@ -68,6 +68,18 @@ async def app_lifespan(app: FastAPI):
     # Security: JWT secret must be configured
     if not os.getenv("JWT_SECRET_KEY"):
         raise RuntimeError("JWT_SECRET_KEY is not configured. Set it before starting the server.")
+    # Production guard: require secure cookies via HTTPS
+    try:
+        if os.getenv("ENV", "").lower() == "production":
+            https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
+            https_enabled = os.getenv("HTTPS_ENABLED", "false").lower() == "true"
+            if not (https_only or https_enabled):
+                raise RuntimeError(
+                    "In production (ENV=production), you must enable HTTPS_ONLY or HTTPS_ENABLED to enforce Secure cookies."
+                )
+    except Exception as e:
+        # If misconfigured, fail early with a clear message
+        raise
     app.state.redis = Redis.from_url(
         f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
         decode_responses=True
@@ -169,7 +181,7 @@ async def app_lifespan(app: FastAPI):
 doorman = FastAPI(
     title="doorman",
     description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application's gateway to the world.",
-    version="0.0.1",
+    version="1.0.0",
     lifespan=app_lifespan,
 )
 
