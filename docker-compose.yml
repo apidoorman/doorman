@@ -1,10 +1,5 @@
 version: '3.9'
 services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
   backend:
     build:
       context: .
@@ -18,11 +13,6 @@ services:
       ALLOWED_ORIGINS: http://localhost:3000
       HTTPS_ONLY: "false"
       HTTPS_ENABLED: "false"
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 0
-    depends_on:
-      - redis
     ports:
       - "5001:5001"
     volumes:
@@ -44,4 +34,3 @@ services:
 volumes:
   backend_generated:
   backend_logs:
-
