@@ -52,7 +52,7 @@ async def get_dashboard_data(request: Request):
 
         # Active users list from top_users in metrics; enrich with subscribers (count of apis in subscriptions)
         active_users_list = []
-        for username, reqs in snap.get('top_users', [])[:10]:
+        for username, reqs in snap.get('top_users', [])[:5]:
             subs = subscriptions_collection.find_one({'username': username}) or {}
             subscribers = len(subs.get('apis', [])) if isinstance(subs.get('apis'), list) else 0
             active_users_list.append({

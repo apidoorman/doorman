@@ -4,7 +4,13 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta
+try:
+    # Python 3.11+
+    from datetime import UTC  # type: ignore
+except Exception:  # Python <3.11 fallback
+    from datetime import timezone as _timezone  # type: ignore
+    UTC = _timezone.utc  # type: ignore
 import os
 import uuid
 from fastapi import HTTPException, Request

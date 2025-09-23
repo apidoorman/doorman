@@ -33,7 +33,7 @@ Doorman can validate request payloads at the endpoint level before proxying to y
 Create a validation schema
 
 ```bash
-curl -X POST -b cookies.txt \
+curl -X POST -b /tmp/doorman_cookies.txt \
   -H 'Content-Type: application/json' \
   http://localhost:5001/platform/endpoint/endpoint/validation \
   -d '{
@@ -167,8 +167,8 @@ Defaults
 Smoke checks
 - Liveness: `curl -s http://localhost:5001/platform/monitor/liveness` → `{ "status": "alive" }`
 - Readiness: `curl -s http://localhost:5001/platform/monitor/readiness` → `{ status: "ready", ... }`
-- Auth login: `curl -s -c cookies.txt -H 'Content-Type: application/json' -d '{"email":"admin@localhost","password":"password1"}' http://localhost:5001/platform/authorization`
-- Auth status: `curl -s -b cookies.txt http://localhost:5001/platform/authorization/status`
+- Auth login: `curl -s -c /tmp/doorman_cookies.txt -H 'Content-Type: application/json' -d '{\"email\":\"admin@localhost\",\"password\":\"password1\"}' http://localhost:5001/platform/authorization`
+- Auth status: `curl -s -b /tmp/doorman_cookies.txt http://localhost:5001/platform/authorization/status`
 - One-liner: `BASE_URL=http://localhost:5001 STARTUP_ADMIN_EMAIL=admin@localhost STARTUP_ADMIN_PASSWORD=password1 bash scripts/smoke.sh`
 
 Production notes
@@ -186,8 +186,8 @@ Quick go-live checklist
   - `curl -s http://localhost:5001/platform/monitor/liveness` → `{ "status": "alive" }`
   - `curl -s http://localhost:5001/platform/monitor/readiness` → `{ status: "ready", ... }`
 - Smoke auth:
-  - `curl -s -c cookies.txt -H 'Content-Type: application/json' -d '{"email":"admin@localhost","password":"password1"}' http://localhost:5001/platform/authorization`
-  - `curl -s -b cookies.txt http://localhost:5001/platform/authorization/status`
+  - `curl -s -c /tmp/doorman_cookies.txt -H 'Content-Type: application/json' -d '{\"email\":\"admin@localhost\",\"password\":\"password1\"}' http://localhost:5001/platform/authorization`
+  - `curl -s -b /tmp/doorman_cookies.txt http://localhost:5001/platform/authorization/status`
 - Web: Ensure `web-client/.env.local` has `NEXT_PUBLIC_SERVER_URL=http://localhost:5001`, then `npm run build && npm start` (or use compose service `web`).
 
 Optional: run `bash scripts/smoke.sh` (uses `BASE_URL`, `STARTUP_ADMIN_EMAIL`, `STARTUP_ADMIN_PASSWORD`).
