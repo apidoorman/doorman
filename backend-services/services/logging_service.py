@@ -46,10 +46,6 @@ class LoggingService:
             # Find all log files matching the pattern
             log_files = glob.glob(os.path.join(self.log_directory, self.log_file_pattern))
             
-            # Sort log files by modification time (newest first)
-            # This ensures we read the most recent log files first
-            log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-            
             if not log_files:
                 return {
                     "logs": [],
@@ -60,8 +56,10 @@ class LoggingService:
             logs = []
             total_count = 0
             
+            # Sort log files by modification time (newest first)
+            log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            
             # Read from all log files
-            logger.debug(f"Found {len(log_files)} log files: {log_files}")
             for log_file in log_files:
                 if not os.path.exists(log_file):
                     continue
@@ -340,8 +338,8 @@ class LoggingService:
         if ip_match:
             data['ip_address'] = ip_match.group(1)
         
-        # Extract endpoint
-        endpoint_match = re.search(r'Endpoint: (\w+) (.*)', message)
+        # Extract endpoint - fixed pattern to match actual log format
+        endpoint_match = re.search(r'Endpoint: (\w+) (.+)', message)
         if endpoint_match:
             data['method'] = endpoint_match.group(1)
             data['endpoint'] = endpoint_match.group(2)

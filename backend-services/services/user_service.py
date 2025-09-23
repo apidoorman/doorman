@@ -16,7 +16,6 @@ import logging
 
 from utils.role_util import platform_role_required_bool
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 class UserService:

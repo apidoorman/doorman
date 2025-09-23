@@ -9,7 +9,6 @@ from fastapi import HTTPException
 from utils.database import role_collection, user_collection
 from utils.doorman_cache_util import doorman_cache
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
 
 @staticmethod
