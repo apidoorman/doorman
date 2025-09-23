@@ -213,6 +213,33 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
+@user_router.get("/me",
+    description="Get user by username",
+    response_model=UserModelResponse
+    )
+async def get_user_by_username(request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        auth_username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {auth_username} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        return process_response(await UserService.get_user_by_username(auth_username, request_id), "rest")
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict(), "rest")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
 
 @user_router.get("/all",
     description="Get all users",

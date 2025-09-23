@@ -1,10 +1,13 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import Link from 'next/link';
 import './roles.css';
 
 interface Role {
+  role_description: ReactNode;
+  role_permissions: ReactNode;
+  role_name: ReactNode;
   id: string;
   name: string;
   description: string;
@@ -66,12 +69,20 @@ const RolesPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/platform/roles`);
+      const response = await fetch(`http://localhost:3002/platform/role/all`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to load roles');
       }
       const data = await response.json();
-      setRoles(data);
+      const roleList = Array.isArray(data) ? data : (data.roles || data.response?.roles || []);
+      setRoles(roleList);
     } catch (err) {
       setError('Failed to load roles. Please try again later.');
       setRoles([]);
@@ -186,21 +197,13 @@ const RolesPage = () => {
                   <tr>
                     <th>Name</th>
                     <th>Description</th>
-                    <th>Permissions</th>
-                    <th>Users</th>
-                    <th>Created At</th>
-                    <th>Last Updated</th>
                   </tr>
                 </thead>
                 <tbody>
                   {roles.map((role) => (
                     <tr key={role.id}>
-                      <td>{role.name}</td>
-                      <td>{role.description}</td>
-                      <td>{role.permissions}</td>
-                      <td>{role.userCount}</td>
-                      <td>{new Date(role.createdAt).toLocaleDateString()}</td>
-                      <td>{new Date(role.lastUpdated).toLocaleDateString()}</td>
+                      <td>{role.role_name}</td>
+                      <td>{role.role_description}</td>
                     </tr>
                   ))}
                 </tbody>
