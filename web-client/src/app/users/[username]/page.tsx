@@ -295,12 +295,12 @@ const UserDetailPage = () => {
     );
   }
 
-  if (error || !user) {
+  if (!user) {
     return (
       <div className="user-detail-root">
         <div className="error-container">
           <div className="error-message">
-            {error || 'User not found'}
+            User not found
           </div>
           <button className="back-button" onClick={handleBack}>
             ← Back to Users

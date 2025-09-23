@@ -1,19 +1,14 @@
 'use client'
 
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import './groups.css';
 
 interface Group {
-  group_name: ReactNode;
-  group_description: ReactNode;
-  id: string;
-  name: string;
-  description: string;
-  memberCount: number;
-  createdBy: string;
-  createdAt: string;
-  lastUpdated: string;
+  group_name: string;
+  group_description: string;
+  api_access?: string[];
 }
 
 const menuItems = [
@@ -29,15 +24,6 @@ const menuItems = [
   { label: 'Settings', href: '/settings' },
 ];
 
-const groups = [
-  {
-    name: 'c1-group',
-    members: 5,
-    role: 'Client',
-    subscriptions: 12,
-  },
-];
-
 const handleLogout = () => {
   localStorage.clear();
   sessionStorage.clear();
@@ -47,12 +33,14 @@ const handleLogout = () => {
 };
 
 const GroupsPage = () => {
+  const router = useRouter();
   const [theme, setTheme] = useState('light');
   const [groups, setGroups] = useState<Group[]>([]);
+  const [allGroups, setAllGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name');
+  const [sortBy, setSortBy] = useState('group_name');
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -68,7 +56,7 @@ const GroupsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`http://localhost:3002/platform/group/all`, {
+      const response = await fetch(`http://localhost:3002/platform/group/all?page=1&page_size=10`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
@@ -80,11 +68,12 @@ const GroupsPage = () => {
         throw new Error('Failed to load groups');
       }
       const data = await response.json();
-      const groupList = Array.isArray(data) ? data : (data.groups || data.response?.groups || []);
-      setGroups(groupList);
+      setAllGroups(data.groups);
+      setGroups(data.groups);
     } catch (err) {
       setError('Failed to load groups. Please try again later.');
       setGroups([]);
+      setAllGroups([]);
     } finally {
       setLoading(false);
     }
@@ -92,22 +81,36 @@ const GroupsPage = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Implement search functionality
+    if (!searchTerm.trim()) {
+      setGroups(allGroups);
+      return;
+    }
+    
+    const filteredGroups = allGroups.filter(group => 
+      group.group_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      group.group_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      group.api_access?.some(api => api.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+    setGroups(filteredGroups);
   };
 
   const handleSort = (sortField: string) => {
     setSortBy(sortField);
     const sortedGroups = [...groups].sort((a, b) => {
-      if (sortField === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortField === 'memberCount') {
-        return b.memberCount - a.memberCount;
-      } else if (sortField === 'createdAt') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (sortField === 'group_name') {
+        return a.group_name.localeCompare(b.group_name);
+      } else if (sortField === 'api_access') {
+        return (a.api_access?.length || 0) - (b.api_access?.length || 0);
       }
       return 0;
     });
     setGroups(sortedGroups);
+  };
+
+  const handleGroupClick = (group: Group) => {
+    // Store group data in sessionStorage for the detail page
+    sessionStorage.setItem('selectedGroup', JSON.stringify(group));
+    router.push(`/groups/${group.group_name}`);
   };
 
   return (
@@ -152,26 +155,22 @@ const GroupsPage = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               <button type="submit" className="groups-search-btn">Search</button>
-              <button type="button" className="groups-add-btn">Add Group</button>
+              <Link href="/groups/add" className="groups-add-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                Add Group
+              </Link>
             </form>
             <div className="groups-sort-group">
               <button 
-                className={`groups-sort-btn ${sortBy === 'name' ? 'active' : ''}`}
-                onClick={() => handleSort('name')}
+                className={`groups-sort-btn ${sortBy === 'group_name' ? 'active' : ''}`}
+                onClick={() => handleSort('group_name')}
               >
                 Name
               </button>
               <button 
-                className={`groups-sort-btn ${sortBy === 'members' ? 'active' : ''}`}
-                onClick={() => handleSort('members')}
+                className={`groups-sort-btn ${sortBy === 'api_access' ? 'active' : ''}`}
+                onClick={() => handleSort('api_access')}
               >
-                Members
-              </button>
-              <button 
-                className={`groups-sort-btn ${sortBy === 'created' ? 'active' : ''}`}
-                onClick={() => handleSort('created')}
-              >
-                Created
+                API Access
               </button>
             </div>
           </div>
@@ -196,13 +195,25 @@ const GroupsPage = () => {
                   <tr>
                     <th>Name</th>
                     <th>Description</th>
+                    <th>API Access</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groups.map((group) => (
-                    <tr key={group.id}>
-                      <td>{group.group_name}</td>
-                      <td>{group.group_description}</td>
+                    <tr 
+                      key={group.group_name} 
+                      onClick={() => handleGroupClick(group)}
+                      style={{ cursor: 'pointer' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
+                    >
+                      <td><b>{group.group_name}</b></td>
+                      <td>{group.group_description || 'No description'}</td>
+                      <td>
+                        <span className="groups-api-badge">
+                          {group.api_access?.length || 0} API{(group.api_access?.length || 0) !== 1 ? 's' : ''}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
