@@ -42,6 +42,11 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
                 detail="Missing email or password"
             )
         user = await UserService.check_password_return_user(email, password)
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid email or password"
+            )
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize)
         response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
         Authorize.set_access_cookies(access_token, response)

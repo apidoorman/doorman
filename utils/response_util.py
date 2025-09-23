@@ -6,7 +6,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
-def process_resposnse(response):
+def process_response(response):
     """
     Process the response from the API.
     """
@@ -17,7 +17,7 @@ def process_resposnse(response):
             processed_response = response.response
         elif response.status_code == 201:
             processed_response = {"message": response.message}
-        elif response.status_code == 400:
+        elif response.status_code in (400, 404):
             processed_response = {
                 "code": response.error_code,
                 "message": response.error_message
