@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { getCookie } from '@/utils/http'
+import { SERVER_URL } from '@/utils/config'
 import { format } from 'date-fns'
 import { ChangeEvent } from 'react'
 import Layout from '@/components/Layout'
@@ -92,16 +94,9 @@ export default function LogsPage() {
       const api_version = parts[1]
       const keyPrefix = `${api_name}|${api_version}|`
       if (Object.keys(overrideMap).some(k => k.includes(keyPrefix))) return
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/endpoint/${encodeURIComponent(api_name)}/${encodeURIComponent(api_version)}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      const data = await response.json()
-      if (!response.ok) return
+      const { fetchJson } = await import('@/utils/http')
+      const responseData: any = await fetchJson(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api_name)}/${encodeURIComponent(api_version)}`)
+      const data = responseData
       const eps: any[] = data.endpoints || []
       const next: Record<OverrideKey, boolean> = {}
       eps.forEach(ep => {
@@ -112,24 +107,40 @@ export default function LogsPage() {
     } catch {}
   }
 
+  const toQueryParams = (f: FilterState) => {
+    const qp = new URLSearchParams()
+    const map: Record<string,string> = {
+      startDate: 'start_date',
+      endDate: 'end_date',
+      startTime: 'start_time',
+      endTime: 'end_time',
+      request_id: 'request_id',
+      ipAddress: 'ip_address',
+      minResponseTime: 'min_response_time',
+      maxResponseTime: 'max_response_time',
+      user: 'user',
+      endpoint: 'endpoint',
+      method: 'method',
+      level: 'level'
+    }
+    Object.entries(f).forEach(([k,v]) => {
+      if (!v) return
+      const key = (map as any)[k] || k
+      qp.append(key, v)
+    })
+    return qp
+  }
+
   const fetchLogs = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
       
-      const queryParams = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) queryParams.append(key, value)
-      })
+      const queryParams = toQueryParams(filters)
       
-      const response = await fetch(`http://localhost:3002/platform/logging/logs?${queryParams}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
+      const { fetchJson } = await import('@/utils/http')
+      const csrf = getCookie('csrf_token')
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept':'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }})
       
       if (!response.ok) {
         throw new Error('Failed to fetch logs')
@@ -157,14 +168,8 @@ export default function LogsPage() {
             completeQueryParams.append('request_id', requestId)
             completeQueryParams.append('limit', '1000')
             
-            const completeResponse = await fetch(`http://localhost:3002/platform/logging/logs?${completeQueryParams}`, {
-              credentials: 'include',
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-              }
-            })
+            const csrf2 = getCookie('csrf_token')
+            const completeResponse = await fetch(`${SERVER_URL}/platform/logging/logs?${completeQueryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf2 ? { 'X-CSRF-Token': csrf2 } : {}) }})
             
             if (completeResponse.ok) {
               const completeData = await completeResponse.json()
@@ -198,14 +203,8 @@ export default function LogsPage() {
       queryParams.append('request_id', requestId)
       queryParams.append('limit', '1000') // Get a large number to ensure we get all logs
       
-      const response = await fetch(`http://localhost:3002/platform/logging/logs?${queryParams}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
+      const csrf3 = getCookie('csrf_token')
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf3 ? { 'X-CSRF-Token': csrf3 } : {}) }})
       
       if (!response.ok) {
         throw new Error('Failed to fetch logs for request ID')
@@ -377,19 +376,12 @@ export default function LogsPage() {
   const exportLogs = async (format: 'json' | 'csv') => {
     try {
       setExporting(true)
-      const queryParams = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) queryParams.append(key, value)
-      })
+      const queryParams = toQueryParams(filters)
       queryParams.append('format', format)
       
-      const response = await fetch(`http://localhost:3002/platform/logging/logs/export?${queryParams}`, {
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs/export?${queryParams}`, {
         credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
       })
       
       if (!response.ok) {
@@ -799,7 +791,7 @@ export default function LogsPage() {
                                   </div>
                                 ) : (
                                   <div className="space-y-2">
-                                    {(group.expanded_logs || group.logs).map((log, index) => (
+                                    {((group.expanded_logs || group.logs) || []).map((log, index) => (
                                       <div key={index} className="flex items-start space-x-4 p-2 bg-white dark:bg-gray-900 rounded border">
                                         <div className="flex-shrink-0">
                                           <span className={`badge ${getLevelBgColor(log.level)}`}>

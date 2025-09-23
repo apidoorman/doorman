@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { SERVER_URL } from '@/utils/config'
 import Layout from '@/components/Layout'
 
 interface API {
@@ -38,13 +39,9 @@ const APIsPage = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/api/all`, {
+      const response = await fetch(`${SERVER_URL}/platform/api/all`, {
         credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
       })
       if (!response.ok) {
         throw new Error('Failed to load APIs')

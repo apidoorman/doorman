@@ -16,7 +16,7 @@ from models.update_endpoint_validation_model import UpdateEndpointValidationMode
 from services.endpoint_service import EndpointService
 from utils.auth_util import auth_required
 from models.create_endpoint_model import CreateEndpointModel
-from utils.response_util import process_response
+from utils.response_util import respond_rest, process_response
 from utils.role_util import platform_role_required_bool
 
 import uuid
@@ -52,15 +52,15 @@ async def create_endpoint(endpoint_data: CreateEndpointModel, request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_endpoints'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
                 },
                 error_code="END010",
                 error_message="You do not have permission to create endpoints"
-            ).dict(), "rest")
-        return process_response(await EndpointService.create_endpoint(endpoint_data, request_id), "rest")
+            ))
+        return respond_rest(await EndpointService.create_endpoint(endpoint_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -100,15 +100,15 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_endpoints'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
                 },
                 error_code="END011",
                 error_message="You do not have permission to update endpoints"
-            ).dict(), "rest")
-        return process_response(await EndpointService.update_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, endpoint_data, request_id), "rest")
+            ))
+        return respond_rest(await EndpointService.update_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, endpoint_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -148,7 +148,7 @@ async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str,
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_endpoints'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
@@ -156,7 +156,7 @@ async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str,
                 error_code="END012",
                 error_message="You do not have permission to delete endpoints"
             ))
-        return process_response(await EndpointService.delete_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id), "rest")
+        return respond_rest(await EndpointService.delete_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -183,7 +183,7 @@ async def get_endpoint(endpoint_method: str, api_name: str, api_version: str, en
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await EndpointService.get_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id), "rest")
+        return respond_rest(await EndpointService.get_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -210,7 +210,7 @@ async def get_endpoints_by_name_version(api_name: str, api_version: str, request
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await EndpointService.get_endpoints_by_name_version(api_name, api_version, request_id), "rest")
+        return respond_rest(await EndpointService.get_endpoints_by_name_version(api_name, api_version, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -250,15 +250,15 @@ async def create_endpoint_validation(endpoint_validation_data: CreateEndpointVal
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_endpoints'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
                 },
                 error_code="END013",
                 error_message="You do not have permission to create endpoint validations"
-            ).dict(), "rest")
-        return process_response(await EndpointService.create_endpoint_validation(endpoint_validation_data, request_id), "rest")
+            ))
+        return respond_rest(await EndpointService.create_endpoint_validation(endpoint_validation_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -286,15 +286,15 @@ async def update_endpoint_validation(endpoint_id: str, endpoint_validation_data:
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_endpoints'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
                 },
                 error_code="END014",
                 error_message="You do not have permission to update endpoint validations"
-            ).dict(), "rest")
-        return process_response(await EndpointService.update_endpoint_validation(endpoint_id, endpoint_validation_data, request_id), "rest")
+            ))
+        return respond_rest(await EndpointService.update_endpoint_validation(endpoint_id, endpoint_validation_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -322,15 +322,15 @@ async def delete_endpoint_validation(endpoint_id: str, request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         if not await platform_role_required_bool(username, 'manage_endpoints'):
-            return process_response(ResponseModel(
+            return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     "request_id": request_id
                 },
                 error_code="END015",
                 error_message="You do not have permission to delete endpoint validations"
-            ).dict(), "rest")
-        return process_response(await EndpointService.delete_endpoint_validation(endpoint_id, request_id), "rest")
+            ))
+        return respond_rest(await EndpointService.delete_endpoint_validation(endpoint_id, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -353,9 +353,11 @@ async def get_endpoint_validation(endpoint_id: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
+        payload = await auth_required(request)
+        username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await EndpointService.get_endpoint_validation(endpoint_id, request_id), "rest")
+        return respond_rest(await EndpointService.get_endpoint_validation(endpoint_id, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -369,3 +371,28 @@ async def get_endpoint_validation(endpoint_id: str, request: Request):
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+# Normalized aliases for endpoint validation (without leading /endpoint segment)
+@endpoint_router.post("/validation",
+    description="Create a new endpoint validation (alias)",
+    response_model=ResponseModel)
+async def create_endpoint_validation_alias(endpoint_validation_data: CreateEndpointValidationModel, request: Request):
+    return await create_endpoint_validation(endpoint_validation_data, request)
+
+@endpoint_router.put("/validation/{endpoint_id}",
+    description="Update endpoint validation by endpoint ID (alias)",
+    response_model=ResponseModel)
+async def update_endpoint_validation_alias(endpoint_id: str, endpoint_validation_data: UpdateEndpointValidationModel, request: Request):
+    return await update_endpoint_validation(endpoint_id, endpoint_validation_data, request)
+
+@endpoint_router.delete("/validation/{endpoint_id}",
+    description="Delete endpoint validation by endpoint ID (alias)",
+    response_model=ResponseModel)
+async def delete_endpoint_validation_alias(endpoint_id: str, request: Request):
+    return await delete_endpoint_validation(endpoint_id, request)
+
+@endpoint_router.get("/validation/{endpoint_id}",
+    description="Get endpoint validation by endpoint ID (alias)",
+    response_model=EndpointValidationModelResponse)
+async def get_endpoint_validation_alias(endpoint_id: str, request: Request):
+    return await get_endpoint_validation(endpoint_id, request)

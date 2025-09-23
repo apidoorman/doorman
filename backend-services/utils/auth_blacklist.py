@@ -8,29 +8,29 @@ class TimedHeap:
         self.heap = []
         self.purge_after = purge_after
 
-    async def push(self, item):
+    def push(self, item):
         expire_time = datetime.now() + self.purge_after
         heapq.heappush(self.heap, (expire_time, item))
 
-    async def pop(self):
-        await self.purge()
+    def pop(self):
+        self.purge()
         if self.heap:
             return heapq.heappop(self.heap)[1]
         raise IndexError("pop from an empty priority queue")
 
-    async def purge(self):
+    def purge(self):
         current_time = datetime.now()
         while self.heap and self.heap[0][0] < current_time:
             heapq.heappop(self.heap)
 
-    async def peek(self):
-        await self.purge()
+    def peek(self):
+        self.purge()
         if self.heap:
             return self.heap[0][1]
         return None
 
 async def purge_expired_tokens():
     for key, timed_heap in list(jwt_blacklist.items()):
-        await timed_heap.purge()
+        timed_heap.purge()
         if not timed_heap.heap:
             del jwt_blacklist[key]

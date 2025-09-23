@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 export default function AddEndpointPage() {
   const params = useParams()
@@ -61,13 +62,12 @@ export default function AddEndpointPage() {
       if (useOverride && servers.length > 0) {
         body.endpoint_servers = servers
       }
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/endpoint`, {
+      const response = await fetch(`${SERVER_URL}/platform/endpoint`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(body)
       })
@@ -172,4 +172,3 @@ export default function AddEndpointPage() {
     </Layout>
   )
 }
-

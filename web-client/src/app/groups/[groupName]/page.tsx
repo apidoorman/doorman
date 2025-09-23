@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface Group {
   group_name: string
@@ -50,12 +51,11 @@ const GroupDetailPage = () => {
       }
 
       // Fetch from API if not in sessionStorage
-      const response = await fetch(`http://localhost:3002/platform/group/${encodeURIComponent(groupName)}`, {
+      const response = await fetch(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       
@@ -93,13 +93,12 @@ const GroupDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/group/${encodeURIComponent(groupName)}`, {
+      const response = await fetch(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(editData)
       })
@@ -110,12 +109,11 @@ const GroupDetailPage = () => {
       }
       
       // Refresh from server to get the latest canonical data
-      const refreshed = await fetch(`http://localhost:3002/platform/group/${encodeURIComponent(groupName)}`, {
+      const refreshed = await fetch(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       const refreshedGroup = await refreshed.json()
@@ -145,13 +143,12 @@ const GroupDetailPage = () => {
       setDeleting(true)
       setError(null)
       
-      const response = await fetch(`http://localhost:3002/platform/group/${encodeURIComponent(groupName)}`, {
+      const response = await fetch(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, {
         method: 'DELETE',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+          'Content-Type': 'application/json'
         }
       })
       

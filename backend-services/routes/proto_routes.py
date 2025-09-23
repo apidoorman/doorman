@@ -89,6 +89,19 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
+        # Per-route multipart size limit (default 5MB)
+        max_size = int(os.getenv("MAX_MULTIPART_SIZE_BYTES", 5_242_880))
+        cl = request.headers.get('content-length') if request else None
+        try:
+            if cl and int(cl) > max_size:
+                return process_response(ResponseModel(
+                    status_code=413,
+                    response_headers={"request_id": request_id},
+                    error_code="REQ002",
+                    error_message="Uploaded file too large"
+                ).dict(), "rest")
+        except Exception:
+            pass
         payload = await auth_required(request)
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username}")

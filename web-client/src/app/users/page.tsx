@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 
 interface User {
   username: string
@@ -31,18 +32,8 @@ const UsersPage = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`http://localhost:3002/platform/user/all`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
-        }
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load users')
-      }
-      const data = await response.json()
+      const { fetchJson } = await import('@/utils/http')
+      const data: any = await fetchJson(`${SERVER_URL}/platform/user/all`)
       const userList = Array.isArray(data) ? data : (data.users || data.response?.users || [])
       setAllUsers(userList)
       setUsers(userList)
