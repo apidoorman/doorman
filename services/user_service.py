@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+from fastapi import HTTPException
 from models.response_model import ResponseModel
 from utils import password_util
 from utils.database import user_collection, subscriptions_collection, api_collection
@@ -25,7 +26,7 @@ class UserService:
         user = user_collection.find_one({'email': email})
         if user.get('_id'): del user['_id']
         if not user:
-            raise ValueError("User not found")
+            raise HTTPException(status_code=404, detail="User not found")
         return user
 
     @staticmethod
@@ -38,16 +39,16 @@ class UserService:
             if not user:
                 user = user_collection.find_one({'username': username})
                 if not user:
-                    raise ValueError("User not found in database")
+                    raise HTTPException(status_code=404, detail="User not found")
                 if user.get('_id'): del user['_id']
                 if user.get('password'): del user['password']
                 pygate_cache.set_cache('user_cache', username, user)
             if not user:
-                raise ValueError("User not found")
+                raise HTTPException(status_code=404, detail="User not found")
             pygate_cache.set_cache('user_cache', username, user)
             return user
         except Exception as e:
-            raise ValueError("User not found error" + str(e))
+            raise HTTPException(status_code=404, detail="User not found")
         
     @staticmethod
     async def get_user_by_username(username, request_id):
@@ -78,7 +79,7 @@ class UserService:
         logger.info(f"{request_id} | User retrieval successful")
         return ResponseModel(
             status_code=200,
-            data=user
+            response=user
         ).dict()
 
     @staticmethod
@@ -102,7 +103,7 @@ class UserService:
         logger.info(f"{request_id} | User retrieval successful")
         return ResponseModel(
             status_code=200,
-            data=user
+            response=user
         ).dict()
 
     @staticmethod
@@ -154,10 +155,10 @@ class UserService:
         try:
             user = await UserService.get_user_by_email_with_password_helper(email)
             if not password_util.verify_password(password, user.get('password')):
-                raise ValueError("Invalid email or password")
+                HTTPException(status_code=400, detail="Invalid email or password")
             return user
         except Exception as e:
-            raise ValueError("Authentication failed")
+            HTTPException(status_code=400, detail="Invalid email or password")
 
     @staticmethod
     async def update_user(username, update_data, request_id):
@@ -185,7 +186,7 @@ class UserService:
                 return ResponseModel(
                     status_code=400,
                     error_code='USR004',
-                    error_message='Database error: Unable to update user'
+                    error_message='Unable to update user'
                 ).dict()
         if non_null_update_data.get('role'):
             await UserService.purge_apis_after_role_change(username, request_id)
@@ -217,7 +218,7 @@ class UserService:
             return ResponseModel(
                 status_code=400,
                 error_code='USR003',
-                error_message='Database error: Unable to delete user'
+                error_message='Unable to delete user'
             ).dict()
         pygate_cache.delete_cache('user_cache', username)
         pygate_cache.delete_cache('user_subscription_cache', username)
@@ -268,15 +269,16 @@ class UserService:
         """
         logger.info(f"{request_id} | Purging APIs for user: {username}")
         user_subscriptions = pygate_cache.get_cache('user_subscription_cache', username) or subscriptions_collection.find_one({'username': username})
-        for subscription in user_subscriptions.get('apis'):
-            api_name, api_version = subscription.split('/')
-            user = pygate_cache.get_cache('user_cache', username) or user_collection.find_one({'username': username})
-            api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}") or api_collection.find_one({'api_name': api_name, 'api_version': api_version})
-            if api and api.get('role') and user.get('role') not in api.get('role'):
-                user_subscriptions['apis'].remove(subscription)
-        subscriptions_collection.update_one(
-            {'username': username},
-            {'$set': {'apis': user_subscriptions.get('apis', [])}}
-        )
-        pygate_cache.set_cache('user_subscription_cache', username, user_subscriptions)
+        if user_subscriptions:
+            for subscription in user_subscriptions.get('apis'):
+                api_name, api_version = subscription.split('/')
+                user = pygate_cache.get_cache('user_cache', username) or user_collection.find_one({'username': username})
+                api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}") or api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+                if api and api.get('role') and user.get('role') not in api.get('role'):
+                    user_subscriptions['apis'].remove(subscription)
+            subscriptions_collection.update_one(
+                {'username': username},
+                {'$set': {'apis': user_subscriptions.get('apis', [])}}
+            )
+            pygate_cache.set_cache('user_subscription_cache', username, user_subscriptions)
         logger.info(f"{request_id} | Purge successful")

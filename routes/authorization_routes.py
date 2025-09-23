@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 
+from models.response_model import ResponseModel
 from services.user_service import UserService
 from utils.token_util import create_access_token
 from utils.auth_util import auth_required
@@ -27,8 +28,22 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 @authorization_router.post("/authorization",
-    description="Create authorization token",)
-async def login(request: Request, Authorize: AuthJWT = Depends()):
+    description="Create authorization token",
+    response_model=ResponseModel,
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "access_token": "******************"
+                    }
+                }
+            }
+        }
+    }
+)
+async def authorization(request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -47,16 +62,15 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
         if not user:
             logger.error(f"{request_id} | Invalid email or password")
             raise HTTPException(
-                status_code=401,
+                status_code=400,
                 detail="Invalid email or password"
             )
         access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize, False)
         response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
+        response.delete_cookie("access_token_cookie")
+        response.set_cookie("access_token_cookie", access_token, httponly=True)
         Authorize.set_access_cookies(access_token, response)
         return response
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -68,8 +82,22 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
     description="Create authorization refresh token",
     dependencies=[
         Depends(auth_required)
-    ])
-async def extended_login(request: Request, Authorize: AuthJWT = Depends()):
+    ],
+    response_model=ResponseModel,
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "refresh_token": "******************"
+                    }
+                }
+            }
+        }
+    }
+)
+async def extended_authorization(request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -79,14 +107,12 @@ async def extended_login(request: Request, Authorize: AuthJWT = Depends()):
         user = await UserService.get_user_by_username_helper(username)
         refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
         response = JSONResponse(content={"refresh_token": refresh_token}, media_type="application/json")
+        response.delete_cookie("access_token_cookie")
         Authorize.set_access_cookies(refresh_token, response)
         return response
     except AuthJWTException as e:
         logging.error(f"Token refresh failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during token refresh"})
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -98,8 +124,22 @@ async def extended_login(request: Request, Authorize: AuthJWT = Depends()):
     description="Get authorization token status",
     dependencies=[
         Depends(auth_required)
-    ])
-async def status(request: Request, Authorize: AuthJWT = Depends()):
+    ],
+    response_model=ResponseModel,
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "authorized"
+                    }
+                }
+            }
+        }
+    }
+)
+async def authorization_status(request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -108,9 +148,6 @@ async def status(request: Request, Authorize: AuthJWT = Depends()):
         return JSONResponse(content={"status": "authorized"}, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid token")
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)
@@ -122,26 +159,41 @@ async def status(request: Request, Authorize: AuthJWT = Depends()):
     description="Invalidate authorization token",
     dependencies=[
         Depends(auth_required)
-    ])
-async def logout(response: Response, request: Request, Authorize: AuthJWT = Depends()):
+    ],
+    response_model=ResponseModel,
+    responses={
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Your token has been invalidated"
+                    }
+                }
+            }
+        }
+    }
+)
+async def authorization_invalidate(response: Response, request: Request, Authorize: AuthJWT = Depends()):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        jwt_id = Authorize.get_raw_jwt()['jti']
+        Authorize.jwt_required()
         user = Authorize.get_jwt_subject()
-        Authorize.unset_jwt_cookies(response)
+        jti = Authorize.get_raw_jwt()["jti"]
         if user not in jwt_blacklist:
             jwt_blacklist[user] = TimedHeap()
-        jwt_blacklist[user].push(jwt_id)
-        return JSONResponse(content={"message": "Your token has been invalidated"}, status_code=200)
+        await jwt_blacklist[user].push(jti)
+        response = JSONResponse(content={"message": "Your token has been invalidated"}, status_code=200)
+        response.delete_cookie("access_token_cookie")
+        response.delete_cookie("refresh_token_cookie")
+        response.delete_cookie("csrf_access_token")
+        return response
     except AuthJWTException as e:
         logging.error(f"Logout failed: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})
-    except ValueError as e:
-        logger.error(f"{request_id} | Error: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(content={"error": "An unexpected error occurred"}, status_code=500)

@@ -24,11 +24,9 @@ async def validate_platform_role(role_name, action):
         if not role:
             role = role_collection.find_one({"role_name": role_name})
             if not role:
-                raise ValueError("Role not found")
+                HTTPException(status_code=404, detail="Role not found")
             if role.get("_id"): del role["_id"]
             pygate_cache.set_cache("role_cache", role_name, role)
-        if not role:
-            raise ValueError("No roles found for validation")
         if action == "manage_users" and role.get("manage_users"):
             return True
         elif action == "manage_apis" and role.get("manage_apis"):
@@ -47,7 +45,6 @@ async def validate_platform_role(role_name, action):
             return True
         return False
     except Exception as e:
-        logger.error(f"Error getting platform roles: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 async def platform_role_required_bool(username, action):

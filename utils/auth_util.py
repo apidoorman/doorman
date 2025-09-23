@@ -18,12 +18,15 @@ async def auth_required(Authorize: AuthJWT = Depends()):
     try:
         Authorize.jwt_required()
         jwt_subject = Authorize.get_jwt_subject()
-        jwt_id = Authorize.get_raw_jwt()['jti']
-        if jwt_subject in jwt_blacklist and jwt_id in jwt_blacklist[jwt_subject]:
-            raise HTTPException(
-                status_code=401,
-                detail="Token has been revoked"
-            )
+        jti = Authorize.get_raw_jwt()["jti"]
+        if jwt_subject in jwt_blacklist:
+            timed_heap = jwt_blacklist[jwt_subject]
+            for _, token_jti in timed_heap.heap:
+                if token_jti == jti:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Token has been revoked"
+                    )
     except Exception as e:
         logger.error(f"Unauthorized access: {e}")
         raise HTTPException(status_code=401, detail="Unauthorized")
