@@ -24,6 +24,7 @@ class CreateUserModel(BaseModel):
     throttle_queue_limit: Optional[int] = Field(None, ge=0, description="Throttle queue limit for the user", example=10)
     custom_attributes: Optional[dict] = Field(None, description="Custom attributes for the user", example={"custom_key": "custom_value"})
     active: Optional[bool] = Field(True, description="Active status of the user", example=True)
+    ui_access: Optional[bool] = Field(False, description="UI access for the user", example=False)
 
     class Config:
         arbitrary_types_allowed = True

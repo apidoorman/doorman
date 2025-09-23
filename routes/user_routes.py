@@ -5,8 +5,7 @@ See https://github.com/pypeople-dev/doorman for more information
 """
 
 from typing import List
-from fastapi import APIRouter, Depends, Request
-from fastapi_jwt_auth import AuthJWT
+from fastapi import APIRouter, Request
 
 from models.response_model import ResponseModel
 from models.user_model_response import UserModelResponse
@@ -29,9 +28,6 @@ logger = logging.getLogger("doorman.gateway")
 
 @user_router.post("",
     description="Add user",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -46,13 +42,15 @@ logger = logging.getLogger("doorman.gateway")
         }
     }
 )
-async def create_user(user_data: CreateUserModel, request: Request, Authorize: AuthJWT = Depends()):
+async def create_user(user_data: CreateUserModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
+        if not await platform_role_required_bool(username, 'manage_users'):
             return process_response(
                 ResponseModel(
                     status_code=403,
@@ -76,9 +74,6 @@ async def create_user(user_data: CreateUserModel, request: Request, Authorize: A
 
 @user_router.put("/{username}",
     description="Update user",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -93,13 +88,15 @@ async def create_user(user_data: CreateUserModel, request: Request, Authorize: A
         }
     }
 )
-async def update_user(username: str, api_data: UpdateUserModel, request: Request, Authorize: AuthJWT = Depends()):
+async def update_user(username: str, api_data: UpdateUserModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        auth_username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not Authorize.get_jwt_subject() == username and not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
+        if not auth_username == username and not await platform_role_required_bool(auth_username, 'manage_users'):
             return process_response(
                 ResponseModel(
                     status_code=403,
@@ -123,9 +120,6 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
     
 @user_router.delete("/{username}",
     description="Delete user",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -140,13 +134,15 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
         }
     }
 )
-async def delete_user(username: str, request: Request, Authorize: AuthJWT = Depends()):
+async def delete_user(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        auth_username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not Authorize.get_jwt_subject() == username and not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
+        if not auth_username == username and not await platform_role_required_bool(auth_username, 'manage_users'):
             return process_response(
                 ResponseModel(
                     status_code=403, 
@@ -170,9 +166,6 @@ async def delete_user(username: str, request: Request, Authorize: AuthJWT = Depe
 
 @user_router.put("/{username}/update-password",
     description="Update user password",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=ResponseModel,
     responses={
         200: {
@@ -187,13 +180,15 @@ async def delete_user(username: str, request: Request, Authorize: AuthJWT = Depe
         }
     }
 )
-async def update_user_password(username: str, api_data: UpdatePasswordModel, request: Request, Authorize: AuthJWT = Depends()):
+async def update_user_password(username: str, api_data: UpdatePasswordModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        auth_username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not Authorize.get_jwt_subject() == username and not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
+        if not auth_username == username and not await platform_role_required_bool(auth_username, 'manage_users'):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
@@ -219,18 +214,17 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
 
 @user_router.get("/{username}",
     description="Get user by username",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=UserModelResponse
 )
-async def get_user_by_username(username: str, request: Request, Authorize: AuthJWT = Depends()):
+async def get_user_by_username(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        auth_username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not Authorize.get_jwt_subject == username and not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
+        if not auth_username == username and not await platform_role_required_bool(auth_username, 'manage_users'):
             return process_response(
                 ResponseModel(
                     status_code=403,
@@ -254,18 +248,17 @@ async def get_user_by_username(username: str, request: Request, Authorize: AuthJ
 
 @user_router.get("/email/{email}",
     description="Get user by email",
-    dependencies=[
-        Depends(auth_required)
-    ],
     response_model=List[UserModelResponse]
 )
-async def get_user_by_email(email: str, request: Request, Authorize: AuthJWT = Depends()):
+async def get_user_by_email(email: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
+        payload = await auth_required(request)
+        username = payload.get("sub")
+        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return process_response(await UserService.get_user_by_email(Authorize.get_jwt_subject(), email, request_id), "rest")
+        return process_response(await UserService.get_user_by_email(username, email, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(

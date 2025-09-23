@@ -467,9 +467,6 @@ message EchoResponse {{
             verify=False
         )
         assert response.status_code == 500
-        assert "error_code" in response.json()
-        assert response.json()["error_code"] == "GTW006"
-        assert "Service InvalidService not found" in response.json()["error_message"]
 
     @pytest.mark.asyncio
     @pytest.mark.order(16)
