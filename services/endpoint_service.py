@@ -6,10 +6,10 @@ See https://github.com/pypeople-dev/pygate for more information
 
 from models.response_model import ResponseModel
 from models.update_endpoint_model import UpdateEndpointModel
-from utils.database import db
-from utils.cache import cache_manager
-from services.cache import pygate_cache
-from models.endpoint_model import EndpointModel
+from utils.database import endpoint_collection, api_collection
+from utils.cache_manager_util import cache_manager
+from utils.pygate_cache_util import pygate_cache
+from models.create_endpoint_model import CreateEndpointModel
 
 import uuid
 import logging
@@ -18,17 +18,15 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 class EndpointService:
-    endpoint_collection = db.endpoints
-    apis_collection = db.apis
 
     @staticmethod
-    async def create_endpoint(data: EndpointModel, request_id):
+    async def create_endpoint(data: CreateEndpointModel, request_id):
         """
         Create an endpoint for an API.
         """
         logger.info(request_id + " | Creating endpoint: " + data.api_name + " " + data.api_version + " " + data.endpoint_uri)
         cache_key = f"/{data.endpoint_method}/{data.api_name}/{data.api_version}/{data.endpoint_uri}".replace("//", "/")
-        if pygate_cache.get_cache('endpoint_cache', cache_key) or EndpointService.endpoint_collection.find_one({
+        if pygate_cache.get_cache('endpoint_cache', cache_key) or endpoint_collection.find_one({
             'api_name': data.api_name,
             'api_version': data.api_version,
             'endpoint_uri': data.endpoint_uri
@@ -41,7 +39,7 @@ class EndpointService:
             ).dict()
         data.api_id = pygate_cache.get_cache('api_id_cache', data.api_name + data.api_version)
         if not data.api_id:
-            api = EndpointService.apis_collection.find_one({"api_name": data.api_name, "api_version": data.api_version})
+            api = api_collection.find_one({"api_name": data.api_name, "api_version": data.api_version})
             if not api:
                 logger.error(request_id + " | Endpoint creation failed with code END002")
                 return ResponseModel(
@@ -53,7 +51,7 @@ class EndpointService:
             pygate_cache.set_cache('api_id_cache', f"{data.api_name}/{data.api_version}", data.api_id)
         data.endpoint_id = str(uuid.uuid4())
         endpoint_dict = data.dict()
-        insert_result = EndpointService.endpoint_collection.insert_one(endpoint_dict)
+        insert_result = endpoint_collection.insert_one(endpoint_dict)
         if not insert_result.acknowledged:
             logger.error(request_id + " | Endpoint creation failed with code END003")
             return ResponseModel(
@@ -85,7 +83,7 @@ class EndpointService:
         cache_key = f"/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
         endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
         if not endpoint:
-            endpoint = EndpointService.endpoint_collection.find_one({
+            endpoint = endpoint_collection.find_one({
                 'api_name': api_name,
                 'api_version': api_version,
                 'endpoint_uri': endpoint_uri,
@@ -102,7 +100,7 @@ class EndpointService:
             pygate_cache.delete_cache('endpoint_cache', cache_key)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
-            update_result = EndpointService.endpoint_collection.update_one({
+            update_result = endpoint_collection.update_one({
                     'api_name': api_name,
                     'api_version': api_version,
                     'endpoint_uri': endpoint_uri,
@@ -141,7 +139,7 @@ class EndpointService:
         cache_key = f"/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
         endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
         if not endpoint:
-            endpoint = EndpointService.endpoint_collection.find_one({
+            endpoint = endpoint_collection.find_one({
                 'api_name': api_name,
                 'api_version': api_version,
                 'endpoint_uri': endpoint_uri,
@@ -154,7 +152,7 @@ class EndpointService:
                     error_code='END004',
                     error_message='Endpoint does not exist for the requested API name, version and URI'
                 ).dict()
-        delete_result = EndpointService.endpoint_collection.delete_one({
+        delete_result = endpoint_collection.delete_one({
             'api_name': api_name,
             'api_version': api_version,
             'endpoint_uri': endpoint_uri,
@@ -183,7 +181,7 @@ class EndpointService:
         logger.info(request_id + " | Getting: " + api_name + " " + api_version + " " + endpoint_uri)
         endpoint = pygate_cache.get_cache('endpoint_cache', f"{api_name}/{api_version}/{endpoint_uri}")
         if not endpoint:
-            endpoint = EndpointService.endpoint_collection.find_one({
+            endpoint = endpoint_collection.find_one({
             'api_name': api_name,
             'api_version': api_version,
             'endpoint_uri': endpoint_uri,
@@ -213,7 +211,7 @@ class EndpointService:
         Get all endpoints by API name and version.
         """
         logger.info(request_id + " | Getting: " + api_name + " " + api_version)
-        cursor = EndpointService.endpoint_collection.find({
+        cursor = endpoint_collection.find({
             'api_name': api_name,
             'api_version': api_version
         })

@@ -6,10 +6,10 @@ See https://github.com/pypeople-dev/pygate for more information
 
 from models.response_model import ResponseModel
 from models.update_group_model import UpdateGroupModel
-from utils.database import db
-from utils.cache import cache_manager
-from services.cache import pygate_cache
-from models.group_model import GroupModel
+from utils.database import group_collection
+from utils.cache_manager_util import cache_manager
+from utils.pygate_cache_util import pygate_cache
+from models.create_group_model import CreateGroupModel
 from pymongo.errors import DuplicateKeyError
 
 import logging
@@ -18,10 +18,9 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 class GroupService:
-    group_collection = db.groups
 
     @staticmethod
-    async def create_group(data: GroupModel, request_id):
+    async def create_group(data: CreateGroupModel, request_id):
         """
         Onboard a group to the platform.
         """
@@ -34,7 +33,7 @@ class GroupService:
             ).dict()
         group_dict = data.dict()
         try:
-            insert_result = GroupService.group_collection.insert_one(group_dict)
+            insert_result = group_collection.insert_one(group_dict)
             if not insert_result.acknowledged:
                 logger.error(request_id + " | Group creation failed with code GRP002")
                 return ResponseModel(
@@ -71,7 +70,7 @@ class GroupService:
             ).dict()
         group = pygate_cache.get_cache('group_cache', group_name)
         if not group:
-            group = GroupService.group_collection.find_one({
+            group = group_collection.find_one({
                 'group_name': group_name
             })
             if not group:
@@ -85,7 +84,7 @@ class GroupService:
             pygate_cache.delete_cache('group_cache', group_name)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
-            update_result = GroupService.group_collection.update_one(
+            update_result = group_collection.update_one(
                 {'group_name': group_name},
                 {'$set': not_null_data}
             )
@@ -117,7 +116,7 @@ class GroupService:
         logger.info(request_id + " | Deleting group: " + group_name)
         group = pygate_cache.get_cache('group_cache', group_name)
         if not group:
-            group = GroupService.group_collection.find_one({
+            group = group_collection.find_one({
                 'group_name': group_name
             })
             if not group:
@@ -127,7 +126,7 @@ class GroupService:
                     error_code='GRP003',
                     error_message='Group does not exist'
                 ).dict()
-        delete_result = GroupService.group_collection.delete_one({'group_name': group_name})
+        delete_result = group_collection.delete_one({'group_name': group_name})
         if not delete_result.acknowledged:
             logger.error(request_id + " | Group deletion failed with code GRP002")
             return ResponseModel(
@@ -148,7 +147,7 @@ class GroupService:
         """
         Check if a group exists.
         """
-        if pygate_cache.get_cache('group_cache', data.get('group_name')) or GroupService.group_collection.find_one({'group_name': data.get('group_name')}):
+        if pygate_cache.get_cache('group_cache', data.get('group_name')) or group_collection.find_one({'group_name': data.get('group_name')}):
             return True
         return False
 
@@ -160,7 +159,7 @@ class GroupService:
         """
         logger.info(request_id + " | Getting groups: Page=" + str(page) + " Page Size=" + str(page_size))
         skip = (page - 1) * page_size
-        cursor = GroupService.group_collection.find().sort('group_name', 1).skip(skip).limit(page_size)
+        cursor = group_collection.find().sort('group_name', 1).skip(skip).limit(page_size)
         groups = cursor.to_list(length=None)
         if not groups:
             logger.error(request_id + " | Groups retrieval failed with code GRP002")
@@ -186,7 +185,7 @@ class GroupService:
         logger.info(request_id + " | Getting group: " + group_name)
         group = pygate_cache.get_cache('group_cache', group_name)
         if not group:
-            group = GroupService.group_collection.find_one({'group_name': group_name})
+            group = group_collection.find_one({'group_name': group_name})
             if not group:
                 logger.error(request_id + " | Group retrieval failed with code GRP003")
                 return ResponseModel(

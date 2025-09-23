@@ -5,10 +5,10 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 from models.response_model import ResponseModel
-from models.routing_model import RoutingModel
+from models.create_routing_model import CreateRoutingModel
 from models.update_routing_model import UpdateRoutingModel
-from utils.database import db
-from services.cache import pygate_cache
+from utils.database import routing_collection
+from utils.pygate_cache_util import pygate_cache
 from pymongo.errors import DuplicateKeyError
 
 import uuid
@@ -18,10 +18,9 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("pygate.gateway")
 
 class RoutingService:
-    routing_collection = db.routings
 
     @staticmethod
-    async def create_routing(data: RoutingModel, request_id):
+    async def create_routing(data: CreateRoutingModel, request_id):
         """
         Onboard a routing to the platform.
         """
@@ -37,7 +36,7 @@ class RoutingService:
             ).dict()
         routing_dict = data.dict()
         try:
-            insert_result = RoutingService.routing_collection.insert_one(routing_dict)
+            insert_result = routing_collection.insert_one(routing_dict)
             if not insert_result.acknowledged:
                 logger.error(request_id + " | Routing creation failed with code ROUT002")
                 return ResponseModel(
@@ -75,7 +74,7 @@ class RoutingService:
             ).dict()
         routing = pygate_cache.get_cache('client_routing_cache', client_key)
         if not routing:
-            routing = RoutingService.routing_collection.find_one({
+            routing = routing_collection.find_one({
                 'client_key': client_key
             })
             if not routing:
@@ -89,7 +88,7 @@ class RoutingService:
             pygate_cache.delete_cache('client_routing_cache', client_key)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
-            update_result = RoutingService.routing_collection.update_one({'client_key': client_key}, {'$set': not_null_data})
+            update_result = routing_collection.update_one({'client_key': client_key}, {'$set': not_null_data})
             if not update_result.acknowledged or update_result.modified_count == 0:
                 logger.error(request_id + " | Routing update failed with code ROUT006")
                 return ResponseModel(
@@ -118,7 +117,7 @@ class RoutingService:
         logger.info(request_id + " | Deleting: " + client_key)
         routing = pygate_cache.get_cache('client_routing_cache', client_key)
         if not routing:
-            routing = RoutingService.routing_collection.find_one({
+            routing = routing_collection.find_one({
                 'client_key': client_key
             })
             if not routing:
@@ -130,7 +129,7 @@ class RoutingService:
                 ).dict()
         else:
             pygate_cache.delete_cache('client_routing_cache', client_key)
-        delete_result = RoutingService.routing_collection.delete_one({'client_key': client_key})
+        delete_result = routing_collection.delete_one({'client_key': client_key})
         if not delete_result.acknowledged or delete_result.deleted_count == 0:
             logger.error(request_id + " | Routing deletion failed with code ROUT008")
             return ResponseModel(
@@ -152,7 +151,7 @@ class RoutingService:
         logger.info(request_id + " | Getting: " + client_key)
         routing = pygate_cache.get_cache('client_routing_cache', client_key)
         if not routing:
-            routing = RoutingService.routing_collection.find_one({
+            routing = routing_collection.find_one({
                 'client_key': client_key
             })
             if not routing:
@@ -176,7 +175,7 @@ class RoutingService:
         """
         logger.info(request_id + " | Getting routings: Page=" + str(page) + " Page Size=" + str(page_size))
         skip = (page - 1) * page_size
-        cursor = RoutingService.routing_collection.find().sort('client_key', 1).skip(skip).limit(page_size)
+        cursor = routing_collection.find().sort('client_key', 1).skip(skip).limit(page_size)
         routings = cursor.to_list(length=None)
         if not routings:
             logger.error(request_id + " | Routing retrieval failed with code ROUT002")
