@@ -1,5 +1,5 @@
 
-![Logo](https://i.ibb.co/Y5T8g9y/pygate-logo-white.png)
+![Logo](https://i.ibb.co/5WVvCfkx/doorman-logo.png)
 
 ##
 
@@ -7,12 +7,12 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 ![Release](https://img.shields.io/badge/release-pre--release-orange)
-![Last Commit](https://img.shields.io/github/last-commit/pypeople-dev/pygate)
-![GitHub issues](https://img.shields.io/github/issues/pypeople-dev/pygate)
+![Last Commit](https://img.shields.io/github/last-commit/apidoorman/doorman)
+![GitHub issues](https://img.shields.io/github/issues/apidoorman/doorman)
 
 A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs. Fully managed with built-in RESTful APIs for configuration and control. This is your application’s gateway to the world.
 
-🔗 [pygate.org](https://pygate.org)
+🔗 [doorman.so](https://doorman.so)
 
 No specialized low-level language expertise required. Just a simple, cost-effective API Gateway built in Python. 🐍
 
@@ -38,24 +38,24 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 
 
 ## Releases
-- [v0.0.1- REST, AI, and SOAP API Support](https://github.com/pygate-dev/pygate/releases) (29 April 2025)
+- [v0.0.1- REST, AI, and SOAP API Support](https://github.com/apidoorman/doorman/releases) (29 April 2025)
 
 
 ## Documentation
-🔗 [API documentation](https://pygate.org/docs)
+🔗 [API documentation](https://doorman.so/docs)
 
-🔗 [Postman collection](https://pygate.org/pygate-postman-collection.json)
+🔗 [Postman collection](https://doorman.so/doorman-postman-collection.json)
 
-🔗 [OpenAPI swagger](https://pygate.org/openapi.json)
+🔗 [OpenAPI swagger](https://doorman.so/openapi.json)
 
 
 ## Installation
 Ensure you have a MongoDB server and redis running.
 
-Clone pygate repository
+Clone Doorman repository
 
 ```bash
-  git clone https://github.com/pygate-dev/pygate.git
+  git clone https://github.com/apidoorman/doorman.git
 ```
 
 Install requirements
@@ -99,30 +99,30 @@ THREADS=4
 DEV_RELOAD=False # Helpful when running in console for debug
 SSL_CERTFILE=./certs/localhost.crt # Update to your cert path if using HTTPS_ONlY
 SSL_KEYFILE=./certs/localhost.key # Update to your key path if using HTTPS_ONlY
-PID_FILE=pygate.pid
+PID_FILE=Doorman.pid
 ```
 
-Start pygate background process
+Start Doorman background process
     
 ```bash
-  python pygate.py start
+  python doorman.py start
 ```
 
-Stop pygate background process
+Stop Doorman background process
     
 ```bash
-  python pygate.py stop
+  python doorman.py stop
 ```
 
-Run pygate console instance
+Run Doorman console instance
     
 ```bash
-  python pygate.py run
+  python doorman.py run
 ```
 
 
 ## License Information
-The contents of this repository are property of pygate.org.
+The contents of this repository are property of doorman.so.
 
 Review the Apache License 2.0 for valid authorization of use.
 

@@ -1,14 +1,14 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 import redis
 import json
 import os
 
-class PygateCacheManager:
+class DoormanCacheManager:
     def __init__(self):
         redis_host = os.getenv("REDIS_HOST")
         redis_port = int(os.getenv("REDIS_PORT"))
@@ -90,28 +90,28 @@ class PygateCacheManager:
         try:
             test_key = "health_check_test"
             test_value = "test"
-            pygate_cache.set_cache(test_key, test_key, test_value)
-            retrieved_value = pygate_cache.get_cache(test_key, test_key)
-            pygate_cache.delete_cache(test_key, test_key)
+            doorman_cache.set_cache(test_key, test_key, test_value)
+            retrieved_value = doorman_cache.get_cache(test_key, test_key)
+            doorman_cache.delete_cache(test_key, test_key)
             return retrieved_value == test_value
         except Exception:
             return False
 
-pygate_cache = PygateCacheManager()
+doorman_cache = DoormanCacheManager()
 
 """
 # Example usage
-pygate_cache = PygateCacheManager()
+doorman_cache = DoormanCacheManager()
 
 # Setting values
-pygate_cache.set_cache('api_cache', 'api_name/v1', {'data': 'example'})
+doorman_cache.set_cache('api_cache', 'api_name/v1', {'data': 'example'})
 
 # Getting values
-print(pygate_cache.get_cache('api_cache', 'api_name/v1'))
+print(doorman_cache.get_cache('api_cache', 'api_name/v1'))
 
 # Deleting a key
-pygate_cache.delete_cache('api_cache', 'api_name/v1')
+doorman_cache.delete_cache('api_cache', 'api_name/v1')
 
 # Clearing an entire cache
-pygate_cache.clear_cache('api_cache')
+doorman_cache.clear_cache('api_cache')
 """

@@ -1,7 +1,7 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 import os
@@ -9,7 +9,7 @@ from models.response_model import ResponseModel
 from utils import api_util, routing_util
 from utils import token_util
 from utils.gateway_utils import get_headers
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from utils.token_util import deduct_ai_token, get_token_api_heaeder
 
 import json
@@ -20,7 +20,7 @@ import time
 import httpx
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 class GatewayService:
 
@@ -64,7 +64,7 @@ class GatewayService:
                 match = re.match(r"([^/]+/v\d+)", request.path)
                 api_name_version = '/' + match.group(1) if match else ""
                 endpoint_uri = re.sub(r"^[^/]+/v\d+/", "", request.path)
-                api_key = pygate_cache.get_cache('api_id_cache', api_name_version)
+                api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
                 api = await api_util.get_api(api_key, api_name_version)
                 if not api:
                     return GatewayService.error_response(request_id, 'GTW001', 'API does not exist for the requested name and version')
@@ -83,10 +83,10 @@ class GatewayService:
                         return GatewayService.error_response(request_id, 'GTW007', 'Client key does not exist in routing')
                     logger.info(f"{request_id} | REST gateway to: {server}")
                 else:
-                    server_index = pygate_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
+                    server_index = doorman_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
                     api_servers = api.get('api_servers') or []
                     server = api_servers[server_index]
-                    pygate_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api_servers))
+                    doorman_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api_servers))
                     logger.info(f"{request_id} | REST gateway to: {server}")
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 method = request.method.upper()
@@ -172,7 +172,7 @@ class GatewayService:
                 match = re.match(r"([^/]+/v\d+)", path)
                 api_name_version = '/' + match.group(1) if match else ""
                 endpoint_uri = re.sub(r"^[^/]+/v\d+/", "", path)
-                api_key = pygate_cache.get_cache('api_id_cache', api_name_version)
+                api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
                 api = await api_util.get_api(api_key, api_name_version)
                 if not api:
                     return GatewayService.error_response(request_id, 'GTW001', 'API does not exist for the requested name and version')
@@ -191,10 +191,10 @@ class GatewayService:
                         return GatewayService.error_response(request_id, 'GTW007', 'Client key does not exist in routing')
                     logger.info(f"{request_id} | SOAP gateway to: {server}")
                 else:
-                    server_index = pygate_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
+                    server_index = doorman_cache.get_cache('endpoint_server_cache', api.get('api_id')) or 0
                     api_servers = api.get('api_servers') or []
                     server = api_servers[server_index]
-                    pygate_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api_servers))
+                    doorman_cache.set_cache('endpoint_server_cache', api.get('api_id'), (server_index + 1) % len(api_servers))
                     logger.info(f"{request_id} | SOAP gateway to: {server}")
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 logger.info(f"{request_id} | SOAP gateway to: {url}")

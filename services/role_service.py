@@ -1,20 +1,20 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 from models.response_model import ResponseModel
 from models.update_role_model import UpdateRoleModel
 from utils.database import role_collection
 from utils.cache_manager_util import cache_manager
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from models.create_role_model import CreateRoleModel
 from pymongo.errors import DuplicateKeyError
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 class RoleService:
 
@@ -24,7 +24,7 @@ class RoleService:
         Onboard a role to the platform.
         """
         logger.info(request_id + " | Creating role: " + data.role_name)
-        if pygate_cache.get_cache('role_cache', data.role_name):
+        if doorman_cache.get_cache('role_cache', data.role_name):
             logger.error(request_id + " | Role creation failed with code ROLE001")
             return ResponseModel(
                 status_code=400,
@@ -45,7 +45,7 @@ class RoleService:
                     error_message='Unable to insert role'
                 ).dict()
             role_dict['_id'] = str(insert_result.inserted_id)
-            pygate_cache.set_cache('role_cache', data.role_name, role_dict)
+            doorman_cache.set_cache('role_cache', data.role_name, role_dict)
             logger.info(request_id + " | Role creation successful")
             return ResponseModel(
                 status_code=201,
@@ -78,7 +78,7 @@ class RoleService:
                 error_code='ROLE005',
                 error_message='Role name cannot be changed'
             ).dict()
-        role = pygate_cache.get_cache('role_cache', role_name)
+        role = doorman_cache.get_cache('role_cache', role_name)
         if not role:
             role = role_collection.find_one({
                 'role_name': role_name
@@ -91,7 +91,7 @@ class RoleService:
                     error_message='Role does not exist'
                 ).dict()
         else:
-            pygate_cache.delete_cache('role_cache', role_name)
+            doorman_cache.delete_cache('role_cache', role_name)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
             update_result = role_collection.update_one({'role_name': role_name}, {'$set': not_null_data})
@@ -124,7 +124,7 @@ class RoleService:
         Delete a role.
         """
         logger.info(request_id + " | Deleting role: " + role_name)
-        role = pygate_cache.get_cache('role_cache', role_name)
+        role = doorman_cache.get_cache('role_cache', role_name)
         if not role:
             role = role_collection.find_one({'role_name': role_name})
             if not role:
@@ -135,7 +135,7 @@ class RoleService:
                     error_message='Role does not exist'
                 ).dict()
         else:
-            pygate_cache.delete_cache('role_cache', role_name)
+            doorman_cache.delete_cache('role_cache', role_name)
         delete_result = role_collection.delete_one({'role_name': role_name})
         if not delete_result.acknowledged:
             logger.error(request_id + " | Role deletion failed with code ROLE008")
@@ -163,7 +163,7 @@ class RoleService:
         """
         Check if a role exists.
         """
-        if pygate_cache.get_cache('role_cache', data.get('role_name')) or role_collection.find_one({'role_name': data.get('role_name')}):
+        if doorman_cache.get_cache('role_cache', data.get('role_name')) or role_collection.find_one({'role_name': data.get('role_name')}):
             return True
         return False
 
@@ -202,7 +202,7 @@ class RoleService:
         Get a role by name.
         """
         logger.info(request_id + " | Getting role: " + role_name)
-        role = pygate_cache.get_cache('role_cache', role_name)
+        role = doorman_cache.get_cache('role_cache', role_name)
         if not role:
             role = role_collection.find_one({'role_name': role_name})
             if not role:
@@ -213,7 +213,7 @@ class RoleService:
                     error_message='Role does not exist'
                 ).dict()
             if role.get('_id'): del role['_id']
-            pygate_cache.set_cache('role_cache', role_name, role)
+            doorman_cache.set_cache('role_cache', role_name, role)
         if role.get('_id'): del role['_id']
         logger.info(request_id + " | Role retrieval successful")
         return ResponseModel(

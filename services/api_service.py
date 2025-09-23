@@ -1,7 +1,7 @@
 """
-The contents of this file are property of pygate.org
+The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/pygate for more information
+See https://github.com/pypeople-dev/doorman for more information
 """
 
 import uuid
@@ -9,13 +9,13 @@ from models.response_model import ResponseModel
 from models.update_api_model import UpdateApiModel
 from utils.database import api_collection
 from utils.cache_manager_util import cache_manager
-from utils.pygate_cache_util import pygate_cache
+from utils.doorman_cache_util import doorman_cache
 from models.create_api_model import CreateApiModel
 
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
-logger = logging.getLogger("pygate.gateway")
+logger = logging.getLogger("doorman.gateway")
 
 class ApiService:
 
@@ -26,7 +26,7 @@ class ApiService:
         """
         logger.info(request_id + " | Creating API: " + data.api_name + " " + data.api_version)
         cache_key = f"{data.api_name}/{data.api_version}"
-        if pygate_cache.get_cache('api_cache', cache_key) or api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version}):
+        if doorman_cache.get_cache('api_cache', cache_key) or api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version}):
             logger.error(request_id + " | API Creation Failed with code API001")
             return ResponseModel(
                 status_code=400, 
@@ -45,8 +45,8 @@ class ApiService:
                 error_message='Unable to insert endpoint'
                 ).dict()
         api_dict['_id'] = str(insert_result.inserted_id)
-        pygate_cache.set_cache('api_cache', data.api_id, api_dict)
-        pygate_cache.set_cache('api_id_cache', data.api_path, data.api_id)
+        doorman_cache.set_cache('api_cache', data.api_id, api_dict)
+        doorman_cache.set_cache('api_id_cache', data.api_path, data.api_id)
         logger.info(request_id + " | API creation successful")
         return ResponseModel(
             status_code=201,
@@ -69,7 +69,7 @@ class ApiService:
                 error_code='API005', 
                 error_message='API name and version cannot be updated'
                 ).dict()
-        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
+        api = doorman_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
             api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
@@ -80,8 +80,8 @@ class ApiService:
                     error_message='API does not exist for the requested name and version'
                     ).dict()
         else:
-            pygate_cache.delete_cache('api_cache', pygate_cache.get_cache('api_id_cache', f"/{api_name}/{api_version}"))
-            pygate_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
+            doorman_cache.delete_cache('api_cache', doorman_cache.get_cache('api_id_cache', f"/{api_name}/{api_version}"))
+            doorman_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
             update_result = api_collection.update_one(
@@ -114,7 +114,7 @@ class ApiService:
         Delete an API from the platform.
         """
         logger.info(request_id + " | Deleting API: " + api_name + " " + api_version)
-        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
+        api = doorman_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
             api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
@@ -132,8 +132,8 @@ class ApiService:
                 error_code='API002', 
                 error_message='Unable to delete endpoint'
                 ).dict()
-        pygate_cache.delete_cache('api_cache', pygate_cache.get_cache('api_id_cache', f"/{api_name}/{api_version}"))
-        pygate_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
+        doorman_cache.delete_cache('api_cache', doorman_cache.get_cache('api_id_cache', f"/{api_name}/{api_version}"))
+        doorman_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
         logger.info(request_id + " | API deletion successful")
         return ResponseModel(
             status_code=200,
@@ -150,7 +150,7 @@ class ApiService:
         Get an API by name and version.
         """
         logger.info(request_id + " | Getting API: " + api_name + " " + api_version)
-        api = pygate_cache.get_cache('api_cache', f"{api_name}/{api_version}")
+        api = doorman_cache.get_cache('api_cache', f"{api_name}/{api_version}")
         if not api:
             api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
@@ -161,7 +161,7 @@ class ApiService:
                     error_message='API does not exist for the requested name and version'
                     ).dict()
             if api.get('_id'): del api['_id']
-            pygate_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
+            doorman_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
         if '_id' in api:
             del api['_id']
         logger.info(request_id + " | API retrieval successful")
