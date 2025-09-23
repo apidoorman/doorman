@@ -4,7 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import uuid
 from fastapi import HTTPException, Depends
 from fastapi_jwt_auth import AuthJWT
@@ -52,6 +52,6 @@ async def auth_required(Authorize: AuthJWT = Depends()):
 def create_access_token(data: dict, Authorize: AuthJWT, refresh: bool = False):
     to_encode = data.copy()
     expire = timedelta(minutes=30) if not refresh else timedelta(days=7)
-    to_encode.update({"exp": datetime.utcnow() + expire, "jti": str(uuid.uuid4())})
+    to_encode.update({"exp": datetime.now(UTC) + expire, "jti": str(uuid.uuid4())})
     encoded_jwt = Authorize.create_access_token(subject=data["sub"], expires_time=expire, user_claims={"role": data.get("role")})
     return encoded_jwt

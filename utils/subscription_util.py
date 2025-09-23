@@ -21,15 +21,21 @@ def subscription_required(request: Request, Authorize: AuthJWT = Depends()):
         full_path = request.url.path
         if full_path.startswith("/api/rest/"):
             prefix = "/api/rest/"
+            path = full_path[len(prefix):]
+            api_and_version = '/'.join(path.split('/')[:2])
         elif full_path.startswith("/api/soap/"):
             prefix = "/api/soap/"
+            path = full_path[len(prefix):]
+            api_and_version = '/'.join(path.split('/')[:2])
+        elif full_path.startswith("/api/graphql/"):
+            api_name = full_path.replace("/api/graphql/", "")
+            api_version = request.headers.get('X-API-Version', 'v1')
+            api_and_version = f"{api_name}/{api_version}"
         else:
             prefix = ""
-        if full_path.startswith(prefix):
-            path = full_path[len(prefix):]
-        else:
-            path = full_path
-        api_and_version = '/'.join(path.split('/')[:2])
+            path = full_path[len(prefix):] if full_path.startswith(prefix) else full_path
+            api_and_version = '/'.join(path.split('/')[:2])
+        
         user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or subscriptions_collection.find_one({'username': username})
         subscriptions = user_subscriptions.get('apis') if user_subscriptions and 'apis' in user_subscriptions else None
         if not subscriptions or api_and_version not in subscriptions:
