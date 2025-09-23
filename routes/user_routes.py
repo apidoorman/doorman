@@ -45,6 +45,21 @@ async def update_user(username: str, api_data: UpdateUserModel, Authorize: AuthJ
         return process_response(await UserService.update_user(username, api_data))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+"""
+Delete user *platform endpoint.
+"""
+@user_router.delete("/{username}",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def delete_user(username: str, Authorize: AuthJWT = Depends()):
+    try:
+        if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
+            raise HTTPException(status_code=403, detail="Can only delete your own account")
+        return process_response(await UserService.delete_user(username))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 """
 Update user *platform endpoint.

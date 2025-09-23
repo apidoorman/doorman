@@ -172,27 +172,59 @@ class UserService:
         """
         Update user information.
         """
-        update_data_dict = update_data.dict()
-        non_null_update_data = {key: value for key, value in update_data_dict.items() if value is not None}
+        user = pygate_cache.get_cache('user_cache', username)
+        if not user:
+            user = UserService.user_collection.find_one({'username': username})
+            if not user:
+                return ResponseModel(
+                    status_code=404,
+                    error_code='USR002',
+                    error_message='User not found'
+                ).dict()
+        else:
+            pygate_cache.delete_cache('user_cache', username)
+        non_null_update_data = {k: v for k, v in update_data.dict().items() if v is not None}
         if non_null_update_data:
-            UserService.user_collection.update_one({'username': username}, {'$set': non_null_update_data})
+            update_result = UserService.user_collection.update_one({'username': username}, {'$set': non_null_update_data})
+            if not update_result.acknowledged or update_result.modified_count == 0:
+                return ResponseModel(
+                    status_code=400,
+                    error_code='USR004',
+                    error_message='Database error: Unable to update user'
+                ).dict()
         if non_null_update_data.get('role'):
             await UserService.purge_apis_after_role_change(username)
-        user = UserService.user_collection.find_one({'username': username})
-        if not user:
-            return ResponseModel(
-                status_code=404,
-                error_code='USR002',
-                error_message='User not found'
-            ).dict()
-        if '_id' in user:
-            del user['_id']
-        if 'password' in user:
-            del user['password']
-        pygate_cache.set_cache('user_cache', username, user)
         return ResponseModel(
             status_code=200,
             message='User updated successfully'
+        ).dict()
+    
+    @staticmethod
+    async def delete_user(username):
+        """
+        Delete a user.
+        """
+        user = pygate_cache.get_cache('user_cache', username)
+        if not user:
+            user = UserService.user_collection.find_one({'username': username})
+            if not user:
+                return ResponseModel(
+                    status_code=404,
+                    error_code='USR002',
+                    error_message='User not found'
+                ).dict()
+        delete_result = UserService.user_collection.delete_one({'username': username})
+        if not delete_result.acknowledged or delete_result.deleted_count == 0:
+            return ResponseModel(
+                status_code=400,
+                error_code='USR003',
+                error_message='Database error: Unable to delete user'
+            ).dict()
+        pygate_cache.delete_cache('user_cache', username)
+        pygate_cache.delete_cache('user_subscription_cache', username)
+        return ResponseModel(
+            status_code=200,
+            message='User deleted successfully'
         ).dict()
 
     @staticmethod
