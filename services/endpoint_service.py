@@ -22,7 +22,7 @@ class EndpointService:
         """
         Create an endpoint for an API.
         """
-        cache_key = f"/{data.api_name}/{data.api_version}/{data.endpoint_uri}".replace("//", "/")
+        cache_key = f"/{data.endpoint_method}/{data.api_name}/{data.api_version}/{data.endpoint_uri}".replace("//", "/")
 
         if pygate_cache.get_cache('endpoint_cache', cache_key) or EndpointService.endpoint_collection.find_one({
             'api_name': data.api_name,
@@ -35,7 +35,7 @@ class EndpointService:
                 error_message='Endpoint already exists for the requested API name, version and URI'
             ).dict()
 
-        data.api_id = pygate_cache.get_cache('api_id_cache', data.api_name + '/' + data.api_version)
+        data.api_id = pygate_cache.get_cache('api_id_cache', data.api_name + data.api_version)
 
         if not data.api_id:
             api = EndpointService.apis_collection.find_one({"api_name": data.api_name, "api_version": data.api_version})
@@ -67,20 +67,21 @@ class EndpointService:
         ).dict()
     
     @staticmethod
-    async def update_endpoint(api_name, api_version, endpoint_uri, data: UpdateEndpointModel):
-        if data.endpoint_method and data.api_name and data.api_name != api_name or data.api_version and data.api_version != api_version or data.endpoint_uri and data.endpoint_uri != endpoint_uri:
+    async def update_endpoint(endpoint_method, api_name, api_version, endpoint_uri, data: UpdateEndpointModel):
+        if data.endpoint_method and data.endpoint_method != endpoint_method or data.api_name and data.api_name != api_name or data.api_version and data.api_version != api_version or data.endpoint_uri and data.endpoint_uri != endpoint_uri:
             return ResponseModel(
                 status_code=400,
                 error_code='END006',
                 error_message='API method, name, version and URI cannot be updated'
             ).dict()
-        cache_key = f"/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
+        cache_key = f"/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
         endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
         if not endpoint:
             endpoint = EndpointService.endpoint_collection.find_one({
-                'api_name': data.api_name,
-                'api_version': data.api_version,
-                'endpoint_uri': data.endpoint_uri
+                'api_name': api_name,
+                'api_version': api_version,
+                'endpoint_uri': endpoint_uri,
+                'endpoint_method': endpoint_method
             })
             if not endpoint:
                 return ResponseModel(
@@ -88,13 +89,21 @@ class EndpointService:
                     error_code='END004',
                     error_message='Endpoint does not exist for the requested API name, version and URI'
                 ).dict()
+        else:
+            pygate_cache.delete_cache('endpoint_cache', cache_key)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
-            update_result = EndpointService.endpoint_collection.update_one(
-                {'api_name': api_name, 'api_version': api_version, 'endpoint_uri': endpoint_uri},
-                {'$set': not_null_data}
+            update_result = EndpointService.endpoint_collection.update_one({
+                    'api_name': api_name,
+                    'api_version': api_version,
+                    'endpoint_uri': endpoint_uri,
+                    'endpoint_method': endpoint_method
+                },
+                {   
+                    '$set': not_null_data
+                }
             )
-            if not update_result.acknowledged:
+            if not update_result.acknowledged or update_result.modified_count == 0:
                 return ResponseModel(
                     status_code=400,
                     error_code='END003',
@@ -112,17 +121,18 @@ class EndpointService:
             ).dict()
         
     @staticmethod
-    async def delete_endpoint(api_name, api_version, endpoint_uri):
+    async def delete_endpoint(endpoint_method, api_name, api_version, endpoint_uri):
         """
         Delete an endpoint for an API.
         """
-        cache_key = f"/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
+        cache_key = f"/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
         endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
         if not endpoint:
             endpoint = EndpointService.endpoint_collection.find_one({
                 'api_name': api_name,
                 'api_version': api_version,
-                'endpoint_uri': endpoint_uri
+                'endpoint_uri': endpoint_uri,
+                'endpoint_method': endpoint_method
             })
             if not endpoint:
                 return ResponseModel(
@@ -133,7 +143,8 @@ class EndpointService:
         delete_result = EndpointService.endpoint_collection.delete_one({
             'api_name': api_name,
             'api_version': api_version,
-            'endpoint_uri': endpoint_uri
+            'endpoint_uri': endpoint_uri,
+            'endpoint_method': endpoint_method
         })
         if not delete_result.acknowledged:
             return ResponseModel(
@@ -149,7 +160,7 @@ class EndpointService:
 
     @staticmethod
     @cache_manager.cached(ttl=300)
-    async def get_endpoint(api_name, api_version, endpoint_uri):
+    async def get_endpoint(endpoint_method, api_name, api_version, endpoint_uri):
         """
         Get an endpoint by API name, version and URI.
         """
@@ -158,7 +169,8 @@ class EndpointService:
             endpoint = EndpointService.endpoint_collection.find_one({
             'api_name': api_name,
             'api_version': api_version,
-            'endpoint_uri': endpoint_uri
+            'endpoint_uri': endpoint_uri,
+            'endpoint_method': endpoint_method
             })
             if not endpoint:
                 return ResponseModel(
