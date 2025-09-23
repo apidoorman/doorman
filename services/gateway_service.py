@@ -87,7 +87,8 @@ class GatewayService:
             return JSONResponse(content=response_content, status_code=response.status_code)
         except Exception as e:
             GatewayService.logger.error(f"REST | {request_id} | Error in rest_gateway: {str(e)}")
-            return {"error": str(e)}
+            GatewayService.logger.info(f'"error: {str(e)}')
+            raise ValueError("Unable to process request")
         finally:
             end_time = time.time() * 1000
             response.headers['X-Request-Id'] = request_id
