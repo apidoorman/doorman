@@ -9,8 +9,6 @@ from fastapi.responses import JSONResponse
 
 from services.role_service import RoleService
 from utils.auth_util import auth_required
-from utils.whitelist_util import whitelist_check
-from utils.role_util import role_required
 from models.role_model import RoleModel
 
 role_router = APIRouter()
