@@ -97,7 +97,7 @@ class GatewayService:
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
             allowed_headers = api.get('api_allowed_headers') or []
-            headers = get_headers(request, allowed_headers)
+            headers = await get_headers(request, allowed_headers)
             if api.get('api_tokens_enabled'):
                 ai_token_headers = await token_util.get_token_api_header(api.get('api_token_group'))
                 if ai_token_headers:
@@ -212,7 +212,7 @@ class GatewayService:
             else:
                 content_type = "text/xml; charset=utf-8"
             allowed_headers = api.get('api_allowed_headers') or []
-            headers = get_headers(request, allowed_headers)
+            headers = await get_headers(request, allowed_headers)
             headers["Content-Type"] = content_type
             if "SOAPAction" not in headers:
                 headers["SOAPAction"] = '""'
