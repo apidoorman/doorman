@@ -198,8 +198,8 @@ def run():
         reload_excludes="venv",
         workers=num_threads,
         log_level="critical",
-        ssl_certfile=os.getenv("SSL_CERTFILE"),
-        ssl_keyfile=os.getenv("SSL_KEYFILE")
+        ssl_certfile=os.getenv("SSL_CERTFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None,
+        ssl_keyfile=os.getenv("SSL_KEYFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None
     )
 
 if __name__ == "__main__":
