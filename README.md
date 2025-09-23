@@ -108,6 +108,10 @@ Run Doorman console instance for debugging
   python doorman.py run
 ```
 
+## Report Issues
+If you run into any bugs or issues. Please email them to:
+jelohsi+haj3mkpsbath11ztqled@app.trello.com
+
 
 ## License Information
 The contents of this repository are property of doorman.so.
