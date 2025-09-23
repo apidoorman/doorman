@@ -46,7 +46,7 @@ async def rest_gateway(path: str, request: Request,
             query_params=dict(request.query_params),
             identity=Authorize.get_jwt_subject()
         )
-        return process_response(await GatewayService.rest_gateway(request_model))
+        return process_response(await GatewayService.rest_gateway(request_model, request_id))
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
     finally:
