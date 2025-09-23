@@ -1,7 +1,7 @@
 """
 The contents of this file are property of doorman.so
 Review the Apache License 2.0 for valid authorization of use
-See https://github.com/pypeople-dev/doorman for more information
+See https://github.com/apidoorman/doorman for more information
 """
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
@@ -98,6 +98,7 @@ async def authorization(request: Request):
         _domain = os.getenv("COOKIE_DOMAIN", None)
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
+        # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
@@ -108,6 +109,7 @@ async def authorization(request: Request):
             domain=safe_domain,
             max_age=1800
         )
+        # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
         response.set_cookie(
             key="access_token_cookie",
             value=access_token,
@@ -381,6 +383,7 @@ async def extended_authorization(request: Request):
         _domain = os.getenv("COOKIE_DOMAIN", None)
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
+        # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
@@ -391,6 +394,7 @@ async def extended_authorization(request: Request):
             domain=safe_domain,
             max_age=604800
         )
+        # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
         response.set_cookie(
             key="access_token_cookie",
             value=refresh_token,

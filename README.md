@@ -6,7 +6,7 @@
 ![api-gateway](https://img.shields.io/badge/API-Gateway-blue)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
-![Release](https://img.shields.io/badge/release-pre--release-orange)
+![Release](https://img.shields.io/badge/release-v1.0.0-brightgreen)
 ![Last Commit](https://img.shields.io/github/last-commit/apidoorman/doorman)
 ![GitHub issues](https://img.shields.io/github/issues/apidoorman/doorman)
 
@@ -18,10 +18,45 @@ A lightweight API gateway built for AI, REST, SOAP, GraphQL, and gRPC APIs. No s
 ![Example](https://i.ibb.co/9dkgPLP/dashboardpage.png)
 
 ## Features
-Doorman supports user management, authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, and mongodb. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
+Doorman supports user management, authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, mongodb, and endpoint request payload validation. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
 
 ## Coming Enhancements
 Doorman will soon support transformation, field encryption, and orchestration. More features to be announced.
+
+## Request Validation
+Doorman can validate request payloads at the endpoint level before proxying to your upstream service.
+
+- Scope: REST (JSON/XML), SOAP, GraphQL, and gRPC (JSON payload for gateway).
+- Configure: Use the platform API to attach a validation schema to an endpoint.
+- Behavior: If validation fails, the gateway responds with 400 and does not call the upstream.
+
+Create a validation schema
+
+```bash
+curl -X POST -b cookies.txt \
+  -H 'Content-Type: application/json' \
+  http://localhost:5001/platform/endpoint/endpoint/validation \
+  -d '{
+        "endpoint_id": "<endpoint_id>",
+        "validation_enabled": true,
+        "validation_schema": {
+          "validation_schema": {
+            "user.name": {"required": true, "type": "string", "min": 2}
+          }
+        }
+      }'
+```
+
+Schema path examples
+- REST (JSON): `user.name`, `items[0].price`
+- SOAP: refer to elements within the SOAP Body operation element (namespaces are stripped). Example: `name` for `<Operation><name>...</name></Operation>`
+- GraphQL: prefix with operation name. Example: `CreateUser.input.name` for `mutation CreateUser($input: UserInput!) { ... }`
+- gRPC (gateway JSON): for `{ "message": { "user": { "name": "..." } } }` use `user.name`
+
+Notes
+- Enable/disable per-endpoint with `validation_enabled`.
+- Schemas are cached and enforced in the gateway path before proxying.
+- On failure, response code is 400 with a concise validation message.
 
 ## Get Started
 Doorman is simple to setup. In production you should run Redis and (optionally) MongoDB. In memory-only mode, Doorman persists encrypted dumps to disk for quick restarts.
@@ -124,7 +159,7 @@ Defaults
 
 ## Docker
 - Compose up: `docker compose up --build`
-- Services: backend (`:5001`), web (`:3000`), redis (`:6379`)
+- Services: backend (`:5001`), web (`:3000`)
 - Secrets: set `JWT_SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `MEM_ENCRYPTION_KEY` via env/secret manager (avoid checking into git)
 - Override backend envs: `docker compose run -e KEY=value backend ...`
 - Reset volumes/logs: `docker compose down -v`
@@ -139,7 +174,7 @@ Smoke checks
 Production notes
 - Use Redis in production (`MEM_OR_EXTERNAL=REDIS`) for distributed rate limiting.
 - In memory-only mode, run a single worker: `THREADS=1`.
-- Optional: set `LOG_FORMAT=json` for structured logs.
+- Prefer `LOG_FORMAT=json` for structured logs.
 
 Production security defaults
 - Set `CORS_STRICT=true` and explicitly whitelist your origins via `ALLOWED_ORIGINS`.
@@ -158,22 +193,6 @@ Quick go-live checklist
 Optional: run `bash scripts/smoke.sh` (uses `BASE_URL`, `STARTUP_ADMIN_EMAIL`, `STARTUP_ADMIN_PASSWORD`).
 
 
-## Web UI
-Utilize the built in web interface for ease of use!
-
-![Create APIs](https://i.ibb.co/j9vQJGL0/apispage.png)
-
-![Custom Routings](https://i.ibb.co/D0CCYGJ/routespage.png)
-
-![Edit Roles](https://i.ibb.co/jk2F7vk8/rolespage.png)
-
-![Add Groups](https://i.ibb.co/1G3jMPvG/groupspage.png)
-
-![User Management](https://i.ibb.co/3y2xVTv5/userspage.png)
-
-![Advanced Logs](https://i.ibb.co/BKvVhW4B/logspage.png)
-
-
 ## License Information
 The contents of this repository are property of doorman.so.
 
@@ -183,8 +202,6 @@ Review the Apache License 2.0 for valid authorization of use.
 
 
 ## Disclaimer
-This project is under active development and is not yet ready for production environments.
-
 Use at your own risk. By using this software, you agree to the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0) and any annotations found in the source code.
 
 ##
