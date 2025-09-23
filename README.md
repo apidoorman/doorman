@@ -34,6 +34,7 @@ No specialized low-level language expertise required. Just a simple, cost-effect
 - 🔜 Transformation
 - 🔜 Field Encryption
 - 🔜 Orchestration
+- 🔜 Open-Soruce UI
 
 ## Coming Enhancements
 
