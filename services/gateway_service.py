@@ -30,7 +30,7 @@ class GatewayService:
         External gateway.
         """
         response = None
-        logger.info(f"{request_id} | REST Gateway Trying Resource: {request.path}")
+        logger.info(f"{request_id} | REST gateway trying resource: {request.path}")
         try:
             match = re.match(r"([^/]+/v\d+)", request.path)
             api_name_version = '/' + match.group(1) if match else ""
@@ -39,7 +39,7 @@ class GatewayService:
             if not api:
                 api = GatewayService.api_collection.find_one({'api_path': api_name_version})
                 if not api:
-                    logger.error(f"{request_id} | REST Gateway failed with code GTW001")
+                    logger.error(f"{request_id} | REST gateway failed with code GTW001")
                     return ResponseModel(
                         status_code=404,
                         error_code='GTW001',
@@ -51,7 +51,7 @@ class GatewayService:
             if not endpoints:
                 endpoints = GatewayService.endpoint_collection.find({'api_id': api.get('api_id')})
                 if not endpoints:
-                    logger.error(f"{request_id} | REST Gateway failed with code GTW002")
+                    logger.error(f"{request_id} | REST gateway failed with code GTW002")
                     return ResponseModel(
                         status_code=404,
                         error_code='GTW002',
@@ -64,7 +64,7 @@ class GatewayService:
                 pygate_cache.set_cache('api_endpoint_cache', api.get('api_id'), api_endpoints)
                 endpoints = api_endpoints
             if not endpoints or not any(re.fullmatch(re.sub(r"\{[^/]+\}", r"([^/]+)", endpoint), request.method + '/' + endpoint_uri) for endpoint in endpoints):
-                logger.error(f"{request_id} | REST Gateway failed with code GTW003")
+                logger.error(f"{request_id} | REST gateway failed with code GTW003")
                 return ResponseModel(
                     status_code=404,
                     error_code='GTW003',
@@ -87,7 +87,7 @@ class GatewayService:
             elif method == 'DELETE':
                 response = requests.delete(url)
             else:
-                logger.error(f"{request_id} | REST Gateway failed with code GTW004")
+                logger.error(f"{request_id} | REST gateway failed with code GTW004")
                 return ResponseModel(
                     status_code=405,
                     error_code='GTW004',
@@ -98,19 +98,19 @@ class GatewayService:
             except requests.exceptions.JSONDecodeError:
                 response_content = response.text
             if response.status_code == 404:
-                logger.error(f"{request_id} | REST Gateway failed with code GTW005")
+                logger.error(f"{request_id} | REST gateway failed with code GTW005")
                 return ResponseModel(
                     status_code=404,
                     error_code='GTW005',
                     error_message='Endpoint does not exist in backend service'
                 ).dict()
-            logger.info(f"{request_id} | REST Gateway Response Successfully Recieved")
+            logger.info(f"{request_id} | REST gateway response successfully recieved")
             return ResponseModel(
                 status_code=response.status_code,
                 response=response_content
             ).dict()
         except Exception as e:
-            logger.error(f"{request_id} | REST Gateway failed with code GTW006")
+            logger.error(f"{request_id} | REST gateway failed with code GTW006")
             return ResponseModel(
                 status_code=500,
                 error_code='GTW006',

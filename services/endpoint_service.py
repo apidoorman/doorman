@@ -26,7 +26,7 @@ class EndpointService:
         """
         Create an endpoint for an API.
         """
-        logger.info(request_id + " | Creating: " + data.api_name + " " + data.api_version + " " + data.endpoint_uri)
+        logger.info(request_id + " | Creating endpoint: " + data.api_name + " " + data.api_version + " " + data.endpoint_uri)
         cache_key = f"/{data.endpoint_method}/{data.api_name}/{data.api_version}/{data.endpoint_uri}".replace("//", "/")
         if pygate_cache.get_cache('endpoint_cache', cache_key) or EndpointService.endpoint_collection.find_one({
             'api_name': data.api_name,
@@ -74,7 +74,7 @@ class EndpointService:
     
     @staticmethod
     async def update_endpoint(endpoint_method, api_name, api_version, endpoint_uri, data: UpdateEndpointModel, request_id):
-        logger.info(request_id + " | Updating: " + api_name + " " + api_version + " " + endpoint_uri)
+        logger.info(request_id + " | Updating endpoint: " + api_name + " " + api_version + " " + endpoint_uri)
         if data.endpoint_method and data.endpoint_method != endpoint_method or data.api_name and data.api_name != api_name or data.api_version and data.api_version != api_version or data.endpoint_uri and data.endpoint_uri != endpoint_uri:
             logger.error(request_id + " | Endpoint update failed with code END006")
             return ResponseModel(
