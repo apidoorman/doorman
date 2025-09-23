@@ -17,25 +17,11 @@ const LoginPage = () => {
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
 
-  const pylogin_server = process.env.NEXT_PUBLIC_PYLOGIN_SERVER;
-
-  interface LoginResponse {
-    detail?: string;
-    server?: string;
-    username?: string;
-  }
-
   const handleLogin = async (e: React.MouseEvent<HTMLButtonElement>): Promise<void> => {
     e.preventDefault();
 
-    let server;
-
-    var organization = email.substring(email.lastIndexOf("@") +1);
-
     try {
-      server = "http://localhost:3002";
-
-      const authResponse = await fetch(`${server}/platform/authorization`, {
+      const authResponse = await fetch(`http://localhost:3002/platform/authorization`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -46,16 +32,23 @@ const LoginPage = () => {
       });
 
       if (authResponse.ok) {
-        const authData = await authResponse.json();
-        if (authData.token) {
-          localStorage.setItem('authToken', authData.token);
+        const data = await authResponse.json();
+        if (data.access_token) {
+          // Set the cookie with the access token
+          document.cookie = `access_token_cookie=${data.access_token}; path=/; domain=localhost`;
+          console.log('Access token cookie set:', document.cookie);
+        } else {
+          console.error('No access token in response:', data);
+          setErrorMessage('Login successful but no access token received');
+          return;
         }
         window.location.href = '/dashboard';
       } else {
-        const errorData: LoginResponse = await authResponse.json();
+        const errorData = await authResponse.json();
         setErrorMessage(errorData.detail || 'An error occurred');
       }
-    } catch {
+    } catch (error) {
+      console.error('Login error:', error);
       setErrorMessage('Invalid email or password');
     }
   };
