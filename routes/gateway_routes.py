@@ -5,10 +5,10 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 from fastapi import APIRouter, Request, Depends
-from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from slowapi.errors import RateLimitExceeded
 
+from models.response_model import ResponseModel
 from utils.pygate_cache_util import pygate_cache
 from utils.limit_throttle_util import limit_and_throttle
 from utils.auth_util import auth_required
@@ -44,7 +44,10 @@ logger = logging.getLogger("pygate.gateway")
     }
 )
 async def rest_gateway_status():
-    return JSONResponse(content={"message": "Gateway is online"}, status_code=200)
+    return process_response(ResponseModel(
+        status_code=200,
+        message="Gateway is online"
+    ).dict())
 
 @gateway_router.api_route("/caches", methods=["DELETE"],
     description="Clear all caches",
@@ -67,12 +70,22 @@ async def rest_gateway_status():
 async def clear_all_caches(Authorize: AuthJWT = Depends()):
     try:
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_gateway'):
-            return JSONResponse(content={"error": "You do not have permission to create roles"}, status_code=403)
+            return process_response(ResponseModel(
+                status_code=403,
+                error_code="GTW008",
+                error_message="You do not have permission to clear caches"
+            ))
         pygate_cache.clear_all_caches()
-        return JSONResponse(content={"message": "All caches cleared"}, status_code=200)
+        return process_response(ResponseModel(
+            status_code=200,
+            message="All caches cleared"
+            ).dict())
     except Exception as e:
-        logger.error(f"Error clearing caches: {str(e)}", exc_info=True)
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict())
 
 @gateway_router.api_route(
     "/rest/{path:path}",
@@ -103,9 +116,17 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
         )
         return process_response(await GatewayService.rest_gateway(request_model, request_id, start_time))
     except RateLimitExceeded as e:
-        return JSONResponse(content={"error": "Rate limit exceeded"}, status_code=429)
+        return process_response(ResponseModel(
+            status_code=429,
+            error_code="GTW009",
+            error_message="Rate limit exceeded"
+            ).dict())
     except ValueError:
-        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+        return process_response(ResponseModel(
+            status_code=500,
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+            ).dict())
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
