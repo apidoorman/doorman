@@ -13,6 +13,7 @@ class TestPygate:
     username = None
     email = None
     password = None
+    client_key = None
 
     @staticmethod
     def getAccessCookies():
@@ -61,7 +62,9 @@ class TestPygate:
                                     "manage_apis": True,
                                     "manage_endpoints": True,
                                     "manage_groups": True,
-                                    "manage_roles": True
+                                    "manage_roles": True,
+                                    "manage_subscriptions": True,
+                                    "manage_routings": True
                                 })
         assert response.status_code == 201
 
@@ -77,7 +80,7 @@ class TestPygate:
                                     "username": TestPygate.username, 
                                     "email": TestPygate.email, 
                                     "password": TestPygate.password, 
-                                    "role": "admin",
+                                    "role": TestPygate.role_name,
                                     "groups": ["ALL"],
                                     "rate_limit": 2,
                                     "rate_limit_duration": "minute"
@@ -185,34 +188,68 @@ class TestPygate:
 
     @pytest.mark.asyncio
     @pytest.mark.order(13)
-    async def test_gateway_call(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                cookies=TestPygate.getAccessCookies())
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(13)
-    async def test_gateway_call_2(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                cookies=TestPygate.getAccessCookies())
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(13)
-    async def test_gateway_call_3_rate_limit_exceed(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                cookies=TestPygate.getAccessCookies())
-        assert response.status_code == 429
-
-    @pytest.mark.asyncio
-    @pytest.mark.order(13)
-    async def test_gateway_call_4_rate_limit_exceed(self):
-        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
-                                cookies=TestPygate.getAccessCookies())
-        assert response.status_code == 429
+    async def test_create_routing(self):
+        TestPygate.client_key = "test_routing" + str(time.time())
+        response = requests.post(f"{self.base_url}/platform/routing",
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "routing_name": "test_routing",
+                                    "routing_description": "Test routing",
+                                    "client_key": TestPygate.client_key,
+                                    "routing_servers": ["https://fake-json-api.mock.beeceptor.com/"],
+                                })
+        assert response.status_code == 201
 
     @pytest.mark.asyncio
     @pytest.mark.order(14)
+    async def test_get_routing(self):
+        response = requests.get(f"{self.base_url}/platform/routing/{TestPygate.client_key}",
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(15)
+    async def test_update_routing(self):
+        response = requests.put(f"{self.base_url}/platform/routing/{TestPygate.client_key}",
+                                cookies=TestPygate.getAccessCookies(),
+                                json={
+                                    "routing_description": "Updated routing description"
+                                })
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(16)
+    async def test_gateway_call_client_key(self):
+        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
+                                headers={"client-key": TestPygate.client_key},
+                                cookies=TestPygate.getAccessCookies(),
+                                )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(17)
+    async def test_delete_routing(self):
+        response = requests.delete(f"{self.base_url}/platform/routing/{TestPygate.client_key}",
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(18)
+    async def test_gateway_call_regular_route(self):
+        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(19)
+    async def test_gateway_call_rate_limited(self):
+        response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
+                                cookies=TestPygate.getAccessCookies())
+        assert response.status_code == 429
+
+
+    @pytest.mark.asyncio
+    @pytest.mark.order(20)
     async def test_unsubscribe(self):
         response = requests.post(f"{self.base_url}/platform/subscription/unsubscribe", 
                                     cookies=TestPygate.getAccessCookies(),
@@ -224,21 +261,21 @@ class TestPygate:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(15)
+    @pytest.mark.order(21)
     async def test_re_gateway_call(self):
         response = requests.get(f"{self.base_url}/api/rest/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path.replace("{userId}", "2"),
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    @pytest.mark.order(16)
+    @pytest.mark.order(22)
     async def test_get_api(self):
         response = requests.get(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(17)
+    @pytest.mark.order(23)
     async def test_get_all_apis(self):
         response = requests.get(f"{self.base_url}/platform/api/all",
                                 cookies=TestPygate.getAccessCookies(),
@@ -246,14 +283,14 @@ class TestPygate:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(18)
+    @pytest.mark.order(24)
     async def test_api_endpoints(self):
         response = requests.get(f"{self.base_url}/platform/endpoint/" + TestPygate.api_name + "/v1",
                                 cookies=TestPygate.getAccessCookies()) 
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(19)
+    @pytest.mark.order(25)
     async def test_re_subscribe(self):
         response = requests.post(f"{self.base_url}/platform/subscription/subscribe", 
                                  cookies=TestPygate.getAccessCookies(),
@@ -265,20 +302,19 @@ class TestPygate:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(20)
+    @pytest.mark.order(26)
     async def test_update_user(self):
         TestPygate.email  = "newuser" + str(time.time()) + "@pygate.org"
         response = requests.put(f"{self.base_url}/platform/user/" + TestPygate.username,
                                 cookies=TestPygate.getAccessCookies(),
                                 json={
                                     "email": TestPygate.email,
-                                    "role": "admin",
                                     "groups": ["ALL", "ALL_UPDATED"]
                                 })
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(21)
+    @pytest.mark.order(27)
     async def test_update_password(self):
         new_password = "newpass123"
         response = requests.put(f"{self.base_url}/platform/user/" + TestPygate.username + "/update-password",
@@ -291,7 +327,7 @@ class TestPygate:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(22)
+    @pytest.mark.order(28)
     async def test_re_auth_calls(self):
         response = requests.post(f"{self.base_url}/platform/authorization", 
                                  json={"email": TestPygate.email, "password": TestPygate.password})
@@ -305,21 +341,21 @@ class TestPygate:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(23)
+    @pytest.mark.order(29)
     async def test_get_user(self):
         response = requests.get(f"{self.base_url}/platform/user/" + TestPygate.username,
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
     
     @pytest.mark.asyncio
-    @pytest.mark.order(24)
+    @pytest.mark.order(30)
     async def test_get_user_by_email(self):
         response = requests.get(f"{self.base_url}/platform/user/email/" + TestPygate.email,
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(25)
+    @pytest.mark.order(31)
     async def test_auth_refresh_calls(self):
         response = requests.post(f"{self.base_url}/platform/authorization/refresh",
                                 cookies=TestPygate.getAccessCookies())
@@ -327,7 +363,7 @@ class TestPygate:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(26)
+    @pytest.mark.order(32)
     async def test_update_api(self):
         response = requests.put(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
                                 cookies=TestPygate.getAccessCookies(),
@@ -339,7 +375,7 @@ class TestPygate:
         assert response.status_code == 200
     
     @pytest.mark.asyncio
-    @pytest.mark.order(27)
+    @pytest.mark.order(33)
     async def test_update_endpoint(self):
         response = requests.put(f"{self.base_url}/platform/endpoint/GET/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path,
                                 cookies=TestPygate.getAccessCookies(),
@@ -349,21 +385,21 @@ class TestPygate:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(28)
+    @pytest.mark.order(34)
     async def test_delete_endpoint(self):
         response = requests.delete(f"{self.base_url}/platform/endpoint/GET/" + TestPygate.api_name + "/v1" + TestPygate.endpoint_path,
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(29)
+    @pytest.mark.order(35)
     async def test_delete_api(self):
         response = requests.delete(f"{self.base_url}/platform/api/" + TestPygate.api_name + "/v1",
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(30)
+    @pytest.mark.order(36)
     async def test_update_group(self):
         response = requests.put(f"{self.base_url}/platform/group/" + TestPygate.group_name,
                                 cookies=TestPygate.getAccessCookies(),
@@ -373,14 +409,14 @@ class TestPygate:
         assert response.status_code == 200
     
     @pytest.mark.asyncio
-    @pytest.mark.order(31)
+    @pytest.mark.order(37)
     async def test_delete_group(self):
         response = requests.delete(f"{self.base_url}/platform/group/" + TestPygate.group_name,
                                 cookies=TestPygate.getAccessCookies())
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(32)
+    @pytest.mark.order(38)
     async def test_update_role(self):
         response = requests.put(f"{self.base_url}/platform/role/" + TestPygate.role_name,
                                 cookies=TestPygate.getAccessCookies(),
@@ -390,7 +426,7 @@ class TestPygate:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.order(33)
+    @pytest.mark.order(39)
     async def test_delete_role(self):
         response = requests.delete(f"{self.base_url}/platform/role/" + TestPygate.role_name,
                                 cookies=TestPygate.getAccessCookies())

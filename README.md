@@ -18,8 +18,8 @@ No specialized low-level langauge expertise required. Just a simple, cost-effect
 - [x]  Basic logging.
 - [x]  Rate limiting.
 - [x]  Throttling.
-- [ ]  Key based routing (in progress ⏳).
-- [ ]  Code optimization and testing.
+- [x]  Key based routing.
+- [ ]  Code optimization and testing (in progress ⏳).
 - [ ]  Add REST capabilties to user documentation.
 - [ ]  Version 1.0.0 release.
 - [ ]  AI gatewat implementation.
