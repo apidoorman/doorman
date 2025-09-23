@@ -94,6 +94,9 @@ async def authorization(request: Request):
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
         _secure = os.getenv("HTTPS_ONLY", "false").lower() == "true"
+        _domain = os.getenv("COOKIE_DOMAIN", None)
+        host = request.url.hostname or (request.client.host if request.client else None)
+        safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
@@ -101,6 +104,7 @@ async def authorization(request: Request):
             secure=_secure,
             samesite="Strict",
             path="/",
+            domain=safe_domain,
             max_age=1800
         )
         response.set_cookie(
@@ -110,6 +114,7 @@ async def authorization(request: Request):
             secure=_secure,
             samesite="Strict",
             path="/",
+            domain=safe_domain,
             max_age=1800  # 30 minutes
         )
         return response
@@ -371,6 +376,9 @@ async def extended_authorization(request: Request):
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
         _secure = os.getenv("HTTPS_ONLY", "false").lower() == "true"
+        _domain = os.getenv("COOKIE_DOMAIN", None)
+        host = request.url.hostname or (request.client.host if request.client else None)
+        safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
@@ -378,6 +386,7 @@ async def extended_authorization(request: Request):
             secure=_secure,
             samesite="Strict",
             path="/",
+            domain=safe_domain,
             max_age=604800
         )
         response.set_cookie(
@@ -387,6 +396,7 @@ async def extended_authorization(request: Request):
             secure=_secure,
             samesite="Strict",
             path="/",
+            domain=safe_domain,
             max_age=604800  # 7 days
         )
         return response
@@ -511,7 +521,11 @@ async def authorization_invalidate(response: Response, request: Request):
             },
             message="Your token has been invalidated"
             ))
-        response.delete_cookie("access_token_cookie")
+        # Delete cookie on the configured domain if provided (helps when using subdomains)
+        _domain = os.getenv("COOKIE_DOMAIN", None)
+        host = request.url.hostname or (request.client.host if request.client else None)
+        safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
+        response.delete_cookie("access_token_cookie", domain=safe_domain, path="/")
         return response
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)

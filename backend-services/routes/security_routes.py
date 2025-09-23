@@ -20,6 +20,7 @@ logger = logging.getLogger("doorman.gateway")
 
 @security_router.get("/security/settings",
     description="Get security settings",
+    response_model=ResponseModel,
 )
 async def get_security_settings(request: Request):
     request_id = str(uuid.uuid4())
@@ -64,6 +65,7 @@ async def get_security_settings(request: Request):
 
 @security_router.put("/security/settings",
     description="Update security settings",
+    response_model=ResponseModel,
 )
 async def update_security_settings(request: Request, body: SecuritySettingsModel):
     request_id = str(uuid.uuid4())
