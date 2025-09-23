@@ -95,9 +95,9 @@ class MemoryCache:
                 print(f"Cleaned up {len(expired_keys)} expired cache entries")
 
     def _get_encryption_key(self) -> bytes:
-        env_key = os.getenv("CACHE_ENCRYPTION_KEY")
+        env_key = os.getenv("MEM_ENCRYPTION_KEY")
         if not env_key:
-            raise ValueError("CACHE_ENCRYPTION_KEY environment variable is required for memory cache")
+            raise ValueError("MEM_ENCRYPTION_KEY environment variable is required for memory cache")
         salt = b'pygate_cache_salt'
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -172,7 +172,7 @@ class MemoryCache:
 
 class DoormanCacheManager:
     def __init__(self):
-        self.cache_type = os.getenv("MEM_OR_REDIS", "REDIS").upper()
+        self.cache_type = os.getenv("MEM_OR_EXTERNAL", "MEM").upper()
         if self.cache_type == "MEM":
             self.cache = MemoryCache()
             self.is_redis = False
