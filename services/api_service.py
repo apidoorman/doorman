@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
+import uuid
 from fastapi.responses import JSONResponse
 from models.response_model import ResponseModel
 from models.update_api_model import UpdateApiModel
@@ -12,7 +13,10 @@ from utils.cache import cache_manager
 from services.cache import pygate_cache
 from models.api_model import ApiModel
 
-import uuid
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger("pygate.gateway")
 
 class ApiService:
     api_collection = db.apis
