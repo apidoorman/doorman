@@ -1,6 +1,6 @@
 """
 Protected demo seeding routes for populating the running server with dummy data.
-Only available to users with 'manage_gateway' OR 'manage_tokens'.
+Only available to users with 'manage_gateway' OR 'manage_credits'.
 """
 
 from fastapi import APIRouter, Request
@@ -36,7 +36,7 @@ async def demo_seed(request: Request,
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not (await platform_role_required_bool(username, 'manage_gateway') or await platform_role_required_bool(username, 'manage_tokens')):
+        if not (await platform_role_required_bool(username, 'manage_gateway') or await platform_role_required_bool(username, 'manage_credits')):
             return respond_rest(ResponseModel(
                 status_code=403,
                 error_code='DEMO001',
@@ -50,4 +50,3 @@ async def demo_seed(request: Request,
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-

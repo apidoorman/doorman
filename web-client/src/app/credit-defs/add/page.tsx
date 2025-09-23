@@ -7,11 +7,11 @@ import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
-export default function AddTokenDefPage() {
-  const [api_token_group, setGroup] = useState('')
+export default function AddCreditDefPage() {
+  const [api_credit_group, setGroup] = useState('')
   const [api_key_header, setHeader] = useState('x-api-key')
   const [api_key, setKey] = useState('')
-  const [tokenTiersText, setTiersText] = useState('[\n  {"tier_name":"basic","tokens":100,"input_limit":150,"output_limit":150,"reset_frequency":"monthly"}\n]')
+  const [creditTiersText, setTiersText] = useState('[\n  {"tier_name":"basic","credits":100,"input_limit":150,"output_limit":150,"reset_frequency":"monthly"}\n]')
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -19,27 +19,27 @@ export default function AddTokenDefPage() {
   const create = async () => {
     setWorking(true); setError(null); setSuccess(null)
     try {
-      if (!api_token_group.trim()) throw new Error('Group is required')
-      const tiers = JSON.parse(tokenTiersText || '[]')
-      await postJson(`${SERVER_URL}/platform/token`, { api_token_group: api_token_group.trim(), api_key, api_key_header, token_tiers: tiers })
-      setSuccess('Token definition created')
+      if (!api_credit_group.trim()) throw new Error('Group is required')
+      const tiers = JSON.parse(creditTiersText || '[]')
+      await postJson(`${SERVER_URL}/platform/credit`, { api_credit_group: api_credit_group.trim(), api_key, api_key_header, credit_tiers: tiers })
+      setSuccess('Credit definition created')
     } catch (e: any) {
-      setError(e?.message || 'Failed to create token definition')
+      setError(e?.message || 'Failed to create credit definition')
     } finally {
       setWorking(false)
     }
   }
 
   return (
-    <ProtectedRoute requiredPermission="manage_tokens">
+    <ProtectedRoute requiredPermission="manage_credits">
       <Layout>
         <div className="space-y-6">
           <div className="page-header">
             <div>
-              <h1 className="page-title">Add Token Definition</h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">Create a token group and tiers</p>
+              <h1 className="page-title">Add Credit Definition</h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">Create a credit group and tiers</p>
             </div>
-            <Link href="/token-defs" className="btn btn-secondary">Back to Token Definitions</Link>
+            <Link href="/credit-defs" className="btn btn-secondary">Back to Credit Definitions</Link>
           </div>
 
           <div className="card">
@@ -48,8 +48,8 @@ export default function AddTokenDefPage() {
               {success && <div className="text-sm text-success-600">{success}</div>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium">API Token Group</label>
-                  <input className="input" value={api_token_group} onChange={e => setGroup(e.target.value)} placeholder="ai-basic" />
+                  <label className="block text-sm font-medium">API Credit Group</label>
+                  <input className="input" value={api_credit_group} onChange={e => setGroup(e.target.value)} placeholder="ai-basic" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">API Key Header</label>
@@ -60,13 +60,13 @@ export default function AddTokenDefPage() {
                   <input className="input" value={api_key} onChange={e => setKey(e.target.value)} placeholder="sk_live_..." />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium">Token Tiers (JSON)</label>
-                  <textarea className="input font-mono text-xs h-48" value={tokenTiersText} onChange={e => setTiersText(e.target.value)} />
+                  <label className="block text-sm font-medium">Credit Tiers (JSON)</label>
+                  <textarea className="input font-mono text-xs h-48" value={creditTiersText} onChange={e => setTiersText(e.target.value)} />
                 </div>
               </div>
               <div className="flex gap-2">
                 <button onClick={create} disabled={working} className="btn btn-primary">{working ? 'Saving...' : 'Create'}</button>
-                <Link href="/token-defs" className="btn btn-ghost">Cancel</Link>
+                <Link href="/credit-defs" className="btn btn-ghost">Cancel</Link>
               </div>
             </div>
           </div>
@@ -75,4 +75,3 @@ export default function AddTokenDefPage() {
     </ProtectedRoute>
   )
 }
-

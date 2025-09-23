@@ -8,72 +8,72 @@ import { getJson, postJson, putJson, delJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import ConfirmModal from '@/components/ConfirmModal'
 
-interface TokenTier {
+interface CreditTier {
   tier_name: string
-  tokens: number
+  credits: number
   input_limit: number
   output_limit: number
   reset_frequency: string
 }
 
-interface TokenDefForm {
-  api_token_group: string
+interface CreditDefForm {
+  api_credit_group: string
   api_key: string
   api_key_header: string
-  token_tiers_text: string
+  credit_tiers_text: string
   working: boolean
   error: string | null
   success: string | null
 }
 
-interface UserTokenInfo {
+interface UserCreditInfo {
   tier_name: string
-  available_tokens: number
+  available_credits: number
   reset_date?: string
   user_api_key?: string
 }
 
-interface UserTokensRow {
+interface UserCreditsRow {
   username: string
-  users_tokens: Record<string, UserTokenInfo>
+  users_credits: Record<string, UserCreditInfo>
 }
 
-export default function TokensPage() {
-  const [form, setForm] = useState<TokenDefForm>({
-    api_token_group: '',
+export default function CreditsPage() {
+  const [form, setForm] = useState<CreditDefForm>({
+    api_credit_group: '',
     api_key: '',
     api_key_header: 'x-api-key',
-    token_tiers_text: '[\n  {"tier_name":"basic","tokens":100,"input_limit":150,"output_limit":150,"reset_frequency":"monthly"}\n] ',
+    credit_tiers_text: '[\n  {"tier_name":"basic","credits":100,"input_limit":150,"output_limit":150,"reset_frequency":"monthly"}\n] ',
     working: false,
     error: null,
     success: null
   })
   const [usersLoading, setUsersLoading] = useState(false)
-  const [userRows, setUserRows] = useState<UserTokensRow[]>([])
+  const [userRows, setUserRows] = useState<UserCreditsRow[]>([])
   const [usersPage, setUsersPage] = useState(1)
   const [usersPageSize, setUsersPageSize] = useState(10)
   const [usersHasNext, setUsersHasNext] = useState(false)
   const [selectedUser, setSelectedUser] = useState('')
-  const [userDetail, setUserDetail] = useState<UserTokensRow | null>(null)
+  const [userDetail, setUserDetail] = useState<UserCreditsRow | null>(null)
   const [userWorking, setUserWorking] = useState(false)
   const [userError, setUserError] = useState<string | null>(null)
   const [userSuccess, setUserSuccess] = useState<string | null>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
 
-  const parseTiers = (): TokenTier[] => {
-    try { return JSON.parse(form.token_tiers_text || '[]') } catch { return [] }
+  const parseTiers = (): CreditTier[] => {
+    try { return JSON.parse(form.credit_tiers_text || '[]') } catch { return [] }
   }
 
   const handleCreate = async () => {
     setForm(f => ({ ...f, working: true, error: null, success: null }))
     try {
       const tiers = parseTiers()
-      if (!form.api_token_group.trim()) throw new Error('Token group is required')
-      await postJson(`${SERVER_URL}/platform/token`, { api_token_group: form.api_token_group.trim(), api_key: form.api_key, api_key_header: form.api_key_header, token_tiers: tiers })
-      setForm(f => ({ ...f, success: 'Token definition created' }))
+      if (!form.api_credit_group.trim()) throw new Error('Credit group is required')
+      await postJson(`${SERVER_URL}/platform/credit`, { api_credit_group: form.api_credit_group.trim(), api_key: form.api_key, api_key_header: form.api_key_header, credit_tiers: tiers })
+      setForm(f => ({ ...f, success: 'Credit definition created' }))
     } catch (e:any) {
-      setForm(f => ({ ...f, error: e?.message || 'Failed to create token definition' }))
+      setForm(f => ({ ...f, error: e?.message || 'Failed to create credit definition' }))
     } finally {
       setForm(f => ({ ...f, working: false }))
     }
@@ -83,35 +83,35 @@ export default function TokensPage() {
     setForm(f => ({ ...f, working: true, error: null, success: null }))
     try {
       const tiers = parseTiers()
-      if (!form.api_token_group.trim()) throw new Error('Token group is required')
-      await putJson(`${SERVER_URL}/platform/token/${encodeURIComponent(form.api_token_group.trim())}`, { api_token_group: form.api_token_group.trim(), api_key: form.api_key, api_key_header: form.api_key_header, token_tiers: tiers })
-      setForm(f => ({ ...f, success: 'Token definition updated' }))
+      if (!form.api_credit_group.trim()) throw new Error('Credit group is required')
+      await putJson(`${SERVER_URL}/platform/credit/${encodeURIComponent(form.api_credit_group.trim())}`, { api_credit_group: form.api_credit_group.trim(), api_key: form.api_key, api_key_header: form.api_key_header, credit_tiers: tiers })
+      setForm(f => ({ ...f, success: 'Credit definition updated' }))
     } catch (e:any) {
-      setForm(f => ({ ...f, error: e?.message || 'Failed to update token definition' }))
+      setForm(f => ({ ...f, error: e?.message || 'Failed to update credit definition' }))
     } finally {
       setForm(f => ({ ...f, working: false }))
     }
   }
 
   const openDeleteModal = () => {
-    if (!form.api_token_group.trim()) {
-      setForm(f => ({ ...f, error: 'Token group is required' }));
+    if (!form.api_credit_group.trim()) {
+      setForm(f => ({ ...f, error: 'Credit group is required' }));
       return;
     }
     setShowDeleteModal(true)
   }
 
   const handleDeleteConfirm = async () => {
-    if (deleteConfirmation !== form.api_token_group.trim()) return
+    if (deleteConfirmation !== form.api_credit_group.trim()) return
     setForm(f => ({ ...f, working: true, error: null, success: null }))
     try {
-      if (!form.api_token_group.trim()) throw new Error('Token group is required')
-      await delJson(`${SERVER_URL}/platform/token/${encodeURIComponent(form.api_token_group.trim())}`)
-      setForm(f => ({ ...f, success: 'Token definition deleted' }))
+      if (!form.api_credit_group.trim()) throw new Error('Credit group is required')
+      await delJson(`${SERVER_URL}/platform/credit/${encodeURIComponent(form.api_credit_group.trim())}`)
+      setForm(f => ({ ...f, success: 'Credit definition deleted' }))
       setShowDeleteModal(false)
       setDeleteConfirmation('')
     } catch (e:any) {
-      setForm(f => ({ ...f, error: e?.message || 'Failed to delete token definition' }))
+      setForm(f => ({ ...f, error: e?.message || 'Failed to delete credit definition' }))
     } finally {
       setForm(f => ({ ...f, working: false }))
     }
@@ -120,12 +120,12 @@ export default function TokensPage() {
   const loadAllUserTokens = async () => {
     try {
       setUsersLoading(true); setUserError(null)
-      const payload = await getJson<any>(`${SERVER_URL}/platform/token/all?page=${usersPage}&page_size=${usersPageSize}`)
-      const items = payload?.items || payload?.user_tokens || []
+      const payload = await getJson<any>(`${SERVER_URL}/platform/credit/all?page=${usersPage}&page_size=${usersPageSize}`)
+      const items = payload?.items || payload?.user_credits || []
       setUserRows(items)
       setUsersHasNext((items || []).length === usersPageSize)
     } catch (e:any) {
-      setUserError(e?.message || 'Failed to load user tokens')
+      setUserError(e?.message || 'Failed to load user credits')
       setUserRows([])
       setUsersHasNext(false)
     } finally {
@@ -137,10 +137,10 @@ export default function TokensPage() {
     if (!username.trim()) return
     try {
       setUserError(null)
-      const payload = await getJson<any>(`${SERVER_URL}/platform/token/${encodeURIComponent(username.trim())}`)
-      setUserDetail({ username: username.trim(), users_tokens: payload.users_tokens || {} })
+      const payload = await getJson<any>(`${SERVER_URL}/platform/credit/${encodeURIComponent(username.trim())}`)
+      setUserDetail({ username: username.trim(), users_credits: payload.users_credits || {} })
     } catch (e:any) {
-      setUserError(e?.message || 'Failed to load user tokens')
+      setUserError(e?.message || 'Failed to load user credits')
       setUserDetail(null)
     }
   }
@@ -149,12 +149,12 @@ export default function TokensPage() {
     if (!userDetail) return
     try {
       setUserWorking(true); setUserError(null); setUserSuccess(null)
-      await postJson(`${SERVER_URL}/platform/token/${encodeURIComponent(userDetail.username)}`, { username: userDetail.username, users_tokens: userDetail.users_tokens })
-      setUserSuccess('User tokens saved')
+      await postJson(`${SERVER_URL}/platform/credit/${encodeURIComponent(userDetail.username)}`, { username: userDetail.username, users_credits: userDetail.users_credits })
+      setUserSuccess('User credits saved')
       setTimeout(() => setUserSuccess(null), 2000)
       await loadAllUserTokens()
     } catch (e:any) {
-      setUserError(e?.message || 'Failed to save user tokens')
+      setUserError(e?.message || 'Failed to save user credits')
     } finally {
       setUserWorking(false)
     }
@@ -165,33 +165,33 @@ export default function TokensPage() {
   }, [usersPage, usersPageSize])
 
   return (
-    <ProtectedRoute requiredPermission="manage_tokens">
+    <ProtectedRoute requiredPermission="manage_credits">
     <Layout>
       <div className="space-y-6">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Tokens</h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">Manage token definitions and user token balances</p>
+            <h1 className="page-title">Credits</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">Manage credit definitions and user credit balances</p>
           </div>
         </div>
 
-        {/* Token Definitions CTA */}
+        {/* Credit Definitions CTA */}
         <div className="card">
           <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h3 className="card-title">Token Definitions</h3>
-              <p className="text-gray-600 dark:text-gray-400">Create and manage token groups, headers, and tiers</p>
+              <h3 className="card-title">Credit Definitions</h3>
+              <p className="text-gray-600 dark:text-gray-400">Create and manage credit groups, headers, and tiers</p>
             </div>
             <div className="flex gap-2">
-              <a href="/token-defs" className="btn btn-secondary">View Definitions</a>
-              <a href="/token-defs/add" className="btn btn-primary">Add Definition</a>
+              <a href="/credit-defs" className="btn btn-secondary">View Definitions</a>
+              <a href="/credit-defs/add" className="btn btn-primary">Add Definition</a>
             </div>
           </div>
         </div>
 
-        {/* User Tokens */}
+        {/* User Credits */}
         <div className="card">
-          <div className="card-header"><h3 className="card-title">User Tokens</h3></div>
+          <div className="card-header"><h3 className="card-title">User Credits</h3></div>
           <div className="p-6 space-y-4">
             {userError && <div className="text-sm text-error-600">{userError}</div>}
             {userSuccess && <div className="text-sm text-success-600">{userSuccess}</div>}
@@ -204,21 +204,21 @@ export default function TokensPage() {
             </div>
             {userDetail && (
               <div className="space-y-3">
-                <div className="text-sm text-gray-600">Editing tokens for <span className="font-medium">{userDetail.username}</span></div>
+                <div className="text-sm text-gray-600">Editing credits for <span className="font-medium">{userDetail.username}</span></div>
                 <div className="space-y-2">
-                  {Object.entries(userDetail.users_tokens).map(([group, info]) => (
+                  {Object.entries(userDetail.users_credits).map(([group, info]) => (
                     <div key={group} className="flex items-center gap-2">
                       <span className="badge badge-gray min-w-[8rem]">{group}</span>
-                      <input className="input w-28" type="number" value={info.available_tokens}
-                        onChange={e => setUserDetail(prev => prev ? ({ ...prev, users_tokens: { ...prev.users_tokens, [group]: { ...prev.users_tokens[group], available_tokens: Number(e.target.value || 0) } } }) : prev)} />
+                      <input className="input w-28" type="number" value={info.available_credits}
+                        onChange={e => setUserDetail(prev => prev ? ({ ...prev, users_credits: { ...prev.users_credits, [group]: { ...prev.users_credits[group], available_credits: Number(e.target.value || 0) } } }) : prev)} />
                       <input className="input flex-1" placeholder="user API key (optional)" value={info.user_api_key || ''}
-                        onChange={e => setUserDetail(prev => prev ? ({ ...prev, users_tokens: { ...prev.users_tokens, [group]: { ...prev.users_tokens[group], user_api_key: e.target.value } } }) : prev)} />
+                        onChange={e => setUserDetail(prev => prev ? ({ ...prev, users_credits: { ...prev.users_credits, [group]: { ...prev.users_credits[group], user_api_key: e.target.value } } }) : prev)} />
                     </div>
                   ))}
-                  <button className="btn btn-secondary" onClick={() => setUserDetail(prev => prev ? ({ ...prev, users_tokens: { ...prev.users_tokens, 'new-group': { tier_name: 'basic', available_tokens: 0 } } }) : prev)}>Add Group</button>
+                  <button className="btn btn-secondary" onClick={() => setUserDetail(prev => prev ? ({ ...prev, users_credits: { ...prev.users_credits, 'new-group': { tier_name: 'basic', available_credits: 0 } } }) : prev)}>Add Group</button>
                 </div>
                 <div>
-                  <button className="btn btn-primary" disabled={userWorking} onClick={saveUserTokens}>{userWorking ? 'Saving...' : 'Save Tokens'}</button>
+                  <button className="btn btn-primary" disabled={userWorking} onClick={saveUserTokens}>{userWorking ? 'Saving...' : 'Save Credits'}</button>
                 </div>
               </div>
             )}
@@ -236,7 +236,7 @@ export default function TokensPage() {
                         <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-dark-surfaceHover">
                           <td className="font-medium">{row.username}</td>
                           <td className="text-sm text-gray-600">
-                            {Object.keys(row.users_tokens || {}).join(', ') || '-'}
+                            {Object.keys(row.users_credits || {}).join(', ') || '-'}
                           </td>
                         </tr>
                       ))}
