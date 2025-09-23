@@ -64,15 +64,20 @@ export default function LogsPage() {
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState<FilterState>(() => {
-    // Set default to last 30 minutes
+    // Set default to last 30 minutes of today
     const now = new Date();
+    const today = now.toISOString().split('T')[0]; // Always use today's date
+    
+    // Calculate 30 minutes ago, but ensure we stay within today
     const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+    const startTime = thirtyMinutesAgo.toTimeString().slice(0, 5);
+    const endTime = now.toTimeString().slice(0, 5);
     
     return {
-      startDate: now.toISOString().split('T')[0], // Always use today's date
-      endDate: now.toISOString().split('T')[0],   // Always use today's date
-      startTime: thirtyMinutesAgo.toTimeString().slice(0, 5),
-      endTime: now.toTimeString().slice(0, 5),
+      startDate: today,
+      endDate: today,
+      startTime: startTime,
+      endTime: endTime,
       user: '',
       endpoint: '',
       request_id: '',
@@ -156,13 +161,18 @@ export default function LogsPage() {
 
   const clearFilters = () => {
     const now = new Date();
+    const today = now.toISOString().split('T')[0]; // Always use today's date
+    
+    // Calculate 30 minutes ago, but ensure we stay within today
     const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+    const startTime = thirtyMinutesAgo.toTimeString().slice(0, 5);
+    const endTime = now.toTimeString().slice(0, 5);
     
     setFilters({
-      startDate: now.toISOString().split('T')[0], // Always use today's date
-      endDate: now.toISOString().split('T')[0],   // Always use today's date
-      startTime: thirtyMinutesAgo.toTimeString().slice(0, 5),
-      endTime: now.toTimeString().slice(0, 5),
+      startDate: today,
+      endDate: today,
+      startTime: startTime,
+      endTime: endTime,
       user: '',
       endpoint: '',
       request_id: '',
