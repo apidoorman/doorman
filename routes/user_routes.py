@@ -65,6 +65,9 @@ async def create_user(user_data: CreateUserModel, request: Request, Authorize: A
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -110,6 +113,9 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -155,6 +161,9 @@ async def delete_user(username: str, request: Request, Authorize: AuthJWT = Depe
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -190,6 +199,9 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
         if not Authorize.get_jwt_subject() == username and not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="USR006",
                 error_message="Can only update your own password"
             ).dict())
@@ -198,6 +210,9 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -223,6 +238,9 @@ async def get_user_by_username(username: str, request: Request, Authorize: AuthJ
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -248,6 +266,9 @@ async def get_user_by_email(email: str, request: Request, Authorize: AuthJWT = D
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())

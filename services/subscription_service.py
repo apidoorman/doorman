@@ -76,6 +76,9 @@ class SubscriptionService:
             logger.error(f"{request_id} | Subscription failed with code SUB003")
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='SUB003',
                 error_message='API does not exist for the requested name and version'
             ).dict()
@@ -94,6 +97,9 @@ class SubscriptionService:
             logger.error(f"{request_id} | Subscription failed with code SUB004")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='SUB004',
                 error_message='User is already subscribed to the API'
             ).dict()
@@ -121,6 +127,9 @@ class SubscriptionService:
         if not await SubscriptionService.api_exists(data.api_name, data.api_version):
             return ResponseModel(
                 status_code=404,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='SUB005',
                 error_message='API does not exist for the requested name and version'
             ).dict()
@@ -133,6 +142,9 @@ class SubscriptionService:
             logger.error(f"{request_id} | Unsubscription failed with code SUB006")
             return ResponseModel(
                 status_code=400,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code='SUB006',
                 error_message='User is not subscribed to the API'
             ).dict()

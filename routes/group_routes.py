@@ -54,6 +54,9 @@ async def create_group(api_data: CreateGroupModel, request: Request, Authorize: 
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="GRP008",
                 error_message="You do not have permission to create groups"
             ))
@@ -62,6 +65,9 @@ async def create_group(api_data: CreateGroupModel, request: Request, Authorize: 
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -97,6 +103,9 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="GRP009",
                 error_message="You do not have permission to update groups"
             ))
@@ -105,6 +114,9 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -140,6 +152,9 @@ async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = D
         if not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_groups'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
                 error_code="GRP010",
                 error_message="You do not have permission to delete groups"
             ))
@@ -148,6 +163,9 @@ async def delete_group(group_name: str, request: Request, Authorize: AuthJWT = D
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -173,6 +191,9 @@ async def get_groups(request: Request, Authorize: AuthJWT = Depends(), page: int
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
@@ -199,6 +220,9 @@ async def get_group(group_name: str, request: Request, Authorize: AuthJWT = Depe
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={
+                "request_id": request_id
+            },
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict())
