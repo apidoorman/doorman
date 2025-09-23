@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   const router = useRouter()
 
-  const checkAuth = () => {
+  const checkAuth = async () => {
     const token = getTokenFromCookie()
     console.log('=== AUTH CONTEXT DEBUG ===')
     console.log('AuthContext checkAuth - token found:', !!token)
@@ -53,37 +53,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const tokenValid = isTokenValid(token)
-    const uiAccess = hasUIAccess(token)
-    const user = getCurrentUser(token)
-    const permissions = getUserPermissions(token)
+    try {
+      // Check with backend auth status endpoint
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/authorization/status`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        }
+      })
 
-    console.log('AuthContext - Token validation results:', {
-      tokenValid,
-      uiAccess,
-      user: user?.username,
-      hasPermissions: !!permissions,
-      permissions: permissions
-    })
+      if (response.ok) {
+        // Token is valid according to backend
+        const tokenValid = isTokenValid(token)
+        const uiAccess = hasUIAccess(token)
+        const user = getCurrentUser(token)
+        const permissions = getUserPermissions(token)
 
-    console.log('AuthContext - Setting auth state:', {
-      isAuthenticated: tokenValid,
-      hasUIAccess: tokenValid && uiAccess,
-      user,
-      permissions
-    })
+        console.log('AuthContext - Backend validation successful, token validation results:', {
+          tokenValid,
+          uiAccess,
+          user: user?.username,
+          hasPermissions: !!permissions,
+          permissions: permissions
+        })
 
-    setAuthState({
-      isAuthenticated: tokenValid,
-      hasUIAccess: tokenValid && uiAccess,
-      user,
-      permissions
-    })
+        console.log('AuthContext - Setting auth state:', {
+          isAuthenticated: tokenValid,
+          hasUIAccess: tokenValid && uiAccess,
+          user,
+          permissions
+        })
 
-    // If authenticated but no UI access, redirect to login
-    if (tokenValid && !uiAccess) {
-      console.log('AuthContext - User authenticated but no UI access, logging out')
-      logout()
+        setAuthState({
+          isAuthenticated: tokenValid,
+          hasUIAccess: tokenValid && uiAccess,
+          user,
+          permissions
+        })
+
+        // If authenticated but no UI access, redirect to login
+        if (tokenValid && !uiAccess) {
+          console.log('AuthContext - User authenticated but no UI access, logging out')
+          logout()
+        }
+      } else {
+        // Token is invalid according to backend
+        console.log('AuthContext - Backend validation failed, token is invalid')
+        setAuthState({
+          isAuthenticated: false,
+          hasUIAccess: false,
+          user: null,
+          permissions: null
+        })
+        logout()
+      }
+    } catch (error) {
+      console.error('AuthContext - Error checking auth status:', error)
+      // Fallback to client-side validation
+      const tokenValid = isTokenValid(token)
+      const uiAccess = hasUIAccess(token)
+      const user = getCurrentUser(token)
+      const permissions = getUserPermissions(token)
+
+      setAuthState({
+        isAuthenticated: tokenValid,
+        hasUIAccess: tokenValid && uiAccess,
+        user,
+        permissions
+      })
+
+      // If authenticated but no UI access, redirect to login
+      if (tokenValid && !uiAccess) {
+        console.log('AuthContext - User authenticated but no UI access, logging out')
+        logout()
+      }
     }
   }
 
