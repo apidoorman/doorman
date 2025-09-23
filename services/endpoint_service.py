@@ -5,6 +5,7 @@ See https://github.com/pypeople-dev/pygate for more information
 """
 
 from models.response_model import ResponseModel
+from models.update_endpoint_model import UpdateEndpointModel
 from utils.database import db
 from utils.cache import cache_manager
 from services.cache import pygate_cache
@@ -64,6 +65,87 @@ class EndpointService:
             status_code=201,
             message='Endpoint created successfully'
         ).dict()
+    
+    @staticmethod
+    async def update_endpoint(api_name, api_version, endpoint_uri, data: UpdateEndpointModel):
+        if data.endpoint_method and data.api_name and data.api_name != api_name or data.api_version and data.api_version != api_version or data.endpoint_uri and data.endpoint_uri != endpoint_uri:
+            return ResponseModel(
+                status_code=400,
+                error_code='END006',
+                error_message='API method, name, version and URI cannot be updated'
+            ).dict()
+        cache_key = f"/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
+        endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
+        if not endpoint:
+            endpoint = EndpointService.endpoint_collection.find_one({
+                'api_name': data.api_name,
+                'api_version': data.api_version,
+                'endpoint_uri': data.endpoint_uri
+            })
+            if not endpoint:
+                return ResponseModel(
+                    status_code=400,
+                    error_code='END004',
+                    error_message='Endpoint does not exist for the requested API name, version and URI'
+                ).dict()
+        not_null_data = {k: v for k, v in data.dict().items() if v is not None}
+        if not_null_data:
+            update_result = EndpointService.endpoint_collection.update_one(
+                {'api_name': api_name, 'api_version': api_version, 'endpoint_uri': endpoint_uri},
+                {'$set': not_null_data}
+            )
+            if not update_result.acknowledged:
+                return ResponseModel(
+                    status_code=400,
+                    error_code='END003',
+                    error_message='Database error: Unable to update endpoint'
+                ).dict()
+            return ResponseModel(
+                status_code=200,
+                message='Endpoint updated successfully'
+                ).dict()
+        else:
+            return ResponseModel(
+                status_code=400,
+                error_code='END007',
+                error_message='No data to update'
+            ).dict()
+        
+    @staticmethod
+    async def delete_endpoint(api_name, api_version, endpoint_uri):
+        """
+        Delete an endpoint for an API.
+        """
+        cache_key = f"/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
+        endpoint = pygate_cache.get_cache('endpoint_cache', cache_key)
+        if not endpoint:
+            endpoint = EndpointService.endpoint_collection.find_one({
+                'api_name': api_name,
+                'api_version': api_version,
+                'endpoint_uri': endpoint_uri
+            })
+            if not endpoint:
+                return ResponseModel(
+                    status_code=400,
+                    error_code='END004',
+                    error_message='Endpoint does not exist for the requested API name, version and URI'
+                ).dict()
+        delete_result = EndpointService.endpoint_collection.delete_one({
+            'api_name': api_name,
+            'api_version': api_version,
+            'endpoint_uri': endpoint_uri
+        })
+        if not delete_result.acknowledged:
+            return ResponseModel(
+                status_code=400,
+                error_code='END003',
+                error_message='Database error: Unable to delete endpoint'
+            ).dict()
+        pygate_cache.delete_cache('endpoint_cache', cache_key)
+        return ResponseModel(
+            status_code=200,
+            message='Endpoint deleted successfully'
+        ).dict()
 
     @staticmethod
     @cache_manager.cached(ttl=300)
@@ -77,7 +159,7 @@ class EndpointService:
             'api_name': api_name,
             'api_version': api_version,
             'endpoint_uri': endpoint_uri
-        })
+            })
             if not endpoint:
                 return ResponseModel(
                     status_code=400,

@@ -15,7 +15,6 @@ def whitelist_check():
         @wraps(f)
         async def decorated_function(*args, request: Request, Authorize: AuthJWT = Depends(), **kwargs):
             try:
-                Authorize.jwt_required()
                 username = Authorize.get_jwt_subject()
                 user = await UserService.get_user_by_username_helper(username)
                 client_ip = request.client.host

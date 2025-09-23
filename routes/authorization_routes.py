@@ -17,18 +17,13 @@ from utils.auth_blacklist import TimedHeap, jwt_blacklist
 
 authorization_router = APIRouter()
 
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger("pygate.gateway")
+
 """
 Login endpoint
-Request:
-{
-    "email": "<string>",
-    "password": "<string>"
-}
-Response:
-{
-    "access_token": "<string>",
-    "token_type": "bearer"
-}
 """
 @authorization_router.post("/authorization")
 async def login(request: Request, Authorize: AuthJWT = Depends()):
@@ -47,21 +42,36 @@ async def login(request: Request, Authorize: AuthJWT = Depends()):
                 status_code=401,
                 detail="Invalid email or password"
             )
-        access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize)
+        access_token = create_access_token({"sub": user["username"], "role": user["role"]}, Authorize, False)
         response = JSONResponse(content={"access_token": access_token}, media_type="application/json")
         Authorize.set_access_cookies(access_token, response)
         return response
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
+    
+"""
+Refresh token endpoint
+"""
+@authorization_router.post("/authorization/refresh",
+    dependencies=[
+        Depends(auth_required)
+    ])
+async def extended_login(Authorize: AuthJWT = Depends()):
+    try:
+        username = Authorize.get_jwt_subject()
+        user = await UserService.get_user_by_username_helper(username)
+        refresh_token = create_access_token({"sub": username, "role": user["role"]}, Authorize, True)
+        response = JSONResponse(content={"refresh_token": refresh_token}, media_type="application/json")
+        Authorize.set_access_cookies(refresh_token, response)
+        return response
+    except AuthJWTException as e:
+        logging.error(f"Token refresh failed: {str(e)}")
+        return JSONResponse(status_code=500, content={"detail": "An error occurred during token refresh"})
+    except ValueError as e:
+        return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
 
 """
 Status endpoint
-Request:
-{
-}
-Response:
-{
-}
 """
 @authorization_router.get("/authorization/status",
     dependencies=[
@@ -74,16 +84,9 @@ async def status():
         raise HTTPException(status_code=401, detail="Invalid token")
     except ValueError as e:
         return JSONResponse(content={"error": "Unable to process request"}, status_code=500)
-        
+    
 """
 Logout endpoint
-Request:
-{
-}
-Response:
-{
-    "message": "Your token has been invalidated"
-}
 """
 @authorization_router.post("/authorization/invalidate",
     dependencies=[

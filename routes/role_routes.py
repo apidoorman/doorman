@@ -18,20 +18,6 @@ role_router = APIRouter()
 
 """
 Create API *platform endpoint.
-Request:
-{
-    "role_name": "<string>",
-    "role_description": "<string>",
-    "manage_users": "<boolean>",
-    "manage_apis": "<boolean>",
-    "manage_endpoints": "<boolean>",
-    "manage_groups": "<boolean>",
-    "manage_roles": "<boolean>"
-}
-Response:
-{
-    "message": "Role created successfully"
-}
 """
 @role_router.post("",
     dependencies=[
@@ -48,23 +34,6 @@ async def create_role(api_data: RoleModel, Authorize: AuthJWT = Depends()):
 
 """
 Create API *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    "roles": [
-        {
-            "role_name": "<string>",
-            "role_description": "<string>",
-            "manage_users": "<boolean>",
-            "manage_apis": "<boolean>",
-            "manage_endpoints": "<boolean>",
-            "manage_groups": "<boolean>",
-            "manage_roles": "<boolean>"
-        }
-    ]
-}
 """
 @role_router.get("/all",
     dependencies=[
@@ -79,21 +48,6 @@ async def get_roles(page: int = 1, page_size: int = 10):
 
 """
 Create API *platform endpoint.
-Request:
-{
-}
-Response:
-{
-    {
-        "role_name": "<string>",
-        "role_description": "<string>",
-        "manage_users": "<boolean>",
-        "manage_apis": "<boolean>",
-        "manage_endpoints": "<boolean>",
-        "manage_groups": "<boolean>",
-        "manage_roles": "<boolean>"
-    }
-}
 """
 @role_router.get("/{role_name}",
     dependencies=[

@@ -16,6 +16,21 @@ class UserService:
     api_collection = db.apis
 
     @staticmethod
+    async def get_user_by_email_with_password_helper(email):
+        """
+        Retrieve a user by email.
+        """
+        try:
+            user = UserService.user_collection.find_one({'email': email})
+            if '_id' in user:
+                del user['_id']
+            if not user:
+                raise ValueError("User not found")
+            return user
+        except Exception as e:
+            raise ValueError("User not found")
+
+    @staticmethod
     async def get_user_by_username_helper(username):
         """
         Retrieve a user by username.
@@ -105,21 +120,6 @@ class UserService:
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
-        
-    @staticmethod
-    async def get_user_by_email_with_password(email):
-        """
-        Retrieve a user by email.
-        """
-        try:
-            user = UserService.user_collection.find_one({'email': email})
-            if '_id' in user:
-                del user['_id']
-            if not user:
-                raise ValueError("User not found")
-            return user
-        except Exception as e:
-            raise ValueError("User not found")
 
     @staticmethod
     async def create_user(data: CreateUserModel):
@@ -157,7 +157,7 @@ class UserService:
         Verify password and return user if valid.
         """
         try:
-            user = await UserService.get_user_by_email_with_password(email)
+            user = await UserService.get_user_by_email_with_password_helper(email)
             
             if not password_util.verify_password(password, user.get('password')):
                 raise ValueError("Invalid email or password")
