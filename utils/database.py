@@ -79,9 +79,6 @@ class Database:
         ])
 
         self.db.endpoints.create_indexes([
-            IndexModel([("api_id", ASCENDING)], unique=True),
-            IndexModel([("api_name", ASCENDING), ("api_version", ASCENDING)], unique=True),
-            IndexModel([("api_name", ASCENDING), ("api_version", ASCENDING), ("path", ASCENDING)], unique=True),
             IndexModel([("endpoint_method", ASCENDING), ("api_name", ASCENDING), ("api_version", ASCENDING), ("endpoint_uri", ASCENDING)], unique=True),
         ])
 

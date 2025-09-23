@@ -12,7 +12,7 @@ from services.subscription_service import SubscriptionService
 from utils.auth_util import auth_required
 from models.subscribe_model import SubscribeModel
 from utils.group_util import group_required
-from utils.response_util import process_response\
+from utils.response_util import process_response
 
 import uuid
 import time
@@ -56,8 +56,8 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
                 },
                 error_code="SUB007",
                 error_message="You do not have the correct group access"
-            ))
-        return process_response(await SubscriptionService.subscribe(api_data, request_id))
+            ).dict(), "rest")
+        return process_response(await SubscriptionService.subscribe(api_data, request_id), "rest")
     except HTTPException as e:
         return process_response(ResponseModel(
             status_code=e.status_code,
@@ -66,7 +66,7 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
             },
             error_code="GEN001",
             error_message=e.detail
-        ))
+        ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -76,7 +76,7 @@ async def subscribe_api(api_data: SubscribeModel, request: Request, Authorize: A
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -114,8 +114,8 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
                 },
                 error_code="SUB008",
                 error_message="You do not have the correct group access"
-            ))
-        return process_response(await SubscriptionService.unsubscribe(api_data, request_id))
+            ).dict(), "rest")
+        return process_response(await SubscriptionService.unsubscribe(api_data, request_id), "rest")
     except HTTPException as e:
         return process_response(ResponseModel(
             status_code=e.status_code,
@@ -124,7 +124,7 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
             },
             error_code="GEN002",
             error_message=e.detail
-        ))
+        ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -134,7 +134,7 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request, Authorize:
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -168,7 +168,7 @@ async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = 
         logger.info(f"{request_id} | Username: {Authorize.get_jwt_subject()} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         username = Authorize.get_jwt_subject()
-        return process_response(await SubscriptionService.get_user_subscriptions(username, request_id))
+        return process_response(await SubscriptionService.get_user_subscriptions(username, request_id), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -178,7 +178,7 @@ async def subscriptions_for_current_user(request: Request, Authorize: AuthJWT = 
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -221,7 +221,7 @@ async def subscriptions_for_user_by_id(user_id: str, request: Request, Authorize
             },
             error_code="GTW999",
             error_message="An unexpected error occurred"
-            ).dict())
+            ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

@@ -121,7 +121,7 @@ async def authjwt_exception_handler(exc: AuthJWTException):
         status_code=exc.status_code,
         error_code="JWT001",
         error_message=exc.message
-    ).dict())
+    ).dict(), "rest")
 
 @pygate.exception_handler(500)
 async def internal_server_error_handler(request: Request, exc: Exception):
@@ -129,7 +129,7 @@ async def internal_server_error_handler(request: Request, exc: Exception):
         status_code=500,
         error_code="ISE001",
         error_message="Internal Server Error"
-    ).dict())
+    ).dict(), "rest")
 
 @pygate.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -137,7 +137,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=422,
         error_code="VAL001",
         error_message="Validation Error"
-    ).dict())
+    ).dict(), "rest")
 
 cache_manager.init_app(pygate)
 
@@ -205,7 +205,7 @@ def run():
         reload=os.getenv("DEV_RELOAD", "false").lower() == "true",
         reload_excludes=["venv/*", "logs/*"],
         workers=num_threads,
-        log_level="critical",
+        log_level="info",
         ssl_certfile=os.getenv("SSL_CERTFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None,
         ssl_keyfile=os.getenv("SSL_KEYFILE") if os.getenv("HTTPS_ONLY", "false").lower() == "true" else None
     )
