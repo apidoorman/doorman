@@ -91,6 +91,26 @@ def process_response(response, type):
         except Exception as e:
             logger.error(f"An error occurred while processing the GraphQL response: {e}")
             return JSONResponse(content={"error": "Unable to process GraphQL response"}, status_code=500)
+    elif type == "grpc":
+        try:
+            if response.status_code == 200:
+                return JSONResponse(
+                    content=response.response,
+                    status_code=response.status_code,
+                    headers=response.response_headers
+                )
+            else:
+                return JSONResponse(
+                    content={
+                        "error_code": response.error_code,
+                        "error_message": response.error_message
+                    },
+                    status_code=response.status_code,
+                    headers=response.response_headers
+                )
+        except Exception as e:
+            logger.error(f"An error occurred while processing the gRPC response: {e}")
+            return JSONResponse(content={"error": "Unable to process gRPC response"}, status_code=500)
     else:
         logger.error(f"Unhandled response type: {type}")
         return JSONResponse(content={"error": "Unhandled response type"}, status_code=500)

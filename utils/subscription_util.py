@@ -31,6 +31,10 @@ def subscription_required(request: Request, Authorize: AuthJWT = Depends()):
             api_name = full_path.replace("/api/graphql/", "")
             api_version = request.headers.get('X-API-Version', 'v1')
             api_and_version = f"{api_name}/{api_version}"
+        elif full_path.startswith("/api/grpc/"):
+            api_name = full_path.replace("/api/grpc/", "").split('/')[0]
+            api_version = request.headers.get('X-API-Version', 'v1')
+            api_and_version = f"{api_name}/{api_version}"
         else:
             prefix = ""
             path = full_path[len(prefix):] if full_path.startswith(prefix) else full_path

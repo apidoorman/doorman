@@ -5,15 +5,7 @@ See https://github.com/pypeople-dev/doorman for more information
 """
 
 import os
-from models.response_model import ResponseModel
-from utils import api_util, routing_util
-from utils import token_util
-from utils.gateway_utils import get_headers
-from utils.doorman_cache_util import doorman_cache
-from utils.token_util import deduct_ai_token, get_token_api_header, get_user_api_key
-from gql import Client, gql
-from gql.transport.httpx import HTTPXTransport
-
+import sys
 import json
 import xml.etree.ElementTree as ET
 import logging
@@ -23,6 +15,16 @@ import httpx
 import aiohttp
 from typing import Dict
 import asyncio
+import grpc
+from google.protobuf.json_format import MessageToDict
+import importlib
+import uuid
+from datetime import datetime
+from models.response_model import ResponseModel
+from utils import api_util, routing_util
+from utils import token_util
+from utils.gateway_utils import get_headers
+from utils.doorman_cache_util import doorman_cache
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger("doorman.gateway")
@@ -430,26 +432,164 @@ class GatewayService:
             if backend_end_time and current_time:
                 logger.info(f"{request_id} | Backend time {backend_end_time - current_time}ms")
 
+    @staticmethod
+    async def grpc_gateway(Authorize, request, request_id, start_time, api_name=None, url=None, retry=0):
+        """
+        External gRPC gateway using grpcio for optimized gRPC handling.
+        """
+        logger.info(f"{request_id} | gRPC gateway processing request")
+        current_time = backend_end_time = None
+        try:
+            if not url:
+                if api_name is None:
+                    path_parts = request.path.strip('/').split('/')
+                    if len(path_parts) < 1:
+                        logger.error(f"{request_id} | Invalid API path format: {request.path}")
+                        return GatewayService.error_response(request_id, 'GTW001', 'Invalid API path format', status=404)
+                    api_name = path_parts[-1]
+                api_version = request.headers.get('X-API-Version', 'v1')
+                api_path = f"{api_name}/{api_version}"
+                logger.info(f"{request_id} | Processing gRPC request for API: {api_path}")
+                proto_filename = f"{api_name}_{api_version}.proto"
+                project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                proto_dir = os.path.join(project_root, 'proto')
+                proto_path = os.path.join(proto_dir, proto_filename)
+                if not os.path.exists(proto_path):
+                    logger.error(f"{request_id} | Proto file not found: {proto_path}")
+                    return GatewayService.error_response(request_id, 'GTW012', f'Proto file not found for API: {api_path}', status=404)
+                api = doorman_cache.get_cache('api_cache', api_path)
+                if not api:
+                    api = await api_util.get_api(None, api_path)
+                    if not api:
+                        logger.error(f"{request_id} | API not found: {api_path}")
+                        return GatewayService.error_response(request_id, 'GTW001', f'API does not exist: {api_path}', status=404)
+                doorman_cache.set_cache('api_cache', api_path, api)
+                if not api.get('api_servers'):
+                    logger.error(f"{request_id} | No API servers configured for {api_path}")
+                    return GatewayService.error_response(request_id, 'GTW001', 'No API servers configured', status=404)
+                url = api.get('api_servers', [])[0].rstrip('/')
+                if url.startswith('grpc://'):
+                    url = url[7:]
+                retry = api.get('api_allowed_retry_count') or 0
+                if api.get('api_tokens_enabled'):
+                    if not await token_util.deduct_ai_token(api.get('api_token_group'), Authorize.get_jwt_subject()):
+                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any tokens', status=401)
+            current_time = time.time() * 1000
+            allowed_headers = api.get('api_allowed_headers') or []
+            headers = await get_headers(request, allowed_headers)
+            try:
+                body = request.body
+                if isinstance(body, str):
+                    body = json.loads(body)
+                elif not isinstance(body, dict):
+                    logger.error(f"{request_id} | Invalid request body format")
+                    return GatewayService.error_response(request_id, 'GTW011', 'Invalid request body format', status=400)
+            except json.JSONDecodeError:
+                logger.error(f"{request_id} | Invalid JSON in request body")
+                return GatewayService.error_response(request_id, 'GTW011', 'Invalid JSON in request body', status=400)
+            if 'method' not in body:
+                logger.error(f"{request_id} | Missing method in request body")
+                return GatewayService.error_response(request_id, 'GTW011', 'Missing method in request body', status=400)
+            if 'message' not in body:
+                logger.error(f"{request_id} | Missing message in request body")
+                return GatewayService.error_response(request_id, 'GTW011', 'Missing message in request body', status=400)
+            proto_filename = f"{api_name}_{api_version}.proto"
+            proto_path = os.path.join(proto_dir, proto_filename)
+            if not os.path.exists(proto_path):
+                logger.error(f"{request_id} | Proto file not found: {proto_path}")
+                return GatewayService.error_response(request_id, 'GTW012', f'Proto file not found for API: {api_path}', status=404)
+            try:
+                module_name = f"{api_name}_{api_version}".replace('-', '_')
+                generated_dir = os.path.join(project_root, 'generated')
+                if generated_dir not in sys.path:
+                    sys.path.insert(0, generated_dir)
+                
+                try:
+                    pb2_module = importlib.import_module(f"{module_name}_pb2")
+                    service_module = importlib.import_module(f"{module_name}_pb2_grpc")
+                except ImportError as e:
+                    logger.error(f"{request_id} | Failed to import gRPC module: {str(e)}")
+                    return GatewayService.error_response(request_id, 'GTW012', f'Failed to import gRPC module: {str(e)}', status=404)
+                service_name = body['method'].split('.')[0]
+                method_name = body['method'].split('.')[1]
+                channel = grpc.aio.insecure_channel(url)
+                try:
+                    service_class = getattr(service_module, f"{service_name}Stub")
+                    stub = service_class(channel)
+                except AttributeError as e:
+                    logger.error(f"{request_id} | Service {service_name} not found in module")
+                    return GatewayService.error_response(request_id, 'GTW006', f'Service {service_name} not found', status=500)
+                try:
+                    request_class_name = f"{method_name}Request"
+                    request_class = getattr(pb2_module, request_class_name)
+                    request_message = request_class()
+                except AttributeError as e:
+                    logger.error(f"{request_id} | Method {method_name} not found in module: {str(e)}")
+                    return GatewayService.error_response(request_id, 'GTW006', f'Method {method_name} not found', status=500)
+                for key, value in body['message'].items():
+                    setattr(request_message, key, value)
+                method = getattr(stub, method_name)
+                response = await method(request_message)
+                response_dict = {}
+                for field in response.DESCRIPTOR.fields:
+                    value = getattr(response, field.name)
+                    if hasattr(value, 'DESCRIPTOR'):
+                        response_dict[field.name] = MessageToDict(value)
+                    else:
+                        response_dict[field.name] = value
+                backend_end_time = time.time() * 1000
+                return ResponseModel(
+                    status_code=200,
+                    response_headers={"request_id": request_id},
+                    response=response_dict
+                ).dict()
+            except ImportError as e:
+                logger.error(f"{request_id} | Failed to import gRPC module: {str(e)}")
+                return GatewayService.error_response(request_id, 'GTW012', f'Failed to import gRPC module: {str(e)}', status=404)
+            except AttributeError as e:
+                logger.error(f"{request_id} | Invalid service or method: {str(e)}")
+                return GatewayService.error_response(request_id, 'GTW006', f'Invalid service or method: {str(e)}', status=500)
+            except grpc.RpcError as e:
+                status_code = e.code()
+                if status_code == grpc.StatusCode.UNAVAILABLE and retry > 0:
+                    logger.error(f"{request_id} | gRPC gateway failed retrying")
+                    return await GatewayService.grpc_gateway(Authorize, request, request_id, start_time, api_name, url, retry - 1)
+                error_message = e.details()
+                logger.error(f"{request_id} | gRPC error: {error_message}")
+                return ResponseModel(
+                    status_code=500,
+                    response_headers={"request_id": request_id},
+                    error_code="GTW006",
+                    error_message=error_message
+                ).dict()
+            except Exception as e:
+                logger.error(f"{request_id} | gRPC gateway failed with code GTW006: {str(e)}")
+                return GatewayService.error_response(request_id, 'GTW006', str(e), status=500)
+        except httpx.TimeoutException:
+            return ResponseModel(
+                status_code=504,
+                response_headers={"request_id": request_id},
+                error_code="GTW010",
+                error_message="Gateway timeout"
+            ).dict()
+        except Exception as e:
+            logger.error(f"{request_id} | gRPC gateway failed with code GTW006: {str(e)}")
+            return GatewayService.error_response(request_id, 'GTW006', str(e), status=500)
+        finally:
+            if current_time:
+                logger.info(f"{request_id} | Gateway time {current_time - start_time}ms")
+            if backend_end_time and current_time:
+                logger.info(f"{request_id} | Backend time {backend_end_time - current_time}ms")
+
     async def _make_graphql_request(self, url: str, query: str, headers: Dict[str, str] = None) -> Dict:
         try:
             if headers is None:
                 headers = {}
             if 'Content-Type' not in headers:
                 headers['Content-Type'] = 'application/json'
-            if 'github.com' in url and 'Accept' not in headers:
-                headers['Accept'] = 'application/vnd.github.v4+json'
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json={'query': query}, headers=headers) as response:
                     response_data = await response.json()
-                    if response.status == 403 and 'github.com' in url:
-                        error_msg = response_data.get('message', '')
-                        if 'rate limit exceeded' in error_msg.lower():
-                            return {
-                                'errors': [{
-                                    'message': 'GitHub API rate limit exceeded. Please try again later or use authentication.',
-                                    'extensions': {'code': 'RATE_LIMIT_EXCEEDED'}
-                                }]
-                            }
                     if 'errors' in response_data:
                         return response_data
                     if response.status != 200:

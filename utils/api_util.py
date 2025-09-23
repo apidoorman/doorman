@@ -4,7 +4,8 @@ from utils.database import api_collection, endpoint_collection
 async def get_api(api_key, api_name_version):
     api = doorman_cache.get_cache('api_cache', api_key) if api_key else None
     if not api:
-        api = api_collection.find_one({'api_path': api_name_version})
+        api_name, api_version = api_name_version.lstrip('/').split('/')
+        api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
         if not api:
             return None
         api.pop('_id', None)
