@@ -347,7 +347,7 @@ const RoleDetailPage = () => {
                   { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
                   { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
                   { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' },
-                  { key: 'manage_tokens', label: 'Manage Tokens', description: 'Manage API tokens and user token balances' },
+                  { key: 'manage_credits', label: 'Manage Credits', description: 'Manage API credits and user credit balances' },
                   { key: 'manage_auth', label: 'Manage Auth', description: 'Revoke tokens and enable/disable users' },
                   { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
                   { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }

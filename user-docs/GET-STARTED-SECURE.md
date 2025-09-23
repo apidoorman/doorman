@@ -46,7 +46,7 @@ Use explicit, strong secrets and force HTTPS. You can terminate TLS either at Do
 
 ### 1) Required secrets and security env
 - `JWT_SECRET_KEY`: REQUIRED. Long, random string for access tokens.
-- `TOKEN_ENCRYPTION_KEY`: Encrypts API keys at rest (token defs).
+- `TOKEN_ENCRYPTION_KEY`: Encrypts API keys at rest.
 - `MEM_ENCRYPTION_KEY`: Encrypts memory dump files when in memory mode.
 - `ALLOWED_ORIGINS`: Exact origins allowed by CORS (no `*` with credentials).
 - `CORS_STRICT=true`: Disallow wildcard origins when using credentials.
@@ -147,11 +147,11 @@ curl -s -c "$COOKIE" -H 'Content-Type: application/json' \
 2) Define a token group for the upstream’s API key
 ```
 curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
-  "$BASE/platform/token" -d '{
-    "api_token_group": "orders-upstream",
+  "$BASE/platform/credit" -d '{
+    "api_credit_group": "orders-upstream",
     "api_key": "REDACTED_REAL_KEY",
     "api_key_header": "x-api-key",
-    "token_tiers": [ {"tier_name": "default", "tokens": 100000, "input_limit": 0, "output_limit": 0, "reset_frequency": "monthly"} ]
+    "credit_tiers": [ {"tier_name": "default", "credits": 100000, "input_limit": 0, "output_limit": 0, "reset_frequency": "monthly"} ]
   }'
 ```
 
@@ -168,8 +168,8 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
     "api_type": "REST",
     "api_allowed_retry_count": 1,
     "api_allowed_headers": ["content-type", "accept"],
-    "api_tokens_enabled": true,
-    "api_token_group": "orders-upstream"
+    "api_credits_enabled": true,
+    "api_credit_group": "orders-upstream"
   }'
 ```
 
@@ -225,4 +225,3 @@ Requests that fail validation return HTTP 400 without hitting the upstream.
 - 404/GTW001/GTW003: API or endpoint mapping is missing; verify name/version/URI.
 - CORS errors: tighten `ALLOWED_ORIGINS` and set `CORS_STRICT=true`.
 - Secure cookies not set: confirm `HTTPS_ONLY=true` or `HTTPS_ENABLED=true` and correct `COOKIE_DOMAIN`.
-

@@ -19,7 +19,7 @@ from google.protobuf.json_format import MessageToDict
 import importlib
 from models.response_model import ResponseModel
 from utils import api_util, routing_util
-from utils import token_util
+from utils import credit_util
 from utils.gateway_utils import get_headers
 from utils.doorman_cache_util import doorman_cache
 from utils.validation_util import validation_util
@@ -100,18 +100,18 @@ class GatewayService:
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 method = request.method.upper()
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_tokens_enabled'):
-                    if not await token_util.deduct_ai_token(api.get('api_token_group'), username):
-                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any tokens', status=401)
+                if api.get('api_credits_enabled'):
+                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
             allowed_headers = api.get('api_allowed_headers') or []
             headers = await get_headers(request, allowed_headers)
-            if api.get('api_tokens_enabled'):
-                ai_token_headers = await token_util.get_token_api_header(api.get('api_token_group'))
+            if api.get('api_credits_enabled'):
+                ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
-                user_specific_api_key = await token_util.get_user_api_key(api.get('api_token_group'), username)
+                user_specific_api_key = await credit_util.get_user_api_key(api.get('api_credit_group'), username)
                 if user_specific_api_key:
                     headers[ai_token_headers[0]] = user_specific_api_key
             content_type = request.headers.get("Content-Type", "").upper()
@@ -216,9 +216,9 @@ class GatewayService:
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 logger.info(f"{request_id} | SOAP gateway to: {url}")
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_tokens_enabled'):
-                    if not await token_util.deduct_ai_token(api, username):
-                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any tokens', status=401)
+                if api.get('api_credits_enabled'):
+                    if not await credit_util.deduct_credit(api, username):
+                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
             incoming_content_type = request.headers.get("Content-Type") or "application/xml"
@@ -304,19 +304,19 @@ class GatewayService:
                     return GatewayService.error_response(request_id, 'GTW001', 'No upstream servers configured')
                 url = server.rstrip('/')
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_tokens_enabled'):
-                    if not await token_util.deduct_ai_token(api.get('api_token_group'), username):
-                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any tokens', status=401)
+                if api.get('api_credits_enabled'):
+                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
             allowed_headers = api.get('api_allowed_headers') or []
             headers = await get_headers(request, allowed_headers)
             headers['Content-Type'] = 'application/json'
             headers['Accept'] = 'application/json'
-            if api.get('api_tokens_enabled'):
-                ai_token_headers = await token_util.get_token_api_header(api.get('api_token_group'))
+            if api.get('api_credits_enabled'):
+                ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
-                user_specific_api_key = await token_util.get_user_api_key(api.get('api_token_group'), username)
+                user_specific_api_key = await credit_util.get_user_api_key(api.get('api_credit_group'), username)
                 if user_specific_api_key:
                     headers[ai_token_headers[0]] = user_specific_api_key
             if api.get('api_authorization_field_swap'):
@@ -426,9 +426,9 @@ class GatewayService:
                 if url.startswith('grpc://'):
                     url = url[7:]
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_tokens_enabled'):
-                    if not await token_util.deduct_ai_token(api.get('api_token_group'), username):
-                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any tokens', status=401)
+                if api.get('api_credits_enabled'):
+                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                        return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
             allowed_headers = api.get('api_allowed_headers') or []
             headers = await get_headers(request, allowed_headers)

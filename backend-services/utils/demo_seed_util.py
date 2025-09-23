@@ -13,12 +13,12 @@ from utils.database import (
     group_collection,
     role_collection,
     subscriptions_collection,
-    token_def_collection,
-    user_token_collection,
+    credit_def_collection,
+    user_credit_collection,
     user_collection,
 )
 from utils.metrics_util import metrics_store, MinuteBucket
-from utils.token_util import encrypt_value
+from utils.encryption_util import encrypt_value
 
 
 def _rand_choice(seq):
@@ -51,7 +51,7 @@ def _rand_password() -> str:
 
 
 def ensure_roles() -> list[str]:
-    roles = [("developer", dict(manage_apis=True, manage_endpoints=True, manage_subscriptions=True, manage_tokens=True, view_logs=True)),
+    roles = [("developer", dict(manage_apis=True, manage_endpoints=True, manage_subscriptions=True, manage_credits=True, view_logs=True)),
              ("analyst", dict(view_logs=True, export_logs=True)),
              ("viewer", dict(view_logs=True)),
              ("ops", dict(manage_gateway=True, view_logs=True, export_logs=True, manage_security=True))]
@@ -165,45 +165,45 @@ def seed_endpoints(apis: list[tuple[str,str]], per_api: int) -> None:
             })
 
 
-def seed_tokens() -> list[str]:
+def seed_credits() -> list[str]:
     groups = ["ai-basic","ai-pro","maps-basic","maps-pro","news-tier","weather-tier"]
     tiers_catalog = [
-        {"tier_name": "basic", "tokens": 100, "input_limit": 100, "output_limit": 100, "reset_frequency": "monthly"},
-        {"tier_name": "pro", "tokens": 1000, "input_limit": 500, "output_limit": 500, "reset_frequency": "monthly"},
-        {"tier_name": "enterprise", "tokens": 10000, "input_limit": 2000, "output_limit": 2000, "reset_frequency": "monthly"},
+        {"tier_name": "basic", "credits": 100, "input_limit": 100, "output_limit": 100, "reset_frequency": "monthly"},
+        {"tier_name": "pro", "credits": 1000, "input_limit": 500, "output_limit": 500, "reset_frequency": "monthly"},
+        {"tier_name": "enterprise", "credits": 10000, "input_limit": 2000, "output_limit": 2000, "reset_frequency": "monthly"},
     ]
     created = []
     for g in groups:
-        if token_def_collection.find_one({"api_token_group": g}):
+        if credit_def_collection.find_one({"api_credit_group": g}):
             created.append(g)
             continue
         tiers = random.sample(tiers_catalog, k=random.randint(1, 3))
-        token_def_collection.insert_one({
-            "api_token_group": g,
+        credit_def_collection.insert_one({
+            "api_credit_group": g,
             "api_key": encrypt_value(uuid.uuid4().hex),
             "api_key_header": _rand_choice(["x-api-key","authorization","x-token"]),
-            "token_tiers": tiers,
+            "credit_tiers": tiers,
         })
         created.append(g)
     return created
 
 
-def seed_user_tokens(usernames: list[str], token_groups: list[str]) -> None:
+def seed_user_credits(usernames: list[str], credit_groups: list[str]) -> None:
     pick_users = random.sample(usernames, k=min(len(usernames), max(1, len(usernames)//2))) if usernames else []
     for u in pick_users:
-        users_tokens = {}
-        for g in random.sample(token_groups, k=random.randint(1, min(3, len(token_groups)))):
-            users_tokens[g] = {
+        users_credits = {}
+        for g in random.sample(credit_groups, k=random.randint(1, min(3, len(credit_groups)))):
+            users_credits[g] = {
                 "tier_name": _rand_choice(["basic","pro","enterprise"]),
-                "available_tokens": random.randint(10, 10000),
+                "available_credits": random.randint(10, 10000),
                 "reset_date": (datetime.utcnow() + timedelta(days=random.randint(1, 30))).strftime("%Y-%m-%d"),
                 "user_api_key": encrypt_value(uuid.uuid4().hex),
             }
-        existing = user_token_collection.find_one({"username": u})
+        existing = user_credit_collection.find_one({"username": u})
         if existing:
-            user_token_collection.update_one({"username": u}, {"$set": {"users_tokens": users_tokens}})
+            user_credit_collection.update_one({"username": u}, {"$set": {"users_credits": users_credits}})
         else:
-            user_token_collection.insert_one({"username": u, "users_tokens": users_tokens})
+            user_credit_collection.insert_one({"username": u, "users_credits": users_credits})
 
 
 def seed_subscriptions(usernames: list[str], apis: list[tuple[str,str]]) -> None:
@@ -301,8 +301,8 @@ def run_seed(users=30, apis=12, endpoints=5, groups=6, protos=5, logs=1000, seed
     group_names = seed_groups(groups, [f"{a}/{v}" for a, v in api_pairs])
     usernames = seed_users(users, roles, group_names)
     seed_endpoints(api_pairs, endpoints)
-    token_groups = seed_tokens()
-    seed_user_tokens(usernames, token_groups)
+    credit_groups = seed_credits()
+    seed_user_credits(usernames, credit_groups)
     seed_subscriptions(usernames, api_pairs)
     seed_logs(logs, usernames, api_pairs)
     seed_protos(protos, api_pairs)
@@ -314,7 +314,6 @@ def run_seed(users=30, apis=12, endpoints=5, groups=6, protos=5, logs=1000, seed
         'groups': group_collection.count_documents({}),
         'roles': role_collection.count_documents({}),
         'subscriptions': subscriptions_collection.count_documents({}),
-        'token_defs': token_def_collection.count_documents({}),
-        'user_tokens': user_token_collection.count_documents({}),
+        'credit_defs': credit_def_collection.count_documents({}),
+        'user_credits': user_credit_collection.count_documents({}),
     }
-

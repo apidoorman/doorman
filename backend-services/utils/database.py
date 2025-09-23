@@ -62,7 +62,8 @@ class Database:
                     "manage_roles": True,
                     "manage_routings": True,
                     "manage_gateway": True,
-                    "manage_subscriptions": True
+                    "manage_subscriptions": True,
+                    "manage_credits": True
                 })
             # Seed groups 'admin' and 'ALL'
             if not groups.find_one({"group_name": "admin"}):
@@ -184,7 +185,7 @@ class Database:
                 pass
             print("Memory-only mode: Core data initialized (admin user/role/groups)")
             return
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'token_defs', 'user_tokens', 'endpoint_validations', 'settings']
+        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
@@ -294,8 +295,8 @@ class Database:
         self.db.routings.create_indexes([
             IndexModel([("client_key", ASCENDING)], unique=True)
         ])
-        self.db.token_defs.create_indexes([
-            IndexModel([("api_token_group", ASCENDING)], unique=True),
+        self.db.credit_defs.create_indexes([
+            IndexModel([("api_credit_group", ASCENDING)], unique=True),
             IndexModel([("username", ASCENDING)], unique=True)
         ])
         self.db.endpoint_validations.create_indexes([
@@ -452,15 +453,15 @@ class InMemoryDB:
         self.roles = InMemoryCollection('roles')
         self.subscriptions = InMemoryCollection('subscriptions')
         self.routings = InMemoryCollection('routings')
-        self.token_defs = InMemoryCollection('token_defs')
-        self.user_tokens = InMemoryCollection('user_tokens')
+        self.credit_defs = InMemoryCollection('credit_defs')
+        self.user_credits = InMemoryCollection('user_credits')
         self.endpoint_validations = InMemoryCollection('endpoint_validations')
         self.settings = InMemoryCollection('settings')
 
     def list_collection_names(self):
         return [
             'users', 'apis', 'endpoints', 'groups', 'roles',
-            'subscriptions', 'routings', 'token_defs', 'user_tokens',
+            'subscriptions', 'routings', 'credit_defs', 'user_credits',
             'endpoint_validations', 'settings'
         ]
 
@@ -485,8 +486,8 @@ class InMemoryDB:
             'roles': coll_docs(self.roles),
             'subscriptions': coll_docs(self.subscriptions),
             'routings': coll_docs(self.routings),
-            'token_defs': coll_docs(self.token_defs),
-            'user_tokens': coll_docs(self.user_tokens),
+            'credit_defs': coll_docs(self.credit_defs),
+            'user_credits': coll_docs(self.user_credits),
             'endpoint_validations': coll_docs(self.endpoint_validations),
             'settings': coll_docs(self.settings),
         }
@@ -503,8 +504,8 @@ class InMemoryDB:
         load_coll(self.roles, data.get('roles', []))
         load_coll(self.subscriptions, data.get('subscriptions', []))
         load_coll(self.routings, data.get('routings', []))
-        load_coll(self.token_defs, data.get('token_defs', []))
-        load_coll(self.user_tokens, data.get('user_tokens', []))
+        load_coll(self.credit_defs, data.get('credit_defs', []))
+        load_coll(self.user_credits, data.get('user_credits', []))
         load_coll(self.endpoint_validations, data.get('endpoint_validations', []))
         load_coll(self.settings, data.get('settings', []))
 
@@ -523,8 +524,8 @@ if database.memory_only:
     routing_collection = db.routings
     subscriptions_collection = db.subscriptions
     user_collection = db.users
-    token_def_collection = db.token_defs
-    user_token_collection = db.user_tokens
+    credit_def_collection = db.credit_defs
+    user_credit_collection = db.user_credits
     endpoint_validation_collection = db.endpoint_validations
 else:
     db = database.db
@@ -536,6 +537,6 @@ else:
     routing_collection = db.routings
     subscriptions_collection = db.subscriptions
     user_collection = db.users
-    token_def_collection = db.token_defs
-    user_token_collection = db.user_tokens
+    credit_def_collection = db.credit_defs
+    user_credit_collection = db.user_credits
     endpoint_validation_collection = db.endpoint_validations

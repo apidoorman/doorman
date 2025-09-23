@@ -21,8 +21,8 @@ interface API {
   api_allowed_retry_count: number
   api_authorization_field_swap?: string
   api_allowed_headers?: string[]
-  api_tokens_enabled: boolean
-  api_token_group?: string
+  api_credits_enabled: boolean
+  api_credit_group?: string
   api_path?: string
 }
 
@@ -47,8 +47,8 @@ interface UpdateApiData {
   api_allowed_retry_count?: number
   api_authorization_field_swap?: string
   api_allowed_headers?: string[]
-  api_tokens_enabled?: boolean
-  api_token_group?: string
+  api_credits_enabled?: boolean
+  api_credit_group?: string
 }
 
 const ApiDetailPage = () => {
@@ -158,8 +158,8 @@ const ApiDetailPage = () => {
           api_allowed_retry_count: parsedApi.api_allowed_retry_count,
           api_authorization_field_swap: parsedApi.api_authorization_field_swap,
           api_allowed_headers: [...(parsedApi.api_allowed_headers || [])],
-          api_tokens_enabled: parsedApi.api_tokens_enabled,
-          api_token_group: parsedApi.api_token_group
+          api_credits_enabled: parsedApi.api_credits_enabled,
+          api_credit_group: parsedApi.api_credit_group
         })
         setLoading(false)
       } catch (err) {
@@ -186,8 +186,8 @@ const ApiDetailPage = () => {
               api_allowed_retry_count: found.api_allowed_retry_count,
               api_authorization_field_swap: found.api_authorization_field_swap,
               api_allowed_headers: [...(found.api_allowed_headers || [])],
-              api_tokens_enabled: found.api_tokens_enabled,
-              api_token_group: found.api_token_group
+              api_credits_enabled: found.api_credits_enabled,
+              api_credit_group: found.api_credit_group
             })
             setError(null)
           } else {
@@ -246,8 +246,8 @@ const ApiDetailPage = () => {
         api_allowed_retry_count: api.api_allowed_retry_count,
         api_authorization_field_swap: api.api_authorization_field_swap,
         api_allowed_headers: [...(api.api_allowed_headers || [])],
-        api_tokens_enabled: api.api_tokens_enabled,
-        api_token_group: api.api_token_group
+        api_credits_enabled: api.api_credits_enabled,
+        api_credit_group: api.api_credit_group
       })
     }
   }
@@ -703,43 +703,43 @@ const ApiDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tokens Enabled
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Credits Enabled
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
                         type="checkbox"
-                        checked={editData.api_tokens_enabled || false}
-                        onChange={(e) => handleInputChange('api_tokens_enabled', e.target.checked)}
+                        checked={editData.api_credits_enabled || false}
+                        onChange={(e) => handleInputChange('api_credits_enabled', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
                       <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                        Enable API tokens
+                        Enable API credits
                       </label>
                     </div>
                   ) : (
-                    <span className={`badge ${api.api_tokens_enabled ? 'badge-success' : 'badge-gray'}`}>
-                      {api.api_tokens_enabled ? 'Enabled' : 'Disabled'}
+                    <span className={`badge ${api.api_credits_enabled ? 'badge-success' : 'badge-gray'}`}>
+                      {api.api_credits_enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   )}
                 </div>
 
-                {api.api_tokens_enabled && (
+                {api.api_credits_enabled && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Token Group
+                      Credit Group
                     </label>
                     {isEditing ? (
                       <input
                         type="text"
-                        value={editData.api_token_group || ''}
-                        onChange={(e) => handleInputChange('api_token_group', e.target.value)}
+                        value={editData.api_credit_group || ''}
+                        onChange={(e) => handleInputChange('api_credit_group', e.target.value)}
                         className="input"
-                        placeholder="Enter token group"
+                        placeholder="Enter credit group"
                       />
                     ) : (
-                      <p className="text-gray-900 dark:text-white">{api.api_token_group || 'Default'}</p>
+                      <p className="text-gray-900 dark:text-white">{api.api_credit_group || 'Default'}</p>
                     )}
                   </div>
                 )}

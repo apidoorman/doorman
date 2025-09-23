@@ -8,9 +8,9 @@ from typing import List
 from fastapi import APIRouter, Depends, Request
 
 from models.response_model import ResponseModel
-from models.user_tokens_model import UserTokenModel
-from models.token_model import TokenModel
-from services.token_service import TokenService
+from models.user_credits_model import UserCreditModel
+from models.credit_model import CreditModel
+from services.credit_service import CreditService
 from utils.auth_util import auth_required
 from utils.response_util import respond_rest, process_response
 
@@ -20,18 +20,18 @@ import logging
 
 from utils.role_util import platform_role_required_bool
 
-token_router = APIRouter()
+credit_router = APIRouter()
 
 logger = logging.getLogger("doorman.gateway")
 
-@token_router.get("/defs",
-    description="List token definitions",
+@credit_router.get("/defs",
+    description="List credit definitions",
     response_model=ResponseModel,
     responses={
         200: {"description": "Successful Response"}
     }
 )
-async def list_token_definitions(request: Request, page: int = 1, page_size: int = 50):
+async def list_credit_definitions(request: Request, page: int = 1, page_size: int = 50):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -39,13 +39,13 @@ async def list_token_definitions(request: Request, page: int = 1, page_size: int
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(ResponseModel(
                 status_code=403,
-                error_code='TKN002',
-                error_message='Unable to retrieve tokens'
+                error_code='CRD002',
+                error_message='Unable to retrieve credits'
             ))
-        return respond_rest(await TokenService.list_token_defs(page, page_size, request_id))
+        return respond_rest(await CreditService.list_credit_defs(page, page_size, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -58,11 +58,11 @@ async def list_token_definitions(request: Request, page: int = 1, page_size: int
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@token_router.get("/defs/{api_token_group}",
-    description="Get a token definition",
+@credit_router.get("/defs/{api_credit_group}",
+    description="Get a credit definition",
     response_model=ResponseModel,
 )
-async def get_token_definition(api_token_group: str, request: Request):
+async def get_credit_definition(api_credit_group: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -70,13 +70,13 @@ async def get_token_definition(api_token_group: str, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(ResponseModel(
                 status_code=403,
-                error_code='TKN002',
-                error_message='Unable to retrieve tokens'
+                error_code='CRD002',
+                error_message='Unable to retrieve credits'
             ))
-        return respond_rest(await TokenService.get_token_def(api_token_group, request_id))
+        return respond_rest(await CreditService.get_credit_def(api_credit_group, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -89,8 +89,8 @@ async def get_token_definition(api_token_group: str, request: Request):
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@token_router.post("",
-    description="Create a token",
+@credit_router.post("",
+    description="Create a credit definition",
     response_model=ResponseModel,
     responses={
         201: {
@@ -98,14 +98,14 @@ async def get_token_definition(api_token_group: str, request: Request):
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Token created successfully"
+                        "message": "Credit definition created successfully"
                     }
                 }
             }
         }
     }
 )
-async def create_token(token_data: TokenModel, request: Request):
+async def create_credit(credit_data: CreditModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -113,14 +113,14 @@ async def create_token(token_data: TokenModel, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
                     status_code=403,
-                    error_code="TKN001",
-                    error_message="You do not have permission to manage tokens",
+                    error_code="CRD001",
+                    error_message="You do not have permission to manage credits",
                 ))
-        return respond_rest(await TokenService.create_token(token_data, request_id))
+        return respond_rest(await CreditService.create_credit(credit_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -135,8 +135,8 @@ async def create_token(token_data: TokenModel, request: Request):
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@token_router.put("/{api_token_group}",
-    description="Update a token",
+@credit_router.put("/{api_credit_group}",
+    description="Update a credit definition",
     response_model=ResponseModel,
     responses={
         200: {
@@ -144,14 +144,14 @@ async def create_token(token_data: TokenModel, request: Request):
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Token created successfully"
+                        "message": "Credit definition updated successfully"
                     }
                 }
             }
         }
     }
 )
-async def update_token(api_token_group:str, token_data: TokenModel, request: Request):
+async def update_credit(api_credit_group:str, credit_data: CreditModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -159,14 +159,14 @@ async def update_token(api_token_group:str, token_data: TokenModel, request: Req
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
                     status_code=403,
-                    error_code="TKN001",
-                    error_message="You do not have permission to manage tokens",
+                    error_code="CRD001",
+                    error_message="You do not have permission to manage credits",
                 ))
-        return respond_rest(await TokenService.update_token(api_token_group, token_data, request_id))
+        return respond_rest(await CreditService.update_credit(api_credit_group, credit_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -181,8 +181,8 @@ async def update_token(api_token_group:str, token_data: TokenModel, request: Req
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@token_router.delete("/{api_token_group}",
-    description="Delete a token",
+@credit_router.delete("/{api_credit_group}",
+    description="Delete a credit definition",
     response_model=ResponseModel,
     responses={
         200: {
@@ -190,14 +190,14 @@ async def update_token(api_token_group:str, token_data: TokenModel, request: Req
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Token created successfully"
+                        "message": "Credit definition deleted successfully"
                     }
                 }
             }
         }
     }
 )
-async def delete_token(api_token_group:str, request: Request):
+async def delete_credit(api_credit_group:str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -205,14 +205,14 @@ async def delete_token(api_token_group:str, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
                     status_code=403,
-                    error_code="TKN001",
-                    error_message="You do not have permission to manage tokens",
+                    error_code="CRD001",
+                    error_message="You do not have permission to manage credits",
                 ))
-        return respond_rest(await TokenService.delete_token(api_token_group, request_id))
+        return respond_rest(await CreditService.delete_credit(api_credit_group, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -227,8 +227,8 @@ async def delete_token(api_token_group:str, request: Request):
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@token_router.post("/{username}",
-    description="Add tokens for a user",
+@credit_router.post("/{username}",
+    description="Add credits for a user",
     response_model=ResponseModel,
     responses={
         200: {
@@ -236,14 +236,14 @@ async def delete_token(api_token_group:str, request: Request):
             "content": {
                 "application/json": {
                     "example": {
-                        "message": "Tokens added successfully"
+                        "message": "Credits saved successfully"
                     }
                 }
             }
         }
     }
 )
-async def add_user_tokens(username: str, token_data: UserTokenModel, request: Request):
+async def add_user_credits(username: str, credit_data: UserCreditModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -251,14 +251,14 @@ async def add_user_tokens(username: str, token_data: UserTokenModel, request: Re
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
                     status_code=403,
-                    error_code="TKN001",
-                    error_message="You do not have permission to manage tokens",
+                    error_code="CRD001",
+                    error_message="You do not have permission to manage credits",
                 ))
-        return respond_rest(await TokenService.add_tokens(username, token_data, request_id))
+        return respond_rest(await CreditService.add_credits(username, credit_data, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -273,11 +273,11 @@ async def add_user_tokens(username: str, token_data: UserTokenModel, request: Re
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@token_router.get("/all",
-    description="Get all user tokens",
-    response_model=List[UserTokenModel]
+@credit_router.get("/all",
+    description="Get all user credits",
+    response_model=List[UserCreditModel]
 )
-async def get_roles(request: Request, page: int = 1, page_size: int = 10):
+async def get_all_users_credits(request: Request, page: int = 1, page_size: int = 10):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -285,14 +285,14 @@ async def get_roles(request: Request, page: int = 1, page_size: int = 10):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_tokens'):
+        if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
                     status_code=403,
-                    error_code="TKN002",
-                    error_message="Unable to retrieve tokens for all user",
+                    error_code='CRD002',
+                    error_message='Unable to retrieve credits for all users',
                 ))
-        return respond_rest(await TokenService.get_all_tokens(page, page_size, request_id))
+        return respond_rest(await CreditService.get_all_credits(page, page_size, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -307,23 +307,23 @@ async def get_roles(request: Request, page: int = 1, page_size: int = 10):
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-@token_router.get("/{username}",
-    description="Get tokens for a user",
-    response_model=UserTokenModel
+@credit_router.get("/{username}",
+    description="Get credits for a user",
+    response_model=UserCreditModel
 )
-async def get_tokens(username: str, request: Request):
+async def get_credits(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        if not payload.get("sub") == username and not await platform_role_required_bool(payload.get("sub"), 'manage_tokens'):
+        if not payload.get("sub") == username and not await platform_role_required_bool(payload.get("sub"), 'manage_credits'):
             return respond_rest(
                 ResponseModel(
                     status_code=403,
-                    error_code="TKN003",
-                    error_message="Unable to retrieve tokens for user",
+                    error_code='CRD003',
+                    error_message='Unable to retrieve credits for user',
                 ))
-        return respond_rest(await TokenService.get_user_tokens(username, request_id))
+        return respond_rest(await CreditService.get_user_credits(username, request_id))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return respond_rest(ResponseModel(
@@ -332,8 +332,9 @@ async def get_tokens(username: str, request: Request):
                 "request_id": request_id
             },
             error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_message='An unexpected error occurred'
             ))
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+

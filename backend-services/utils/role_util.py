@@ -41,7 +41,7 @@ async def validate_platform_role(role_name, action):
             return True
         elif action == "manage_security" and role.get("manage_security"):
             return True
-        elif action == "manage_tokens" and role.get("manage_tokens"):
+        elif action == "manage_credits" and role.get("manage_credits"):
             return True
         elif action == "manage_auth" and role.get("manage_auth"):
             return True

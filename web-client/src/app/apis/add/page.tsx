@@ -22,8 +22,8 @@ const AddApiPage = () => {
     api_allowed_groups: [] as string[],
     api_allowed_headers: [] as string[],
     api_authorization_field_swap: '',
-    api_tokens_enabled: false,
-    api_token_group: '',
+    api_credits_enabled: false,
+    api_credit_group: '',
     // kept for future use; backend ignores unknown fields
     validation_enabled: false
   })
@@ -41,7 +41,7 @@ const AddApiPage = () => {
       // Trim empty optional fields to keep payload clean
       const payload: any = { ...formData }
       if (!payload.api_authorization_field_swap) delete payload.api_authorization_field_swap
-      if (!payload.api_token_group) delete payload.api_token_group
+      if (!payload.api_credit_group) delete payload.api_credit_group
       if (!Array.isArray(payload.api_allowed_headers) || payload.api_allowed_headers.length === 0) delete payload.api_allowed_headers
       if (!Array.isArray(payload.api_allowed_roles) || payload.api_allowed_roles.length === 0) delete payload.api_allowed_roles
       if (!Array.isArray(payload.api_allowed_groups) || payload.api_allowed_groups.length === 0) delete payload.api_allowed_groups
@@ -241,34 +241,34 @@ const AddApiPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Tokens Enabled
+                  Credits Enabled
                 </label>
                 <div className="flex items-center">
                   <input
-                    id="api_tokens_enabled"
-                    name="api_tokens_enabled"
+                    id="api_credits_enabled"
+                    name="api_credits_enabled"
                     type="checkbox"
                     className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                    checked={formData.api_tokens_enabled}
+                    checked={formData.api_credits_enabled}
                     onChange={handleChange}
                     disabled={loading}
                   />
-                  <label htmlFor="api_tokens_enabled" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                    Enable API tokens
+                  <label htmlFor="api_credits_enabled" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Enable API credits
                   </label>
                 </div>
               </div>
-              {formData.api_tokens_enabled && (
+              {formData.api_credits_enabled && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Token Group
+                    Credit Group
                   </label>
                   <input
                     type="text"
-                    name="api_token_group"
+                    name="api_credit_group"
                     className="input"
                     placeholder="ai-group-1"
-                    value={formData.api_token_group}
+                    value={formData.api_credit_group}
                     onChange={handleChange}
                     disabled={loading}
                   />
