@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface ApiKey {
   id: string
@@ -36,18 +38,37 @@ interface SecurityPolicy {
   createdAt: string
 }
 
+interface SecuritySettings {
+  enable_auto_save: boolean
+  auto_save_frequency_seconds: number
+  dump_path: string
+}
+
 const SecurityPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('api-keys')
+  // Tabs removed; render sections directly
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
   const [rateLimits, setRateLimits] = useState<RateLimit[]>([])
   const [ipWhitelist, setIpWhitelist] = useState<IpWhitelist[]>([])
   const [securityPolicies, setSecurityPolicies] = useState<SecurityPolicy[]>([])
+  const [activeTab, setActiveTab] = useState('')
+  const tabs: { id: string; label: string; icon: string }[] = []
+  const [settingsLoading, setSettingsLoading] = useState(true)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settings, setSettings] = useState<SecuritySettings>({
+    enable_auto_save: false,
+    auto_save_frequency_seconds: 900,
+    dump_path: 'generated/memory_dump.bin'
+  })
+  const [memoryOnly, setMemoryOnly] = useState(false)
+  const [restorePath, setRestorePath] = useState('')
+  const { permissions } = useAuth()
 
   useEffect(() => {
     fetchSecurityData()
+    fetchSecuritySettings()
   }, [])
 
   const fetchSecurityData = async () => {
@@ -79,6 +100,125 @@ const SecurityPage = () => {
       setError('Failed to load security data. Please try again later.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchSecuritySettings = async () => {
+    try {
+      setSettingsLoading(true)
+      setError(null)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/security/settings`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
+      if (!response.ok) throw new Error('Failed to load security settings')
+      const data = await response.json()
+      setSettings({
+        enable_auto_save: !!data.enable_auto_save,
+        auto_save_frequency_seconds: Number(data.auto_save_frequency_seconds || 900),
+        dump_path: data.dump_path || 'generated/memory_dump.bin'
+      })
+      setMemoryOnly(!!data.memory_only)
+    } catch (err) {
+      setError('Failed to load security settings. Please try again later.')
+    } finally {
+      setSettingsLoading(false)
+    }
+  }
+
+  const handleSaveSettings = async () => {
+    try {
+      setSettingsSaving(true)
+      setError(null)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/security/settings`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        },
+        body: JSON.stringify(settings)
+      })
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.error_message || 'Failed to save settings')
+      }
+      setSuccess('Security settings saved')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save settings')
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  const handleDumpNow = async () => {
+    try {
+      setError(null)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/memory/dump`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        },
+        body: JSON.stringify({ path: settings.dump_path })
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error_message || 'Failed to create memory dump')
+      setSuccess(`Memory dump created at ${data.response?.path || settings.dump_path}`)
+      setTimeout(() => setSuccess(null), 4000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create memory dump')
+    }
+  }
+
+  const handleRestore = async () => {
+    try {
+      setError(null)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/memory/restore`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        },
+        body: JSON.stringify({ path: restorePath || settings.dump_path })
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error_message || 'Failed to restore memory dump')
+      setSuccess(`Memory restored (created at ${data.response?.created_at || 'unknown'})`)
+      setTimeout(() => setSuccess(null), 4000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to restore memory dump')
+    }
+  }
+
+  const handleClearCaches = async () => {
+    try {
+      setError(null)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/api/caches`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error_message || 'Failed to clear caches')
+      setSuccess('All gateway caches cleared')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear caches')
     }
   }
 
@@ -130,20 +270,21 @@ const SecurityPage = () => {
     }
   }
 
-  const tabs = [
-    { id: 'api-keys', label: 'API Keys', icon: '🔑' },
-    { id: 'rate-limits', label: 'Rate Limits', icon: '⏱️' },
-    { id: 'ip-whitelist', label: 'IP Whitelist', icon: '🌐' },
-    { id: 'policies', label: 'Security Policies', icon: '🛡️' }
-  ]
+  // No tabs for this page; show all sections inline
 
   return (
+    <ProtectedRoute requiredPermission="manage_security">
     <Layout>
       <div className="space-y-6">
         {/* Page Header */}
         <div className="page-header">
           <div>
-            <h1 className="page-title">Security</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="page-title">Security</h1>
+              {memoryOnly && (
+                <span className="badge badge-gray">Memory Mode</span>
+              )}
+            </div>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
               Manage API keys, rate limits, and security policies
             </p>
@@ -190,6 +331,95 @@ const SecurityPage = () => {
           </div>
         ) : (
           <>
+            {/* Settings (always visible) */}
+            <div className="card">
+              <div className="p-6 space-y-6">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">Memory & Security Settings</h3>
+                  {memoryOnly && (
+                    <span className="badge badge-gray">Memory Mode</span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className={`block text-sm font-medium ${memoryOnly ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>Enable Auto-save</label>
+                    <div className={`flex items-center gap-3 ${memoryOnly ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={memoryOnly ? true : settings.enable_auto_save}
+                        onChange={(e) => setSettings(s => ({ ...s, enable_auto_save: e.target.checked }))}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        disabled={settingsLoading || settingsSaving || memoryOnly}
+                      />
+                      <span className={`text-sm ${memoryOnly ? 'text-gray-500 dark:text-gray-500' : 'text-gray-600 dark:text-gray-400'}`}>
+                        {memoryOnly ? 'Always on in memory mode' : 'Periodically save encrypted memory dump'}
+                      </span>
+                    </div>
+                    {memoryOnly && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Auto-save is enforced in memory mode; adjust only the frequency and dump path.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Auto-save Frequency (seconds)</label>
+                    <input
+                      type="number"
+                      min={60}
+                      value={settings.auto_save_frequency_seconds}
+                      onChange={(e) => setSettings(s => ({ ...s, auto_save_frequency_seconds: Math.max(60, Number(e.target.value || 60)) }))}
+                      className="input"
+                      placeholder="900"
+                      disabled={settingsLoading || settingsSaving}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Minimum 60 seconds</p>
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Dump Path</label>
+                    <input
+                      type="text"
+                      value={settings.dump_path}
+                      onChange={(e) => setSettings(s => ({ ...s, dump_path: e.target.value }))}
+                      className="input"
+                      placeholder="generated/memory_dump.bin"
+                      disabled={settingsLoading || settingsSaving}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 flex gap-3">
+                    <button onClick={handleSaveSettings} disabled={settingsSaving || settingsLoading} className="btn btn-primary">
+                      {settingsSaving ? (
+                        <div className="flex items-center"><div className="spinner mr-2"></div>Saving...</div>
+                      ) : 'Save Settings'}
+                    </button>
+                    <button onClick={handleDumpNow} className="btn btn-secondary">Dump Now</button>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Restore From Path</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={restorePath}
+                        onChange={(e) => setRestorePath(e.target.value)}
+                        className="input flex-1"
+                        placeholder={settings.dump_path}
+                      />
+                      <button onClick={handleRestore} className="btn btn-secondary">Restore</button>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Requires MEM_ENCRYPTION_KEY to be configured on server.</p>
+                  </div>
+
+                  {permissions?.manage_gateway && (
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gateway</label>
+                      <button onClick={handleClearCaches} className="btn btn-secondary">Clear All Caches</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
             {/* Tabs */}
             <div className="card">
               <div className="border-b border-gray-200 dark:border-gray-700">
@@ -212,6 +442,84 @@ const SecurityPage = () => {
               </div>
 
               <div className="p-6">
+                {activeTab === 'settings' && (
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">Memory & Security Settings</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Enable Auto-save</label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={settings.enable_auto_save}
+                            onChange={(e) => setSettings(s => ({ ...s, enable_auto_save: e.target.checked }))}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                            disabled={settingsLoading || settingsSaving}
+                          />
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Periodically save encrypted memory dump</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Auto-save Frequency (seconds)</label>
+                        <input
+                          type="number"
+                          min={60}
+                          value={settings.auto_save_frequency_seconds}
+                          onChange={(e) => setSettings(s => ({ ...s, auto_save_frequency_seconds: Math.max(60, Number(e.target.value || 60)) }))}
+                          className="input"
+                          placeholder="900"
+                          disabled={settingsLoading || settingsSaving}
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Minimum 60 seconds</p>
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Dump Path</label>
+                        <input
+                          type="text"
+                          value={settings.dump_path}
+                          onChange={(e) => setSettings(s => ({ ...s, dump_path: e.target.value }))}
+                          className="input"
+                          placeholder="generated/memory_dump.bin"
+                          disabled={settingsLoading || settingsSaving}
+                        />
+                      </div>
+
+                      <div className="md:col-span-2 flex gap-3">
+                        <button onClick={handleSaveSettings} disabled={settingsSaving || settingsLoading} className="btn btn-primary">
+                          {settingsSaving ? (
+                            <div className="flex items-center"><div className="spinner mr-2"></div>Saving...</div>
+                          ) : 'Save Settings'}
+                        </button>
+                        <button onClick={handleDumpNow} className="btn btn-secondary">Dump Now</button>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Restore From Path</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={restorePath}
+                            onChange={(e) => setRestorePath(e.target.value)}
+                            className="input flex-1"
+                            placeholder={settings.dump_path}
+                          />
+                          <button onClick={handleRestore} className="btn btn-secondary">Restore</button>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Requires MEM_ENCRYPTION_KEY to be configured on server.</p>
+                      </div>
+
+                      {permissions?.manage_gateway && (
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gateway</label>
+                          <button onClick={handleClearCaches} className="btn btn-secondary">Clear All Caches</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* API Keys Tab */}
                 {activeTab === 'api-keys' && (
                   <div className="space-y-4">
@@ -422,6 +730,7 @@ const SecurityPage = () => {
         )}
       </div>
     </Layout>
+    </ProtectedRoute>
   )
 }
 

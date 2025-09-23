@@ -143,7 +143,6 @@ class ApiService:
             ).dict()
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_api_by_name_version(api_name, api_version, request_id):
         """
         Get an API by name and version.
@@ -170,7 +169,6 @@ class ApiService:
             ).dict()
 
     @staticmethod
-    @cache_manager.cached(ttl=300)
     async def get_apis(page, page_size, request_id):
         """
         Get all APIs that a user has access to with pagination.

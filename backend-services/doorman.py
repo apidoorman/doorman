@@ -34,6 +34,11 @@ from routes.routing_routes import routing_router
 from routes.proto_routes import proto_router
 from routes.logging_routes import logging_router
 from routes.dashboard_routes import dashboard_router
+from routes.memory_routes import memory_router
+from routes.security_routes import security_router
+from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
+from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
+from utils.database import database
 
 import multiprocessing
 import logging
@@ -115,6 +120,42 @@ async def startup_event():
         decode_responses=True
     )
     asyncio.create_task(automatic_purger(1800))
+    # Load security settings and start auto-save loop (non-blocking)
+    try:
+        await load_settings()
+        await start_auto_save_task()
+    except Exception as e:
+        gateway_logger.error(f"Failed to initialize security settings auto-save: {e}")
+    # If running in memory-only mode, try to restore from the most recent encrypted dump
+    try:
+        if database.memory_only:
+            settings = get_cached_settings()
+            hint = settings.get("dump_path")
+            latest_path = find_latest_dump_path(hint)
+            if latest_path and os.path.exists(latest_path):
+                info = restore_memory_from_file(latest_path)
+                gateway_logger.info(f"Memory mode: restored from dump {latest_path} (created_at={info.get('created_at')})")
+            else:
+                gateway_logger.info("Memory mode: no existing dump found to restore")
+    except Exception as e:
+        gateway_logger.error(f"Memory mode restore failed: {e}")
+
+@doorman.on_event("shutdown")
+async def shutdown_event():
+    # Stop auto-save task cleanly
+    try:
+        await stop_auto_save_task()
+    except Exception as e:
+        gateway_logger.error(f"Failed to stop auto-save task: {e}")
+    # Always write a final encrypted memory dump when in memory-only mode
+    try:
+        if database.memory_only:
+            settings = get_cached_settings()
+            path = settings.get("dump_path")
+            dump_memory_to_file(path)
+            gateway_logger.info(f"Final memory dump written to {path}")
+    except Exception as e:
+        gateway_logger.error(f"Failed to write final memory dump: {e}")
 
 @doorman.exception_handler(JWTError)
 async def jwt_exception_handler(exc: JWTError):
@@ -154,6 +195,8 @@ doorman.include_router(routing_router, prefix="/platform/routing", tags=["Routin
 doorman.include_router(proto_router, prefix="/platform/proto", tags=["Proto"])
 doorman.include_router(logging_router, prefix="/platform/logging", tags=["Logging"])
 doorman.include_router(dashboard_router, prefix="/platform/dashboard", tags=["Dashboard"])
+doorman.include_router(memory_router, prefix="/platform", tags=["Memory"])
+doorman.include_router(security_router, prefix="/platform", tags=["Security"])
 
 def start():
     if os.path.exists(PID_FILE):
