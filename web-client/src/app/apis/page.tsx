@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Key, ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import './apis.css';
 
 interface API {
@@ -42,8 +43,10 @@ const handleLogout = () => {
 };
 
 const APIsPage = () => {
+  const router = useRouter();
   const [theme, setTheme] = useState('light');
   const [apis, setApis] = useState<API[]>([]);
+  const [allApis, setAllApis] = useState<API[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -76,10 +79,12 @@ const APIsPage = () => {
       }
       const data = await response.json();
       const apiList = Array.isArray(data) ? data : (data.apis || data.response?.apis || []);
+      setAllApis(apiList);
       setApis(apiList);
     } catch (err) {
       setError('Failed to load APIs. Please try again later.');
       setApis([]);
+      setAllApis([]);
     } finally {
       setLoading(false);
     }
@@ -87,7 +92,19 @@ const APIsPage = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Implement search functionality
+    if (!searchTerm.trim()) {
+      setApis(allApis);
+      return;
+    }
+    
+    const filteredApis = allApis.filter(api => 
+      (api.api_name as string)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (api.api_version as string)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (api.api_type as string)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (api.api_path as string)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (api.api_description as string)?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setApis(filteredApis);
   };
 
   const handleSort = (sortField: string) => {
@@ -97,10 +114,17 @@ const APIsPage = () => {
         return (a.api_name as string).localeCompare(b.api_name as string);
       } else if (sortField === 'api_version') {
         return (a.api_version as string).localeCompare(b.api_version as string);
+      } else if (sortField === 'api_type') {
+        return (a.api_type as string).localeCompare(b.api_type as string);
       }
       return 0;
     });
     setApis(sortedApis);
+  };
+
+  const handleApiClick = (api: API) => {
+    sessionStorage.setItem('selectedApi', JSON.stringify(api));
+    router.push(`/apis/${api.api_id}`);
   };
 
   return (
@@ -152,7 +176,9 @@ const APIsPage = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               <button type="submit" className="apis-search-btn">Search</button>
-              <button type="button" className="apis-add-btn">Add API</button>
+              <Link href="/apis/add" className="apis-add-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                Add API
+              </Link>
             </form>
             <div className="apis-sort-group">
               <button 
@@ -206,7 +232,13 @@ const APIsPage = () => {
                 </thead>
                 <tbody>
                   {apis.map((api, index) => (
-                    <tr key={api.api_id || `${api.api_name}-${api.api_version}-${index}`}>
+                    <tr 
+                      key={api.api_id || `${api.api_name}-${api.api_version}-${index}`}
+                      onClick={() => handleApiClick(api)}
+                      style={{ cursor: 'pointer' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
+                    >
                       <td>{api.api_name}</td>
                       <td>
                         <span className="apis-version-badge">{api.api_version}</span>

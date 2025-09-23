@@ -124,6 +124,7 @@ const UserDetailPage = () => {
 
   const handleCancel = () => {
     setIsEditing(false);
+    setError(null);
     // Reset edit data to original values
     if (user) {
       setEditData({
