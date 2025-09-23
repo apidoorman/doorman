@@ -10,7 +10,6 @@ def process_response(response):
     """
     Process the response from the API.
     """
-    logger.info(f"Processing response")
     response = ResponseModel(**response)
     try:
         processed_response = None
