@@ -49,6 +49,8 @@ interface GroupedLogs {
   expanded_logs?: Log[] // Store all logs for this request when expanded
 }
 
+type OverrideKey = string // `${method}|${api_name}|${api_version}|${endpoint_uri}`
+
 export default function LogsPage() {
   const [logs, setLogs] = useState<Log[]>([])
   const [groupedLogs, setGroupedLogs] = useState<GroupedLogs[]>([])
@@ -79,6 +81,36 @@ export default function LogsPage() {
       level: ''
     }
   })
+
+  const [overrideMap, setOverrideMap] = useState<Record<OverrideKey, boolean>>({})
+
+  const ensureEndpointOverridesLoaded = async (apiPath: string) => {
+    try {
+      const parts = apiPath.replace(/^\//, '').split('/')
+      if (parts.length < 2) return
+      const api_name = parts[0]
+      const api_version = parts[1]
+      const keyPrefix = `${api_name}|${api_version}|`
+      if (Object.keys(overrideMap).some(k => k.includes(keyPrefix))) return
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3002'}/platform/endpoint/${encodeURIComponent(api_name)}/${encodeURIComponent(api_version)}`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `access_token_cookie=${document.cookie.split('; ').find(row => row.startsWith('access_token_cookie='))?.split('=')[1]}`
+        }
+      })
+      const data = await response.json()
+      if (!response.ok) return
+      const eps: any[] = data.endpoints || []
+      const next: Record<OverrideKey, boolean> = {}
+      eps.forEach(ep => {
+        const k: OverrideKey = `${ep.endpoint_method}|${ep.api_name}|${ep.api_version}|${ep.endpoint_uri}`
+        next[k] = Array.isArray(ep.endpoint_servers) && ep.endpoint_servers.length > 0
+      })
+      setOverrideMap(prev => ({ ...prev, ...next }))
+    } catch {}
+  }
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -259,6 +291,11 @@ export default function LogsPage() {
         const responseTimeLog = sortedLogs.find(log => log.response_time)
         const userLog = sortedLogs.find(log => log.user)
         const endpointLog = sortedLogs.find(log => log.endpoint && log.method)
+        const apiHintLog = sortedLogs.find(log => log.api)?.api
+        if (apiHintLog) {
+          // Best effort: load endpoint override info for this API path
+          ensureEndpointOverridesLoaded(apiHintLog as string)
+        }
         const hasError = sortedLogs.some(log => log.level.toLowerCase() === 'error')
         
         return {
@@ -658,6 +695,7 @@ export default function LogsPage() {
                     <th>Duration</th>
                     <th>User</th>
                     <th>Endpoint</th>
+                    <th>Routing</th>
                     <th>Method</th>
                     <th>Response Time</th>
                     <th>Status</th>
@@ -708,6 +746,26 @@ export default function LogsPage() {
                           </p>
                         </td>
                         <td>
+                          {(() => {
+                            if (!group.endpoint || !group.method) return '-'
+                            const m = (group.endpoint || '').match(/^\/?([^/]+\/v\d+)(?:\/(.*))?$/)
+                            if (!m) return '-'
+                            const apiPath = m[1]
+                            const epUri = '/' + (m[2] || '')
+                            const parts = apiPath.split('/')
+                            if (parts.length < 2) return '-'
+                            const api_name = parts[0]
+                            const api_version = parts[1]
+                            const k: OverrideKey = `${group.method}|${api_name}|${api_version}|${epUri}`
+                            const hasOverride = !!overrideMap[k]
+                            return (
+                              <span className={`badge ${hasOverride ? 'badge-primary' : 'badge-gray'}`} title="Routing precedence: client-key → endpoint → API">
+                                {hasOverride ? 'Endpoint override' : 'API default'}
+                              </span>
+                            )
+                          })()}
+                        </td>
+                        <td>
                           <span className={`badge ${group.method === 'GET' ? 'badge-success' : group.method === 'POST' ? 'badge-primary' : 'badge-warning'}`}>
                             {group.method || '-'}
                           </span>
@@ -727,7 +785,7 @@ export default function LogsPage() {
                       {/* Expanded logs for this request */}
                       {expandedRequests.has(group.request_id) && (
                         <tr>
-                          <td colSpan={9} className="p-0">
+                          <td colSpan={10} className="p-0">
                             <div className="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
                               <div className="p-4">
                                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
