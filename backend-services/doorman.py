@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from models.response_model import ResponseModel
 from utils.cache_manager_util import cache_manager
 from utils.auth_blacklist import purge_expired_tokens
+from utils.doorman_cache_util import doorman_cache
 
 from routes.authorization_routes import authorization_router
 from routes.group_routes import group_router
@@ -173,6 +174,9 @@ def start():
     gateway_logger.info(f"Starting doorman with PID {process.pid}.")
 
 def stop():
+    if doorman_cache.cache_type == "MEM":
+        doorman_cache.force_save_cache()
+        doorman_cache.stop_cache_persistence()
     if not os.path.exists(PID_FILE):
         gateway_logger.info("No running instance found")
         return
