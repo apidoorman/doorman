@@ -79,6 +79,7 @@ async def authorization(request: Request, Authorize: AuthJWT = Depends()):
             },
             response={"access_token": access_token}
         ).dict())
+        response.delete_cookie("access_token_cookie")
         Authorize.set_access_cookies(access_token, response)
         return response
     except HTTPException as e:
@@ -260,13 +261,15 @@ async def authorization_invalidate(response: Response, request: Request, Authori
         if user not in jwt_blacklist:
             jwt_blacklist[user] = TimedHeap()
         await jwt_blacklist[user].push(jti)
-        return process_response(ResponseModel(
+        response = process_response(ResponseModel(
             status_code=200,
             response_headers={
                 "request_id": request_id
             },
             message="Your token has been invalidated"
             ).dict())
+        response.delete_cookie("access_token_cookie")
+        return response
     except AuthJWTException as e:
         logging.error(f"Logout failed: {str(e)}")
         return process_response(ResponseModel(
