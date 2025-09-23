@@ -4,7 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
@@ -70,7 +70,7 @@ Response:
     ])
 async def update_user(username: str, api_data: UpdateUserModel, Authorize: AuthJWT = Depends()):
     try:
-        if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(('admin', 'dev'), Authorize.get_jwt_subject()):
+        if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             raise HTTPException(status_code=403, detail="Can only update your own information")
         await UserService.update_user(username, api_data)
         return JSONResponse(content={"message": "User updated successfully"}, status_code=200)
@@ -95,7 +95,7 @@ Response:
     ])
 async def update_user_password(username: str, api_data: UpdatePasswordModel, Authorize: AuthJWT = Depends()):
     try:
-        if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(('admin', 'dev'), Authorize.get_jwt_subject()):
+        if not Authorize.get_jwt_subject() == username or not await platform_role_required_bool(Authorize.get_jwt_subject(), 'manage_users'):
             raise HTTPException(status_code=403, detail="Can only update your own password")
         await UserService.update_password(username, api_data)
         return JSONResponse(content={"message": "Password updated successfully"}, status_code=200)

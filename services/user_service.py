@@ -4,13 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/pygate for more information
 """
 
-from services.subscription_service import SubscriptionService
 from utils import password_util
 from utils.database import db
 from services.cache import pygate_cache
 from models.create_user_model import CreateUserModel
-
-import logging
 
 class UserService:
     user_collection = db.users
@@ -23,7 +20,14 @@ class UserService:
         Retrieve a user by username.
         """
         try:
-            user = pygate_cache.get_cache('user_cache', username) or await UserService.user_collection.find_one({'username': username})
+            user = pygate_cache.get_cache('user_cache', username)
+            if not user:
+                user = UserService.user_collection.find_one({'username': username})
+                if not user:
+                    raise ValueError("User not found in database")
+                if user.get('_id'): del user['_id']
+                if user.get('password'): del user['password']
+                pygate_cache.set_cache('user_cache', username, user)
             if '_id' in user:
                 del user['_id']
             if 'password' in user:
@@ -32,7 +36,7 @@ class UserService:
                 raise ValueError("User not found")
             return user
         except Exception as e:
-            raise ValueError("User not found")
+            raise ValueError("User not found error" + str(e))
 
     @staticmethod
     async def get_user_by_email(email):
@@ -101,7 +105,6 @@ class UserService:
             return user
             
         except Exception as e:
-            logging.error(f"Error in check_password_return_user: {str(e)}")
             raise ValueError("Authentication failed")
 
     @staticmethod
