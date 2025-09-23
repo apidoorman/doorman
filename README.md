@@ -69,7 +69,7 @@ Set environment variables
 ```bash
 # Mongo DB Config
 MONGO_DB_URI=mongodb://localhost:27017/pygate
-`
+
 # Redis Config
 REDIS_HOST=localhost
 REDIS_PORT=6379
