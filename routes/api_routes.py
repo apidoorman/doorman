@@ -53,7 +53,7 @@ def validate_path(base_path: Path, target_path: Path) -> bool:
         base_path = base_path.resolve()
         target_path = target_path.resolve()
         # Check if target_path is within base_path
-        return str(target_path).startswith(str(base_path))
+        return os.path.commonpath([str(base_path)]) == os.path.commonpath([str(base_path), str(target_path)])
     except Exception:
         return False
 
@@ -349,9 +349,13 @@ async def upload_proto_file(
                 str(proto_path)
             ], check=True)
             init_path = generated_dir / "__init__.py"
+            if not validate_path(generated_dir, init_path):
+                raise HTTPException(status_code=400, detail="Invalid init path")
             if not init_path.exists():
                 init_path.write_text('"""Generated gRPC code."""\n')
             pb2_grpc_file = generated_dir / f"{safe_api_name}_{safe_api_version}_pb2_grpc.py"
+            if not validate_path(generated_dir, pb2_grpc_file):
+                raise HTTPException(status_code=400, detail="Invalid grpc file path")
             if pb2_grpc_file.exists():
                 content = pb2_grpc_file.read_text()
                 content = content.replace(
@@ -602,14 +606,12 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request, A
         if proto_path.exists():
             proto_path.unlink()
             logger.info(f"{request_id} | Deleted proto file: {proto_path}")
-        generated_files = [
-            f"{key}_pb2.py",
-            f"{key}_pb2.pyc",
-            f"{key}_pb2_grpc.py",
-            f"{key}_pb2_grpc.pyc"
-        ]
+        generated_files = [f"{key}_pb2.py", f"{key}_pb2.pyc", f"{key}_pb2_grpc.py", f"{key}_pb2_grpc.pyc"]
         for file in generated_files:
             file_path = generated_dir / file
+            if not validate_path(generated_dir, file_path):
+                logger.warning(f"{request_id} | Unsafe file path detected: {file_path}. Skipping deletion.")
+                continue
             if file_path.exists():
                 file_path.unlink()
                 logger.info(f"{request_id} | Deleted generated file: {file_path}")
