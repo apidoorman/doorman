@@ -11,6 +11,7 @@ from models.response_model import ResponseModel
 from utils.auth_util import auth_required
 from utils.response_util import process_response
 from utils.database import user_collection, api_collection, subscriptions_collection
+from utils.metrics_util import metrics_store
 
 import uuid
 import time
@@ -38,41 +39,53 @@ async def get_dashboard_data(request: Request):
         total_users = user_collection.count_documents({"active": True})
         total_apis = api_collection.count_documents({})
         
-        # Get monthly usage data (mock data for now)
-        current_month = datetime.now().strftime("%b")
-        monthly_usage = {
-            "Jan": 1250,
-            "Feb": 1380,
-            "Mar": 1420,
-            "Apr": 1580,
-            "May": 1620,
-            "Jun": 1750,
-            "Jul": 1820,
-            "Aug": 1950,
-            "Sep": 2100,
-            "Oct": 2250,
-            "Nov": 2400,
-            "Dec": 2600
-        }
-        
-        # Get active users list (mock data for now)
-        active_users_list = [
-            {"username": "admin", "requests": "1,250", "subscribers": 5},
-            {"username": "user1", "requests": "890", "subscribers": 3},
-            {"username": "user2", "requests": "650", "subscribers": 2},
-            {"username": "user3", "requests": "420", "subscribers": 1}
-        ]
-        
-        # Get popular APIs (mock data for now)
-        popular_apis = [
-            {"name": "User API", "requests": "2,500", "subscribers": 15},
-            {"name": "Payment API", "requests": "1,800", "subscribers": 8},
-            {"name": "Notification API", "requests": "1,200", "subscribers": 12},
-            {"name": "Analytics API", "requests": "950", "subscribers": 6}
-        ]
+        # Build monthly usage from metrics (aggregate per calendar month from available series)
+        snap = metrics_store.snapshot('30d')
+        monthly_usage: Dict[str, int] = {}
+        for pt in snap.get('series', []):
+            try:
+                ts = datetime.fromtimestamp(pt['timestamp'])
+                key = ts.strftime('%b')
+                monthly_usage[key] = monthly_usage.get(key, 0) + int(pt.get('count', 0))
+            except Exception:
+                continue
+
+        # Active users list from top_users in metrics; enrich with subscribers (count of apis in subscriptions)
+        active_users_list = []
+        for username, reqs in snap.get('top_users', [])[:10]:
+            subs = subscriptions_collection.find_one({'username': username}) or {}
+            subscribers = len(subs.get('apis', [])) if isinstance(subs.get('apis'), list) else 0
+            active_users_list.append({
+                'username': username,
+                'requests': f"{int(reqs):,}",
+                'subscribers': subscribers
+            })
+
+        # Popular APIs from metrics top_apis; subscribers are approximate (number of users subscribed to that api token path)
+        popular_apis = []
+        for api_key, reqs in snap.get('top_apis', [])[:10]:
+            # Estimate subscribers across all users who have this api in their subscriptions
+            try:
+                name = api_key
+                # Count subscribers
+                count = 0
+                try:
+                    for doc in subscriptions_collection.find():
+                        apis = doc.get('apis', [])
+                        if any(str(api_key).split(':')[-1] in str(a) for a in (apis or [])):
+                            count += 1
+                except Exception:
+                    count = 0
+                popular_apis.append({
+                    'name': name,
+                    'requests': f"{int(reqs):,}",
+                    'subscribers': count
+                })
+            except Exception:
+                continue
         
         dashboard_data = {
-            "totalRequests": sum(monthly_usage.values()),
+            "totalRequests": int(sum(monthly_usage.values()) or snap.get('total_requests', 0)),
             "activeUsers": total_users,
             "newApis": total_apis,
             "monthlyUsage": monthly_usage,
