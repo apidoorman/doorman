@@ -114,7 +114,7 @@ async def rest_gateway(path: str, request: Request, Authorize: AuthJWT = Depends
             query_params=dict(request.query_params),
             identity=Authorize.get_jwt_subject()
         )
-        return process_response(await GatewayService.rest_gateway(request_model, request_id, start_time))
+        return process_response(await GatewayService.rest_gateway(Authorize, request_model, request_id, start_time))
     except RateLimitExceeded as e:
         return process_response(ResponseModel(
             status_code=429,

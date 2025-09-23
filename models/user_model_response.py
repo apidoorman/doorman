@@ -22,6 +22,7 @@ class UserModelResponse(BaseModel):
     throttle_wait_duration_type: Optional[str] = Field(None, min_length=1, max_length=7, description="Wait duration for the throttle limit", example="seconds")
     throttle_queue_limit: Optional[int] = Field(None, ge=0, description="Throttle queue limit for the user", example=10)
     custom_attributes: Optional[dict] = Field(None, description="Custom attributes for the user", example={"custom_key": "custom_value"})
+    active: Optional[bool] = Field(None, description="Active status of the user", example=True)
 
     class Config:
         arbitrary_types_allowed = True
