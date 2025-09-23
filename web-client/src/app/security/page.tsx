@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
+import { getJson, postJson, putJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -108,15 +109,7 @@ const SecurityPage = () => {
     try {
       setSettingsLoading(true)
       setError(null)
-      const response = await fetch(`${SERVER_URL}/platform/security/settings`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      if (!response.ok) throw new Error('Failed to load security settings')
-      const data = await response.json()
+      const data = await getJson<any>(`${SERVER_URL}/platform/security/settings`)
       setSettings({
         enable_auto_save: !!data.enable_auto_save,
         auto_save_frequency_seconds: Number(data.auto_save_frequency_seconds || 900),
@@ -134,19 +127,7 @@ const SecurityPage = () => {
     try {
       setSettingsSaving(true)
       setError(null)
-      const response = await fetch(`${SERVER_URL}/platform/security/settings`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(settings)
-      })
-      if (!response.ok) {
-        const errData = await response.json()
-        throw new Error(errData.error_message || 'Failed to save settings')
-      }
+      await putJson(`${SERVER_URL}/platform/security/settings`, settings)
       setSuccess('Security settings saved')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
@@ -159,17 +140,7 @@ const SecurityPage = () => {
   const handleDumpNow = async () => {
     try {
       setError(null)
-      const response = await fetch(`${SERVER_URL}/platform/memory/dump`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ path: settings.dump_path })
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error_message || 'Failed to create memory dump')
+      const data = await postJson<any>(`${SERVER_URL}/platform/memory/dump`, { path: settings.dump_path })
       setSuccess(`Memory dump created at ${data.response?.path || settings.dump_path}`)
       setTimeout(() => setSuccess(null), 4000)
     } catch (err) {
@@ -180,17 +151,7 @@ const SecurityPage = () => {
   const handleRestore = async () => {
     try {
       setError(null)
-      const response = await fetch(`${SERVER_URL}/platform/memory/restore`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ path: restorePath || settings.dump_path })
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error_message || 'Failed to restore memory dump')
+      const data = await postJson<any>(`${SERVER_URL}/platform/memory/restore`, { path: restorePath || settings.dump_path })
       setSuccess(`Memory restored (created at ${data.response?.created_at || 'unknown'})`)
       setTimeout(() => setSuccess(null), 4000)
     } catch (err) {
@@ -201,16 +162,7 @@ const SecurityPage = () => {
   const handleClearCaches = async () => {
     try {
       setError(null)
-      const response = await fetch(`${SERVER_URL}/api/caches`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error_message || 'Failed to clear caches')
+      const data = await postJson<any>(`${SERVER_URL}/api/caches`, {})
       setSuccess('All gateway caches cleared')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {

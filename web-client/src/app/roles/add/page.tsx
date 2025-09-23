@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
+import { postJson } from '@/utils/api'
 
 interface CreateRoleData {
   role_name: string
@@ -18,6 +19,8 @@ interface CreateRoleData {
   manage_gateway: boolean
   manage_subscriptions: boolean
   manage_security: boolean
+  view_logs: boolean
+  export_logs: boolean
 }
 
 const AddRolePage = () => {
@@ -35,7 +38,9 @@ const AddRolePage = () => {
     manage_routings: false,
     manage_gateway: false,
     manage_subscriptions: false,
-    manage_security: false
+    manage_security: false,
+    view_logs: false,
+    export_logs: false
   })
 
   const handleInputChange = (field: keyof CreateRoleData, value: any) => {
@@ -54,17 +59,7 @@ const AddRolePage = () => {
       setLoading(true)
       setError(null)
 
-      const response = await fetch(`${SERVER_URL}/platform/role`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to create role')
-      }
+      await postJson(`${SERVER_URL}/platform/role`, formData)
 
       router.push('/roles')
     } catch (err) {
@@ -87,7 +82,11 @@ const AddRolePage = () => {
     { key: 'manage_routings', label: 'Manage Routings', description: 'Configure API routing and load balancing' },
     { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
     { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
-    { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' }
+    { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' },
+    { key: 'manage_tokens', label: 'Manage Tokens', description: 'Manage API tokens and user token balances' },
+    { key: 'manage_auth', label: 'Manage Auth', description: 'Revoke tokens and enable/disable users' },
+    { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
+    { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }
   ]
 
   return (

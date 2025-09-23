@@ -11,7 +11,9 @@ from models.response_model import ResponseModel
 from services.user_service import UserService
 from utils.response_util import respond_rest
 from utils.auth_util import auth_required, create_access_token
-from utils.auth_blacklist import TimedHeap, jwt_blacklist
+from utils.auth_blacklist import TimedHeap, jwt_blacklist, revoke_all_for_user, unrevoke_all_for_user, is_user_revoked
+from utils.role_util import platform_role_required_bool
+from models.update_user_model import UpdateUserModel
 
 import uuid
 import time
@@ -95,8 +97,8 @@ async def authorization(request: Request):
             key="csrf_token",
             value=csrf_token,
             httponly=False,
-            secure=os.getenv("HTTPS_ONLY", "false").lower() == "true",
-            samesite="Lax",
+            secure=True,
+            samesite="Strict",
             path="/",
             max_age=1800
         )
@@ -104,8 +106,8 @@ async def authorization(request: Request):
             key="access_token_cookie",
             value=access_token,
             httponly=True,
-            secure=os.getenv("HTTPS_ONLY", "false").lower() == "true",
-            samesite="Lax",
+            secure=True,
+            samesite="Strict",
             path="/",
             max_age=1800  # 30 minutes
         )
@@ -129,6 +131,195 @@ async def authorization(request: Request):
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ))
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+# Admin endpoints for revoking tokens and disabling/enabling users
+@authorization_router.post("/authorization/admin/revoke/{username}",
+    description="Revoke all active tokens for a user (admin)",
+    response_model=ResponseModel)
+async def admin_revoke_user_tokens(username: str, request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        admin_user = payload.get("sub")
+        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        if not await platform_role_required_bool(admin_user, 'manage_auth'):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={"request_id": request_id},
+                error_code="AUTH900",
+                error_message="You do not have permission to manage auth"
+            ))
+        revoke_all_for_user(username)
+        return respond_rest(ResponseModel(
+            status_code=200,
+            response_headers={"request_id": request_id},
+            message=f"All tokens revoked for {username}"
+        ))
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={"request_id": request_id},
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+        ))
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@authorization_router.post("/authorization/admin/unrevoke/{username}",
+    description="Clear token revocation for a user (admin)",
+    response_model=ResponseModel)
+async def admin_unrevoke_user_tokens(username: str, request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        admin_user = payload.get("sub")
+        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        if not await platform_role_required_bool(admin_user, 'manage_auth'):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={"request_id": request_id},
+                error_code="AUTH900",
+                error_message="You do not have permission to manage auth"
+            ))
+        unrevoke_all_for_user(username)
+        return respond_rest(ResponseModel(
+            status_code=200,
+            response_headers={"request_id": request_id},
+            message=f"Token revocation cleared for {username}"
+        ))
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={"request_id": request_id},
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+        ))
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@authorization_router.post("/authorization/admin/disable/{username}",
+    description="Disable a user (admin)",
+    response_model=ResponseModel)
+async def admin_disable_user(username: str, request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        admin_user = payload.get("sub")
+        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        if not await platform_role_required_bool(admin_user, 'manage_auth'):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={"request_id": request_id},
+                error_code="AUTH900",
+                error_message="You do not have permission to manage auth"
+            ))
+        # Disable user
+        await UserService.update_user(username, UpdateUserModel(active=False), request_id)
+        # Revoke all tokens for immediate effect
+        revoke_all_for_user(username)
+        return respond_rest(ResponseModel(
+            status_code=200,
+            response_headers={"request_id": request_id},
+            message=f"User {username} disabled and tokens revoked"
+        ))
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={"request_id": request_id},
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+        ))
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@authorization_router.post("/authorization/admin/enable/{username}",
+    description="Enable a user (admin)",
+    response_model=ResponseModel)
+async def admin_enable_user(username: str, request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        admin_user = payload.get("sub")
+        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        if not await platform_role_required_bool(admin_user, 'manage_auth'):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={"request_id": request_id},
+                error_code="AUTH900",
+                error_message="You do not have permission to manage auth"
+            ))
+        await UserService.update_user(username, UpdateUserModel(active=True), request_id)
+        # Do not automatically unrevoke; keep admin control explicit
+        return respond_rest(ResponseModel(
+            status_code=200,
+            response_headers={"request_id": request_id},
+            message=f"User {username} enabled"
+        ))
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={"request_id": request_id},
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+        ))
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@authorization_router.get("/authorization/admin/status/{username}",
+    description="Get auth status for a user (admin)",
+    response_model=ResponseModel)
+async def admin_user_status(username: str, request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        admin_user = payload.get("sub")
+        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
+        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        if not await platform_role_required_bool(admin_user, 'manage_auth'):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={"request_id": request_id},
+                error_code="AUTH900",
+                error_message="You do not have permission to manage auth"
+            ))
+        user = await UserService.get_user_by_username_helper(username)
+        status = {
+            'active': bool(user.get('active', False)),
+            'revoked': is_user_revoked(username)
+        }
+        return respond_rest(ResponseModel(
+            status_code=200,
+            response_headers={"request_id": request_id},
+            response=status
+        ))
+    except Exception as e:
+        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={"request_id": request_id},
+            error_code="GTW999",
+            error_message="An unexpected error occurred"
+        ))
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -182,8 +373,8 @@ async def extended_authorization(request: Request):
             key="csrf_token",
             value=csrf_token,
             httponly=False,
-            secure=os.getenv("HTTPS_ONLY", "false").lower() == "true",
-            samesite="Lax",
+            secure=True,
+            samesite="Strict",
             path="/",
             max_age=604800
         )
@@ -191,8 +382,8 @@ async def extended_authorization(request: Request):
             key="access_token_cookie",
             value=refresh_token,
             httponly=True,
-            secure=os.getenv("HTTPS_ONLY", "false").lower() == "true",
-            samesite="Lax",
+            secure=True,
+            samesite="Strict",
             path="/",
             max_age=604800  # 7 days
         )
