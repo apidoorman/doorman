@@ -24,6 +24,7 @@ interface AuthContextType {
   canAccessPage: (permission: string) => boolean
   logout: () => void
   checkAuth: () => void
+  refreshAuth: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -74,6 +75,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const refreshAuth = async () => {
+    try {
+      // Attempt to extend the current session if still valid
+      await postJson(`${SERVER_URL}/platform/authorization/refresh`, {})
+      // Refresh user + permissions after extending
+      await checkAuth()
+    } catch (e) {
+      // Silently ignore; refresh requires a valid token and may fail if session already expired
+      console.warn('AuthContext - Token refresh failed or not applicable:', e)
+    }
+  }
+
   const logout = async () => {
     try {
       await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {})
@@ -105,10 +118,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('AuthContext - Periodic auth check')
       checkAuth()
     }, 60000)
+
+    // Proactively refresh token every 10 minutes while logged in
+    const refreshInterval = setInterval(() => {
+      if (authState.isAuthenticated) {
+        console.log('AuthContext - Proactive token refresh')
+        refreshAuth()
+      }
+    }, 10 * 60 * 1000)
     
     return () => {
       clearTimeout(timer)
       clearInterval(interval)
+      clearInterval(refreshInterval)
     }
   }, [])
 
@@ -119,7 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     permissions: authState.permissions,
     canAccessPage: canAccessPagePermission,
     logout,
-    checkAuth
+    checkAuth,
+    refreshAuth
   }
 
   return (
