@@ -4,6 +4,7 @@ Only available to users with 'manage_gateway' OR 'manage_credits'.
 """
 
 from fastapi import APIRouter, Request
+from typing import Optional
 from models.response_model import ResponseModel
 from utils.response_util import respond_rest
 from utils.role_util import platform_role_required_bool
@@ -28,7 +29,7 @@ async def demo_seed(request: Request,
                    groups: int = 8,
                    protos: int = 6,
                    logs: int = 1500,
-                   seed: int | None = None):
+                   seed: Optional[int] = None):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
