@@ -236,7 +236,12 @@ class EndpointService:
             'api_name': api_name,
             'api_version': api_version
         })
-        endpoints = cursor.to_list(length=None)
+        # Support both PyMongo (Cursor) and in-memory cursor
+        try:
+            endpoints = list(cursor)
+        except Exception:
+            # Fallback for any custom cursor that exposes to_list
+            endpoints = cursor.to_list(length=None)
         for endpoint in endpoints:
             if '_id' in endpoint: del endpoint['_id']
         if not endpoints:
