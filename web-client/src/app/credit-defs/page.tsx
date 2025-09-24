@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
@@ -16,6 +17,7 @@ interface CreditDefItem {
 }
 
 export default function CreditDefsPage() {
+  const router = useRouter()
   const [items, setItems] = useState<CreditDefItem[]>([])
   const [allItems, setAllItems] = useState<CreditDefItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,12 +68,20 @@ export default function CreditDefsPage() {
               <h1 className="page-title">Credit Definitions</h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Define API credit groups and tiers</p>
             </div>
-            <Link href="/credit-defs/add" className="btn btn-primary">
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Credit Definition
-            </Link>
+            <div className="flex gap-2">
+              <Link href="/credits" className="btn btn-secondary">
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Credits
+              </Link>
+              <Link href="/credit-defs/add" className="btn btn-primary">
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Credit Definition
+              </Link>
+            </div>
           </div>
 
           {/* Search */}
@@ -113,12 +123,15 @@ export default function CreditDefsPage() {
                       <th>Header</th>
                       <th>Tiers</th>
                       <th>API Key</th>
-                      <th className="w-40">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((it) => (
-                      <tr key={it.api_credit_group}>
+                      <tr
+                        key={it.api_credit_group}
+                        onClick={() => router.push(`/credit-defs/${encodeURIComponent(it.api_credit_group)}`)}
+                        className="cursor-pointer"
+                      >
                         <td><span className="font-medium">{it.api_credit_group}</span></td>
                         <td><span className="badge badge-gray">{it.api_key_header || '-'}</span></td>
                         <td>
@@ -137,13 +150,6 @@ export default function CreditDefsPage() {
                           ) : (
                             <span className="badge badge-warning">Missing</span>
                           )}
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <Link href={`/credit-defs/${encodeURIComponent(it.api_credit_group)}`} className="btn btn-secondary btn-sm">
-                              Edit
-                            </Link>
-                          </div>
                         </td>
                       </tr>
                     ))}

@@ -221,12 +221,27 @@ class CreditService:
             return ResponseModel(status_code=500, error_code='CRD015', error_message='Database error occurred while saving user credits').dict()
 
     @staticmethod
-    async def get_all_credits(page: int, page_size: int, request_id):
+    async def get_all_credits(page: int, page_size: int, request_id, search: str = ""):
         logger.info(request_id + " | Getting all users' credits")
         try:
-            skip = (page - 1) * page_size
-            cursor = user_credit_collection.find().sort('username', 1).skip(skip).limit(page_size)
-            items = cursor.to_list(length=None)
+            # Load all, then filter and paginate in-memory to support MEM mode and Mongo uniformly
+            cursor = user_credit_collection.find().sort('username', 1)
+            all_items = cursor.to_list(length=None)
+            term = (search or "").strip().lower()
+            if term:
+                filtered = []
+                for it in all_items:
+                    uname = str(it.get('username', '')).lower()
+                    groups = list((it.get('users_credits') or {}).keys())
+                    if uname.find(term) != -1 or any(term in str(g).lower() for g in groups):
+                        filtered.append(it)
+                items_src = filtered
+            else:
+                items_src = all_items
+            # Paginate
+            start = max((page - 1), 0) * page_size
+            end = start + page_size if page_size else None
+            items = items_src[start:end]
             for it in items:
                 if it.get('_id'):
                     del it['_id']
