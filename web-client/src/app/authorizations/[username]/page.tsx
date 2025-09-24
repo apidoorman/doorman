@@ -6,6 +6,7 @@ import Layout from '@/components/Layout'
 import ConfirmModal from '@/components/ConfirmModal'
 import { SERVER_URL } from '@/utils/config'
 import { fetchJson } from '@/utils/http'
+import { postJson } from '@/utils/api'
 
 interface Subscription {
   api_name: string
@@ -51,7 +52,7 @@ const UserSubscriptionsPage = () => {
 
   const fetchApis = async () => {
     try {
-      const data = await fetchJson(`${SERVER_URL}/platform/api/all`)
+      const data = await fetchJson(`${SERVER_URL}/platform/subscription/available-apis/${encodeURIComponent(username)}`)
       setAllApis(data.apis || [])
     } catch (err) {
       setError('Failed to load available APIs.')
@@ -85,10 +86,7 @@ const UserSubscriptionsPage = () => {
       const [api_name, api_version] = selectedApi.split('/')
       const body = { username, api_name, api_version }
       
-      await fetchJson(`${SERVER_URL}/platform/subscription/subscribe`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      })
+      await postJson(`${SERVER_URL}/platform/subscription/subscribe`, body)
 
       setSuccess(`Successfully subscribed ${username} to ${selectedApi}.`)
       setSelectedApi('')
@@ -122,10 +120,7 @@ const UserSubscriptionsPage = () => {
       const { api_name, api_version } = subscriptionToRevoke
       const body = { username, api_name, api_version }
 
-      await fetchJson(`${SERVER_URL}/platform/subscription/unsubscribe`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      })
+      await postJson(`${SERVER_URL}/platform/subscription/unsubscribe`, body)
 
       setSuccess(`Successfully revoked access to ${api_name}/${api_version} for ${username}.`)
       await fetchSubscriptions() // Refresh the list

@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
@@ -39,6 +41,7 @@ interface UserCreditsRow {
 }
 
 export default function CreditsPage() {
+  const router = useRouter()
   const [form, setForm] = useState<CreditDefForm>({
     api_credit_group: '',
     api_key: '',
@@ -50,16 +53,35 @@ export default function CreditsPage() {
   })
   const [usersLoading, setUsersLoading] = useState(false)
   const [userRows, setUserRows] = useState<UserCreditsRow[]>([])
+  const [allUserRows, setAllUserRows] = useState<UserCreditsRow[]>([])
   const [usersPage, setUsersPage] = useState(1)
   const [usersPageSize, setUsersPageSize] = useState(10)
   const [usersHasNext, setUsersHasNext] = useState(false)
-  const [selectedUser, setSelectedUser] = useState('')
-  const [userDetail, setUserDetail] = useState<UserCreditsRow | null>(null)
+  const [userSearch, setUserSearch] = useState('')
   const [userWorking, setUserWorking] = useState(false)
   const [userError, setUserError] = useState<string | null>(null)
   const [userSuccess, setUserSuccess] = useState<string | null>(null)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+
+  // Credit definitions cache for computing totals/used per group
+  type TierMeta = { credits: number; reset_frequency?: string }
+  const [defs, setDefs] = useState<Record<string, { [tier: string]: TierMeta }>>({})
+
+  const loadDefs = async () => {
+    try {
+      const res = await getJson<any>(`${SERVER_URL}/platform/credit/defs?page=1&page_size=1000`)
+      const items = res?.items || res?.response?.items || []
+      const map: Record<string, { [tier: string]: TierMeta }> = {}
+      for (const it of items) {
+        const tiers = it.credit_tiers || []
+        const tierMap: Record<string, TierMeta> = {}
+        for (const t of tiers) tierMap[t.tier_name] = { credits: Number(t.credits || 0), reset_frequency: t.reset_frequency }
+        map[it.api_credit_group] = tierMap
+      }
+      setDefs(map)
+    } catch (e) {
+      // Non-fatal; UI will just omit totals/used if defs missing
+    }
+  }
 
   const parseTiers = (): CreditTier[] => {
     try { return JSON.parse(form.credit_tiers_text || '[]') } catch { return [] }
@@ -120,48 +142,29 @@ export default function CreditsPage() {
   const loadAllUserTokens = async () => {
     try {
       setUsersLoading(true); setUserError(null)
-      const payload = await getJson<any>(`${SERVER_URL}/platform/credit/all?page=${usersPage}&page_size=${usersPageSize}`)
+      const q = userSearch.trim() ? `&search=${encodeURIComponent(userSearch.trim())}` : ''
+      const payload = await getJson<any>(`${SERVER_URL}/platform/credit/all?page=${usersPage}&page_size=${usersPageSize}${q}`)
       const items = payload?.items || payload?.user_credits || []
+      setAllUserRows(items)
       setUserRows(items)
       setUsersHasNext((items || []).length === usersPageSize)
     } catch (e:any) {
       setUserError(e?.message || 'Failed to load user credits')
       setUserRows([])
+      setAllUserRows([])
       setUsersHasNext(false)
     } finally {
       setUsersLoading(false)
     }
   }
 
-  const loadUserTokens = async (username: string) => {
-    if (!username.trim()) return
-    try {
-      setUserError(null)
-      const payload = await getJson<any>(`${SERVER_URL}/platform/credit/${encodeURIComponent(username.trim())}`)
-      setUserDetail({ username: username.trim(), users_credits: payload.users_credits || {} })
-    } catch (e:any) {
-      setUserError(e?.message || 'Failed to load user credits')
-      setUserDetail(null)
-    }
-  }
+  // User detail moved to /credits/[username]
 
-  const saveUserTokens = async () => {
-    if (!userDetail) return
-    try {
-      setUserWorking(true); setUserError(null); setUserSuccess(null)
-      await postJson(`${SERVER_URL}/platform/credit/${encodeURIComponent(userDetail.username)}`, { username: userDetail.username, users_credits: userDetail.users_credits })
-      setUserSuccess('User credits saved')
-      setTimeout(() => setUserSuccess(null), 2000)
-      await loadAllUserTokens()
-    } catch (e:any) {
-      setUserError(e?.message || 'Failed to save user credits')
-    } finally {
-      setUserWorking(false)
-    }
-  }
+  // Saving handled on detail page
 
   useEffect(() => {
     loadAllUserTokens()
+    loadDefs()
   }, [usersPage, usersPageSize])
 
   return (
@@ -175,6 +178,8 @@ export default function CreditsPage() {
           </div>
         </div>
 
+        {/* Search moved below Credit Definitions and above User Credits rows */}
+
         {/* Credit Definitions CTA */}
         <div className="card">
           <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -183,10 +188,38 @@ export default function CreditsPage() {
               <p className="text-gray-600 dark:text-gray-400">Create and manage credit groups, headers, and tiers</p>
             </div>
             <div className="flex gap-2">
-              <a href="/credit-defs" className="btn btn-secondary">View Definitions</a>
-              <a href="/credit-defs/add" className="btn btn-primary">Add Definition</a>
+              <Link href="/credit-defs" className="btn btn-secondary">View Definitions</Link>
+              <Link href="/credit-defs/add" className="btn btn-primary">Add Definition</Link>
             </div>
           </div>
+        </div>
+
+        {/* Search Users (separate section under Credit Definitions) */}
+        <div className="card -mt-3">
+          <form onSubmit={(e) => { e.preventDefault(); setUsersPage(1); loadAllUserTokens() }} className="flex-1">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search users by username or group..."
+                value={userSearch}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setUserSearch(val)
+                  const term = val.trim().toLowerCase()
+                  if (!term) { setUserRows(allUserRows); return }
+                  const filtered = allUserRows.filter(r =>
+                    r.username.toLowerCase().includes(term) ||
+                    Object.keys(r.users_credits || {}).some(g => g.toLowerCase().includes(term))
+                  )
+                  setUserRows(filtered)
+                }}
+              />
+            </div>
+          </form>
         </div>
 
         {/* User Credits */}
@@ -195,53 +228,49 @@ export default function CreditsPage() {
           <div className="p-6 space-y-4">
             {userError && <div className="text-sm text-error-600">{userError}</div>}
             {userSuccess && <div className="text-sm text-success-600">{userSuccess}</div>}
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <label className="block text-sm font-medium">Username</label>
-                <input className="input" value={selectedUser} onChange={e => setSelectedUser(e.target.value)} placeholder="username" />
-              </div>
-              <button className="btn btn-secondary" onClick={() => loadUserTokens(selectedUser)}>Load</button>
-            </div>
-            {userDetail && (
-              <div className="space-y-3">
-                <div className="text-sm text-gray-600">Editing credits for <span className="font-medium">{userDetail.username}</span></div>
-                <div className="space-y-2">
-                  {Object.entries(userDetail.users_credits).map(([group, info]) => (
-                    <div key={group} className="flex items-center gap-2">
-                      <span className="badge badge-gray min-w-[8rem]">{group}</span>
-                      <input className="input w-28" type="number" value={info.available_credits}
-                        onChange={e => setUserDetail(prev => prev ? ({ ...prev, users_credits: { ...prev.users_credits, [group]: { ...prev.users_credits[group], available_credits: Number(e.target.value || 0) } } }) : prev)} />
-                      <input className="input flex-1" placeholder="user API key (optional)" value={info.user_api_key || ''}
-                        onChange={e => setUserDetail(prev => prev ? ({ ...prev, users_credits: { ...prev.users_credits, [group]: { ...prev.users_credits[group], user_api_key: e.target.value } } }) : prev)} />
-                    </div>
-                  ))}
-                  <button className="btn btn-secondary" onClick={() => setUserDetail(prev => prev ? ({ ...prev, users_credits: { ...prev.users_credits, 'new-group': { tier_name: 'basic', available_credits: 0 } } }) : prev)}>Add Group</button>
-                </div>
-                <div>
-                  <button className="btn btn-primary" disabled={userWorking} onClick={saveUserTokens}>{userWorking ? 'Saving...' : 'Save Credits'}</button>
-                </div>
-              </div>
-            )}
+            {/* Select a user from the table below to view/edit credits */}
+            {/* Detail view moved to /credits/[username] */}
 
-            <div className="mt-6">
-              <div className="text-sm font-medium mb-2">All Users (paged)</div>
+            <div className="mt-2">
               {usersLoading ? (
                 <div className="text-gray-500">Loading...</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="table">
-                    <thead><tr><th>Username</th><th>Groups</th></tr></thead>
+                    <thead><tr><th>Username</th><th>Groups</th><th>Total</th><th>Used</th><th>Left</th><th>Reset Freq</th><th>Reset Dates</th></tr></thead>
                     <tbody>
-                      {userRows.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-dark-surfaceHover">
-                          <td className="font-medium">{row.username}</td>
-                          <td className="text-sm text-gray-600">
-                            {Object.keys(row.users_credits || {}).join(', ') || '-'}
-                          </td>
-                        </tr>
-                      ))}
+                      {userRows.map((row, idx) => {
+                        let total = 0, available = 0
+                        const freqs = new Set<string>()
+                        const dates = new Set<string>()
+                        for (const [group, info] of Object.entries(row.users_credits || {})) {
+                          const tmap = defs[group] || {}
+                          const meta = tmap[(info as any).tier_name] || { credits: 0, reset_frequency: undefined }
+                          total += Number(meta.credits || 0)
+                          available += Number((info as any).available_credits || 0)
+                          if (meta.reset_frequency) freqs.add(meta.reset_frequency)
+                          const rd = (info as any).reset_date
+                          if (rd) dates.add(String(rd))
+                        }
+                        const used = total > 0 ? Math.max(total - available, 0) : 0
+                        return (
+                          <tr
+                            key={idx}
+                            className="hover:bg-gray-50 dark:hover:bg-dark-surfaceHover cursor-pointer"
+                            onClick={() => router.push(`/credits/${encodeURIComponent(row.username)}`)}
+                          >
+                            <td className="font-medium">{row.username}</td>
+                            <td className="text-sm text-gray-600">{Object.keys(row.users_credits || {}).join(', ') || '-'}</td>
+                            <td className="text-sm">{total || 0}</td>
+                            <td className="text-sm">{used}</td>
+                            <td className="text-sm">{available || 0}</td>
+                            <td className="text-sm">{freqs.size ? Array.from(freqs).join(', ') : '-'}</td>
+                            <td className="text-sm">{dates.size ? Array.from(dates).join(', ') : '-'}</td>
+                          </tr>
+                        )
+                      })}
                       {userRows.length === 0 && (
-                        <tr><td colSpan={2} className="text-gray-500 text-center py-6">No user token records</td></tr>
+                        <tr><td colSpan={7} className="text-gray-500 text-center py-6">No user token records</td></tr>
                       )}
                     </tbody>
                   </table>

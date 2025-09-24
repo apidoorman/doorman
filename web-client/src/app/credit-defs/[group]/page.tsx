@@ -74,7 +74,7 @@ export default function EditCreditDefPage() {
               <h1 className="page-title">Edit Credit Definition</h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">{api_credit_group}</p>
             </div>
-            <Link href="/credit-defs" className="btn btn-secondary">Back to Credit Definitions</Link>
+            <Link href="/credits" className="btn btn-secondary">Back to Credits</Link>
           </div>
 
           <div className="card">
@@ -102,7 +102,7 @@ export default function EditCreditDefPage() {
               <div className="flex gap-2">
                 <button onClick={update} disabled={working} className="btn btn-primary">{working ? 'Saving...' : 'Save Changes'}</button>
                 <button onClick={() => setShowDelete(true)} className="btn btn-error">Delete</button>
-                <Link href="/credit-defs" className="btn btn-ghost">Cancel</Link>
+                <Link href="/credits" className="btn btn-ghost">Cancel</Link>
               </div>
             </div>
           </div>

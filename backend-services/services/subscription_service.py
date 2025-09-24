@@ -25,11 +25,8 @@ class SubscriptionService:
         if not api:
             api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
-                return ResponseModel(
-                    status_code=404,
-                    error_code='SUB001',
-                    error_message='API does not exist for the requested name and version'
-                ).dict()
+                # Return None to signal non-existence cleanly
+                return None
             if api.get('_id'):
                 del api['_id']
             doorman_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
@@ -49,20 +46,20 @@ class SubscriptionService:
             if not subscriptions:
                 # Normalize to 200 with empty list so clients don't treat this as an error
                 logger.info(f"{request_id} | No subscriptions found; returning empty list")
-                empty = {'username': username, 'apis': []}
-                doorman_cache.set_cache('user_subscription_cache', username, empty)
+                apis = []
+                doorman_cache.set_cache('user_subscription_cache', username, {'username': username, 'apis': apis})
                 return ResponseModel(
                     status_code=200,
-                    response={'subscriptions': empty}
+                    response={'apis': apis}
                 ).dict()
             if subscriptions.get('_id'): del subscriptions['_id']
             doorman_cache.set_cache('user_subscription_cache', username, subscriptions)
-        if '_id' in subscriptions:
-            del subscriptions['_id']
+        # Return only the list of apis for client convenience and consistency
+        apis = subscriptions.get('apis', []) if isinstance(subscriptions, dict) else []
         logger.info(f"{request_id} | Subscriptions retrieved successfully")
         return ResponseModel(
             status_code=200,
-            response={'subscriptions': subscriptions}
+            response={'apis': apis}
         ).dict()
 
     @staticmethod
@@ -71,7 +68,8 @@ class SubscriptionService:
         Subscribe to an API.
         """
         logger.info(f"{request_id} | Subscribing {data.username} to API: {data.api_name}/{data.api_version}")
-        if not await SubscriptionService.api_exists(data.api_name, data.api_version):
+        api = await SubscriptionService.api_exists(data.api_name, data.api_version)
+        if not api:
             logger.error(f"{request_id} | Subscription failed with code SUB003")
             return ResponseModel(
                 status_code=404,
@@ -123,7 +121,8 @@ class SubscriptionService:
         Unsubscribe from an API.
         """
         logger.info(f"{request_id} | Unsubscribing {data.username} from API: {data.api_name}/{data.api_version}")
-        if not await SubscriptionService.api_exists(data.api_name, data.api_version):
+        api = await SubscriptionService.api_exists(data.api_name, data.api_version)
+        if not api:
             return ResponseModel(
                 status_code=404,
                 response_headers={

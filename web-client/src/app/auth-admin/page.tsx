@@ -92,7 +92,13 @@ export default function AuthAdminPage() {
                 <input className="input" value={username} onChange={e => setUsername(e.target.value)} placeholder="username" />
               </div>
               <div className="flex items-end gap-2">
-                <button className="btn btn-secondary" onClick={() => loadStatus()}>Load Status</button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => loadStatus()}
+                  disabled={loading || !username.trim()}
+                >
+                  {loading ? 'Loading…' : 'Load Status'}
+                </button>
               </div>
             </div>
 
@@ -112,7 +118,7 @@ export default function AuthAdminPage() {
                 Revoke Tokens
               </button>
               <button
-                className="btn btn-secondary"
+                className="btn btn-neutral"
                 disabled={loading}
                 onClick={() => openConfirm('/platform/authorization/admin/unrevoke', 'Revocation cleared', 'Clear Revocation', 'Clear token revocation for {username}?')}
               >

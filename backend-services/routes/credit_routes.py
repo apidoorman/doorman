@@ -277,7 +277,7 @@ async def add_user_credits(username: str, credit_data: UserCreditModel, request:
     description="Get all user credits",
     response_model=List[UserCreditModel]
 )
-async def get_all_users_credits(request: Request, page: int = 1, page_size: int = 10):
+async def get_all_users_credits(request: Request, page: int = 1, page_size: int = 10, search: str = ""):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -292,7 +292,7 @@ async def get_all_users_credits(request: Request, page: int = 1, page_size: int 
                     error_code='CRD002',
                     error_message='Unable to retrieve credits for all users',
                 ))
-        return respond_rest(await CreditService.get_all_credits(page, page_size, request_id))
+        return respond_rest(await CreditService.get_all_credits(page, page_size, request_id, search=search))
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -337,4 +337,3 @@ async def get_credits(username: str, request: Request):
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-
