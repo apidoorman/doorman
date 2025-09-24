@@ -40,13 +40,17 @@ async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> b
         return False
 
 async def auth_required(request: Request):
-    """Validate JWT token and CSRF for HTTPS"""
+    """Validate JWT token and CSRF for HTTPS.
+
+    CSRF validation is enforced only for unsafe methods (POST, PUT, PATCH, DELETE)
+    to avoid blocking safe reads like GET/HEAD when cookies are otherwise valid.
+    """
     token = request.cookies.get("access_token_cookie")
     if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
     # Enforce CSRF on HTTPS deployments; support both env flags for consistency
     https_enabled = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
-    if https_enabled:
+    if https_enabled and request.method.upper() in ("POST", "PUT", "PATCH", "DELETE"):
         csrf_header = request.headers.get("X-CSRF-Token")
         csrf_cookie = request.cookies.get("csrf_token")
         if not await validate_csrf_double_submit(csrf_header, csrf_cookie):

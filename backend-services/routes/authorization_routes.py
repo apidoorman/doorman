@@ -96,6 +96,9 @@ async def authorization(request: Request):
         # Use Secure cookies when HTTPS is enabled; allow insecure in local dev/tests
         _secure = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
         _domain = os.getenv("COOKIE_DOMAIN", None)
+        _samesite = (os.getenv("COOKIE_SAMESITE", "Strict") or "Strict").strip().lower()
+        if _samesite not in ("strict", "lax", "none"):
+            _samesite = "strict"
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
         # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
@@ -104,7 +107,7 @@ async def authorization(request: Request):
             value=csrf_token,
             httponly=False,
             secure=_secure,
-            samesite="Strict",
+            samesite=_samesite,
             path="/",
             domain=safe_domain,
             max_age=1800
@@ -115,7 +118,7 @@ async def authorization(request: Request):
             value=access_token,
             httponly=True,
             secure=_secure,
-            samesite="Strict",
+            samesite=_samesite,
             path="/",
             domain=safe_domain,
             max_age=1800  # 30 minutes
@@ -381,6 +384,9 @@ async def extended_authorization(request: Request):
         # Use Secure cookies when HTTPS is enabled; allow insecure in local dev/tests
         _secure = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
         _domain = os.getenv("COOKIE_DOMAIN", None)
+        _samesite = (os.getenv("COOKIE_SAMESITE", "Strict") or "Strict").strip().lower()
+        if _samesite not in ("strict", "lax", "none"):
+            _samesite = "strict"
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
         # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
@@ -389,7 +395,7 @@ async def extended_authorization(request: Request):
             value=csrf_token,
             httponly=False,
             secure=_secure,
-            samesite="Strict",
+            samesite=_samesite,
             path="/",
             domain=safe_domain,
             max_age=604800
@@ -400,7 +406,7 @@ async def extended_authorization(request: Request):
             value=refresh_token,
             httponly=True,
             secure=_secure,
-            samesite="Strict",
+            samesite=_samesite,
             path="/",
             domain=safe_domain,
             max_age=604800  # 7 days
