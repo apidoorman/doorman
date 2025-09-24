@@ -37,12 +37,14 @@ const AuthorizationsPage = () => {
       setLoading(true)
       setError(null)
       const { fetchJson } = await import('@/utils/http')
-      const data: any = await fetchJson(`${SERVER_URL}/platform/user/all?page=${page}&page_size=${pageSize}`)
-      let userList = Array.isArray(data) ? data : (data.users || data.response?.users || [])
+      const data: unknown = await fetchJson(`${SERVER_URL}/platform/user/all?page=${page}&page_size=${pageSize}`)
+      let userList: User[] = Array.isArray(data)
+        ? (data as User[])
+        : (((data as any).users || (data as any).response?.users || []) as User[])
       // Ensure the active user is first in the list
       if (currentUser?.username) {
         userList = [...userList]
-        const idx = userList.findIndex(u => u.username === currentUser.username)
+        const idx = userList.findIndex((u: User) => u.username === currentUser.username)
         if (idx > 0) {
           const [me] = userList.splice(idx, 1)
           userList.unshift(me)
