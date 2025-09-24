@@ -53,8 +53,30 @@ async def auth_required(request: Request):
     if https_enabled and request.method.upper() in ("POST", "PUT", "PATCH", "DELETE"):
         csrf_header = request.headers.get("X-CSRF-Token")
         csrf_cookie = request.cookies.get("csrf_token")
-        if not await validate_csrf_double_submit(csrf_header, csrf_cookie):
-            raise HTTPException(status_code=401, detail="Invalid CSRF token")
+        # Accept either valid double-submit token OR trusted same-origin based on allowed origins
+        is_double_submit_ok = await validate_csrf_double_submit(csrf_header, csrf_cookie)
+        if not is_double_submit_ok:
+            # Fallback: trust explicit ALLOWED_ORIGINS for first‑party app without CSRF header
+            try:
+                allowed = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(',') if o.strip() and o.strip() != "*"]
+                origin = request.headers.get("origin") or ""
+                referer = request.headers.get("referer") or ""
+                origin_ok = origin in allowed
+                # Extract origin from referer if origin header missing
+                if not origin_ok and referer:
+                    import urllib.parse as _url
+                    try:
+                        ref_o = f"{_url.urlsplit(referer).scheme}://{_url.urlsplit(referer).netloc}"
+                        origin_ok = ref_o in allowed
+                    except Exception:
+                        origin_ok = False
+                if not origin_ok:
+                    raise HTTPException(status_code=401, detail="Invalid CSRF token")
+            except HTTPException:
+                raise
+            except Exception:
+                # On parsing/env errors, fail closed
+                raise HTTPException(status_code=401, detail="Invalid CSRF token")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")

@@ -47,11 +47,13 @@ class SubscriptionService:
         if not subscriptions:
             subscriptions = subscriptions_collection.find_one({'username': username})
             if not subscriptions:
-                logger.error(f"{request_id} | Subscription retrieval failed with code SUB002")
+                # Normalize to 200 with empty list so clients don't treat this as an error
+                logger.info(f"{request_id} | No subscriptions found; returning empty list")
+                empty = {'username': username, 'apis': []}
+                doorman_cache.set_cache('user_subscription_cache', username, empty)
                 return ResponseModel(
-                    status_code=404,
-                    error_code='SUB002',
-                    error_message='User is not subscribed to any API'
+                    status_code=200,
+                    response={'subscriptions': empty}
                 ).dict()
             if subscriptions.get('_id'): del subscriptions['_id']
             doorman_cache.set_cache('user_subscription_cache', username, subscriptions)
