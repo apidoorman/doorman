@@ -8,7 +8,7 @@ import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
 import { getJson, postJson, putJson, delJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
-import ConfirmModal from '@/components/ConfirmModal'
+// ConfirmModal no longer used on this page
 
 interface CreditTier {
   tier_name: string
@@ -115,29 +115,7 @@ export default function CreditsPage() {
     }
   }
 
-  const openDeleteModal = () => {
-    if (!form.api_credit_group.trim()) {
-      setForm(f => ({ ...f, error: 'Credit group is required' }));
-      return;
-    }
-    setShowDeleteModal(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (deleteConfirmation !== form.api_credit_group.trim()) return
-    setForm(f => ({ ...f, working: true, error: null, success: null }))
-    try {
-      if (!form.api_credit_group.trim()) throw new Error('Credit group is required')
-      await delJson(`${SERVER_URL}/platform/credit/${encodeURIComponent(form.api_credit_group.trim())}`)
-      setForm(f => ({ ...f, success: 'Credit definition deleted' }))
-      setShowDeleteModal(false)
-      setDeleteConfirmation('')
-    } catch (e:any) {
-      setForm(f => ({ ...f, error: e?.message || 'Failed to delete credit definition' }))
-    } finally {
-      setForm(f => ({ ...f, working: false }))
-    }
-  }
+  // Delete modal and handlers removed; definitions managed on /credit-defs
 
   const loadAllUserTokens = async () => {
     try {
