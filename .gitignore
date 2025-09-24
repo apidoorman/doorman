@@ -52,3 +52,4 @@ env/
 **/.venv/
 **/venv/
 **/env/
+backend-services/platform-logs/doorman.log
