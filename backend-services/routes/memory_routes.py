@@ -3,6 +3,7 @@ Routes for dumping and restoring in-memory database state.
 """
 
 from fastapi import APIRouter, Request
+from typing import Optional
 from pydantic import BaseModel
 import os
 import uuid
@@ -21,14 +22,14 @@ logger = logging.getLogger("doorman.gateway")
 
 
 class DumpRequest(BaseModel):
-    path: str | None = None
+    path: Optional[str] = None
 
 
 @memory_router.post("/memory/dump",
     description="Dump in-memory database to an encrypted file",
     response_model=ResponseModel,
 )
-async def memory_dump(request: Request, body: DumpRequest | None = None):
+async def memory_dump(request: Request, body: Optional[DumpRequest] = None):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -85,14 +86,14 @@ async def memory_dump(request: Request, body: DumpRequest | None = None):
 
 
 class RestoreRequest(BaseModel):
-    path: str | None = None
+    path: Optional[str] = None
 
 
 @memory_router.post("/memory/restore",
     description="Restore in-memory database from an encrypted file",
     response_model=ResponseModel,
 )
-async def memory_restore(request: Request, body: RestoreRequest | None = None):
+async def memory_restore(request: Request, body: Optional[RestoreRequest] = None):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
