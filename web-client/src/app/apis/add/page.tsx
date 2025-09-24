@@ -24,6 +24,8 @@ const AddApiPage = () => {
     api_authorization_field_swap: '',
     api_credits_enabled: false,
     api_credit_group: '',
+    // Frontend-only preference; stored in localStorage per API
+    use_protobuf: false,
     // kept for future use; backend ignores unknown fields
     validation_enabled: false
   })
@@ -46,6 +48,11 @@ const AddApiPage = () => {
       if (!Array.isArray(payload.api_allowed_roles) || payload.api_allowed_roles.length === 0) delete payload.api_allowed_roles
       if (!Array.isArray(payload.api_allowed_groups) || payload.api_allowed_groups.length === 0) delete payload.api_allowed_groups
       await postJson(`${SERVER_URL}/platform/api`, payload)
+      // Persist frontend-only preference for this API
+      try {
+        const { setUseProtobuf } = await import('@/utils/proto')
+        setUseProtobuf(formData.api_name, formData.api_version, !!formData.use_protobuf)
+      } catch {}
       router.push('/apis')
     } catch (err) {
       setError('Network error. Please try again.')
@@ -340,6 +347,26 @@ const AddApiPage = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Use Protobuf
+                </label>
+                <div className="flex items-center">
+                  <input
+                    id="use_protobuf"
+                    name="use_protobuf"
+                    type="checkbox"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    checked={formData.use_protobuf}
+                    onChange={handleChange}
+                    disabled={loading}
+                  />
+                  <label htmlFor="use_protobuf" className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                    Enable proto-based features for this API
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Frontend setting; controls proto UI and client behavior.</p>
               </div>
             </div>
           </div>

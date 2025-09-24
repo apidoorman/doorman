@@ -1,49 +1,54 @@
-# Ignore Python bytecode cache directories
+# Python cache & test cache
 __pycache__/
 **/__pycache__/
 .pytest_cache/
 **/.pytest_cache/
+
+# Local env files (keep examples tracked separately if needed)
+.env
+**/.env
+.env.*
+**/.env.*
+
+# Node/Next.js local configs
+.env.local
+**/.env.local
+.env.development
+.env.production
+
+# Certificates, logs, venv, data, generated
 certs/
-**/.certs/
-logs/
-**/.logs/
-venv/
-**/.venv/
-generated/
-**/.generated/
-data/
-**/.data/
-
-# Local-only demo seeders (do not commit)
-backend-services/scripts/seed_demo_data.py
-
-# User-created artifacts and working files
-# Cookie jars from curl or scripts
-cookies.txt
-**/cookies.txt
-*cookies*.txt
-
-# Ignore uploaded protos and generated gRPC code
-backend-services/proto/
-# Ensure nested generated directories are ignored (backend-services/generated, etc.)
-**/generated/
-
-# Ensure nested logs/certs/venv/data are ignored anywhere in repo
-**/logs/
 **/certs/
+logs/
+**/logs/
+venv/
 **/venv/
+generated/
+**/generated/
+data/
 **/data/
 
-# PIDs and OS/editor noise
+# Local-only demo seeders
+backend-services/scripts/seed_demo_data.py
+
+# Uploaded protos & generated gRPC
+backend-services/proto/
+
+# PIDs & OS/editor noise
 *.pid
 **/*.pid
 .DS_Store
 **/.DS_Store
 
-# Local environment files (but keep examples tracked)
-.env
-**/.env
-.env.local
-**/.env.local
-.env.development
-.env.production
+# Cookie jars
+cookies.txt
+**/cookies.txt
+*cookies*.txt
+
+# Python virtual environments (anywhere, any name)
+.venv/
+venv/
+env/
+**/.venv/
+**/venv/
+**/env/

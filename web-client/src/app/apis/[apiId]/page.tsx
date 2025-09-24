@@ -73,6 +73,7 @@ const ApiDetailPage = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const toast = useToast()
+  const [useProtobuf, setUseProtobufState] = useState<boolean>(false)
 
   // Proto management state and helpers
   type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean }
@@ -147,6 +148,10 @@ const ApiDetailPage = () => {
       try {
         const parsedApi = JSON.parse(apiData)
         setApi(parsedApi)
+        try {
+          const { getUseProtobuf } = require('@/utils/proto')
+          setUseProtobufState(getUseProtobuf(parsedApi.api_name, parsedApi.api_version))
+        } catch {}
         setEditData({
           api_name: parsedApi.api_name,
           api_version: parsedApi.api_version,
@@ -175,6 +180,10 @@ const ApiDetailPage = () => {
           const found = (list as any[]).find((a: any) => String(a.api_id) === String(apiId))
           if (found) {
             setApi(found)
+            try {
+              const { getUseProtobuf } = require('@/utils/proto')
+              setUseProtobufState(getUseProtobuf(found.api_name, found.api_version))
+            } catch {}
             setEditData({
               api_name: found.api_name,
               api_version: found.api_version,
@@ -281,6 +290,11 @@ const ApiDetailPage = () => {
       const refreshedApi = await fetchJson(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`)
       setApi(refreshedApi)
       sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
+      // Persist current protobuf preference
+      try {
+        const { setUseProtobuf } = await import('@/utils/proto')
+        setUseProtobuf(refreshedApi.api_name, refreshedApi.api_version, useProtobuf)
+      } catch {}
       setIsEditing(false)
       setSuccess('API updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -760,42 +774,85 @@ const ApiDetailPage = () => {
                     <p className="text-gray-900 dark:text-white">{api.api_authorization_field_swap || 'None'}</p>
                   )}
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Use Protobuf
+                  </label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={useProtobuf}
+                        onChange={async (e) => {
+                          const next = e.target.checked
+                          setUseProtobufState(next)
+                          try {
+                            const { setUseProtobuf } = await import('@/utils/proto')
+                            setUseProtobuf(api?.api_name, api?.api_version, next)
+                          } catch {}
+                        }}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        Enable proto-based features for this API
+                      </label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${useProtobuf ? 'badge-success' : 'badge-gray'}`}>
+                      {useProtobuf ? 'Enabled' : 'Disabled'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Proto Management */}
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Proto</h3>
-              </div>
-              <div className="p-6 space-y-4">
-                {proto.error && (
-                  <div className="rounded bg-error-50 border border-error-200 p-2 text-error-700 text-sm">{proto.error}</div>
-                )}
-                <div className="flex items-center gap-3">
-                  <button className="btn btn-secondary" onClick={checkProto} disabled={proto.loading}> {proto.loading ? 'Checking...' : 'Check Status'} </button>
-                  {proto.exists === true && <span className="text-success-700 dark:text-success-400">Present</span>}
-                  {proto.exists === false && <span className="text-error-700 dark:text-error-400">Missing</span>}
+            {useProtobuf ? (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">Proto</h3>
                 </div>
-                <div className="flex items-center gap-3">
-                  <label className="btn btn-secondary">
-                    Upload
-                    <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
-                      onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'create'); e.currentTarget.value = '' } }} />
-                  </label>
-                  <label className="btn btn-secondary">
-                    Replace
-                    <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
-                      onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'update'); e.currentTarget.value = '' } }} />
-                  </label>
-                  <button className="btn btn-error" onClick={deleteProto} disabled={proto.working || proto.exists !== true}>Delete</button>
-                  <button className="btn btn-ghost" onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} disabled={!proto.content}>{proto.show ? 'Hide' : 'View'}</button>
+                <div className="p-6 space-y-4">
+                  {proto.error && (
+                    <div className="rounded bg-error-50 border border-error-200 p-2 text-error-700 text-sm">{proto.error}</div>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <button className="btn btn-secondary" onClick={checkProto} disabled={proto.loading}> {proto.loading ? 'Checking...' : 'Check Status'} </button>
+                    {proto.exists === true && <span className="text-success-700 dark:text-success-400">Present</span>}
+                    {proto.exists === false && <span className="text-error-700 dark:text-error-400">Missing</span>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="btn btn-secondary">
+                      Upload
+                      <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
+                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'create'); e.currentTarget.value = '' } }} />
+                    </label>
+                    <label className="btn btn-secondary">
+                      Replace
+                      <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
+                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'update'); e.currentTarget.value = '' } }} />
+                    </label>
+                    <button className="btn btn-error" onClick={deleteProto} disabled={proto.working || proto.exists !== true}>Delete</button>
+                    <button className="btn btn-ghost" onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} disabled={!proto.content}>{proto.show ? 'Hide' : 'View'}</button>
+                  </div>
+                  {proto.show && proto.content && (
+                    <pre className="text-xs whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 p-3 rounded max-h-64 overflow-auto">{proto.content}</pre>
+                  )}
                 </div>
-                {proto.show && proto.content && (
-                  <pre className="text-xs whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 p-3 rounded max-h-64 overflow-auto">{proto.content}</pre>
-                )}
               </div>
-            </div>
+            ) : (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">Proto</h3>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Protobuf features are disabled for this API. Enable "Use Protobuf" in the Configuration section to upload or manage proto files.
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Allowed Roles */}
             <div className="card">
