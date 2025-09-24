@@ -426,8 +426,10 @@ export default function LogsPage() {
       const queryParams = toQueryParams(filters)
       queryParams.append('format', format)
       // Use streaming download endpoint
+      const csrf = getCookie('csrf_token')
       const response = await fetch(`${SERVER_URL}/platform/logging/logs/download?${queryParams}`, {
-        credentials: 'include'
+        credentials: 'include',
+        headers: { ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }
       })
       if (!response.ok) throw new Error('Failed to download logs')
       const blob = await response.blob()
@@ -454,8 +456,10 @@ export default function LogsPage() {
       setExporting(true)
       const params = new URLSearchParams()
       params.append('format', format)
+      const csrf = getCookie('csrf_token')
       const response = await fetch(`${SERVER_URL}/platform/logging/logs/download?${params.toString()}`, {
-        credentials: 'include'
+        credentials: 'include',
+        headers: { ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }
       })
       if (!response.ok) throw new Error('Failed to download latest logs')
       const blob = await response.blob()

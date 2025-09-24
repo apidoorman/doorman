@@ -258,32 +258,48 @@ async def security_headers(request: Request, call_next):
         pass
     return response
 
-# Ensure logs write to a stable, absolute path next to this file
+"""Logging configuration
+
+Prefer file logging to LOGS_DIR/doorman.log when writable; otherwise, fall back
+to console so production environments (e.g., ECS/EKS/Lambda) still capture logs.
+Respects LOG_FORMAT=json|plain.
+"""
+
+# Resolve logs directory: env override or default next to this file
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGS_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOGS_DIR, exist_ok=True)
-log_file_handler = RotatingFileHandler(
-    filename=os.path.join(LOGS_DIR, "doorman.log"),
-    maxBytes=10 * 1024 * 1024,
-    backupCount=5,
-    encoding="utf-8"
-)
-if os.getenv("LOG_FORMAT", "plain").lower() == "json":
-    class JSONFormatter(logging.Formatter):
-        def format(self, record: logging.LogRecord) -> str:
-            payload = {
-                "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-                "name": record.name,
-                "level": record.levelname,
-                "message": record.getMessage(),
-            }
-            try:
-                return json.dumps(payload, ensure_ascii=False)
-            except Exception:
-                return f'{payload}'
-    log_file_handler.setFormatter(JSONFormatter())
-else:
-    log_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+_env_logs_dir = os.getenv("LOGS_DIR")
+# Default to backend-services/platform-logs
+LOGS_DIR = os.path.abspath(_env_logs_dir) if _env_logs_dir else os.path.join(BASE_DIR, "platform-logs")
+
+# Build formatters
+class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "name": record.name,
+            "level": record.levelname,
+            "message": record.getMessage(),
+        }
+        try:
+            return json.dumps(payload, ensure_ascii=False)
+        except Exception:
+            return f"{payload}"
+
+_fmt_is_json = os.getenv("LOG_FORMAT", "plain").lower() == "json"
+_file_handler = None
+try:
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    _file_handler = RotatingFileHandler(
+        filename=os.path.join(LOGS_DIR, "doorman.log"),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8"
+    )
+    _file_handler.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+except Exception as _e:
+    # Fall back to console-only logging if file handler cannot be initialized
+    print(f"Warning: file logging disabled ({_e}); using console logging only")
+    _file_handler = None
 
 # Configure all doorman loggers to use the same handler and prevent propagation
 def configure_logger(logger_name):
@@ -314,8 +330,18 @@ def configure_logger(logger_name):
             except Exception:
                 pass
             return True
-    log_file_handler.addFilter(RedactFilter())
-    logger.addHandler(log_file_handler)
+    # Console handler (always attach)
+    console = logging.StreamHandler(stream=sys.stdout)
+    console.setLevel(logging.INFO)
+    console.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    console.addFilter(RedactFilter())
+    logger.addHandler(console)
+    # File handler (attach if available)
+    if _file_handler is not None:
+        # Avoid stacking multiple redact filters on the shared handler
+        if not any(isinstance(f, logging.Filter) and hasattr(f, 'PATTERNS') for f in _file_handler.filters):
+            _file_handler.addFilter(RedactFilter())
+        logger.addHandler(_file_handler)
     return logger
 
 # Configure main loggers

@@ -164,7 +164,9 @@ class Database:
             try:
                 from datetime import datetime
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                logs_dir = os.path.join(base_dir, "logs")
+                # Respect LOGS_DIR env; default to backend-services/platform-logs
+                env_logs = os.getenv("LOGS_DIR")
+                logs_dir = os.path.abspath(env_logs) if env_logs else os.path.join(base_dir, "platform-logs")
                 os.makedirs(logs_dir, exist_ok=True)
                 log_path = os.path.join(logs_dir, "doorman.log")
                 now = datetime.now()
