@@ -100,8 +100,15 @@ async def authorization(request: Request):
         if _samesite not in ("strict", "lax", "none"):
             _samesite = "strict"
         host = request.url.hostname or (request.client.host if request.client else None)
-        safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
+        # Set Domain attribute when the configured domain matches the host.
+        # For test environments with bare hosts (e.g., "testserver"), allow exact match.
+        # Set Domain only when host matches configured domain (exact or subdomain).
+        if _domain and host and (host == _domain or host.endswith('.' + _domain)):
+            safe_domain = _domain
+        else:
+            safe_domain = None
         # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
+        # Set CSRF cookie with configured domain when applicable
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
@@ -112,7 +119,18 @@ async def authorization(request: Request):
             domain=safe_domain,
             max_age=1800
         )
+        # Also set a host-only CSRF cookie to accommodate test/dev hosts
+        response.set_cookie(
+            key="csrf_token",
+            value=csrf_token,
+            httponly=False,
+            secure=_secure,
+            samesite=_samesite,
+            path="/",
+            max_age=1800
+        )
         # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
+        # Set auth cookie with configured domain when applicable
         response.set_cookie(
             key="access_token_cookie",
             value=access_token,
@@ -122,6 +140,16 @@ async def authorization(request: Request):
             path="/",
             domain=safe_domain,
             max_age=1800  # 30 minutes
+        )
+        # Also set a host-only auth cookie for local/test transports
+        response.set_cookie(
+            key="access_token_cookie",
+            value=access_token,
+            httponly=True,
+            secure=_secure,
+            samesite=_samesite,
+            path="/",
+            max_age=1800
         )
         return response
     except HTTPException as e:

@@ -416,7 +416,20 @@ class InMemoryCollection:
                 updated = copy.deepcopy(d)
                 # Apply $set fields
                 if set_data:
-                    updated.update(set_data)
+                    for k, v in set_data.items():
+                        # Support dotted paths for nested updates (e.g., a.b.c)
+                        if isinstance(k, str) and '.' in k:
+                            parts = k.split('.')
+                            cur = updated
+                            for part in parts[:-1]:
+                                nxt = cur.get(part)
+                                if not isinstance(nxt, dict):
+                                    nxt = {}
+                                    cur[part] = nxt
+                                cur = nxt
+                            cur[parts[-1]] = v
+                        else:
+                            updated[k] = v
                 # Apply $push for list fields (create list if missing)
                 if push_data:
                     for k, v in push_data.items():
