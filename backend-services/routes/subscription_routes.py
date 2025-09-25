@@ -47,18 +47,16 @@ async def subscribe_api(api_data: SubscribeModel, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        # Allow users with manage_subscriptions to bypass group gate (admin override)
-        can_manage = await platform_role_required_bool(username, 'manage_subscriptions')
-        if not can_manage:
-            if not await group_required(request, api_data.api_name + '/' + api_data.api_version, api_data.username):
-                return respond_rest(ResponseModel(
-                    status_code=403,
-                    response_headers={
-                        "request_id": request_id
-                    },
-                    error_code="SUB007",
-                    error_message="You do not have the correct group access"
-                ))
+        # Enforce group gate for the target user always
+        if not await group_required(request, api_data.api_name + '/' + api_data.api_version, api_data.username):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code="SUB007",
+                error_message="You do not have the correct group access"
+            ))
         # Audit log: who is subscribing whom to what
         target_user = api_data.username or username
         logger.info(f"{request_id} | Actor: {username} | Action: subscribe | Target: {target_user} | API: {api_data.api_name}/{api_data.api_version}")
@@ -110,18 +108,16 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        # Allow users with manage_subscriptions to bypass group gate (admin override)
-        can_manage = await platform_role_required_bool(username, 'manage_subscriptions')
-        if not can_manage:
-            if not await group_required(request, api_data.api_name + '/' + api_data.api_version, api_data.username):
-                return respond_rest(ResponseModel(
-                    status_code=403,
-                    response_headers={
-                        "request_id": request_id
-                    },
-                    error_code="SUB008",
-                    error_message="You do not have the correct group access"
-                ))
+        # Enforce group gate for the target user always
+        if not await group_required(request, api_data.api_name + '/' + api_data.api_version, api_data.username):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={
+                    "request_id": request_id
+                },
+                error_code="SUB008",
+                error_message="You do not have the correct group access"
+            ))
         # Audit log: who is unsubscribing whom from what
         target_user = api_data.username or username
         logger.info(f"{request_id} | Actor: {username} | Action: unsubscribe | Target: {target_user} | API: {api_data.api_name}/{api_data.api_version}")
