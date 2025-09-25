@@ -105,3 +105,119 @@ async def test_subscriptions_flow(authed_client):
         json={"username": "admin", "api_name": "orders", "api_version": "v1"},
     )
     assert us.status_code in (200, 400)
+
+
+@pytest.mark.asyncio
+async def test_token_defs_and_deduction_on_gateway(monkeypatch, authed_client):
+    # 1) Create a credit definition the API will use
+    credit_group = "ai-group"
+    cd = await authed_client.post(
+        "/platform/credit",
+        json={
+            "api_credit_group": credit_group,
+            "api_key": "sk-test-123",
+            "api_key_header": "x-api-key",
+            "credit_tiers": [
+                {"tier_name": "basic", "credits": 100, "input_limit": 150, "output_limit": 150, "reset_frequency": "monthly"}
+            ],
+        },
+    )
+    assert cd.status_code in (200, 201), cd.text
+
+    # 2) Create an API that requires credits and subscribe admin
+    api_name, version = "aiapi", "v1"
+    c = await authed_client.post(
+        "/platform/api",
+        json={
+            "api_name": api_name,
+            "api_version": version,
+            "api_description": "AI API",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": ["http://fake-upstream"],
+            "api_type": "REST",
+            "api_allowed_retry_count": 0,
+            "api_credits_enabled": True,
+            "api_credit_group": credit_group,
+        },
+    )
+    assert c.status_code in (200, 201), c.text
+    ep = await authed_client.post(
+        "/platform/endpoint",
+        json={
+            "api_name": api_name,
+            "api_version": version,
+            "endpoint_method": "GET",
+            "endpoint_uri": "/ping",
+            "endpoint_description": "ping",
+        },
+    )
+    assert ep.status_code in (200, 201)
+    s = await authed_client.post(
+        "/platform/subscription/subscribe",
+        json={"username": "admin", "api_name": api_name, "api_version": version},
+    )
+    assert s.status_code in (200, 201)
+
+    # 3) Give the admin user a small number of credits in that group
+    uc = await authed_client.post(
+        f"/platform/credit/admin",
+        json={
+            "username": "admin",
+            "users_credits": {
+                credit_group: {"tier_name": "basic", "available_credits": 2}
+            },
+        },
+    )
+    assert uc.status_code in (200, 201), uc.text
+
+    # Helper to read remaining credits via API
+    async def _remaining():
+        r = await authed_client.get("/platform/credit/admin")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        users_credits = body.get("users_credits") or body.get("response", {}).get("users_credits", {})
+        return int(users_credits.get(credit_group, {}).get("available_credits", 0))
+
+    # 4) Monkeypatch upstream and call gateway; each call should deduct one credit
+    import services.gateway_service as gs
+
+    class _FakeHTTPResponse:
+        def __init__(self, status_code=200, json_body=None):
+            self.status_code = status_code
+            self._json_body = json_body or {"ok": True}
+            self.headers = {"Content-Type": "application/json"}
+            self.content = b"{}"
+            self.text = "{}"
+
+        def json(self):
+            return self._json_body
+
+    class _FakeAsyncClient:
+        def __init__(self, timeout=None):
+            self._timeout = timeout
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params=None, headers=None):
+            return _FakeHTTPResponse(200)
+
+    monkeypatch.setattr(gs.httpx, "AsyncClient", _FakeAsyncClient)
+
+    # Before any call
+    assert await _remaining() == 2
+
+    r1 = await authed_client.get(f"/api/rest/{api_name}/{version}/ping")
+    assert r1.status_code in (200, 500)
+    assert await _remaining() == 1
+
+    r2 = await authed_client.get(f"/api/rest/{api_name}/{version}/ping")
+    assert r2.status_code in (200, 500)
+    assert await _remaining() == 0
+
+    # 5) Further calls should be blocked with 401 (no credits)
+    r3 = await authed_client.get(f"/api/rest/{api_name}/{version}/ping")
+    assert r3.status_code == 401

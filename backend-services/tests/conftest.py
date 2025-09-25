@@ -13,6 +13,7 @@ os.environ.setdefault("MEM_OR_EXTERNAL", "MEM")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
 os.environ.setdefault("STARTUP_ADMIN_EMAIL", "admin@doorman.so")
 os.environ.setdefault("STARTUP_ADMIN_PASSWORD", "password1")
+os.environ.setdefault("COOKIE_DOMAIN", "testserver")
 
 _HERE = os.path.dirname(__file__)
 _PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
@@ -36,6 +37,21 @@ async def authed_client():
         json={"email": os.environ.get("STARTUP_ADMIN_EMAIL"), "password": os.environ.get("STARTUP_ADMIN_PASSWORD")},
     )
     assert r.status_code == 200, r.text
+    # Ensure cookie is present; if transport doesn't persist Set-Cookie, set it explicitly from body
+    try:
+        has_cookie = any(c.name == "access_token_cookie" for c in client.cookies.jar)
+        if not has_cookie:
+            body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            token = body.get("access_token")
+            if token:
+                client.cookies.set(
+                    "access_token_cookie",
+                    token,
+                    domain=os.environ.get("COOKIE_DOMAIN") or "testserver",
+                    path="/",
+                )
+    except Exception:
+        pass
     return client
 
 
