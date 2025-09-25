@@ -39,6 +39,27 @@ async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> b
     except Exception:
         return False
 
+def _cookie_values(request: Request, name: str):
+    """Return all values for a cookie name from the raw Cookie header.
+
+    Some browsers/clients may send duplicate cookie names (e.g., prior host-only
+    and domain cookies). Starlette's request.cookies returns one value only.
+    This helper extracts all occurrences so CSRF matching can tolerate duplicates.
+    """
+    try:
+        raw = request.headers.get('cookie') or ''
+        parts = [p.strip() for p in raw.split(';') if p.strip()]
+        vals = []
+        for p in parts:
+            if '=' not in p:
+                continue
+            k, v = p.split('=', 1)
+            if k.strip() == name:
+                vals.append(v)
+        return vals
+    except Exception:
+        return []
+
 async def auth_required(request: Request):
     """Validate JWT token and CSRF for HTTPS.
 
@@ -63,9 +84,10 @@ async def auth_required(request: Request):
             require_csrf = True
     if require_csrf:
         csrf_header = request.headers.get("X-CSRF-Token")
-        csrf_cookie = request.cookies.get("csrf_token")
+        # Accept header match with ANY cookie value named csrf_token to tolerate duplicates
+        csrf_cookies = _cookie_values(request, 'csrf_token')
         # Accept either valid double-submit token OR trusted same-origin based on allowed origins
-        is_double_submit_ok = await validate_csrf_double_submit(csrf_header, csrf_cookie)
+        is_double_submit_ok = bool(csrf_header and csrf_header in csrf_cookies)
         if not is_double_submit_ok:
             # Fallback: trust explicit ALLOWED_ORIGINS for first‑party app without CSRF header
             try:
