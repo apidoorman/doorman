@@ -48,9 +48,20 @@ async def auth_required(request: Request):
     token = request.cookies.get("access_token_cookie")
     if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    # Enforce CSRF on HTTPS deployments only for unsafe methods
+    # Enforce CSRF on HTTPS deployments.
+    # - For sensitive platform endpoints (/platform/*), require CSRF on all methods.
+    # - For gateway endpoints (/api/*), require CSRF only on unsafe methods to avoid
+    #   breaking typical GET usage patterns for API calls.
     https_enabled = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
-    if https_enabled and request.method.upper() in ("POST", "PUT", "PATCH", "DELETE"):
+    path = str(request.url.path)
+    method = request.method.upper()
+    require_csrf = False
+    if https_enabled:
+        if path.startswith('/platform/'):
+            require_csrf = True
+        elif method in ("POST", "PUT", "PATCH", "DELETE"):
+            require_csrf = True
+    if require_csrf:
         csrf_header = request.headers.get("X-CSRF-Token")
         csrf_cookie = request.cookies.get("csrf_token")
         # Accept either valid double-submit token OR trusted same-origin based on allowed origins
