@@ -61,7 +61,7 @@ class SubscriptionService:
         logger.info(f"{request_id} | Subscriptions retrieved successfully")
         return ResponseModel(
             status_code=200,
-            response={'apis': apis}
+            response={'subscriptions': {'apis': apis}}
         ).dict()
 
     @staticmethod
