@@ -22,6 +22,7 @@ class CreateApiModel(BaseModel):
     api_allowed_headers: Optional[List[str]] = Field(None, description="Allowed headers for the API", example=["Content-Type", "Authorization"])
     api_credits_enabled: Optional[bool] = Field(False, description="Enable credit-based authentication for the API", example=True)
     api_credit_group: Optional[str] = Field(None, description="API credit group for the API credits", example="ai-group-1")
+    active: Optional[bool] = Field(True, description="Whether the API is active (enabled)", example=True)
     
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
     api_path: Optional[str] = Field(None, description="Unique path for the API, auto-generated", example=None)

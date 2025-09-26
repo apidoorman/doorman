@@ -84,6 +84,8 @@ class GatewayService:
                 api = await api_util.get_api(api_key, api_name_version)
                 if not api:
                     return GatewayService.error_response(request_id, 'GTW001', 'API does not exist for the requested name and version')
+                if api.get('active') is False:
+                    return GatewayService.error_response(request_id, 'GTW012', 'API is disabled', status=403)
                 endpoints = await api_util.get_api_endpoints(api.get('api_id'))
                 if not endpoints:
                     return GatewayService.error_response(request_id, 'GTW002', 'No endpoints found for the requested API')
@@ -201,6 +203,8 @@ class GatewayService:
                 api = await api_util.get_api(api_key, api_name_version)
                 if not api:
                     return GatewayService.error_response(request_id, 'GTW001', 'API does not exist for the requested name and version')
+                if api.get('active') is False:
+                    return GatewayService.error_response(request_id, 'GTW012', 'API is disabled', status=403)
                 endpoints = await api_util.get_api_endpoints(api.get('api_id'))
                 logger.info(f"{request_id} | SOAP gateway endpoints: {endpoints}")
                 if not endpoints:
@@ -293,9 +297,13 @@ class GatewayService:
                 api = doorman_cache.get_cache('api_cache', api_path)
                 if not api:
                     api = await api_util.get_api(None, api_path)
-                    if not api:
+                if not api:
                         logger.error(f"{request_id} | API not found: {api_path}")
                         return GatewayService.error_response(request_id, 'GTW001', f'API does not exist: {api_path}')
+                if api.get('active') is False:
+                    return GatewayService.error_response(request_id, 'GTW012', 'API is disabled', status=403)
+                if api.get('active') is False:
+                    return GatewayService.error_response(request_id, 'GTW012', 'API is disabled', status=403)
                 doorman_cache.set_cache('api_cache', api_path, api)
                 client_key = request.headers.get('client-key')
                 server = await routing_util.pick_upstream_server(api, 'POST', '/graphql', client_key)
