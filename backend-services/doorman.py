@@ -500,6 +500,21 @@ def stop():
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
 
+def restart():
+    """Restart the doorman process using PID-based supervisor.
+    This function is intended to be invoked from a detached helper process.
+    """
+    try:
+        stop()
+        # Small delay to ensure ports/files released before start
+        time.sleep(1.0)
+    except Exception as e:
+        gateway_logger.error(f"Error during stop phase of restart: {e}")
+    try:
+        start()
+    except Exception as e:
+        gateway_logger.error(f"Error during start phase of restart: {e}")
+
 def run():
     server_port = int(os.getenv('PORT', 5001))
     max_threads = multiprocessing.cpu_count()
@@ -543,6 +558,8 @@ if __name__ == "__main__":
         stop()
     elif len(sys.argv) > 1 and sys.argv[1] == "start":
         start()
+    elif len(sys.argv) > 1 and sys.argv[1] == "restart":
+        restart()
     elif len(sys.argv) > 1 and sys.argv[1] == "run":
         run()
     else:
