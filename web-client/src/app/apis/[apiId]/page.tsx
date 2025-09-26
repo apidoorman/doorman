@@ -8,6 +8,8 @@ import Layout from '@/components/Layout'
 import { fetchJson, getCookie } from '@/utils/http'
 import { useToast } from '@/contexts/ToastContext'
 import { SERVER_URL } from '@/utils/config'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 
 interface API {
   api_id: string
@@ -716,6 +718,24 @@ const ApiDetailPage = () => {
                 <h3 className="card-title">Configuration</h3>
               </div>
               <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Active</label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!(editData as any).active}
+                        onChange={(e) => handleInputChange('active' as any, e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enable this API</label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${((api as any).active ?? true) ? 'badge-success' : 'badge-error'}`}>
+                      {((api as any).active ?? true) ? 'Active' : 'Disabled'}
+                    </span>
+                  )}
+                </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credits Enabled

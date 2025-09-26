@@ -21,6 +21,7 @@ class UpdateApiModel(BaseModel):
     api_allowed_retry_count: Optional[int] = Field(None, description="Number of allowed retries for the API", example=0)
     api_credits_enabled: Optional[bool] = Field(False, description="Enable credit-based authentication for the API", example=True)
     api_credit_group: Optional[str] = Field(None, description="API credit group for the API credits", example="ai-group-1")
+    active: Optional[bool] = Field(None, description="Whether the API is active (enabled)")
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
     api_path: Optional[str] = Field(None, description="Unqiue path for the API, auto-generated", example=None)
 
