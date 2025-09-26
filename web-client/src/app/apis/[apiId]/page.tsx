@@ -740,10 +740,11 @@ const ApiDetailPage = () => {
                 </div>
 
                 {api.api_credits_enabled && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Credit Group
-                    </label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Credit Group
+                    <InfoTooltip text="Configured credit group name used to deduct and inject keys." />
+                  </label>
                     {isEditing ? (
                       <input
                         type="text"
@@ -761,6 +762,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Authorization Field Swap
+                    <InfoTooltip text="Map Authorization to a different header (e.g., X-Api-Key)." />
                   </label>
                   {isEditing ? (
                     <input
@@ -778,6 +780,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Use Protobuf
+                    <InfoTooltip text="Frontend preference; enables proto-aware UI only." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
@@ -902,8 +905,9 @@ const ApiDetailPage = () => {
 
             {/* Allowed Groups */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Allowed Groups</h3>
+                <FormHelp docHref="/docs/using-fields.html#access-control">User must belong to any listed group.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
@@ -951,6 +955,7 @@ const ApiDetailPage = () => {
               <div className="card-header">
                 <h3 className="card-title">Servers</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Used when no client routing or endpoint override is configured</p>
+                <FormHelp docHref="/docs/using-fields.html#servers">Add base upstreams; include scheme and port.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
@@ -1067,8 +1072,9 @@ const ApiDetailPage = () => {
 
             {/* Allowed Headers */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Allowed Headers</h3>
+                <FormHelp docHref="/docs/using-fields.html#header-forwarding">Forward only selected upstream response headers.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (

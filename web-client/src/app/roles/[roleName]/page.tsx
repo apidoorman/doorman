@@ -5,6 +5,7 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
 import { SERVER_URL } from '@/utils/config'
 
@@ -279,8 +280,9 @@ const RoleDetailPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Basic Information */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
+                <FormHelp docHref="/docs/using-fields.html#roles">Update role name/description used for platform permissions.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div>
@@ -332,8 +334,9 @@ const RoleDetailPage = () => {
 
             {/* Permissions */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Permissions</h3>
+                <FormHelp docHref="/docs/using-fields.html#access-control">Grant least-privilege access to platform features.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-1 gap-3">

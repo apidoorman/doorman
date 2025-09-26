@@ -4,6 +4,8 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 
@@ -99,6 +101,7 @@ const AddRoutingPage = () => {
         {/* Form */}
         <div className="card max-w-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
+            <FormHelp docHref="/docs/using-fields.html#routing">Create a routing set with ordered upstreams and optional fixed index.</FormHelp>
             <div>
               <label htmlFor="routing_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Routing Name *
@@ -138,6 +141,7 @@ const AddRoutingPage = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Servers *
+                <InfoTooltip text="Ordered list of upstream base URLs (scheme + host + port). Selection defaults to round-robin." />
               </label>
               <div className="space-y-3">
                 <div className="flex gap-2">

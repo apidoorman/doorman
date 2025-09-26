@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 
@@ -119,6 +120,7 @@ const AddRolePage = () => {
         {/* Form */}
         <div className="card max-w-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
+            <FormHelp docHref="/docs/using-fields.html#roles">Define a role and toggle platform permissions. Apply least privilege.</FormHelp>
             <div>
               <label htmlFor="role_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Role Name *

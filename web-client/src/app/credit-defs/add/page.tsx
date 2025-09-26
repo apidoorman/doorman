@@ -3,6 +3,8 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -44,23 +46,24 @@ export default function AddCreditDefPage() {
 
           <div className="card">
             <div className="p-6 space-y-4">
+              <FormHelp docHref="/docs/using-fields.html#credits">Define a credit group, key header, optional key, and tiers.</FormHelp>
               {error && <div className="text-sm text-error-600">{error}</div>}
               {success && <div className="text-sm text-success-600">{success}</div>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium">API Credit Group</label>
+                  <label className="block text-sm font-medium">API Credit Group <InfoTooltip text="Reference name used by APIs to deduct credits and inject keys." /></label>
                   <input className="input" value={api_credit_group} onChange={e => setGroup(e.target.value)} placeholder="ai-basic" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">API Key Header</label>
+                  <label className="block text-sm font-medium">API Key Header <InfoTooltip text="Header name injected when proxying requests (e.g., x-api-key)." /></label>
                   <input className="input" value={api_key_header} onChange={e => setHeader(e.target.value)} placeholder="x-api-key" />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium">API Key</label>
+                  <label className="block text-sm font-medium">API Key <InfoTooltip text="Default key used when proxying; users can also have per-user keys." /></label>
                   <input className="input" value={api_key} onChange={e => setKey(e.target.value)} placeholder="sk_live_..." />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium">Credit Tiers (JSON)</label>
+                  <label className="block text-sm font-medium">Credit Tiers (JSON) <InfoTooltip text="Array of tiers with tier_name, credits, input_limit, output_limit, reset_frequency." /></label>
                   <textarea className="input font-mono text-xs h-48" value={creditTiersText} onChange={e => setTiersText(e.target.value)} />
                 </div>
               </div>

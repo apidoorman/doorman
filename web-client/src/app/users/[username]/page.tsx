@@ -5,6 +5,8 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
 import { PROTECTED_USERS, SERVER_URL } from '@/utils/config'
 
@@ -385,8 +387,9 @@ const UserDetailPage = () => {
             )}
             {/* Basic Information */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
+                <FormHelp docHref="/docs/using-fields.html#users">Update identity, role, status, and UI access.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div>
@@ -426,6 +429,7 @@ const UserDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Role
+                    <InfoTooltip text="Platform role controls permissions (e.g., manage_apis, view_logs)." />
                   </label>
                   {isEditing ? (
                     <input
@@ -443,6 +447,7 @@ const UserDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Status
+                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
@@ -466,6 +471,7 @@ const UserDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     UI Access
+                    <InfoTooltip text="Controls access to the admin UI; API access is separate." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
@@ -490,8 +496,9 @@ const UserDetailPage = () => {
 
             {/* Groups */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Groups</h3>
+                <FormHelp docHref="/docs/using-fields.html#access-control">Groups are used in API access checks alongside roles.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
@@ -541,8 +548,9 @@ const UserDetailPage = () => {
 
             {/* Rate Limiting */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Rate Limiting</h3>
+                <FormHelp docHref="/docs/using-fields.html#rate-limit">Limits requests per user over a time window.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div>
@@ -581,8 +589,9 @@ const UserDetailPage = () => {
 
             {/* Throttling */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Throttling</h3>
+                <FormHelp docHref="/docs/using-fields.html#throttle">Control bursts with duration, wait, and queue size.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div>

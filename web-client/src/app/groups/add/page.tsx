@@ -4,6 +4,8 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 
@@ -101,9 +103,11 @@ const AddGroupPage = () => {
         {/* Form */}
         <div className="card max-w-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
+            <FormHelp docHref="/docs/using-fields.html#access-control">Groups gate API access alongside roles. Use clear names.</FormHelp>
             <div>
               <label htmlFor="group_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Group Name *
+                <InfoTooltip text="Unique name for the group. Users can belong to multiple groups." />
               </label>
               <input
                 type="text"
@@ -140,6 +144,7 @@ const AddGroupPage = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 API Access
+                <InfoTooltip text="Add API name/version pairs this group may access, e.g., users/v1" />
               </label>
               <div className="space-y-3">
                 <div className="flex gap-2">
