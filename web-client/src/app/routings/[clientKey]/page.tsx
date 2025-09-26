@@ -5,6 +5,8 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
 import { SERVER_URL } from '@/utils/config'
 
@@ -316,8 +318,9 @@ const RoutingDetailPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Basic Information */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
+                <FormHelp docHref="/docs/using-fields.html#routing">Update name, description, and fixed server index.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div>
@@ -366,6 +369,7 @@ const RoutingDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Server Index
+                    <InfoTooltip text="Optional fixed index into the server list; leave 0 for default selection." />
                   </label>
                   {isEditing ? (
                     <input
@@ -384,8 +388,9 @@ const RoutingDetailPage = () => {
 
             {/* Servers Configuration */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Servers Configuration</h3>
+                <FormHelp docHref="/docs/using-fields.html#routing">Ordered upstreams used for this client key.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (

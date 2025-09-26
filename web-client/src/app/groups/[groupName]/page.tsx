@@ -5,6 +5,8 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
 import { SERVER_URL } from '@/utils/config'
 
@@ -287,13 +289,15 @@ const GroupDetailPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Basic Information */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
+                <FormHelp docHref="/docs/using-fields.html#access-control">Groups gate API access alongside roles.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Group Name
+                    <InfoTooltip text="Unique name for the group. Users can belong to multiple groups." />
                   </label>
                   {isEditing ? (
                     <input
@@ -329,8 +333,9 @@ const GroupDetailPage = () => {
 
             {/* API Access */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">API Access</h3>
+                <FormHelp docHref="/docs/using-fields.html#access-control">Grant access to API name/version pairs (e.g., users/v1).</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (

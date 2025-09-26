@@ -4,6 +4,8 @@ import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 
@@ -153,8 +155,9 @@ const AddApiPage = () => {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="card">
-            <div className="card-header">
+            <div className="card-header flex items-center justify-between">
               <h3 className="card-title">Basic Information</h3>
+              <FormHelp docHref="/docs/using-fields.html#apis">Fill API name/version; these form the base path clients call.</FormHelp>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -194,7 +197,7 @@ const AddApiPage = () => {
                   disabled={loading}
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  API version (e.g., v1, v2, beta)
+                  API version (e.g., v1, v2)
                 </p>
               </div>
               </div>
@@ -243,12 +246,16 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Configuration</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Configuration</h3>
+              <FormHelp docHref="/docs/using-fields.html#api-config">Set credits, auth header mapping, and validations.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Credits Enabled
+                  <InfoTooltip text="When enabled, each request to this API deducts credits from the caller's assigned credit group before forwarding upstream." />
                 </label>
                 <div className="flex items-center">
                   <input
@@ -269,6 +276,7 @@ const AddApiPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credit Group
+                    <InfoTooltip text="Name of a configured credit group (e.g., ai-basic). Determines where to deduct and which API key header to inject." />
                   </label>
                   <input
                     type="text"
@@ -283,16 +291,25 @@ const AddApiPage = () => {
               )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Authorization Field Swap</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Authorization Field Swap
+                  <InfoTooltip text="Map inbound Authorization header into a different header name expected by the upstream service. Example: X-Api-Key." />
+                </label>
                 <input type="text" name="api_authorization_field_swap" className="input" placeholder="backend-auth-header" value={formData.api_authorization_field_swap} onChange={handleChange} disabled={loading} />
               </div>
             </div>
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Servers</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Servers</h3>
+              <FormHelp docHref="/docs/using-fields.html#servers">Add one or more upstream base URLs used for proxying.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">API Servers</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                API Servers
+                <InfoTooltip text="Base URLs for upstreams. Include scheme and port. Example: http://localhost:8080" />
+              </label>
               <div className="flex gap-2">
                 <input type="text" className="input flex-1" placeholder="e.g., http://localhost:8080" value={newServer} onChange={(e) => setNewServer(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addServer()} disabled={loading} />
                 <button type="button" onClick={addServer} className="btn btn-secondary" disabled={loading}>Add</button>
@@ -317,11 +334,15 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Allowed Roles</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Allowed Roles</h3>
+              <FormHelp docHref="/docs/using-fields.html#access-control">Grant access by platform roles and groups.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Roles
+                  <InfoTooltip text="Only users with any of these platform roles can access this API." />
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -351,6 +372,7 @@ const AddApiPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Use Protobuf
+                  <InfoTooltip text="Frontend preference enabling proto-aware features (e.g., proto editor). Does not affect gateway behavior." />
                 </label>
                 <div className="flex items-center">
                   <input
@@ -372,11 +394,15 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Allowed Groups</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Allowed Groups</h3>
+              <FormHelp docHref="/docs/using-fields.html#access-control">Restrict by user groups; use ALL to allow any group.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Groups
+                  <InfoTooltip text="User must belong to any of these groups to access this API." />
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -407,10 +433,16 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Allowed Headers</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Allowed Headers</h3>
+              <FormHelp docHref="/docs/using-fields.html#header-forwarding">Choose which upstream response headers are forwarded.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Allowed Headers</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Allowed Headers
+                  <InfoTooltip text="Response headers from upstream that Doorman may forward back to the client. Use lowercase names; examples: x-rate-limit, retry-after." />
+                </label>
                 <div className="flex gap-2">
                   <input type="text" className="input flex-1" placeholder="e.g., Authorization" value={newHeader} onChange={(e) => setNewHeader(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addHeader()} disabled={loading} />
                   <button type="button" onClick={addHeader} className="btn btn-secondary" disabled={loading}>Add</button>

@@ -40,6 +40,7 @@ from routes.security_routes import security_router
 from routes.credit_routes import credit_router
 from routes.demo_routes import demo_router
 from routes.monitor_routes import monitor_router
+from routes.config_routes import config_router
 from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
 from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
 from utils.metrics_util import metrics_store
@@ -452,6 +453,7 @@ doorman.include_router(monitor_router, prefix="/platform", tags=["Monitor"])
 # Expose token management under both legacy and new prefixes
 doorman.include_router(credit_router, prefix="/platform/credit", tags=["Credit"])
 doorman.include_router(demo_router, prefix="/platform/demo", tags=["Demo"])
+doorman.include_router(config_router, prefix="/platform", tags=["Config"])
 
 def start():
     if os.path.exists(PID_FILE):

@@ -4,6 +4,8 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 
@@ -166,7 +168,10 @@ const AddUserPage = () => {
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Basic Information */}
             <div className="space-y-6">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Basic Information</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Basic Information</h3>
+                <FormHelp docHref="/docs/using-fields.html#users">Create user credentials, set role and UI access.</FormHelp>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -203,6 +208,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Password *
+                    <InfoTooltip text="Minimum 16 chars with upper, lower, digit, and symbol for strong security." />
                   </label>
                   <input
                     type="password"
@@ -225,6 +231,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="role" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Role *
+                    <InfoTooltip text="Platform role controls permissions (e.g., manage_apis, view_logs)." />
                   </label>
                   <input
                     type="text"
@@ -242,6 +249,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="status" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Status
+                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled." />
                   </label>
                   <select
                     id="status"
@@ -268,13 +276,17 @@ const AddUserPage = () => {
                     <option value="false">Disabled</option>
                     <option value="true">Enabled</option>
                   </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Controls access to the admin UI; API access is separate.</p>
                 </div>
               </div>
             </div>
 
             {/* Groups */}
             <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Groups</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Groups</h3>
+                <FormHelp docHref="/docs/using-fields.html#access-control">Groups are used for API access checks alongside roles.</FormHelp>
+              </div>
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {formData.groups.map((group, index) => (
@@ -312,11 +324,15 @@ const AddUserPage = () => {
 
             {/* Rate Limiting */}
             <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Rate Limiting</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Rate Limiting</h3>
+                <FormHelp docHref="/docs/using-fields.html#rate-limit">Limits requests per user over a time window.</FormHelp>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="rate_limit_duration" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Rate Limit Duration
+                    <InfoTooltip text="Numeric window size (e.g., 100) combined with type (minute/hour)." />
                   </label>
                   <input
                     type="number"
@@ -332,6 +348,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="rate_limit_duration_type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Rate Limit Type
+                    <InfoTooltip text="Unit for the rate limit window. Example: minute." />
                   </label>
                   <select
                     id="rate_limit_duration_type"
@@ -352,11 +369,15 @@ const AddUserPage = () => {
 
             {/* Throttling */}
             <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Throttling</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Throttling</h3>
+                <FormHelp docHref="/docs/using-fields.html#throttle">Control burst behavior with wait, duration, and queue size.</FormHelp>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="throttle_duration" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Throttle Duration
+                    <InfoTooltip text="How long a throttle period lasts before resetting." />
                   </label>
                   <input
                     type="number"
@@ -372,6 +393,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="throttle_duration_type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Throttle Type
+                    <InfoTooltip text="Unit for the throttle duration period." />
                   </label>
                   <select
                     id="throttle_duration_type"
@@ -390,6 +412,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="throttle_wait_duration" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Wait Duration
+                    <InfoTooltip text="How long requests wait when throttled before retrying." />
                   </label>
                   <input
                     type="number"
@@ -405,6 +428,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="throttle_wait_duration_type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Wait Type
+                    <InfoTooltip text="Unit for the wait duration (seconds/minutes/etc)." />
                   </label>
                   <select
                     id="throttle_wait_duration_type"
@@ -423,6 +447,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="throttle_queue_limit" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Queue Limit
+                    <InfoTooltip text="Maximum number of queued requests when throttled; null disables queueing." />
                   </label>
                   <input
                     type="number"

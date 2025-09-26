@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Layout from '@/components/Layout'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { getJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -86,6 +87,7 @@ export default function AuthAdminPage() {
 
         <div className="card">
           <div className="p-6 space-y-4">
+            <FormHelp docHref="/docs/using-fields.html#auth-admin">Look up user status, revoke tokens, and enable/disable accounts.</FormHelp>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium">Username</label>

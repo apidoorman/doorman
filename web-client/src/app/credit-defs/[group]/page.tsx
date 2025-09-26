@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { getJson, putJson, delJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -79,23 +81,24 @@ export default function EditCreditDefPage() {
 
           <div className="card">
             <div className="p-6 space-y-4">
+              <FormHelp docHref="/docs/using-fields.html#credits">Edit key header, optional key, and tiers. Changes apply immediately.</FormHelp>
               {error && <div className="text-sm text-error-600">{error}</div>}
               {success && <div className="text-sm text-success-600">{success}</div>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium">API Credit Group</label>
+                  <label className="block text-sm font-medium">API Credit Group <InfoTooltip text="Immutable group name used by APIs" /></label>
                   <input className="input" value={api_credit_group} readOnly />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">API Key Header</label>
+                  <label className="block text-sm font-medium">API Key Header <InfoTooltip text="Header name injected when proxying (e.g., x-api-key)" /></label>
                   <input className="input" value={api_key_header} onChange={e => setHeader(e.target.value)} />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium">API Key (leave blank to keep existing)</label>
+                  <label className="block text-sm font-medium">API Key (leave blank to keep existing) <InfoTooltip text="Optional default key value; leave empty to keep current" /></label>
                   <input className="input" value={api_key} onChange={e => setKey(e.target.value)} placeholder="sk_live_..." />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium">Credit Tiers (JSON)</label>
+                  <label className="block text-sm font-medium">Credit Tiers (JSON) <InfoTooltip text="Array of tiers with tier_name, credits, input_limit, output_limit, reset_frequency" /></label>
                   <textarea className="input font-mono text-xs h-48" value={creditTiersText} onChange={e => setTiersText(e.target.value)} />
                 </div>
               </div>

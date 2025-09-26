@@ -139,7 +139,7 @@ async def restart_gateway(request: Request):
                 status_code=409,
                 response_headers={"request_id": request_id},
                 error_code="SEC004",
-                error_message="Restart not supported: no PID file found (run using 'doorman start' or use your orchestrator to restart)"
+                error_message="Restart not supported: no PID file found (run using 'doorman start' or contact your admin)"
             ).dict(), "rest")
         # Spawn a detached helper to perform restart so this request can return 202
         doorman_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'doorman.py'))
