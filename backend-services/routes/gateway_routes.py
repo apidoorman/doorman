@@ -107,7 +107,7 @@ async def clear_all_caches(request: Request):
             error_message="An unexpected error occurred"
             ).dict(), "rest")
 
-@gateway_router.api_route("/rest/{path:path}", methods=["GET", "POST", "PUT", "DELETE"],
+@gateway_router.api_route("/rest/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     description="REST gateway endpoint",
     response_model=ResponseModel)
 async def gateway(request: Request, path: str):

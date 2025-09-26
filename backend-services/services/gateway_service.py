@@ -135,7 +135,7 @@ class GatewayService:
             async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
                 if method == "GET":
                     http_response = await client.get(url, params=query_params, headers=headers)
-                elif method in ("POST", "PUT", "DELETE"):
+                elif method in ("POST", "PUT", "DELETE", "PATCH"):
                     if "JSON" in content_type:
                         body = await request.json()
                         http_response = await getattr(client, method.lower())(
