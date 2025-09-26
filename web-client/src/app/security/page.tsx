@@ -170,6 +170,17 @@ const SecurityPage = () => {
     }
   }
 
+  const handleRestartGateway = async () => {
+    try {
+      setError(null)
+      const res = await postJson<any>(`${SERVER_URL}/platform/security/restart`, {})
+      setSuccess(res?.message || 'Restart scheduled')
+      setTimeout(() => setSuccess(null), 4000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to schedule restart')
+    }
+  }
+
   const handleCreateApiKey = async () => {
     try {
       setSuccess('API key created successfully!')
@@ -359,10 +370,13 @@ const SecurityPage = () => {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Requires MEM_ENCRYPTION_KEY to be configured on server.</p>
                   </div>
 
-                  {permissions?.manage_gateway && (
+                  {(permissions?.manage_gateway || permissions?.manage_security) && (
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gateway</label>
-                      <button onClick={handleClearCaches} className="btn btn-secondary">Clear All Caches</button>
+                      <div className="flex gap-3">
+                        <button onClick={handleClearCaches} className="btn btn-secondary">Clear All Caches</button>
+                        <button onClick={handleRestartGateway} className="btn btn-danger">Restart Gateway</button>
+                      </div>
                     </div>
                   )}
                 </div>
