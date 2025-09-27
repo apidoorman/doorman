@@ -107,7 +107,7 @@ async def authorization(request: Request):
             safe_domain = _domain
         else:
             safe_domain = None
-        # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
+        # codeql[py/insecure-cookie]: In dev, HTTPS may be disabled for localhost; production enables HTTPS_ONLY/HTTPS_ENABLED
         # Set CSRF cookie with configured domain when applicable
         response.set_cookie(
             key="csrf_token",
@@ -120,6 +120,7 @@ async def authorization(request: Request):
             max_age=1800
         )
         # Also set a host-only CSRF cookie to accommodate test/dev hosts
+        # codeql[py/insecure-cookie]: Host-only variant for localhost/dev
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
@@ -129,7 +130,7 @@ async def authorization(request: Request):
             path="/",
             max_age=1800
         )
-        # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
+        # codeql[py/insecure-cookie]: In dev, HTTPS may be disabled for localhost; production enables HTTPS_ONLY/HTTPS_ENABLED
         # Set auth cookie with configured domain when applicable
         response.set_cookie(
             key="access_token_cookie",
@@ -417,7 +418,7 @@ async def extended_authorization(request: Request):
             _samesite = "strict"
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
-        # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
+        # codeql[py/insecure-cookie]: In dev, HTTPS may be disabled for localhost; production enables HTTPS_ONLY/HTTPS_ENABLED
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
