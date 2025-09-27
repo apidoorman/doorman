@@ -22,6 +22,8 @@ JWT/Token encryption:
 
 - JWT_SECRET_KEY — REQUIRED; gateway fails fast if missing at startup
 - TOKEN_ENCRYPTION_KEY — recommended; encrypts stored API keys and user API keys at rest
+- AUTH_EXPIRE_TIME + AUTH_EXPIRE_TIME_FREQ — access token TTL (default 30 minutes)
+- AUTH_REFRESH_EXPIRE_TIME + AUTH_REFRESH_EXPIRE_FREQ — refresh token TTL (default 7 days)
 
 Core variables:
 
@@ -68,7 +70,6 @@ Core variables:
   - Check readiness endpoint; verify Redis/Mongo health; inspect logs via `/platform/logging/logs`.
 - CORS failures:
   - Verify ALLOWED_ORIGINS and CORS_STRICT settings; avoid `*` with credentials.
-  - Use Tools → CORS Checker (or POST `/platform/tools/cors/check`) to simulate preflight/actual decisions and view effective headers.
 - CSRF errors:
   - Ensure clients set `X-CSRF-Token` header to value of `csrf_token` cookie when HTTPS_ENABLED=true.
 
