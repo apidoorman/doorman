@@ -8,6 +8,8 @@ import Layout from '@/components/Layout'
 import { fetchJson, getCookie } from '@/utils/http'
 import { useToast } from '@/contexts/ToastContext'
 import { SERVER_URL } from '@/utils/config'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 
 interface API {
   api_id: string
@@ -21,8 +23,8 @@ interface API {
   api_allowed_retry_count: number
   api_authorization_field_swap?: string
   api_allowed_headers?: string[]
-  api_tokens_enabled: boolean
-  api_token_group?: string
+  api_credits_enabled: boolean
+  api_credit_group?: string
   api_path?: string
 }
 
@@ -47,8 +49,8 @@ interface UpdateApiData {
   api_allowed_retry_count?: number
   api_authorization_field_swap?: string
   api_allowed_headers?: string[]
-  api_tokens_enabled?: boolean
-  api_token_group?: string
+  api_credits_enabled?: boolean
+  api_credit_group?: string
 }
 
 const ApiDetailPage = () => {
@@ -73,6 +75,7 @@ const ApiDetailPage = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const toast = useToast()
+  const [useProtobuf, setUseProtobufState] = useState<boolean>(false)
 
   // Proto management state and helpers
   type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean }
@@ -147,6 +150,10 @@ const ApiDetailPage = () => {
       try {
         const parsedApi = JSON.parse(apiData)
         setApi(parsedApi)
+        try {
+          const { getUseProtobuf } = require('@/utils/proto')
+          setUseProtobufState(getUseProtobuf(parsedApi.api_name, parsedApi.api_version))
+        } catch {}
         setEditData({
           api_name: parsedApi.api_name,
           api_version: parsedApi.api_version,
@@ -158,8 +165,8 @@ const ApiDetailPage = () => {
           api_allowed_retry_count: parsedApi.api_allowed_retry_count,
           api_authorization_field_swap: parsedApi.api_authorization_field_swap,
           api_allowed_headers: [...(parsedApi.api_allowed_headers || [])],
-          api_tokens_enabled: parsedApi.api_tokens_enabled,
-          api_token_group: parsedApi.api_token_group
+          api_credits_enabled: parsedApi.api_credits_enabled,
+          api_credit_group: parsedApi.api_credit_group
         })
         setLoading(false)
       } catch (err) {
@@ -175,6 +182,10 @@ const ApiDetailPage = () => {
           const found = (list as any[]).find((a: any) => String(a.api_id) === String(apiId))
           if (found) {
             setApi(found)
+            try {
+              const { getUseProtobuf } = require('@/utils/proto')
+              setUseProtobufState(getUseProtobuf(found.api_name, found.api_version))
+            } catch {}
             setEditData({
               api_name: found.api_name,
               api_version: found.api_version,
@@ -186,8 +197,8 @@ const ApiDetailPage = () => {
               api_allowed_retry_count: found.api_allowed_retry_count,
               api_authorization_field_swap: found.api_authorization_field_swap,
               api_allowed_headers: [...(found.api_allowed_headers || [])],
-              api_tokens_enabled: found.api_tokens_enabled,
-              api_token_group: found.api_token_group
+              api_credits_enabled: found.api_credits_enabled,
+              api_credit_group: found.api_credit_group
             })
             setError(null)
           } else {
@@ -228,6 +239,25 @@ const ApiDetailPage = () => {
     router.push('/apis')
   }
 
+  const handleExport = async () => {
+    try {
+      const name = (api as any)?.api_name || (editData as any)?.api_name
+      const version = (api as any)?.api_version || (editData as any)?.api_version
+      if (!name || !version) throw new Error('Missing API identity')
+      const res = await fetch(`${SERVER_URL}/platform/config/export/apis?api_name=${encodeURIComponent(String(name))}&api_version=${encodeURIComponent(String(version))}`, { credentials: 'include' })
+      const data = await res.json()
+      const payload = (data && (data.response || data))
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `doorman-api-${name}-${version}.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e:any) {
+      alert(e?.message || 'Export failed')
+    }
+  }
+
   const handleEdit = () => {
     setIsEditing(true)
   }
@@ -246,8 +276,8 @@ const ApiDetailPage = () => {
         api_allowed_retry_count: api.api_allowed_retry_count,
         api_authorization_field_swap: api.api_authorization_field_swap,
         api_allowed_headers: [...(api.api_allowed_headers || [])],
-        api_tokens_enabled: api.api_tokens_enabled,
-        api_token_group: api.api_token_group
+        api_credits_enabled: api.api_credits_enabled,
+        api_credit_group: api.api_credit_group
       })
     }
   }
@@ -281,6 +311,11 @@ const ApiDetailPage = () => {
       const refreshedApi = await fetchJson(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`)
       setApi(refreshedApi)
       sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
+      // Persist current protobuf preference
+      try {
+        const { setUseProtobuf } = await import('@/utils/proto')
+        setUseProtobuf(refreshedApi.api_name, refreshedApi.api_version, useProtobuf)
+      } catch {}
       setIsEditing(false)
       setSuccess('API updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -538,6 +573,12 @@ const ApiDetailPage = () => {
                   </svg>
                   Delete API
                 </button>
+                <button onClick={handleExport} className="btn btn-secondary">
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M4 10l6-6m4 12l6 6" />
+                  </svg>
+                  Export
+                </button>
               </>
             ) : (
               <>
@@ -703,43 +744,62 @@ const ApiDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tokens Enabled
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Active</label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!(editData as any).active}
+                        onChange={(e) => handleInputChange('active' as any, e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enable this API</label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${((api as any).active ?? true) ? 'badge-success' : 'badge-error'}`}>
+                      {((api as any).active ?? true) ? 'Active' : 'Disabled'}
+                    </span>
+                  )}
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Credits Enabled
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
                         type="checkbox"
-                        checked={editData.api_tokens_enabled || false}
-                        onChange={(e) => handleInputChange('api_tokens_enabled', e.target.checked)}
+                        checked={editData.api_credits_enabled || false}
+                        onChange={(e) => handleInputChange('api_credits_enabled', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
                       <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                        Enable API tokens
+                        Enable API credits
                       </label>
                     </div>
                   ) : (
-                    <span className={`badge ${api.api_tokens_enabled ? 'badge-success' : 'badge-gray'}`}>
-                      {api.api_tokens_enabled ? 'Enabled' : 'Disabled'}
+                    <span className={`badge ${api.api_credits_enabled ? 'badge-success' : 'badge-gray'}`}>
+                      {api.api_credits_enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   )}
                 </div>
 
-                {api.api_tokens_enabled && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Token Group
-                    </label>
+                {api.api_credits_enabled && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Credit Group
+                    <InfoTooltip text="Configured credit group name used to deduct and inject keys." />
+                  </label>
                     {isEditing ? (
                       <input
                         type="text"
-                        value={editData.api_token_group || ''}
-                        onChange={(e) => handleInputChange('api_token_group', e.target.value)}
+                        value={editData.api_credit_group || ''}
+                        onChange={(e) => handleInputChange('api_credit_group', e.target.value)}
                         className="input"
-                        placeholder="Enter token group"
+                        placeholder="Enter credit group"
                       />
                     ) : (
-                      <p className="text-gray-900 dark:text-white">{api.api_token_group || 'Default'}</p>
+                      <p className="text-gray-900 dark:text-white">{api.api_credit_group || 'Default'}</p>
                     )}
                   </div>
                 )}
@@ -747,6 +807,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Authorization Field Swap
+                    <InfoTooltip text="Map Authorization to a different header (e.g., X-Api-Key)." />
                   </label>
                   {isEditing ? (
                     <input
@@ -760,42 +821,86 @@ const ApiDetailPage = () => {
                     <p className="text-gray-900 dark:text-white">{api.api_authorization_field_swap || 'None'}</p>
                   )}
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Use Protobuf
+                    <InfoTooltip text="Frontend preference; enables proto-aware UI only." />
+                  </label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={useProtobuf}
+                        onChange={async (e) => {
+                          const next = e.target.checked
+                          setUseProtobufState(next)
+                          try {
+                            const { setUseProtobuf } = await import('@/utils/proto')
+                            setUseProtobuf(api?.api_name, api?.api_version, next)
+                          } catch {}
+                        }}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        Enable proto-based features for this API
+                      </label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${useProtobuf ? 'badge-success' : 'badge-gray'}`}>
+                      {useProtobuf ? 'Enabled' : 'Disabled'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Proto Management */}
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Proto</h3>
-              </div>
-              <div className="p-6 space-y-4">
-                {proto.error && (
-                  <div className="rounded bg-error-50 border border-error-200 p-2 text-error-700 text-sm">{proto.error}</div>
-                )}
-                <div className="flex items-center gap-3">
-                  <button className="btn btn-secondary" onClick={checkProto} disabled={proto.loading}> {proto.loading ? 'Checking...' : 'Check Status'} </button>
-                  {proto.exists === true && <span className="text-success-700 dark:text-success-400">Present</span>}
-                  {proto.exists === false && <span className="text-error-700 dark:text-error-400">Missing</span>}
+            {useProtobuf ? (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">Proto</h3>
                 </div>
-                <div className="flex items-center gap-3">
-                  <label className="btn btn-secondary">
-                    Upload
-                    <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
-                      onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'create'); e.currentTarget.value = '' } }} />
-                  </label>
-                  <label className="btn btn-secondary">
-                    Replace
-                    <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
-                      onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'update'); e.currentTarget.value = '' } }} />
-                  </label>
-                  <button className="btn btn-error" onClick={deleteProto} disabled={proto.working || proto.exists !== true}>Delete</button>
-                  <button className="btn btn-ghost" onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} disabled={!proto.content}>{proto.show ? 'Hide' : 'View'}</button>
+                <div className="p-6 space-y-4">
+                  {proto.error && (
+                    <div className="rounded bg-error-50 border border-error-200 p-2 text-error-700 text-sm">{proto.error}</div>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <button className="btn btn-secondary" onClick={checkProto} disabled={proto.loading}> {proto.loading ? 'Checking...' : 'Check Status'} </button>
+                    {proto.exists === true && <span className="text-success-700 dark:text-success-400">Present</span>}
+                    {proto.exists === false && <span className="text-error-700 dark:text-error-400">Missing</span>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="btn btn-secondary">
+                      Upload
+                      <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
+                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'create'); e.currentTarget.value = '' } }} />
+                    </label>
+                    <label className="btn btn-secondary">
+                      Replace
+                      <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
+                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'update'); e.currentTarget.value = '' } }} />
+                    </label>
+                    <button className="btn btn-error" onClick={deleteProto} disabled={proto.working || proto.exists !== true}>Delete</button>
+                    <button className="btn btn-ghost" onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} disabled={!proto.content}>{proto.show ? 'Hide' : 'View'}</button>
+                  </div>
+                  {proto.show && proto.content && (
+                    <pre className="text-xs whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 p-3 rounded max-h-64 overflow-auto">{proto.content}</pre>
+                  )}
                 </div>
-                {proto.show && proto.content && (
-                  <pre className="text-xs whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 p-3 rounded max-h-64 overflow-auto">{proto.content}</pre>
-                )}
               </div>
-            </div>
+            ) : (
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">Proto</h3>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Protobuf features are disabled for this API. Enable "Use Protobuf" in the Configuration section to upload or manage proto files.
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Allowed Roles */}
             <div className="card">
@@ -845,8 +950,9 @@ const ApiDetailPage = () => {
 
             {/* Allowed Groups */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Allowed Groups</h3>
+                <FormHelp docHref="/docs/using-fields.html#access-control">User must belong to any listed group.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
@@ -894,6 +1000,7 @@ const ApiDetailPage = () => {
               <div className="card-header">
                 <h3 className="card-title">Servers</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Used when no client routing or endpoint override is configured</p>
+                <FormHelp docHref="/docs/using-fields.html#servers">Add base upstreams; include scheme and port.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
@@ -1010,8 +1117,9 @@ const ApiDetailPage = () => {
 
             {/* Allowed Headers */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Allowed Headers</h3>
+                <FormHelp docHref="/docs/using-fields.html#header-forwarding">Forward only selected upstream response headers.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (

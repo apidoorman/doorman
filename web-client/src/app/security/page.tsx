@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { getJson, postJson, putJson, delJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -170,6 +172,17 @@ const SecurityPage = () => {
     }
   }
 
+  const handleRestartGateway = async () => {
+    try {
+      setError(null)
+      const res = await postJson<any>(`${SERVER_URL}/platform/security/restart`, {})
+      setSuccess(res?.message || 'Restart scheduled')
+      setTimeout(() => setSuccess(null), 4000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to schedule restart')
+    }
+  }
+
   const handleCreateApiKey = async () => {
     try {
       setSuccess('API key created successfully!')
@@ -282,16 +295,22 @@ const SecurityPage = () => {
             {/* Settings (always visible) */}
             <div className="card">
               <div className="p-6 space-y-6">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">Memory & Security Settings</h3>
-                  {memoryOnly && (
-                    <span className="badge badge-gray">Memory Mode</span>
-                  )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">Memory & Security Settings</h3>
+                    {memoryOnly && (
+                      <span className="badge badge-gray">Memory Mode</span>
+                    )}
+                  </div>
+                  <FormHelp docHref="/docs/using-fields.html#security">Configure encrypted memory dumps and clear caches safely.</FormHelp>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className={`block text-sm font-medium ${memoryOnly ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>Enable Auto-save</label>
+                    <label className={`block text-sm font-medium ${memoryOnly ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                      Enable Auto-save
+                      <InfoTooltip text="When enabled, Doorman periodically writes an encrypted memory dump to the configured path. Requires MEM_ENCRYPTION_KEY on the server. In memory-only mode this is always on." />
+                    </label>
                     <div className={`flex items-center gap-3 ${memoryOnly ? 'opacity-60 cursor-not-allowed' : ''}`}>
                       <input
                         type="checkbox"
@@ -310,7 +329,10 @@ const SecurityPage = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Auto-save Frequency (seconds)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Auto-save Frequency (seconds)
+                      <InfoTooltip text="Minimum 60s. Choose a value that balances RPO vs. IO overhead. Applies only when auto-save is enabled." />
+                    </label>
                     <input
                       type="number"
                       min={60}
@@ -324,7 +346,10 @@ const SecurityPage = () => {
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Dump Path</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Dump Path
+                      <InfoTooltip text="Filesystem path for the encrypted memory dump. Store on an encrypted volume if possible. Example: generated/memory_dump.bin" />
+                    </label>
                     <input
                       type="text"
                       value={settings.dump_path}
@@ -345,7 +370,10 @@ const SecurityPage = () => {
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Restore From Path</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Restore From Path
+                      <InfoTooltip text="Points to a previously saved encrypted dump file. Requires MEM_ENCRYPTION_KEY to decrypt and restore." />
+                    </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -359,10 +387,13 @@ const SecurityPage = () => {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Requires MEM_ENCRYPTION_KEY to be configured on server.</p>
                   </div>
 
-                  {permissions?.manage_gateway && (
+                  {(permissions?.manage_gateway || permissions?.manage_security) && (
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gateway</label>
-                      <button onClick={handleClearCaches} className="btn btn-secondary">Clear All Caches</button>
+                      <div className="flex gap-3">
+                        <button onClick={handleClearCaches} className="btn btn-secondary">Clear All Caches</button>
+                        <button onClick={handleRestartGateway} className="btn btn-danger">Restart Gateway</button>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -25,11 +25,11 @@ Scenario: You want to publish `/api/rest/customers/v1/*` backed by `http://httpb
 1) Define a token group (used for outbound API-key injection)
 ```
 curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
-  "$BASE/platform/token" -d '{
-    "api_token_group": "demo-customers",
+  "$BASE/platform/credit" -d '{
+    "api_credit_group": "demo-customers",
     "api_key": "demo-secret-123",
     "api_key_header": "x-api-key",
-    "token_tiers": [ {"tier_name": "default", "tokens": 999999, "input_limit": 0, "output_limit": 0, "reset_frequency": "monthly"} ]
+    "credit_tiers": [ {"tier_name": "default", "credits": 999999, "input_limit": 0, "output_limit": 0, "reset_frequency": "monthly"} ]
   }'
 ```
 
@@ -46,8 +46,8 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
     "api_type": "REST",
     "api_allowed_retry_count": 0,
     "api_allowed_headers": ["content-type", "accept"],
-    "api_tokens_enabled": true,
-    "api_token_group": "demo-customers"
+    "api_credits_enabled": true,
+    "api_credit_group": "demo-customers"
   }'
 ```
 
@@ -129,15 +129,15 @@ The token system supports deducting per-user credits when calling an API and inj
 2) Assign a user-specific API key (overrides group key when present)
 ```
 curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
-  "$BASE/platform/token/{username}" -d '{
-    "api_token_group": "demo-customers",
+  "$BASE/platform/credit/{username}" -d '{
+    "api_credit_group": "demo-customers",
     "api_key": "USER-SPECIFIC-KEY",
     "api_key_header": "x-api-key",
-    "token_tiers": [ {"tier_name": "premium", "tokens": 10000, "input_limit": 1000, "output_limit": 1000, "reset_frequency": "monthly"} ]
+    "credit_tiers": [ {"tier_name": "premium", "credits": 10000, "input_limit": 1000, "output_limit": 1000, "reset_frequency": "monthly"} ]
   }'
 ```
 
-3) Enable tokens on the API (`api_tokens_enabled=true`, `api_token_group="demo-customers"`). Each gateway call deducts a token; if the user runs out, calls return 401 with `GTW008`.
+3) Enable credits on the API (`api_credits_enabled=true`, `api_credit_group="demo-customers"`). Each gateway call deducts a credit; if the user runs out, calls return 401 with `GTW008`.
 
 ## Flow 4: GraphQL gateway
 
@@ -225,4 +225,3 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
 - Restrict `api_allowed_headers` to exactly what upstream needs.
 - Use client routing for blue/green or premium clients via `client-key`.
 - Turn on `LOG_FORMAT=json` in prod and ship logs to your SIEM.
-

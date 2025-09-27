@@ -20,7 +20,7 @@ class CreateRoleModel(BaseModel):
     manage_gateway: bool = Field(False, description="Permission to manage gateway", example=True)
     manage_subscriptions: bool = Field(False, description="Permission to manage subscriptions", example=True)
     manage_security: bool = Field(False, description="Permission to manage security settings", example=True)
-    manage_tokens: bool = Field(False, description="Permission to manage tokens", example=True)
+    manage_credits: bool = Field(False, description="Permission to manage credits", example=True)
     manage_auth: bool = Field(False, description="Permission to manage auth (revoke tokens/disable users)", example=True)
     view_logs: bool = Field(False, description="Permission to view logs", example=True)
     export_logs: bool = Field(False, description="Permission to export logs", example=True)

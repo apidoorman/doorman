@@ -26,13 +26,14 @@ const menuItems: MenuItem[] = [
   { label: 'Routings', href: '/routings', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4', permission: 'manage_routings' },
   { label: 'Logging', href: '/logging', icon: 'M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', permission: 'view_logs' },
   { label: 'Monitor', href: '/monitor', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', permission: 'manage_gateway' },
+  { label: 'Reports', href: '/reports', icon: 'M9 17v-6h13M9 7h13M5 7h.01M5 17h.01', permission: 'manage_gateway' },
   { label: 'Demo Seed', href: '/demo', icon: 'M12 4v16m8-8H4', permission: 'manage_gateway' },
-  { label: 'Tokens', href: '/tokens', icon: 'M12 8c-1.657 0-3 1.343-3 3 0 2.239 3 5 3 5s3-2.761 3-5c0-1.657-1.343-3-3-3z M12 13a2 2 0 110-4 2 2 0 010 4z', permission: 'manage_tokens' },
-  { label: 'Token Definitions', href: '/token-defs', icon: 'M5 13l4 4L19 7', permission: 'manage_tokens' },
-  { label: 'Subscriptions', href: '/subscriptions', icon: 'M3 5h12M9 3v2m-6 4h12M9 9v2m-6 4h12m-6 0v2', permission: 'manage_subscriptions' },
-  { label: 'Authorizations', href: '/authorizations', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z', permission: 'manage_subscriptions' },
+  { label: 'Credits', href: '/credits', icon: 'M12 8c-1.657 0-3 1.343-3 3 0 2.239 3 5 3 5s3-2.761 3-5c0-1.657-1.343-3-3-3z M12 13a2 2 0 110-4 2 2 0 010 4z', permission: 'manage_credits' },
+  { label: 'Subscriptions', href: '/authorizations', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z', permission: 'manage_subscriptions' },
   { label: 'Auth Control', href: '/auth-admin', icon: 'M5 13l4 4L19 7', permission: 'manage_auth' },
   { label: 'Security', href: '/security', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z', permission: 'manage_security' },
+  { label: 'Tools', href: '/tools', icon: 'M12 8v8m-4-4h8M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8.414A2 2 0 0019.586 7L15 2.414A2 2 0 0013.586 2H5z', permission: 'manage_security' },
+  { label: 'Import/Export', href: '/import-export', icon: 'M4 4v6h6M20 20v-6h-6M4 10l6-6m4 12l6 6', permission: 'manage_gateway' },
   { label: 'Settings', href: '/settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
 ]
 
@@ -54,6 +55,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Filter menu items based on user permissions
   const filteredMenuItems = menuItems.filter(item => {
     if (!item.permission) return true
+    // Hide Demo Seed unless user is admin
+    if (item.href === '/demo' && user?.role !== 'admin') return false
     return permissions?.[item.permission] || false
   })
 

@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 
@@ -100,6 +102,9 @@ export default function AddEndpointPage() {
 
         <div className="card max-w-3xl">
           <form onSubmit={handleSubmit} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 -mt-2 mb-2">
+              <FormHelp docHref="/docs/using-fields.html#endpoints">Define method and URI; optional upstream override per endpoint.</FormHelp>
+            </div>
             <div>
               <label className="block text-sm font-medium mb-1">Method</label>
               <select className="input" value={method} onChange={e => setMethod(e.target.value)}>
@@ -107,7 +112,10 @@ export default function AddEndpointPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">URI</label>
+              <label className="block text-sm font-medium mb-1">
+                URI
+                <InfoTooltip text="Path pattern relative to the API base. Use {param} for path variables. Example: /items/{id}" />
+              </label>
               <input className="input" value={uri} onChange={e => setUri(e.target.value)} placeholder="/path/{id}" />
             </div>
             <div className="md:col-span-2">
@@ -118,7 +126,10 @@ export default function AddEndpointPage() {
             <div className="md:col-span-2">
               <div className="flex items-center gap-2 mb-2">
                 <input id="use-override" type="checkbox" className="h-4 w-4" checked={useOverride} onChange={(e)=>setUseOverride(e.target.checked)} />
-                <label htmlFor="use-override" className="text-sm">Use endpoint servers (override API servers)</label>
+                <label htmlFor="use-override" className="text-sm">
+                  Use endpoint servers (override API servers)
+                  <InfoTooltip text="Provide endpoint-specific upstreams. If disabled or empty, the API-level servers are used." />
+                </label>
               </div>
               <div className={`flex gap-2 ${useOverride ? '' : 'opacity-60'}`}>
                 <input

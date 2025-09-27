@@ -17,7 +17,18 @@ logger = logging.getLogger("doorman.logging")
 
 class LoggingService:
     def __init__(self):
-        self.log_directory = "logs"
+        # Resolve logs directory to match where doorman.py writes them.
+        # Priority:
+        # 1) LOGS_DIR env var if provided
+        # 2) ../logs relative to this file (backend-services/logs)
+        # 3) ./logs relative to CWD (fallback)
+        env_dir = os.getenv("LOGS_DIR")
+        if env_dir:
+            self.log_directory = env_dir
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            candidate = os.path.normpath(os.path.join(base_dir, "..", "logs"))
+            self.log_directory = candidate if os.path.isdir(candidate) else "logs"
         self.log_file_pattern = "doorman.log*"  # Support rotated log files (doorman.log, doorman.log.1, etc.)
         self.max_logs_per_request = 1000
         

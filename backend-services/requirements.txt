@@ -47,6 +47,6 @@ python-dateutil>=2.8.2  # For date handling
 pytz>=2024.1  # For timezone handling
 
 # gRPC dependencies - install these separately
-grpcio==1.60.1
-grpcio-tools==1.60.1
-protobuf>=4.25.2,<5.0.0
+grpcio==1.75.0
+grpcio-tools==1.75.0
+protobuf==6.32.1

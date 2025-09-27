@@ -20,6 +20,7 @@ type ProtoState = {
   content?: string
   error?: string | null
   working?: boolean
+  deleted?: boolean
 }
 
 async function fetchWithCsrf(input: RequestInfo, init: RequestInit = {}) {
@@ -50,6 +51,7 @@ export default function ProtosPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [protoByKey, setProtoByKey] = useState<Record<string, ProtoState>>({})
+  const [search, setSearch] = useState('')
   const toast = useToast()
 
   const keyFor = (a: ApiItem) => `${a.api_name}/${a.api_version}`
@@ -62,6 +64,8 @@ export default function ProtosPage() {
         const data = await getJson<any>(`${SERVER_URL}/platform/api/all?page=${page}&page_size=${pageSize}`)
         const list: ApiItem[] = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
         setApis(list)
+        // Proactively check proto status for visible APIs so we don't show "Check" for missing/deleted
+        await Promise.all(list.map(a => checkProto(a)))
       } catch (e: any) {
         setError(e?.message || 'Failed to load APIs')
         setApis([])
@@ -118,7 +122,7 @@ export default function ProtosPage() {
       setSuccess('Proto deleted')
       toast.success('Proto deleted')
       setTimeout(() => setSuccess(null), 2000)
-      setProtoByKey(prev => ({ ...prev, [k]: { loading: false, exists: false, content: undefined, error: null } }))
+      setProtoByKey(prev => ({ ...prev, [k]: { loading: false, exists: false, deleted: true, content: undefined, error: null } }))
     } catch (e: any) {
       setProtoByKey(prev => ({ ...prev, [k]: { ...(prev[k] || {}), working: false, error: e?.message || 'Delete failed' } }))
     } finally {
@@ -151,6 +155,16 @@ export default function ProtosPage() {
     )
   }
 
+  const filteredApis = useMemo(() => {
+    const s = search.trim().toLowerCase()
+    if (!s) return apis
+    return apis.filter(a =>
+      a.api_name.toLowerCase().includes(s) ||
+      a.api_version.toLowerCase().includes(s) ||
+      (a.api_description || '').toLowerCase().includes(s)
+    )
+  }, [apis, search])
+
   return (
     <ProtectedRoute requiredPermission="manage_apis">
       <Layout>
@@ -160,9 +174,26 @@ export default function ProtosPage() {
               <h1 className="page-title">gRPC Protos</h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Upload, view, update, and delete proto files per API</p>
             </div>
-            <div className="flex gap-2">
-              <button className="btn btn-secondary" onClick={() => { setPage(1); /* trigger reload */ setPageSize(pageSize) }}>Refresh</button>
+            <div className="flex gap-2 items-center">
+              <button className="btn btn-secondary" onClick={() => { setPage(1); setPageSize(pageSize) }}>Refresh</button>
             </div>
+          </div>
+          {/* Search */}
+          <div className="card">
+            <form onSubmit={(e) => { e.preventDefault() }} className="flex-1">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search by name, version, or description..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
+            </form>
           </div>
 
           {success && (
@@ -190,10 +221,10 @@ export default function ProtosPage() {
                 <tbody>
                   {loading ? (
                     <tr><td colSpan={4}><div className="p-6 text-gray-500">Loading...</div></td></tr>
-                  ) : apis.length === 0 ? (
+                  ) : filteredApis.length === 0 ? (
                     <tr><td colSpan={4}><div className="p-6 text-gray-500">No APIs found</div></td></tr>
                   ) : (
-                    apis.map(api => {
+                    filteredApis.map(api => {
                       const k = keyFor(api)
                       const st = protoByKey[k] || { loading: false, exists: null }
                       return (
@@ -206,7 +237,7 @@ export default function ProtosPage() {
                             ) : st.exists === true ? (
                               <span className="text-success-700 dark:text-success-400">Present</span>
                             ) : st.exists === false ? (
-                              <span className="text-error-700 dark:text-error-400">Missing</span>
+                              <span className="text-error-700 dark:text-error-400">{st.deleted ? 'Deleted' : 'Missing'}</span>
                             ) : (
                               <button className="btn btn-ghost btn-sm" onClick={() => checkProto(api)}>Check</button>
                             )}

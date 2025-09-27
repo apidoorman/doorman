@@ -78,6 +78,35 @@ async def test_cors_strict_allows_localhost(monkeypatch, client):
 
 
 @pytest.mark.asyncio
+async def test_csp_header_default_and_override(monkeypatch, client):
+    # Default CSP should be present with strict directives
+    monkeypatch.delenv("CONTENT_SECURITY_POLICY", raising=False)
+    r = await client.get("/platform/monitor/liveness")
+    assert r.status_code == 200
+    csp = r.headers.get("Content-Security-Policy")
+    assert csp and "default-src 'none'" in csp and "connect-src 'self'" in csp
+
+    # Override via env var
+    monkeypatch.setenv("CONTENT_SECURITY_POLICY", "default-src 'self'")
+    r2 = await client.get("/platform/monitor/liveness")
+    assert r2.headers.get("Content-Security-Policy") == "default-src 'self'"
+
+
+@pytest.mark.asyncio
+async def test_request_id_header_generation_and_echo(client):
+    # Generated header
+    r = await client.get("/platform/monitor/liveness")
+    assert r.status_code == 200
+    assert r.headers.get("X-Request-ID")
+    assert r.headers.get("request_id")
+    # Echo incoming value
+    incoming = "11111111-2222-3333-4444-555555555555"
+    r2 = await client.get("/platform/monitor/liveness", headers={"X-Request-ID": incoming})
+    assert r2.headers.get("X-Request-ID") == incoming
+    assert r2.headers.get("request_id") == incoming
+
+
+@pytest.mark.asyncio
 async def test_memory_dump_and_restore(tmp_path, monkeypatch):
     # Ensure MEM mode and point dump path to tmp
     monkeypatch.setenv("MEM_OR_EXTERNAL", "MEM")

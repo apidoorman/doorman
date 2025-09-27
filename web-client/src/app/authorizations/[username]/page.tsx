@@ -6,6 +6,7 @@ import Layout from '@/components/Layout'
 import ConfirmModal from '@/components/ConfirmModal'
 import { SERVER_URL } from '@/utils/config'
 import { fetchJson } from '@/utils/http'
+import { postJson } from '@/utils/api'
 
 interface Subscription {
   api_name: string
@@ -39,7 +40,11 @@ const UserSubscriptionsPage = () => {
   const fetchSubscriptions = async () => {
     try {
       const data = await fetchJson(`${SERVER_URL}/platform/subscription/subscriptions/${username}`)
-      const subs = data.apis?.map((sub: string) => {
+      // Support both { apis: string[] } and { subscriptions: { apis: string[] } }
+      const apis: string[] = (data?.apis)
+        || (data?.subscriptions?.apis)
+        || []
+      const subs = apis.map((sub: string) => {
         const [api_name, api_version] = sub.split('/')
         return { api_name, api_version }
       }) || []
@@ -51,7 +56,7 @@ const UserSubscriptionsPage = () => {
 
   const fetchApis = async () => {
     try {
-      const data = await fetchJson(`${SERVER_URL}/platform/api/all`)
+      const data = await fetchJson(`${SERVER_URL}/platform/subscription/available-apis/${encodeURIComponent(username)}`)
       setAllApis(data.apis || [])
     } catch (err) {
       setError('Failed to load available APIs.')
@@ -84,16 +89,23 @@ const UserSubscriptionsPage = () => {
     try {
       const [api_name, api_version] = selectedApi.split('/')
       const body = { username, api_name, api_version }
-      
-      await fetchJson(`${SERVER_URL}/platform/subscription/subscribe`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      })
+      // Optimistic update
+      const prev = subscriptions
+      const optimisticSub = { api_name, api_version }
+      setSubscriptions(curr => curr.some(s => s.api_name === api_name && s.api_version === api_version)
+        ? curr
+        : [...curr, optimisticSub]
+      )
+
+      await postJson(`${SERVER_URL}/platform/subscription/subscribe`, body)
 
       setSuccess(`Successfully subscribed ${username} to ${selectedApi}.`)
       setSelectedApi('')
-      await fetchSubscriptions() // Refresh the list
+      // Reconcile with server state (in case of backend normalization)
+      await fetchSubscriptions()
     } catch (err) {
+      // Rollback optimistic update on failure
+      await fetchSubscriptions()
       setError(err instanceof Error ? err.message : 'An unknown error occurred.')
     } finally {
       setIsAdding(false)
@@ -121,15 +133,17 @@ const UserSubscriptionsPage = () => {
     try {
       const { api_name, api_version } = subscriptionToRevoke
       const body = { username, api_name, api_version }
+      // Optimistic removal
+      const prev = subscriptions
+      setSubscriptions(curr => curr.filter(s => !(s.api_name === api_name && s.api_version === api_version)))
 
-      await fetchJson(`${SERVER_URL}/platform/subscription/unsubscribe`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      })
+      await postJson(`${SERVER_URL}/platform/subscription/unsubscribe`, body)
 
       setSuccess(`Successfully revoked access to ${api_name}/${api_version} for ${username}.`)
-      await fetchSubscriptions() // Refresh the list
+      await fetchSubscriptions() // Reconcile with server state
     } catch (err) {
+      // Rollback optimistic change
+      await fetchSubscriptions()
       setError(err instanceof Error ? err.message : 'An unknown error occurred.')
     } finally {
       setIsRevoking(false)

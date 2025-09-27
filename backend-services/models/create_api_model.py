@@ -20,8 +20,9 @@ class CreateApiModel(BaseModel):
 
     api_authorization_field_swap: Optional[str]  = Field(None, description="Header to swap for backend authorization header", example="backend-auth-header")
     api_allowed_headers: Optional[List[str]] = Field(None, description="Allowed headers for the API", example=["Content-Type", "Authorization"])
-    api_tokens_enabled: Optional[bool] = Field(False, description="Enable token-based authentication for the API", example=True)
-    api_token_group: Optional[str] = Field(None, description="API token group for the API tokens", example="ai-group-1")
+    api_credits_enabled: Optional[bool] = Field(False, description="Enable credit-based authentication for the API", example=True)
+    api_credit_group: Optional[str] = Field(None, description="API credit group for the API credits", example="ai-group-1")
+    active: Optional[bool] = Field(True, description="Whether the API is active (enabled)", example=True)
     
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
     api_path: Optional[str] = Field(None, description="Unique path for the API, auto-generated", example=None)

@@ -39,18 +39,77 @@ async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> b
     except Exception:
         return False
 
+def _cookie_values(request: Request, name: str):
+    """Return all values for a cookie name from the raw Cookie header.
+
+    Some browsers/clients may send duplicate cookie names (e.g., prior host-only
+    and domain cookies). Starlette's request.cookies returns one value only.
+    This helper extracts all occurrences so CSRF matching can tolerate duplicates.
+    """
+    try:
+        raw = request.headers.get('cookie') or ''
+        parts = [p.strip() for p in raw.split(';') if p.strip()]
+        vals = []
+        for p in parts:
+            if '=' not in p:
+                continue
+            k, v = p.split('=', 1)
+            if k.strip() == name:
+                vals.append(v)
+        return vals
+    except Exception:
+        return []
+
 async def auth_required(request: Request):
-    """Validate JWT token and CSRF for HTTPS"""
+    """Validate JWT token and CSRF for HTTPS.
+
+    CSRF validation is enforced only for unsafe methods (POST, PUT, PATCH, DELETE)
+    to avoid blocking safe reads like GET/HEAD when cookies are otherwise valid.
+    """
     token = request.cookies.get("access_token_cookie")
     if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    # Enforce CSRF on HTTPS deployments; support both env flags for consistency
+    # Enforce CSRF on HTTPS deployments.
+    # - For sensitive platform endpoints (/platform/*), require CSRF on all methods.
+    # - For gateway endpoints (/api/*), require CSRF only on unsafe methods to avoid
+    #   breaking typical GET usage patterns for API calls.
     https_enabled = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
+    path = str(request.url.path)
+    method = request.method.upper()
+    require_csrf = False
     if https_enabled:
+        if path.startswith('/platform/'):
+            require_csrf = True
+        elif method in ("POST", "PUT", "PATCH", "DELETE"):
+            require_csrf = True
+    if require_csrf:
         csrf_header = request.headers.get("X-CSRF-Token")
-        csrf_cookie = request.cookies.get("csrf_token")
-        if not await validate_csrf_double_submit(csrf_header, csrf_cookie):
-            raise HTTPException(status_code=401, detail="Invalid CSRF token")
+        # Accept header match with ANY cookie value named csrf_token to tolerate duplicates
+        csrf_cookies = _cookie_values(request, 'csrf_token')
+        # Accept either valid double-submit token OR trusted same-origin based on allowed origins
+        is_double_submit_ok = bool(csrf_header and csrf_header in csrf_cookies)
+        if not is_double_submit_ok:
+            # Fallback: trust explicit ALLOWED_ORIGINS for first‑party app without CSRF header
+            try:
+                allowed = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(',') if o.strip() and o.strip() != "*"]
+                origin = request.headers.get("origin") or ""
+                referer = request.headers.get("referer") or ""
+                origin_ok = origin in allowed
+                # Extract origin from referer if origin header missing
+                if not origin_ok and referer:
+                    import urllib.parse as _url
+                    try:
+                        ref_o = f"{_url.urlsplit(referer).scheme}://{_url.urlsplit(referer).netloc}"
+                        origin_ok = ref_o in allowed
+                    except Exception:
+                        origin_ok = False
+                if not origin_ok:
+                    raise HTTPException(status_code=401, detail="Invalid CSRF token")
+            except HTTPException:
+                raise
+            except Exception:
+                # On parsing/env errors, fail closed
+                raise HTTPException(status_code=401, detail="Invalid CSRF token")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
@@ -117,7 +176,7 @@ def create_access_token(data: dict, refresh: bool = False):
     
     # Create accesses object with defaults
     accesses = {
-        "ui_access": True,
+        "ui_access": bool(user.get("ui_access", False)),
         'manage_users': role.get('manage_users', False) if role else False,
         'manage_apis': role.get('manage_apis', False) if role else False,
         'manage_endpoints': role.get('manage_endpoints', False) if role else False,

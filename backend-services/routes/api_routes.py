@@ -15,6 +15,7 @@ from models.update_api_model import UpdateApiModel
 from models.api_model_response import ApiModelResponse
 from utils.response_util import respond_rest, process_response
 from utils.role_util import platform_role_required_bool
+from utils.audit_util import audit
 
 import logging
 import uuid
@@ -57,7 +58,9 @@ async def create_api(request: Request, api_data: CreateApiModel):
                 error_code="API007",
                 error_message="You do not have permission to create APIs"
             ))
-        return respond_rest(await ApiService.create_api(api_data, request_id))
+        result = await ApiService.create_api(api_data, request_id)
+        audit(request, actor=username, action='api.create', target=f"{api_data.api_name}/{api_data.api_version}", status=result.get('status_code'), details={"message": result.get('message')}, request_id=request_id)
+        return respond_rest(result)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -105,7 +108,9 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
                 error_code="API008",
                 error_message="You do not have permission to update APIs"
             ))
-        return respond_rest(await ApiService.update_api(api_name, api_version, api_data, request_id))
+        result = await ApiService.update_api(api_name, api_version, api_data, request_id)
+        audit(request, actor=username, action='api.update', target=f"{api_name}/{api_version}", status=result.get('status_code'), details={"message": result.get('message')}, request_id=request_id)
+        return respond_rest(result)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -183,7 +188,9 @@ async def delete_api(api_name: str, api_version: str, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        return respond_rest(await ApiService.delete_api(api_name, api_version, request_id))
+        result = await ApiService.delete_api(api_name, api_version, request_id)
+        audit(request, actor=username, action='api.delete', target=f"{api_name}/{api_version}", status=result.get('status_code'), details={"message": result.get('message')}, request_id=request_id)
+        return respond_rest(result)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(

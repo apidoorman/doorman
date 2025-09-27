@@ -25,11 +25,8 @@ class SubscriptionService:
         if not api:
             api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
-                return ResponseModel(
-                    status_code=404,
-                    error_code='SUB001',
-                    error_message='API does not exist for the requested name and version'
-                ).dict()
+                # Return None to signal non-existence cleanly
+                return None
             if api.get('_id'):
                 del api['_id']
             doorman_cache.set_cache('api_cache', f"{api_name}/{api_version}", api)
@@ -43,24 +40,28 @@ class SubscriptionService:
         Get user subscriptions.
         """
         logger.info(f"{request_id} | Getting subscriptions for: {username}")
+        # Try cache first, but do not trust cached empties; verify against DB
         subscriptions = doorman_cache.get_cache('user_subscription_cache', username)
-        if not subscriptions:
+        if not subscriptions or not isinstance(subscriptions, dict) or not subscriptions.get('apis'):
+            # Cache miss or empty -> check DB for fresh truth
             subscriptions = subscriptions_collection.find_one({'username': username})
             if not subscriptions:
-                logger.error(f"{request_id} | Subscription retrieval failed with code SUB002")
+                logger.info(f"{request_id} | No subscriptions found; returning empty list")
+                # Do NOT cache misses for long; just return empty
                 return ResponseModel(
-                    status_code=404,
-                    error_code='SUB002',
-                    error_message='User is not subscribed to any API'
+                    status_code=200,
+                    response={'apis': []}
                 ).dict()
-            if subscriptions.get('_id'): del subscriptions['_id']
+            if subscriptions.get('_id'):
+                del subscriptions['_id']
+            # Cache only positive findings
             doorman_cache.set_cache('user_subscription_cache', username, subscriptions)
-        if '_id' in subscriptions:
-            del subscriptions['_id']
+        # Return only the list of apis for client convenience and consistency
+        apis = subscriptions.get('apis', []) if isinstance(subscriptions, dict) else []
         logger.info(f"{request_id} | Subscriptions retrieved successfully")
         return ResponseModel(
             status_code=200,
-            response={'subscriptions': subscriptions}
+            response={'apis': apis, 'subscriptions': {'apis': apis}}
         ).dict()
 
     @staticmethod
@@ -69,7 +70,8 @@ class SubscriptionService:
         Subscribe to an API.
         """
         logger.info(f"{request_id} | Subscribing {data.username} to API: {data.api_name}/{data.api_version}")
-        if not await SubscriptionService.api_exists(data.api_name, data.api_version):
+        api = await SubscriptionService.api_exists(data.api_name, data.api_version)
+        if not api:
             logger.error(f"{request_id} | Subscription failed with code SUB003")
             return ResponseModel(
                 status_code=404,
@@ -79,11 +81,11 @@ class SubscriptionService:
                 error_code='SUB003',
                 error_message='API does not exist for the requested name and version'
             ).dict()
-        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', data.username)
-        if not user_subscriptions:
-            user_subscriptions = subscriptions_collection.find_one({'username': data.username})
-            if user_subscriptions and '_id' in user_subscriptions: del user_subscriptions['_id']
-            doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        # Invalidate cache before mutation to avoid stale reads
+        doorman_cache.delete_cache('user_subscription_cache', data.username)
+        user_subscriptions = subscriptions_collection.find_one({'username': data.username})
+        if user_subscriptions and '_id' in user_subscriptions:
+            del user_subscriptions['_id']
         if user_subscriptions is None:
             user_subscriptions = {
                 'username': data.username,
@@ -105,10 +107,12 @@ class SubscriptionService:
                 {'username': data.username},
                 {'$push': {'apis': f"{data.api_name}/{data.api_version}"}}
             )
+        # Refresh cache with the latest doc
         user_subscriptions = subscriptions_collection.find_one({'username': data.username})
         if user_subscriptions and '_id' in user_subscriptions:
             del user_subscriptions['_id']
-        doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        if user_subscriptions:
+            doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         logger.info(f"{request_id} | Subscription successful")
         return ResponseModel(
             status_code=200,
@@ -121,7 +125,8 @@ class SubscriptionService:
         Unsubscribe from an API.
         """
         logger.info(f"{request_id} | Unsubscribing {data.username} from API: {data.api_name}/{data.api_version}")
-        if not await SubscriptionService.api_exists(data.api_name, data.api_version):
+        api = await SubscriptionService.api_exists(data.api_name, data.api_version)
+        if not api:
             return ResponseModel(
                 status_code=404,
                 response_headers={
@@ -130,11 +135,11 @@ class SubscriptionService:
                 error_code='SUB005',
                 error_message='API does not exist for the requested name and version'
             ).dict()
-        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', data.username)
-        if not user_subscriptions:
-            user_subscriptions = subscriptions_collection.find_one({'username': data.username})
-            if user_subscriptions and '_id' in user_subscriptions: del user_subscriptions['_id']
-            doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        # Invalidate cache before mutation
+        doorman_cache.delete_cache('user_subscription_cache', data.username)
+        user_subscriptions = subscriptions_collection.find_one({'username': data.username})
+        if user_subscriptions and '_id' in user_subscriptions:
+            del user_subscriptions['_id']
         if not user_subscriptions or f"{data.api_name}/{data.api_version}" not in user_subscriptions.get('apis', []):
             logger.error(f"{request_id} | Unsubscription failed with code SUB006")
             return ResponseModel(
@@ -150,10 +155,12 @@ class SubscriptionService:
             {'username': data.username},
             {'$set': {'apis': user_subscriptions.get('apis', [])}}
         )
+        # Refresh cache with the latest doc
         user_subscriptions = subscriptions_collection.find_one({'username': data.username})
         if user_subscriptions and '_id' in user_subscriptions:
             del user_subscriptions['_id']
-        doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
+        if user_subscriptions:
+            doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
         logger.info(f"{request_id} | Unsubscription successful")
         return ResponseModel(
             status_code=200,

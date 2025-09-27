@@ -54,7 +54,7 @@ class Database:
             if not roles.find_one({"role_name": "admin"}):
                 roles.insert_one({
                     "role_name": 'admin',
-                    "role_description": "admin role",
+                    "role_description": "Administrator role",
                     "manage_users": True,
                     "manage_apis": True,
                     "manage_endpoints": True,
@@ -62,7 +62,12 @@ class Database:
                     "manage_roles": True,
                     "manage_routings": True,
                     "manage_gateway": True,
-                    "manage_subscriptions": True
+                    "manage_subscriptions": True,
+                    "manage_credits": True,
+                    "manage_auth": True,
+                    "manage_security": True,
+                    "view_logs": True,
+                    "export_logs": True
                 })
             # Seed groups 'admin' and 'ALL'
             if not groups.find_one({"group_name": "admin"}):
@@ -85,6 +90,7 @@ class Database:
                     "password": password_util.hash_password(os.getenv("STARTUP_ADMIN_PASSWORD")),
                     "role": "admin",
                     "groups": ["ALL", "admin"],
+                    "ui_access": True,
                     "rate_limit_duration": 2000000,
                     "rate_limit_duration_type": "minute",
                     "throttle_duration": 100000000,
@@ -94,76 +100,14 @@ class Database:
                     "custom_attributes": {"custom_key": "custom_value"},
                     "active": True
                 })
-            # Demo data seeding: public APIs + endpoints (idempotent)
-            apis = self.db.apis
-            endpoints = self.db.endpoints
-            demo_apis = [
-                {
-                    "api_name": "customers", "api_version": "v1",
-                    "api_description": "Customers API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8080"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "orders", "api_version": "v1",
-                    "api_description": "Orders API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8081"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "billing", "api_version": "v1",
-                    "api_description": "Billing API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8082"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "weather", "api_version": "v1",
-                    "api_description": "Weather API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8083"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "news", "api_version": "v1",
-                    "api_description": "News API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8084"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "crypto", "api_version": "v1",
-                    "api_description": "Crypto Prices API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8085"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                }
-            ]
-            for api in demo_apis:
-                if not apis.find_one({"api_name": api["api_name"], "api_version": api["api_version"]}):
-                    api_doc = dict(api)
-                    api_doc["api_id"] = str(uuid.uuid4())
-                    api_doc["api_path"] = f"/{api['api_name']}/{api['api_version']}"
-                    apis.insert_one(api_doc)
-                    # Seed 1-2 endpoints for each API
-                    for ep in [
-                        {"method": "GET", "uri": "/status", "desc": f"Get {api['api_name']} status"},
-                        {"method": "GET", "uri": "/list", "desc": f"List {api['api_name']}"}
-                    ]:
-                        if not endpoints.find_one({
-                            "api_name": api["api_name"], "api_version": api["api_version"],
-                            "endpoint_method": ep["method"], "endpoint_uri": ep["uri"]
-                        }):
-                            endpoints.insert_one({
-                                "api_name": api["api_name"],
-                                "api_version": api["api_version"],
-                                "endpoint_method": ep["method"],
-                                "endpoint_uri": ep["uri"],
-                                "endpoint_description": ep["desc"],
-                                "api_id": api_doc["api_id"],
-                                "endpoint_id": str(uuid.uuid4())
-                            })
+            # Do not seed default APIs/endpoints in memory-only mode
             # Seed a few gateway-like log entries so they appear in UI logging
             try:
                 from datetime import datetime
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                logs_dir = os.path.join(base_dir, "logs")
+                # Respect LOGS_DIR env; default to backend-services/platform-logs
+                env_logs = os.getenv("LOGS_DIR")
+                logs_dir = os.path.abspath(env_logs) if env_logs else os.path.join(base_dir, "platform-logs")
                 os.makedirs(logs_dir, exist_ok=True)
                 log_path = os.path.join(logs_dir, "doorman.log")
                 now = datetime.now()
@@ -184,7 +128,7 @@ class Database:
                 pass
             print("Memory-only mode: Core data initialized (admin user/role/groups)")
             return
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'token_defs', 'user_tokens', 'endpoint_validations', 'settings']
+        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
@@ -194,25 +138,29 @@ class Database:
             if not self.db.users.find_one({"username": "admin"}):
                 self.db.users.insert_one({
                     "username": "admin",
-                    "email": os.getenv("STARTUP_ADMIN_EMAIL"),
-                    "password": password_util.hash_password(os.getenv("STARTUP_ADMIN_PASSWORD")),
+                    "email": "admin@doorman.dev",
                     "role": "admin",
-                    "groups": ["ALL", "admin"],
-                    "rate_limit_duration": 2000000,
-                    "rate_limit_duration_type": "minute",
-                    "throttle_duration": 100000000,
+                    "groups": [
+                        "ALL",
+                        "admin"
+                    ],
+                    "rate_limit_duration": 1,
+                    "rate_limit_duration_type": "second",
+                    "throttle_duration": 1,
                     "throttle_duration_type": "second",
-                    "throttle_wait_duration": 5000000,
-                    "throttle_wait_duration_type": "seconds",
+                    "throttle_wait_duration": 0,
+                    "throttle_wait_duration_type": "second",
                     "custom_attributes": {
                         "custom_key": "custom_value"
                     },
-                    "active": True
+                    "active": True,
+                    "throttle_queue_limit": 1,
+                    "ui_access": True
                 })
             if not self.db.roles.find_one({"role_name": "admin"}):
                 self.db.roles.insert_one({
-                    "role_name": 'admin',
-                    "role_description": "admin role",
+                    "role_name": "admin",
+                    "role_description": "Administrator role",
                     "manage_users": True,
                     "manage_apis": True,
                     "manage_endpoints": True,
@@ -221,6 +169,10 @@ class Database:
                     "manage_routings": True,
                     "manage_gateway": True,
                     "manage_subscriptions": True,
+                    "manage_credits": True,
+                    "manage_auth": True,
+                    "view_logs": True,
+                    "export_logs": True,
                     "manage_security": True
                 })
             if not self.db.groups.find_one({"group_name": "admin"}):
@@ -235,36 +187,7 @@ class Database:
                     "group_description": "Default group with access to all APIs",
                     "api_access": []
                 })
-            # Demo data seeding for MongoDB: public APIs + endpoints when DB is new
-            apis = self.db.apis
-            endpoints = self.db.endpoints
-            if apis.count_documents({}) == 0:
-                demo_apis = [
-                    {"api_name": "customers", "api_version": "v1", "api_description": "Customers API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8080"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "orders", "api_version": "v1", "api_description": "Orders API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8081"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "billing", "api_version": "v1", "api_description": "Billing API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8082"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "weather", "api_version": "v1", "api_description": "Weather API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8083"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "news", "api_version": "v1", "api_description": "News API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8084"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "crypto", "api_version": "v1", "api_description": "Crypto Prices API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8085"], "api_type": "REST", "api_allowed_retry_count": 0}
-                ]
-                for api in demo_apis:
-                    api_doc = dict(api)
-                    api_doc["api_id"] = str(uuid.uuid4())
-                    api_doc["api_path"] = f"/{api['api_name']}/{api['api_version']}"
-                    apis.insert_one(api_doc)
-                    for ep in [
-                        {"method": "GET", "uri": "/status", "desc": f"Get {api['api_name']} status"},
-                        {"method": "GET", "uri": "/list", "desc": f"List {api['api_name']}"}
-                    ]:
-                        endpoints.insert_one({
-                            "api_name": api["api_name"],
-                            "api_version": api["api_version"],
-                            "endpoint_method": ep["method"],
-                            "endpoint_uri": ep["uri"],
-                            "endpoint_description": ep["desc"],
-                            "api_id": api_doc["api_id"],
-                            "endpoint_id": str(uuid.uuid4())
-                        })
+            # Do not seed default APIs/endpoints in MongoDB mode either
 
     def create_indexes(self):
         if self.memory_only:
@@ -294,8 +217,8 @@ class Database:
         self.db.routings.create_indexes([
             IndexModel([("client_key", ASCENDING)], unique=True)
         ])
-        self.db.token_defs.create_indexes([
-            IndexModel([("api_token_group", ASCENDING)], unique=True),
+        self.db.credit_defs.create_indexes([
+            IndexModel([("api_credit_group", ASCENDING)], unique=True),
             IndexModel([("username", ASCENDING)], unique=True)
         ])
         self.db.endpoint_validations.create_indexes([
@@ -413,7 +336,20 @@ class InMemoryCollection:
                 updated = copy.deepcopy(d)
                 # Apply $set fields
                 if set_data:
-                    updated.update(set_data)
+                    for k, v in set_data.items():
+                        # Support dotted paths for nested updates (e.g., a.b.c)
+                        if isinstance(k, str) and '.' in k:
+                            parts = k.split('.')
+                            cur = updated
+                            for part in parts[:-1]:
+                                nxt = cur.get(part)
+                                if not isinstance(nxt, dict):
+                                    nxt = {}
+                                    cur[part] = nxt
+                                cur = nxt
+                            cur[parts[-1]] = v
+                        else:
+                            updated[k] = v
                 # Apply $push for list fields (create list if missing)
                 if push_data:
                     for k, v in push_data.items():
@@ -452,15 +388,15 @@ class InMemoryDB:
         self.roles = InMemoryCollection('roles')
         self.subscriptions = InMemoryCollection('subscriptions')
         self.routings = InMemoryCollection('routings')
-        self.token_defs = InMemoryCollection('token_defs')
-        self.user_tokens = InMemoryCollection('user_tokens')
+        self.credit_defs = InMemoryCollection('credit_defs')
+        self.user_credits = InMemoryCollection('user_credits')
         self.endpoint_validations = InMemoryCollection('endpoint_validations')
         self.settings = InMemoryCollection('settings')
 
     def list_collection_names(self):
         return [
             'users', 'apis', 'endpoints', 'groups', 'roles',
-            'subscriptions', 'routings', 'token_defs', 'user_tokens',
+            'subscriptions', 'routings', 'credit_defs', 'user_credits',
             'endpoint_validations', 'settings'
         ]
 
@@ -485,8 +421,8 @@ class InMemoryDB:
             'roles': coll_docs(self.roles),
             'subscriptions': coll_docs(self.subscriptions),
             'routings': coll_docs(self.routings),
-            'token_defs': coll_docs(self.token_defs),
-            'user_tokens': coll_docs(self.user_tokens),
+            'credit_defs': coll_docs(self.credit_defs),
+            'user_credits': coll_docs(self.user_credits),
             'endpoint_validations': coll_docs(self.endpoint_validations),
             'settings': coll_docs(self.settings),
         }
@@ -503,8 +439,8 @@ class InMemoryDB:
         load_coll(self.roles, data.get('roles', []))
         load_coll(self.subscriptions, data.get('subscriptions', []))
         load_coll(self.routings, data.get('routings', []))
-        load_coll(self.token_defs, data.get('token_defs', []))
-        load_coll(self.user_tokens, data.get('user_tokens', []))
+        load_coll(self.credit_defs, data.get('credit_defs', []))
+        load_coll(self.user_credits, data.get('user_credits', []))
         load_coll(self.endpoint_validations, data.get('endpoint_validations', []))
         load_coll(self.settings, data.get('settings', []))
 
@@ -523,8 +459,8 @@ if database.memory_only:
     routing_collection = db.routings
     subscriptions_collection = db.subscriptions
     user_collection = db.users
-    token_def_collection = db.token_defs
-    user_token_collection = db.user_tokens
+    credit_def_collection = db.credit_defs
+    user_credit_collection = db.user_credits
     endpoint_validation_collection = db.endpoint_validations
 else:
     db = database.db
@@ -536,6 +472,6 @@ else:
     routing_collection = db.routings
     subscriptions_collection = db.subscriptions
     user_collection = db.users
-    token_def_collection = db.token_defs
-    user_token_collection = db.user_tokens
+    credit_def_collection = db.credit_defs
+    user_credit_collection = db.user_credits
     endpoint_validation_collection = db.endpoint_validations

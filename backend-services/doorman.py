@@ -37,9 +37,11 @@ from routes.logging_routes import logging_router
 from routes.dashboard_routes import dashboard_router
 from routes.memory_routes import memory_router
 from routes.security_routes import security_router
-from routes.token_routes import token_router
+from routes.credit_routes import credit_router
 from routes.demo_routes import demo_router
 from routes.monitor_routes import monitor_router
+from routes.config_routes import config_router
+from routes.tools_routes import tools_router
 from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
 from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
 from utils.metrics_util import metrics_store
@@ -56,6 +58,7 @@ import signal
 import uvicorn
 import time
 import asyncio
+import uuid
 
 from utils.response_util import process_response
 
@@ -242,6 +245,37 @@ async def body_size_limit(request: Request, call_next):
         pass
     return await call_next(request)
 
+# Request ID middleware: accept incoming X-Request-ID or generate one.
+@doorman.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    try:
+        rid = (
+            request.headers.get("x-request-id")
+            or request.headers.get("request-id")
+            or request.headers.get("x-request-id".title())
+        )
+        if not rid:
+            rid = str(uuid.uuid4())
+        # Expose on request.state for route handlers that want to use it
+        try:
+            request.state.request_id = rid
+        except Exception:
+            pass
+        response = await call_next(request)
+        # Ensure response carries standard header (and legacy for compatibility)
+        try:
+            if "X-Request-ID" not in response.headers:
+                response.headers["X-Request-ID"] = rid
+            # Maintain existing convention for clients expecting request_id
+            if "request_id" not in response.headers:
+                response.headers["request_id"] = rid
+        except Exception:
+            pass
+        return response
+    except Exception:
+        # Do not break the request if request-id handling fails
+        return await call_next(request)
+
 # Security headers (including HSTS when HTTPS is used)
 @doorman.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -251,6 +285,21 @@ async def security_headers(request: Request, call_next):
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        # Content Security Policy: configurable via CONTENT_SECURITY_POLICY; strong default if unset
+        try:
+            csp = os.getenv("CONTENT_SECURITY_POLICY")
+            if csp is None or not csp.strip():
+                # Strict default for API responses; UI is served by Next.js separately
+                csp = \
+                    "default-src 'none'; " \
+                    "frame-ancestors 'none'; " \
+                    "base-uri 'none'; " \
+                    "form-action 'self'; " \
+                    "img-src 'self' data:; " \
+                    "connect-src 'self';"
+            response.headers.setdefault("Content-Security-Policy", csp)
+        except Exception:
+            pass
         if os.getenv("HTTPS_ONLY", "false").lower() == "true":
             # 6 months HSTS with subdomains and preload
             response.headers.setdefault("Strict-Transport-Security", "max-age=15552000; includeSubDomains; preload")
@@ -258,32 +307,48 @@ async def security_headers(request: Request, call_next):
         pass
     return response
 
-# Ensure logs write to a stable, absolute path next to this file
+"""Logging configuration
+
+Prefer file logging to LOGS_DIR/doorman.log when writable; otherwise, fall back
+to console so production environments (e.g., ECS/EKS/Lambda) still capture logs.
+Respects LOG_FORMAT=json|plain.
+"""
+
+# Resolve logs directory: env override or default next to this file
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGS_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOGS_DIR, exist_ok=True)
-log_file_handler = RotatingFileHandler(
-    filename=os.path.join(LOGS_DIR, "doorman.log"),
-    maxBytes=10 * 1024 * 1024,
-    backupCount=5,
-    encoding="utf-8"
-)
-if os.getenv("LOG_FORMAT", "plain").lower() == "json":
-    class JSONFormatter(logging.Formatter):
-        def format(self, record: logging.LogRecord) -> str:
-            payload = {
-                "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-                "name": record.name,
-                "level": record.levelname,
-                "message": record.getMessage(),
-            }
-            try:
-                return json.dumps(payload, ensure_ascii=False)
-            except Exception:
-                return f'{payload}'
-    log_file_handler.setFormatter(JSONFormatter())
-else:
-    log_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+_env_logs_dir = os.getenv("LOGS_DIR")
+# Default to backend-services/platform-logs
+LOGS_DIR = os.path.abspath(_env_logs_dir) if _env_logs_dir else os.path.join(BASE_DIR, "platform-logs")
+
+# Build formatters
+class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "name": record.name,
+            "level": record.levelname,
+            "message": record.getMessage(),
+        }
+        try:
+            return json.dumps(payload, ensure_ascii=False)
+        except Exception:
+            return f"{payload}"
+
+_fmt_is_json = os.getenv("LOG_FORMAT", "plain").lower() == "json"
+_file_handler = None
+try:
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    _file_handler = RotatingFileHandler(
+        filename=os.path.join(LOGS_DIR, "doorman.log"),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8"
+    )
+    _file_handler.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+except Exception as _e:
+    # Fall back to console-only logging if file handler cannot be initialized
+    print(f"Warning: file logging disabled ({_e}); using console logging only")
+    _file_handler = None
 
 # Configure all doorman loggers to use the same handler and prevent propagation
 def configure_logger(logger_name):
@@ -314,13 +379,47 @@ def configure_logger(logger_name):
             except Exception:
                 pass
             return True
-    log_file_handler.addFilter(RedactFilter())
-    logger.addHandler(log_file_handler)
+    # Console handler (always attach)
+    console = logging.StreamHandler(stream=sys.stdout)
+    console.setLevel(logging.INFO)
+    console.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    console.addFilter(RedactFilter())
+    logger.addHandler(console)
+    # File handler (attach if available)
+    if _file_handler is not None:
+        # Avoid stacking multiple redact filters on the shared handler
+        if not any(isinstance(f, logging.Filter) and hasattr(f, 'PATTERNS') for f in _file_handler.filters):
+            _file_handler.addFilter(RedactFilter())
+        logger.addHandler(_file_handler)
     return logger
 
 # Configure main loggers
 gateway_logger = configure_logger("doorman.gateway")
 logging_logger = configure_logger("doorman.logging")
+
+# Dedicated audit trail logger (separate file handler)
+audit_logger = logging.getLogger("doorman.audit")
+audit_logger.setLevel(logging.INFO)
+audit_logger.propagate = False
+# Remove existing handlers
+for h in audit_logger.handlers[:]:
+    audit_logger.removeHandler(h)
+try:
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    _audit_file = RotatingFileHandler(
+        filename=os.path.join(LOGS_DIR, "doorman-trail.log"),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8"
+    )
+    _audit_file.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    audit_logger.addHandler(_audit_file)
+except Exception as _e:
+    # Fall back to console
+    console = logging.StreamHandler(stream=sys.stdout)
+    console.setLevel(logging.INFO)
+    console.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    audit_logger.addHandler(console)
 
 class Settings(BaseSettings):
     mongo_db_uri: str = os.getenv("MONGO_DB_URI")
@@ -423,8 +522,11 @@ doorman.include_router(dashboard_router, prefix="/platform/dashboard", tags=["Da
 doorman.include_router(memory_router, prefix="/platform", tags=["Memory"])
 doorman.include_router(security_router, prefix="/platform", tags=["Security"])
 doorman.include_router(monitor_router, prefix="/platform", tags=["Monitor"])
-doorman.include_router(token_router, prefix="/platform/token", tags=["Token"])
+# Expose token management under both legacy and new prefixes
+doorman.include_router(credit_router, prefix="/platform/credit", tags=["Credit"])
 doorman.include_router(demo_router, prefix="/platform/demo", tags=["Demo"])
+doorman.include_router(config_router, prefix="/platform", tags=["Config"])
+doorman.include_router(tools_router, prefix="/platform/tools", tags=["Tools"])
 
 def start():
     if os.path.exists(PID_FILE):
@@ -473,6 +575,21 @@ def stop():
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
 
+def restart():
+    """Restart the doorman process using PID-based supervisor.
+    This function is intended to be invoked from a detached helper process.
+    """
+    try:
+        stop()
+        # Small delay to ensure ports/files released before start
+        time.sleep(1.0)
+    except Exception as e:
+        gateway_logger.error(f"Error during stop phase of restart: {e}")
+    try:
+        start()
+    except Exception as e:
+        gateway_logger.error(f"Error during start phase of restart: {e}")
+
 def run():
     server_port = int(os.getenv('PORT', 5001))
     max_threads = multiprocessing.cpu_count()
@@ -516,6 +633,8 @@ if __name__ == "__main__":
         stop()
     elif len(sys.argv) > 1 and sys.argv[1] == "start":
         start()
+    elif len(sys.argv) > 1 and sys.argv[1] == "restart":
+        restart()
     elif len(sys.argv) > 1 and sys.argv[1] == "run":
         run()
     else:

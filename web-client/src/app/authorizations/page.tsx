@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface User {
   username: string
@@ -25,6 +26,7 @@ const AuthorizationsPage = () => {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [hasNext, setHasNext] = useState(false)
+  const { user: currentUser } = useAuth()
 
   useEffect(() => {
     fetchUsers()
@@ -35,8 +37,19 @@ const AuthorizationsPage = () => {
       setLoading(true)
       setError(null)
       const { fetchJson } = await import('@/utils/http')
-      const data: any = await fetchJson(`${SERVER_URL}/platform/user/all?page=${page}&page_size=${pageSize}`)
-      const userList = Array.isArray(data) ? data : (data.users || data.response?.users || [])
+      const data: unknown = await fetchJson(`${SERVER_URL}/platform/user/all?page=${page}&page_size=${pageSize}`)
+      let userList: User[] = Array.isArray(data)
+        ? (data as User[])
+        : (((data as any).users || (data as any).response?.users || []) as User[])
+      // Ensure the active user is first in the list
+      if (currentUser?.username) {
+        userList = [...userList]
+        const idx = userList.findIndex((u: User) => u.username === currentUser.username)
+        if (idx > 0) {
+          const [me] = userList.splice(idx, 1)
+          userList.unshift(me)
+        }
+      }
       setAllUsers(userList)
       setUsers(userList)
       setHasNext((userList || []).length === pageSize)
@@ -74,9 +87,9 @@ const AuthorizationsPage = () => {
       <div className="space-y-6">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Authorizations</h1>
+            <h1 className="page-title">Subscriptions</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Grant and revoke API access for users by managing their subscriptions.
+              Grant and revoke API access by managing user subscriptions.
             </p>
           </div>
         </div>
@@ -124,11 +137,13 @@ const AuthorizationsPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
+                  {users.map((user) => {
+                    const isMe = currentUser?.username === user.username
+                    return (
                     <tr 
                       key={user.username}
                       onClick={() => handleManageSubscriptions(user)}
-                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
+                      className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors ${isMe ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
                     >
                       <td>
                         <div className="flex items-center">
@@ -138,6 +153,11 @@ const AuthorizationsPage = () => {
                           <div className="ml-3">
                             <p className="font-medium text-gray-900 dark:text-white">
                               {user.username}
+                              {isMe && (
+                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-700 dark:bg-primary-800 dark:text-primary-200">
+                                  You
+                                </span>
+                              )}
                             </p>
                           </div>
                         </div>
@@ -168,7 +188,7 @@ const AuthorizationsPage = () => {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>

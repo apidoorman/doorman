@@ -68,6 +68,7 @@ Core variables:
   - Check readiness endpoint; verify Redis/Mongo health; inspect logs via `/platform/logging/logs`.
 - CORS failures:
   - Verify ALLOWED_ORIGINS and CORS_STRICT settings; avoid `*` with credentials.
+  - Use Tools → CORS Checker (or POST `/platform/tools/cors/check`) to simulate preflight/actual decisions and view effective headers.
 - CSRF errors:
   - Ensure clients set `X-CSRF-Token` header to value of `csrf_token` cookie when HTTPS_ENABLED=true.
 
