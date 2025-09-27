@@ -176,7 +176,7 @@ def create_access_token(data: dict, refresh: bool = False):
     
     # Create accesses object with defaults
     accesses = {
-        "ui_access": True,
+        "ui_access": bool(user.get("ui_access", False)),
         'manage_users': role.get('manage_users', False) if role else False,
         'manage_apis': role.get('manage_apis', False) if role else False,
         'manage_endpoints': role.get('manage_endpoints', False) if role else False,

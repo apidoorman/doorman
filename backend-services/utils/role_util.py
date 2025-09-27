@@ -11,6 +11,60 @@ from utils.doorman_cache_util import doorman_cache
 
 logger = logging.getLogger("doorman.gateway")
 
+def _strip_id(r):
+    try:
+        if r and r.get('_id'):
+            del r['_id']
+    except Exception:
+        pass
+    return r
+
+async def is_admin_role(role_name: str) -> bool:
+    """Return True if the given role is the admin role.
+
+    Considers role.platform_admin flag for backward compatibility and
+    treats names 'admin' and legacy 'platform admin' as admin.
+    """
+    try:
+        role = doorman_cache.get_cache("role_cache", role_name)
+        if not role:
+            role = role_collection.find_one({"role_name": role_name})
+            role = _strip_id(role)
+            if role:
+                doorman_cache.set_cache("role_cache", role_name, role)
+        if not role:
+            # Heuristic only on name if role not found in DB
+            rn = (role_name or '').strip().lower()
+            return rn in ("admin", "platform admin")
+        if role.get("platform_admin") is True:
+            return True
+        rn = (role.get("role_name") or '').strip().lower()
+        return rn in ("admin", "platform admin")
+    except Exception:
+        return False
+
+async def is_admin_user(username: str) -> bool:
+    """Return True if the user has the admin role."""
+    try:
+        user = doorman_cache.get_cache('user_cache', username)
+        if not user:
+            user = user_collection.find_one({'username': username})
+            user = _strip_id(user)
+            if user:
+                doorman_cache.set_cache('user_cache', username, user)
+        if not user:
+            return False
+        return await is_admin_role(user.get('role'))
+    except Exception:
+        return False
+
+# Backward-compat function names (to ease transition if referenced elsewhere)
+async def is_platform_admin_role(role_name: str) -> bool:
+    return await is_admin_role(role_name)
+
+async def is_platform_admin_user(username: str) -> bool:
+    return await is_admin_user(username)
+
 async def validate_platform_role(role_name, action):
     """
     Get the platform roles from the cache or database.

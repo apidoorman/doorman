@@ -21,7 +21,7 @@ const AddApiPage = () => {
     api_allowed_retry_count: 0,
     api_servers: [] as string[],
     api_allowed_roles: [] as string[],
-    api_allowed_groups: [] as string[],
+    api_allowed_groups: ['ALL'] as string[],
     api_allowed_headers: [] as string[],
     api_authorization_field_swap: '',
     api_credits_enabled: false,
@@ -49,7 +49,9 @@ const AddApiPage = () => {
       if (!payload.api_credit_group) delete payload.api_credit_group
       if (!Array.isArray(payload.api_allowed_headers) || payload.api_allowed_headers.length === 0) delete payload.api_allowed_headers
       if (!Array.isArray(payload.api_allowed_roles) || payload.api_allowed_roles.length === 0) delete payload.api_allowed_roles
-      if (!Array.isArray(payload.api_allowed_groups) || payload.api_allowed_groups.length === 0) delete payload.api_allowed_groups
+      if (!Array.isArray(payload.api_allowed_groups) || payload.api_allowed_groups.length === 0) {
+        payload.api_allowed_groups = ['ALL']
+      }
       await postJson(`${SERVER_URL}/platform/api`, payload)
       // Persist frontend-only preference for this API
       try {

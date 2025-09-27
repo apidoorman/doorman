@@ -41,6 +41,18 @@ const LoginPage = () => {
         setIsLoading(false)
         return
       }
+      // Verify UI access; if missing, show an error and invalidate session
+      try {
+        const me = await fetch(`${SERVER_URL}/platform/user/me`, { credentials: 'include' })
+        const meJson = await me.json().catch(() => ({}))
+        const meData = meJson && meJson.response ? meJson.response : meJson
+        if (!me.ok || !meData || meData.ui_access !== true) {
+          setErrorMessage('Your account does not have UI access. Contact an administrator.')
+          try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
+          setIsLoading(false)
+          return
+        }
+      } catch {}
       await checkAuth()
       router.push('/dashboard')
     } catch (error) {

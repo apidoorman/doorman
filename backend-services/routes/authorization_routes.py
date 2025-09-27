@@ -13,6 +13,7 @@ from utils.response_util import respond_rest
 from utils.auth_util import auth_required, create_access_token
 from utils.auth_blacklist import TimedHeap, jwt_blacklist, revoke_all_for_user, unrevoke_all_for_user, is_user_revoked
 from utils.role_util import platform_role_required_bool
+from utils.role_util import is_admin_user
 from models.update_user_model import UpdateUserModel
 
 import uuid
@@ -195,6 +196,16 @@ async def admin_revoke_user_tokens(username: str, request: Request):
                 error_code="AUTH900",
                 error_message="You do not have permission to manage auth"
             ))
+        # Only admin may revoke tokens for admin users
+        try:
+            if await is_admin_user(username) and not await is_admin_user(admin_user):
+                return respond_rest(ResponseModel(
+                    status_code=404,
+                    response_headers={"request_id": request_id},
+                    error_message="User not found"
+                ))
+        except Exception:
+            pass
         revoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
@@ -231,6 +242,16 @@ async def admin_unrevoke_user_tokens(username: str, request: Request):
                 error_code="AUTH900",
                 error_message="You do not have permission to manage auth"
             ))
+        # Only admin may clear revocation for admin users
+        try:
+            if await is_admin_user(username) and not await is_admin_user(admin_user):
+                return respond_rest(ResponseModel(
+                    status_code=404,
+                    response_headers={"request_id": request_id},
+                    error_message="User not found"
+                ))
+        except Exception:
+            pass
         unrevoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
@@ -267,6 +288,16 @@ async def admin_disable_user(username: str, request: Request):
                 error_code="AUTH900",
                 error_message="You do not have permission to manage auth"
             ))
+        # Only admin may disable admin users
+        try:
+            if await is_admin_user(username) and not await is_admin_user(admin_user):
+                return respond_rest(ResponseModel(
+                    status_code=404,
+                    response_headers={"request_id": request_id},
+                    error_message="User not found"
+                ))
+        except Exception:
+            pass
         # Disable user
         await UserService.update_user(username, UpdateUserModel(active=False), request_id)
         # Revoke all tokens for immediate effect
@@ -306,6 +337,16 @@ async def admin_enable_user(username: str, request: Request):
                 error_code="AUTH900",
                 error_message="You do not have permission to manage auth"
             ))
+        # Only admin may enable admin users
+        try:
+            if await is_admin_user(username) and not await is_admin_user(admin_user):
+                return respond_rest(ResponseModel(
+                    status_code=404,
+                    response_headers={"request_id": request_id},
+                    error_message="User not found"
+                ))
+        except Exception:
+            pass
         await UserService.update_user(username, UpdateUserModel(active=True), request_id)
         # Do not automatically unrevoke; keep admin control explicit
         return respond_rest(ResponseModel(
@@ -343,6 +384,16 @@ async def admin_user_status(username: str, request: Request):
                 error_code="AUTH900",
                 error_message="You do not have permission to manage auth"
             ))
+        # Hide admin user status from non-admins
+        try:
+            if await is_admin_user(username) and not await is_admin_user(admin_user):
+                return respond_rest(ResponseModel(
+                    status_code=404,
+                    response_headers={"request_id": request_id},
+                    error_message="User not found"
+                ))
+        except Exception:
+            pass
         user = await UserService.get_user_by_username_helper(username)
         status = {
             'active': bool(user.get('active', False)),

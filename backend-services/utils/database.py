@@ -54,7 +54,7 @@ class Database:
             if not roles.find_one({"role_name": "admin"}):
                 roles.insert_one({
                     "role_name": 'admin',
-                    "role_description": "admin role",
+                    "role_description": "Administrator role",
                     "manage_users": True,
                     "manage_apis": True,
                     "manage_endpoints": True,
@@ -63,7 +63,11 @@ class Database:
                     "manage_routings": True,
                     "manage_gateway": True,
                     "manage_subscriptions": True,
-                    "manage_credits": True
+                    "manage_credits": True,
+                    "manage_auth": True,
+                    "manage_security": True,
+                    "view_logs": True,
+                    "export_logs": True
                 })
             # Seed groups 'admin' and 'ALL'
             if not groups.find_one({"group_name": "admin"}):
@@ -86,6 +90,7 @@ class Database:
                     "password": password_util.hash_password(os.getenv("STARTUP_ADMIN_PASSWORD")),
                     "role": "admin",
                     "groups": ["ALL", "admin"],
+                    "ui_access": True,
                     "rate_limit_duration": 2000000,
                     "rate_limit_duration_type": "minute",
                     "throttle_duration": 100000000,
@@ -95,71 +100,7 @@ class Database:
                     "custom_attributes": {"custom_key": "custom_value"},
                     "active": True
                 })
-            # Demo data seeding: public APIs + endpoints (idempotent)
-            apis = self.db.apis
-            endpoints = self.db.endpoints
-            demo_apis = [
-                {
-                    "api_name": "customers", "api_version": "v1",
-                    "api_description": "Customers API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8080"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "orders", "api_version": "v1",
-                    "api_description": "Orders API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8081"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "billing", "api_version": "v1",
-                    "api_description": "Billing API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8082"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "weather", "api_version": "v1",
-                    "api_description": "Weather API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8083"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "news", "api_version": "v1",
-                    "api_description": "News API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8084"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                },
-                {
-                    "api_name": "crypto", "api_version": "v1",
-                    "api_description": "Crypto Prices API", "api_allowed_roles": ["admin"],
-                    "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8085"],
-                    "api_type": "REST", "api_allowed_retry_count": 0
-                }
-            ]
-            for api in demo_apis:
-                if not apis.find_one({"api_name": api["api_name"], "api_version": api["api_version"]}):
-                    api_doc = dict(api)
-                    api_doc["api_id"] = str(uuid.uuid4())
-                    api_doc["api_path"] = f"/{api['api_name']}/{api['api_version']}"
-                    apis.insert_one(api_doc)
-                    # Seed 1-2 endpoints for each API
-                    for ep in [
-                        {"method": "GET", "uri": "/status", "desc": f"Get {api['api_name']} status"},
-                        {"method": "GET", "uri": "/list", "desc": f"List {api['api_name']}"}
-                    ]:
-                        if not endpoints.find_one({
-                            "api_name": api["api_name"], "api_version": api["api_version"],
-                            "endpoint_method": ep["method"], "endpoint_uri": ep["uri"]
-                        }):
-                            endpoints.insert_one({
-                                "api_name": api["api_name"],
-                                "api_version": api["api_version"],
-                                "endpoint_method": ep["method"],
-                                "endpoint_uri": ep["uri"],
-                                "endpoint_description": ep["desc"],
-                                "api_id": api_doc["api_id"],
-                                "endpoint_id": str(uuid.uuid4())
-                            })
+            # Do not seed default APIs/endpoints in memory-only mode
             # Seed a few gateway-like log entries so they appear in UI logging
             try:
                 from datetime import datetime
@@ -197,25 +138,29 @@ class Database:
             if not self.db.users.find_one({"username": "admin"}):
                 self.db.users.insert_one({
                     "username": "admin",
-                    "email": os.getenv("STARTUP_ADMIN_EMAIL"),
-                    "password": password_util.hash_password(os.getenv("STARTUP_ADMIN_PASSWORD")),
+                    "email": "admin@doorman.dev",
                     "role": "admin",
-                    "groups": ["ALL", "admin"],
-                    "rate_limit_duration": 2000000,
-                    "rate_limit_duration_type": "minute",
-                    "throttle_duration": 100000000,
+                    "groups": [
+                        "ALL",
+                        "admin"
+                    ],
+                    "rate_limit_duration": 1,
+                    "rate_limit_duration_type": "second",
+                    "throttle_duration": 1,
                     "throttle_duration_type": "second",
-                    "throttle_wait_duration": 5000000,
-                    "throttle_wait_duration_type": "seconds",
+                    "throttle_wait_duration": 0,
+                    "throttle_wait_duration_type": "second",
                     "custom_attributes": {
                         "custom_key": "custom_value"
                     },
-                    "active": True
+                    "active": True,
+                    "throttle_queue_limit": 1,
+                    "ui_access": True
                 })
             if not self.db.roles.find_one({"role_name": "admin"}):
                 self.db.roles.insert_one({
-                    "role_name": 'admin',
-                    "role_description": "admin role",
+                    "role_name": "admin",
+                    "role_description": "Administrator role",
                     "manage_users": True,
                     "manage_apis": True,
                     "manage_endpoints": True,
@@ -224,6 +169,10 @@ class Database:
                     "manage_routings": True,
                     "manage_gateway": True,
                     "manage_subscriptions": True,
+                    "manage_credits": True,
+                    "manage_auth": True,
+                    "view_logs": True,
+                    "export_logs": True,
                     "manage_security": True
                 })
             if not self.db.groups.find_one({"group_name": "admin"}):
@@ -238,36 +187,7 @@ class Database:
                     "group_description": "Default group with access to all APIs",
                     "api_access": []
                 })
-            # Demo data seeding for MongoDB: public APIs + endpoints when DB is new
-            apis = self.db.apis
-            endpoints = self.db.endpoints
-            if apis.count_documents({}) == 0:
-                demo_apis = [
-                    {"api_name": "customers", "api_version": "v1", "api_description": "Customers API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8080"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "orders", "api_version": "v1", "api_description": "Orders API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8081"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "billing", "api_version": "v1", "api_description": "Billing API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8082"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "weather", "api_version": "v1", "api_description": "Weather API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8083"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "news", "api_version": "v1", "api_description": "News API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8084"], "api_type": "REST", "api_allowed_retry_count": 0},
-                    {"api_name": "crypto", "api_version": "v1", "api_description": "Crypto Prices API", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": ["http://localhost:8085"], "api_type": "REST", "api_allowed_retry_count": 0}
-                ]
-                for api in demo_apis:
-                    api_doc = dict(api)
-                    api_doc["api_id"] = str(uuid.uuid4())
-                    api_doc["api_path"] = f"/{api['api_name']}/{api['api_version']}"
-                    apis.insert_one(api_doc)
-                    for ep in [
-                        {"method": "GET", "uri": "/status", "desc": f"Get {api['api_name']} status"},
-                        {"method": "GET", "uri": "/list", "desc": f"List {api['api_name']}"}
-                    ]:
-                        endpoints.insert_one({
-                            "api_name": api["api_name"],
-                            "api_version": api["api_version"],
-                            "endpoint_method": ep["method"],
-                            "endpoint_uri": ep["uri"],
-                            "endpoint_description": ep["desc"],
-                            "api_id": api_doc["api_id"],
-                            "endpoint_id": str(uuid.uuid4())
-                        })
+            # Do not seed default APIs/endpoints in MongoDB mode either
 
     def create_indexes(self):
         if self.memory_only:
