@@ -23,6 +23,8 @@ Doorman supports user management, authentication, authorizaiton, dynamic routing
 ## Coming Enhancements
 Doorman will soon support transformation, field encryption, and orchestration. More features to be announced.
 
+- CORS checker: No preflight/actual request simulator to validate allowed origins/methods/headers.
+
 ## Request Validation
 Doorman can validate request payloads at the endpoint level before proxying to your upstream service.
 
