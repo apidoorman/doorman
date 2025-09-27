@@ -21,6 +21,8 @@ certs/
 **/certs/
 logs/
 **/logs/
+platform-logs/
+**/platform-logs/
 venv/
 **/venv/
 generated/
