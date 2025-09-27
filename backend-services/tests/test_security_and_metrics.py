@@ -110,6 +110,8 @@ async def test_request_id_header_generation_and_echo(client):
 async def test_memory_dump_and_restore(tmp_path, monkeypatch):
     # Ensure MEM mode and point dump path to tmp
     monkeypatch.setenv("MEM_OR_EXTERNAL", "MEM")
+    # Provide encryption key required by memory dump utilities
+    monkeypatch.setenv("MEM_ENCRYPTION_KEY", "unit-test-secret")
     dump_dir = tmp_path / "dumps"
     dump_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("MEM_DUMP_PATH", str(dump_dir / "memory_dump.bin"))
