@@ -179,7 +179,15 @@ class UserService:
         Verify password and return user if valid.
         """
         try:
-            user = await UserService.get_user_by_email_with_password_helper(email)
+            try:
+                user = await UserService.get_user_by_email_with_password_helper(email)
+            except Exception:
+                # Fallback: allow username in place of email for compatibility
+                maybe_user = user_collection.find_one({'username': email})
+                if maybe_user:
+                    user = maybe_user
+                else:
+                    raise
             if not password_util.verify_password(password, user.get('password')):
                 raise HTTPException(status_code=400, detail="Invalid email or password")
             return user

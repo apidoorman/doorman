@@ -58,6 +58,7 @@ import signal
 import uvicorn
 import time
 import asyncio
+import uuid
 
 from utils.response_util import process_response
 
@@ -244,6 +245,37 @@ async def body_size_limit(request: Request, call_next):
         pass
     return await call_next(request)
 
+# Request ID middleware: accept incoming X-Request-ID or generate one.
+@doorman.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    try:
+        rid = (
+            request.headers.get("x-request-id")
+            or request.headers.get("request-id")
+            or request.headers.get("x-request-id".title())
+        )
+        if not rid:
+            rid = str(uuid.uuid4())
+        # Expose on request.state for route handlers that want to use it
+        try:
+            request.state.request_id = rid
+        except Exception:
+            pass
+        response = await call_next(request)
+        # Ensure response carries standard header (and legacy for compatibility)
+        try:
+            if "X-Request-ID" not in response.headers:
+                response.headers["X-Request-ID"] = rid
+            # Maintain existing convention for clients expecting request_id
+            if "request_id" not in response.headers:
+                response.headers["request_id"] = rid
+        except Exception:
+            pass
+        return response
+    except Exception:
+        # Do not break the request if request-id handling fails
+        return await call_next(request)
+
 # Security headers (including HSTS when HTTPS is used)
 @doorman.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -253,6 +285,21 @@ async def security_headers(request: Request, call_next):
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        # Content Security Policy: configurable via CONTENT_SECURITY_POLICY; strong default if unset
+        try:
+            csp = os.getenv("CONTENT_SECURITY_POLICY")
+            if csp is None or not csp.strip():
+                # Strict default for API responses; UI is served by Next.js separately
+                csp = \
+                    "default-src 'none'; " \
+                    "frame-ancestors 'none'; " \
+                    "base-uri 'none'; " \
+                    "form-action 'self'; " \
+                    "img-src 'self' data:; " \
+                    "connect-src 'self';"
+            response.headers.setdefault("Content-Security-Policy", csp)
+        except Exception:
+            pass
         if os.getenv("HTTPS_ONLY", "false").lower() == "true":
             # 6 months HSTS with subdomains and preload
             response.headers.setdefault("Strict-Transport-Security", "max-age=15552000; includeSubDomains; preload")

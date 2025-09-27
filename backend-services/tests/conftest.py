@@ -11,7 +11,7 @@ import sys
 # Ensure critical env before app modules import
 os.environ.setdefault("MEM_OR_EXTERNAL", "MEM")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
-os.environ.setdefault("STARTUP_ADMIN_EMAIL", "admin@doorman.dev")
+os.environ.setdefault("STARTUP_ADMIN_EMAIL", "admin@doorman.so")
 os.environ.setdefault("STARTUP_ADMIN_PASSWORD", "password1")
 os.environ.setdefault("COOKIE_DOMAIN", "testserver")
 
