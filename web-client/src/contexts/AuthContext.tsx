@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setAuthState({
         isAuthenticated: true,
-        hasUIAccess: true,
+        hasUIAccess: !!(user && user.ui_access === true),
         user,
         permissions
       })
