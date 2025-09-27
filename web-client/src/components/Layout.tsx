@@ -55,6 +55,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Filter menu items based on user permissions
   const filteredMenuItems = menuItems.filter(item => {
     if (!item.permission) return true
+    // Hide Demo Seed unless user is admin
+    if (item.href === '/demo' && user?.role !== 'admin') return false
     return permissions?.[item.permission] || false
   })
 
