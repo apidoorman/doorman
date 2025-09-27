@@ -119,7 +119,15 @@ class GatewayService:
             content_type = request.headers.get("Content-Type", "").upper()
             logger.info(f"{request_id} | REST gateway to: {url}")
             if api.get('api_authorization_field_swap'):
-                headers[api.get('Authorization')] = headers.get(api.get('api_authorization_field_swap'))
+                try:
+                    swap_from = api.get('api_authorization_field_swap')
+                    if swap_from:
+                        # Move the client-provided header into Authorization for upstream
+                        val = headers.get(swap_from)
+                        if val is not None:
+                            headers['Authorization'] = val
+                except Exception:
+                    pass
             # Endpoint-level payload validation (when configured)
             try:
                 endpoint_doc = await api_util.get_endpoint(api, method, '/' + endpoint_uri.lstrip('/'))
