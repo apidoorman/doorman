@@ -7,6 +7,20 @@ from fastapi.responses import Response
 
 logger = logging.getLogger("doorman.gateway")
 
+def _normalize_headers(hdrs: dict | None) -> dict | None:
+    try:
+        if not hdrs:
+            return hdrs
+        # Copy to avoid mutating caller-provided dict
+        out = dict(hdrs)
+        rid = out.get("request_id") or out.get("Request-Id") or out.get("X-Request-ID")
+        # Mirror to X-Request-ID for standardization if present
+        if rid and "X-Request-ID" not in out:
+            out["X-Request-ID"] = rid
+        return out
+    except Exception:
+        return hdrs
+
 def _envelope(content: dict, status_code: int) -> dict:
     return {
         "status_code": status_code,
@@ -50,7 +64,7 @@ def process_rest_response(response):
                 content = {"message": response.message} if not strict else _envelope({"message": response.message}, response.status_code)
             else:
                 content = {} if not strict else _envelope({}, response.status_code)
-            return JSONResponse(content=content, status_code=response.status_code, headers=response.response_headers)
+            return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
 
         # Non-2xx: propagate provided error_code/error_message (and message if present)
         err_payload = {}
@@ -66,7 +80,7 @@ def process_rest_response(response):
             err_payload = {"error_message": "Request failed"}
 
         content = err_payload if not strict else _envelope(err_payload, response.status_code)
-        return JSONResponse(content=content, status_code=response.status_code, headers=response.response_headers)
+        return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
     except Exception as e:
         logger.error(f"An error occurred while processing the response: {e}")
         return JSONResponse(content={"error_message": "Unable to process response"}, status_code=500)
@@ -95,7 +109,7 @@ def process_soap_response(response):
             content=soap_response,
             status_code=response.status_code,
             media_type="application/xml",
-            headers=response.response_headers,
+            headers=_normalize_headers(response.response_headers),
         )
     except Exception as e:
         logger.error(f"An error occurred while processing the SOAP response: {e}")
@@ -113,12 +127,12 @@ def process_response(response, type):
             strict = os.getenv("STRICT_RESPONSE_ENVELOPE", "false").lower() == "true"
             if response.status_code == 200:
                 content = response.response if not strict else _envelope({"response": response.response}, response.status_code)
-                return JSONResponse(content=content, status_code=response.status_code, headers=response.response_headers)
+                return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
             else:
                 content = {"error_code": response.error_code, "error_message": response.error_message}
                 if strict:
                     content = _envelope(content, response.status_code)
-                return JSONResponse(content=content, status_code=response.status_code, headers=response.response_headers)
+                return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
         except Exception as e:
             logger.error(f"An error occurred while processing the GraphQL response: {e}")
             return JSONResponse(content={"error": "Unable to process GraphQL response"}, status_code=500)
@@ -127,12 +141,12 @@ def process_response(response, type):
             strict = os.getenv("STRICT_RESPONSE_ENVELOPE", "false").lower() == "true"
             if response.status_code == 200:
                 content = response.response if not strict else _envelope({"response": response.response}, response.status_code)
-                return JSONResponse(content=content, status_code=response.status_code, headers=response.response_headers)
+                return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
             else:
                 content = {"error_code": response.error_code, "error_message": response.error_message}
                 if strict:
                     content = _envelope(content, response.status_code)
-                return JSONResponse(content=content, status_code=response.status_code, headers=response.response_headers)
+                return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
         except Exception as e:
             logger.error(f"An error occurred while processing the gRPC response: {e}")
             return JSONResponse(content={"error": "Unable to process gRPC response"}, status_code=500)
