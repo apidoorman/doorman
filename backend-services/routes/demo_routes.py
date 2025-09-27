@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request
 from typing import Optional
 from models.response_model import ResponseModel
 from utils.response_util import respond_rest
-from utils.role_util import platform_role_required_bool
+from utils.role_util import platform_role_required_bool, is_admin_user
 from utils.auth_util import auth_required
 from utils.demo_seed_util import run_seed
 
@@ -37,7 +37,8 @@ async def demo_seed(request: Request,
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not (await platform_role_required_bool(username, 'manage_gateway') or await platform_role_required_bool(username, 'manage_credits')):
+        # Restrict seeder to admin role only
+        if not await is_admin_user(username):
             return respond_rest(ResponseModel(
                 status_code=403,
                 error_code='DEMO001',
