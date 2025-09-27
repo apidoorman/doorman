@@ -239,6 +239,25 @@ const ApiDetailPage = () => {
     router.push('/apis')
   }
 
+  const handleExport = async () => {
+    try {
+      const name = (api as any)?.api_name || (editData as any)?.api_name
+      const version = (api as any)?.api_version || (editData as any)?.api_version
+      if (!name || !version) throw new Error('Missing API identity')
+      const res = await fetch(`${SERVER_URL}/platform/config/export/apis?api_name=${encodeURIComponent(String(name))}&api_version=${encodeURIComponent(String(version))}`, { credentials: 'include' })
+      const data = await res.json()
+      const payload = (data && (data.response || data))
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `doorman-api-${name}-${version}.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e:any) {
+      alert(e?.message || 'Export failed')
+    }
+  }
+
   const handleEdit = () => {
     setIsEditing(true)
   }
@@ -553,6 +572,12 @@ const ApiDetailPage = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                   Delete API
+                </button>
+                <button onClick={handleExport} className="btn btn-secondary">
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M4 10l6-6m4 12l6 6" />
+                  </svg>
+                  Export
                 </button>
               </>
             ) : (

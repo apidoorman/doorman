@@ -349,6 +349,30 @@ def configure_logger(logger_name):
 gateway_logger = configure_logger("doorman.gateway")
 logging_logger = configure_logger("doorman.logging")
 
+# Dedicated audit trail logger (separate file handler)
+audit_logger = logging.getLogger("doorman.audit")
+audit_logger.setLevel(logging.INFO)
+audit_logger.propagate = False
+# Remove existing handlers
+for h in audit_logger.handlers[:]:
+    audit_logger.removeHandler(h)
+try:
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    _audit_file = RotatingFileHandler(
+        filename=os.path.join(LOGS_DIR, "doorman-trail.log"),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8"
+    )
+    _audit_file.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    audit_logger.addHandler(_audit_file)
+except Exception as _e:
+    # Fall back to console
+    console = logging.StreamHandler(stream=sys.stdout)
+    console.setLevel(logging.INFO)
+    console.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    audit_logger.addHandler(console)
+
 class Settings(BaseSettings):
     mongo_db_uri: str = os.getenv("MONGO_DB_URI")
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY")

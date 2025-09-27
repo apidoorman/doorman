@@ -5,10 +5,10 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
-import { SERVER_URL } from '@/utils/config'
 
 interface Group {
   group_name: string
@@ -67,6 +67,24 @@ const GroupDetailPage = () => {
 
   const handleBack = () => {
     router.push('/groups')
+  }
+
+  const handleExport = async () => {
+    try {
+      const name = group?.group_name || groupName
+      if (!name) throw new Error('Missing group name')
+      const res = await fetch(`${SERVER_URL}/platform/config/export/groups?group_name=${encodeURIComponent(String(name))}`, { credentials: 'include' })
+      const data = await res.json()
+      const payload = data?.response || data
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `doorman-group-${name}.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e:any) {
+      alert(e?.message || 'Export failed')
+    }
   }
 
   const handleEdit = () => {
@@ -225,6 +243,7 @@ const GroupDetailPage = () => {
                   </svg>
                   Delete Group
                 </button>
+                <button onClick={handleExport} className="btn btn-secondary">Export</button>
               </>
             ) : (
               <>

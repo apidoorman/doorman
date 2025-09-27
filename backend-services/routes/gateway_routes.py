@@ -18,6 +18,7 @@ from utils.subscription_util import subscription_required
 from utils.health_check_util import check_mongodb, check_redis, get_memory_usage, get_active_connections, get_uptime
 from services.gateway_service import GatewayService
 from utils.validation_util import validation_util
+from utils.audit_util import audit
 
 import uuid
 import time
@@ -96,6 +97,7 @@ async def clear_all_caches(request: Request):
                 error_message="You do not have permission to clear caches"
             ).dict(), "rest")
         doorman_cache.clear_all_caches()
+        audit(request, actor=username, action='gateway.clear_caches', target='all', status='success', details=None)
         return process_response(ResponseModel(
             status_code=200,
             message="All caches cleared"

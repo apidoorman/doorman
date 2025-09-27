@@ -5,10 +5,10 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
-import { SERVER_URL } from '@/utils/config'
 
 interface Routing {
   routing_name: string
@@ -66,6 +66,24 @@ const RoutingDetailPage = () => {
 
   const handleBack = () => {
     router.push('/routings')
+  }
+
+  const handleExport = async () => {
+    try {
+      const key = routing?.client_key || clientKey
+      if (!key) throw new Error('Missing client key')
+      const res = await fetch(`${SERVER_URL}/platform/config/export/routings?client_key=${encodeURIComponent(String(key))}`, { credentials: 'include' })
+      const data = await res.json()
+      const payload = data?.response || data
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `doorman-routing-${key}.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e:any) {
+      alert(e?.message || 'Export failed')
+    }
   }
 
   const handleEdit = () => {
@@ -254,6 +272,7 @@ const RoutingDetailPage = () => {
                   </svg>
                   Delete Routing
                 </button>
+                <button onClick={handleExport} className="btn btn-secondary">Export</button>
               </>
             ) : (
               <>

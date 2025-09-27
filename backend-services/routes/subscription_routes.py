@@ -14,6 +14,7 @@ from utils.group_util import group_required
 from utils.role_util import platform_role_required_bool
 from utils.database import api_collection
 from utils.response_util import respond_rest
+from utils.audit_util import audit
 
 import uuid
 import time
@@ -60,7 +61,11 @@ async def subscribe_api(api_data: SubscribeModel, request: Request):
         # Audit log: who is subscribing whom to what
         target_user = api_data.username or username
         logger.info(f"{request_id} | Actor: {username} | Action: subscribe | Target: {target_user} | API: {api_data.api_name}/{api_data.api_version}")
-        return respond_rest(await SubscriptionService.subscribe(api_data, request_id))
+        result = await SubscriptionService.subscribe(api_data, request_id)
+        actor_user = username
+        target_user = api_data.username or username
+        audit(request, actor=actor_user, action='subscription.subscribe', target=f"{target_user}:{api_data.api_name}/{api_data.api_version}", status=result.get('status_code'), details=None, request_id=request_id)
+        return respond_rest(result)
     except HTTPException as e:
         return respond_rest(ResponseModel(
             status_code=e.status_code,
@@ -121,7 +126,11 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request):
         # Audit log: who is unsubscribing whom from what
         target_user = api_data.username or username
         logger.info(f"{request_id} | Actor: {username} | Action: unsubscribe | Target: {target_user} | API: {api_data.api_name}/{api_data.api_version}")
-        return respond_rest(await SubscriptionService.unsubscribe(api_data, request_id))
+        result = await SubscriptionService.unsubscribe(api_data, request_id)
+        actor_user = username
+        target_user = api_data.username or username
+        audit(request, actor=actor_user, action='subscription.unsubscribe', target=f"{target_user}:{api_data.api_name}/{api_data.api_version}", status=result.get('status_code'), details=None, request_id=request_id)
+        return respond_rest(result)
     except HTTPException as e:
         return respond_rest(ResponseModel(
             status_code=e.status_code,

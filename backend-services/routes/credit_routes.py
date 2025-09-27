@@ -19,6 +19,7 @@ import time
 import logging
 
 from utils.role_util import platform_role_required_bool
+from utils.audit_util import audit
 
 credit_router = APIRouter()
 
@@ -120,7 +121,9 @@ async def create_credit(credit_data: CreditModel, request: Request):
                     error_code="CRD001",
                     error_message="You do not have permission to manage credits",
                 ))
-        return respond_rest(await CreditService.create_credit(credit_data, request_id))
+        result = await CreditService.create_credit(credit_data, request_id)
+        audit(request, actor=username, action='credit_def.create', target=credit_data.api_credit_group, status=result.get('status_code'), details=None, request_id=request_id)
+        return respond_rest(result)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -166,7 +169,9 @@ async def update_credit(api_credit_group:str, credit_data: CreditModel, request:
                     error_code="CRD001",
                     error_message="You do not have permission to manage credits",
                 ))
-        return respond_rest(await CreditService.update_credit(api_credit_group, credit_data, request_id))
+        result = await CreditService.update_credit(api_credit_group, credit_data, request_id)
+        audit(request, actor=username, action='credit_def.update', target=api_credit_group, status=result.get('status_code'), details=None, request_id=request_id)
+        return respond_rest(result)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -212,7 +217,9 @@ async def delete_credit(api_credit_group:str, request: Request):
                     error_code="CRD001",
                     error_message="You do not have permission to manage credits",
                 ))
-        return respond_rest(await CreditService.delete_credit(api_credit_group, request_id))
+        result = await CreditService.delete_credit(api_credit_group, request_id)
+        audit(request, actor=username, action='credit_def.delete', target=api_credit_group, status=result.get('status_code'), details=None, request_id=request_id)
+        return respond_rest(result)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -258,7 +265,9 @@ async def add_user_credits(username: str, credit_data: UserCreditModel, request:
                     error_code="CRD001",
                     error_message="You do not have permission to manage credits",
                 ))
-        return respond_rest(await CreditService.add_credits(username, credit_data, request_id))
+        result = await CreditService.add_credits(username, credit_data, request_id)
+        audit(request, actor=username, action='user_credits.save', target=username, status=result.get('status_code'), details={"groups": list((credit_data.users_credits or {}).keys())}, request_id=request_id)
+        return respond_rest(result)
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
