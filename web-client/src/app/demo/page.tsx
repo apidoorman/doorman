@@ -3,10 +3,12 @@
 import React, { useState } from 'react'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useAuth } from '@/contexts/AuthContext'
 import { SERVER_URL } from '@/utils/config'
 import { fetchJson } from '@/utils/http'
 
 export default function DemoSeedPage() {
+  const { user } = useAuth()
   const [users, setUsers] = useState(60)
   const [apis, setApis] = useState(20)
   const [endpoints, setEndpoints] = useState(6)
@@ -35,8 +37,21 @@ export default function DemoSeedPage() {
     }
   }
 
+  if (!user || user.role !== 'admin') {
+    return (
+      <ProtectedRoute>
+        <Layout>
+          <div className="p-6">
+            <h1 className="page-title">Not authorized</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">This tool is only available to admin users.</p>
+          </div>
+        </Layout>
+      </ProtectedRoute>
+    )
+  }
+
   return (
-    <ProtectedRoute requiredPermission="manage_gateway">
+    <ProtectedRoute>
       <Layout>
         <div className="space-y-6">
           <div className="page-header">
@@ -104,4 +119,3 @@ export default function DemoSeedPage() {
     </ProtectedRoute>
   )
 }
-

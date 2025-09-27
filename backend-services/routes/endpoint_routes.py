@@ -5,7 +5,7 @@ See https://github.com/apidoorman/doorman for more information
 """
 
 from typing import List
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 
 from models.create_endpoint_validation_model import CreateEndpointValidationModel
 from models.endpoint_model_response import EndpointModelResponse
@@ -61,6 +61,9 @@ async def create_endpoint(endpoint_data: CreateEndpointModel, request: Request):
                 error_message="You do not have permission to create endpoints"
             ))
         return respond_rest(await EndpointService.create_endpoint(endpoint_data, request_id))
+    except HTTPException as he:
+        # Preserve proper auth/permission status codes (401/403/etc.)
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -109,6 +112,8 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
                 error_message="You do not have permission to update endpoints"
             ))
         return respond_rest(await EndpointService.update_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, endpoint_data, request_id))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -157,6 +162,8 @@ async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str,
                 error_message="You do not have permission to delete endpoints"
             ))
         return respond_rest(await EndpointService.delete_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -184,6 +191,8 @@ async def get_endpoint(endpoint_method: str, api_name: str, api_version: str, en
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return respond_rest(await EndpointService.get_endpoint(endpoint_method, api_name, api_version, '/' + endpoint_uri, request_id))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -211,6 +220,8 @@ async def get_endpoints_by_name_version(api_name: str, api_version: str, request
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return respond_rest(await EndpointService.get_endpoints_by_name_version(api_name, api_version, request_id))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -259,6 +270,8 @@ async def create_endpoint_validation(endpoint_validation_data: CreateEndpointVal
                 error_message="You do not have permission to create endpoint validations"
             ))
         return respond_rest(await EndpointService.create_endpoint_validation(endpoint_validation_data, request_id))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -295,6 +308,8 @@ async def update_endpoint_validation(endpoint_id: str, endpoint_validation_data:
                 error_message="You do not have permission to update endpoint validations"
             ))
         return respond_rest(await EndpointService.update_endpoint_validation(endpoint_id, endpoint_validation_data, request_id))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -331,6 +346,8 @@ async def delete_endpoint_validation(endpoint_id: str, request: Request):
                 error_message="You do not have permission to delete endpoint validations"
             ))
         return respond_rest(await EndpointService.delete_endpoint_validation(endpoint_id, request_id))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
@@ -358,6 +375,8 @@ async def get_endpoint_validation(endpoint_id: str, request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         return respond_rest(await EndpointService.get_endpoint_validation(endpoint_id, request_id))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(

@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 
@@ -83,7 +84,7 @@ const AddRolePage = () => {
     { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
     { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
     { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' },
-    { key: 'manage_tokens', label: 'Manage Tokens', description: 'Manage API tokens and user token balances' },
+    { key: 'manage_credits', label: 'Manage Credits', description: 'Manage API credits and user credit balances' },
     { key: 'manage_auth', label: 'Manage Auth', description: 'Revoke tokens and enable/disable users' },
     { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
     { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }
@@ -119,6 +120,7 @@ const AddRolePage = () => {
         {/* Form */}
         <div className="card max-w-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
+            <FormHelp docHref="/docs/using-fields.html#roles">Define a role and toggle platform permissions. Apply least privilege.</FormHelp>
             <div>
               <label htmlFor="role_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Role Name *

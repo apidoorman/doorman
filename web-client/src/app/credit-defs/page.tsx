@@ -2,22 +2,24 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
 import { getJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
-interface TokenDefItem {
-  api_token_group: string
+interface CreditDefItem {
+  api_credit_group: string
   api_key_header: string
   api_key_present: boolean
-  token_tiers: Array<{ tier_name: string; tokens: number; input_limit: number; output_limit: number; reset_frequency: string }>
+  credit_tiers: Array<{ tier_name: string; credits: number; input_limit: number; output_limit: number; reset_frequency: string }>
 }
 
-export default function TokenDefsPage() {
-  const [items, setItems] = useState<TokenDefItem[]>([])
-  const [allItems, setAllItems] = useState<TokenDefItem[]>([])
+export default function CreditDefsPage() {
+  const router = useRouter()
+  const [items, setItems] = useState<CreditDefItem[]>([])
+  const [allItems, setAllItems] = useState<CreditDefItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -30,13 +32,13 @@ export default function TokenDefsPage() {
   const fetchDefs = async () => {
     try {
       setLoading(true); setError(null)
-      const res = await getJson<any>(`${SERVER_URL}/platform/token/defs?page=${page}&page_size=${pageSize}`)
+      const res = await getJson<any>(`${SERVER_URL}/platform/credit/defs?page=${page}&page_size=${pageSize}`)
       const list = Array.isArray(res) ? res : (res.items || res.response?.items || [])
       setItems(list)
       setAllItems(list)
       setHasNext(list.length === pageSize)
     } catch (e: any) {
-      setError(e?.message || 'Failed to load token definitions')
+      setError(e?.message || 'Failed to load credit definitions')
       setItems([])
       setAllItems([])
       setHasNext(false)
@@ -50,28 +52,36 @@ export default function TokenDefsPage() {
     if (!search.trim()) { setItems(allItems); return }
     const s = search.toLowerCase()
     setItems(allItems.filter(it => (
-      it.api_token_group.toLowerCase().includes(s) ||
+      it.api_credit_group.toLowerCase().includes(s) ||
       (it.api_key_header || '').toLowerCase().includes(s) ||
-      (it.token_tiers || []).some(t => t.tier_name.toLowerCase().includes(s))
+      (it.credit_tiers || []).some(t => t.tier_name.toLowerCase().includes(s))
     )))
   }
 
   return (
-    <ProtectedRoute requiredPermission="manage_tokens">
+    <ProtectedRoute requiredPermission="manage_credits">
       <Layout>
         <div className="space-y-6">
           {/* Header */}
           <div className="page-header">
             <div>
-              <h1 className="page-title">Token Definitions</h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">Define API token groups and tiers</p>
+              <h1 className="page-title">Credit Definitions</h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">Define API credit groups and tiers</p>
             </div>
-            <Link href="/token-defs/add" className="btn btn-primary">
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Token Definition
-            </Link>
+            <div className="flex gap-2">
+              <Link href="/credits" className="btn btn-secondary">
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Credits
+              </Link>
+              <Link href="/credit-defs/add" className="btn btn-primary">
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Credit Definition
+              </Link>
+            </div>
           </div>
 
           {/* Search */}
@@ -102,7 +112,7 @@ export default function TokenDefsPage() {
 
           {/* Loading */}
           {loading ? (
-            <div className="card"><div className="flex items-center justify-center py-12"><div className="text-center"><div className="spinner mx-auto mb-4"></div><p className="text-gray-600 dark:text-gray-400">Loading token definitions...</p></div></div></div>
+            <div className="card"><div className="flex items-center justify-center py-12"><div className="text-center"><div className="spinner mx-auto mb-4"></div><p className="text-gray-600 dark:text-gray-400">Loading credit definitions...</p></div></div></div>
           ) : (
             <div className="card">
               <div className="overflow-x-auto">
@@ -113,21 +123,24 @@ export default function TokenDefsPage() {
                       <th>Header</th>
                       <th>Tiers</th>
                       <th>API Key</th>
-                      <th className="w-40">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((it) => (
-                      <tr key={it.api_token_group}>
-                        <td><span className="font-medium">{it.api_token_group}</span></td>
+                      <tr
+                        key={it.api_credit_group}
+                        onClick={() => router.push(`/credit-defs/${encodeURIComponent(it.api_credit_group)}`)}
+                        className="cursor-pointer"
+                      >
+                        <td><span className="font-medium">{it.api_credit_group}</span></td>
                         <td><span className="badge badge-gray">{it.api_key_header || '-'}</span></td>
                         <td>
-                          {(it.token_tiers || []).length > 0 ? (
+                          {(it.credit_tiers || []).length > 0 ? (
                             <div className="flex flex-wrap gap-1">
-                              {(it.token_tiers || []).slice(0, 3).map((t, idx) => (
+                              {(it.credit_tiers || []).slice(0, 3).map((t, idx) => (
                                 <span key={idx} className="badge badge-primary">{t.tier_name}</span>
                               ))}
-                              {(it.token_tiers || []).length > 3 && <span className="text-xs text-gray-500">+{(it.token_tiers || []).length - 3}</span>}
+                              {(it.credit_tiers || []).length > 3 && <span className="text-xs text-gray-500">+{(it.credit_tiers || []).length - 3}</span>}
                             </div>
                           ) : <span className="text-gray-500 text-sm">None</span>}
                         </td>
@@ -137,13 +150,6 @@ export default function TokenDefsPage() {
                           ) : (
                             <span className="badge badge-warning">Missing</span>
                           )}
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <Link href={`/token-defs/${encodeURIComponent(it.api_token_group)}`} className="btn btn-secondary btn-sm">
-                              Edit
-                            </Link>
-                          </div>
                         </td>
                       </tr>
                     ))}
@@ -164,9 +170,9 @@ export default function TokenDefsPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 1.343-3 3 0 2.239 3 5 3 5s3-2.761 3-5c0-1.657-1.343-3-3-3z M12 13a2 2 0 110-4 2 2 0 010 4z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No token definitions</h3>
-                  <p className="text-gray-600 dark:text-gray-400 mb-4">Create a token definition to get started.</p>
-                  <Link href="/token-defs/add" className="btn btn-primary">Add Token Definition</Link>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No credit definitions</h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">Create a credit definition to get started.</p>
+                  <Link href="/credit-defs/add" className="btn btn-primary">Add Credit Definition</Link>
                 </div>
               )}
             </div>
@@ -176,4 +182,3 @@ export default function TokenDefsPage() {
     </ProtectedRoute>
   )
 }
-

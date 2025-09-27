@@ -6,7 +6,7 @@ import os
 import json
 import base64
 from typing import Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
@@ -157,11 +157,11 @@ def dump_memory_to_file(path: Optional[str] = None) -> str:
         raise RuntimeError("Memory dump is only available in memory-only mode")
     dump_dir, stem = _split_dir_and_stem(path)
     os.makedirs(dump_dir, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     dump_path = os.path.join(dump_dir, f"{stem}-{ts}.bin")
     payload = {
         "version": 1,
-        "created_at": datetime.utcnow().isoformat() + "Z",
+        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         # Ensure data is JSON-serializable by normalizing bytes, sets, tuples, etc.
         "data": _to_jsonable(database.db.dump_data()),
     }

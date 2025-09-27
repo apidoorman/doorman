@@ -122,7 +122,8 @@ class DoormanCacheManager:
             'endpoint_load_balancer': 'endpoint_load_balancer:',
             'endpoint_server_cache': 'endpoint_server_cache:',
             'client_routing_cache': 'client_routing_cache:',
-            'token_def_cache': 'token_def_cache:'
+            'token_def_cache': 'token_def_cache:',
+            'credit_def_cache': 'credit_def_cache:'
         }
         self.default_ttls = {
             'api_cache': 86400,
@@ -138,7 +139,8 @@ class DoormanCacheManager:
             'endpoint_load_balancer': 86400,
             'endpoint_server_cache': 86400,
             'client_routing_cache': 86400,
-            'token_def_cache': 86400
+            'token_def_cache': 86400,
+            'credit_def_cache': 86400
         }
 
     def _get_key(self, cache_name, key):

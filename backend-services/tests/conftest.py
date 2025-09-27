@@ -1,97 +1,110 @@
+"""
+Pytest configuration for backend-services tests.
+
+Ensures the backend-services directory is on sys.path so imports like
+`from utils...` resolve correctly when tests run from the repo root in CI.
+"""
+
 import os
 import sys
-import asyncio
-from typing import AsyncGenerator
 
-import pytest
-import pytest_asyncio
-from httpx import AsyncClient
-
-# Ensure project root is importable
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-
-# Set environment for in-memory operation and predictable auth
-os.environ.setdefault("MEM_OR_REDIS", "MEM")
+# Ensure critical env before app modules import
 os.environ.setdefault("MEM_OR_EXTERNAL", "MEM")
-os.environ.setdefault("HTTPS_ONLY", "false")
-os.environ.setdefault("HTTPS_ENABLED", "false")
-os.environ.setdefault("STRICT_RESPONSE_ENVELOPE", "false")
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-please-change")
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key")
 os.environ.setdefault("STARTUP_ADMIN_EMAIL", "admin@doorman.so")
 os.environ.setdefault("STARTUP_ADMIN_PASSWORD", "password1")
-os.environ.setdefault("MEM_ENCRYPTION_KEY", "unit-test-key-32chars-abcdef123456!!")
-os.environ.setdefault("ALLOWED_HEADERS", "*")
-os.environ.setdefault("ALLOW_HEADERS", "*")
-os.environ.setdefault("ALLOW_METHODS", "*")
-os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3000")
+os.environ.setdefault("COOKIE_DOMAIN", "testserver")
+
+_HERE = os.path.dirname(__file__)
+_PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+import pytest_asyncio
+from httpx import AsyncClient
+import pytest
+import asyncio
 
 
-# Import app after env is set
-from doorman import doorman  # noqa: E402
+@pytest_asyncio.fixture
+async def authed_client():
+    # Create an authenticated httpx AsyncClient against the FastAPI app
+    from doorman import doorman
+    client = AsyncClient(app=doorman, base_url="http://testserver")
+    # Login as seeded admin
+    r = await client.post(
+        "/platform/authorization",
+        json={"email": os.environ.get("STARTUP_ADMIN_EMAIL"), "password": os.environ.get("STARTUP_ADMIN_PASSWORD")},
+    )
+    assert r.status_code == 200, r.text
+    # Ensure cookie is present; if transport doesn't persist Set-Cookie, set it explicitly from body
+    try:
+        has_cookie = any(c.name == "access_token_cookie" for c in client.cookies.jar)
+        if not has_cookie:
+            body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            token = body.get("access_token")
+            if token:
+                client.cookies.set(
+                    "access_token_cookie",
+                    token,
+                    domain=os.environ.get("COOKIE_DOMAIN") or "testserver",
+                    path="/",
+                )
+    except Exception:
+        pass
+    return client
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
+def client():
+    from doorman import doorman
+    return AsyncClient(app=doorman, base_url="http://testserver")
+
+
+@pytest.fixture
 def event_loop():
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
-@pytest_asyncio.fixture()
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    async with AsyncClient(app=doorman, base_url="http://testserver") as ac:
-        yield ac
-
-
-async def _login(client: AsyncClient) -> None:
-    resp = await client.post(
-        "/platform/authorization",
-        json={"email": os.environ["STARTUP_ADMIN_EMAIL"], "password": os.environ["STARTUP_ADMIN_PASSWORD"]},
-    )
-    assert resp.status_code == 200, f"Login failed: {resp.text}"
-    # httpx AsyncClient manages cookies automatically; ensure cookie present
-    assert any(c.name == "access_token_cookie" for c in client.cookies.jar), "Auth cookie missing"
-
-
-@pytest_asyncio.fixture()
-async def authed_client(client: AsyncClient) -> AsyncGenerator[AsyncClient, None]:
-    await _login(client)
-    yield client
-
-
-async def create_api(client: AsyncClient, name: str, version: str, *, servers=None, groups=None):
+# Test helpers expected by some suites
+async def create_api(client: AsyncClient, api_name: str, api_version: str):
     payload = {
-        "api_name": name,
-        "api_version": version,
-        "api_description": f"API {name} {version}",
+        "api_name": api_name,
+        "api_version": api_version,
+        "api_description": f"{api_name} {api_version}",
         "api_allowed_roles": ["admin"],
-        "api_allowed_groups": groups or ["ALL"],
-        "api_servers": servers or ["http://upstream.local"],
+        "api_allowed_groups": ["ALL"],
+        "api_servers": ["http://upstream.test"],
         "api_type": "REST",
         "api_allowed_retry_count": 0,
     }
     r = await client.post("/platform/api", json=payload)
     assert r.status_code in (200, 201), r.text
+    return r
 
 
-async def create_endpoint(client: AsyncClient, api_name: str, version: str, method: str, uri: str, *, servers=None):
+async def create_endpoint(client: AsyncClient, api_name: str, api_version: str, method: str, uri: str):
     payload = {
         "api_name": api_name,
-        "api_version": version,
+        "api_version": api_version,
         "endpoint_method": method,
         "endpoint_uri": uri,
         "endpoint_description": f"{method} {uri}",
     }
-    if servers is not None:
-        payload["endpoint_servers"] = servers
     r = await client.post("/platform/endpoint", json=payload)
     assert r.status_code in (200, 201), r.text
+    return r
 
 
-async def subscribe_self(client: AsyncClient, api_name: str, version: str):
-    payload = {"username": "admin", "api_name": api_name, "api_version": version}
-    r = await client.post("/platform/subscription/subscribe", json=payload)
+async def subscribe_self(client: AsyncClient, api_name: str, api_version: str):
+    # Subscribe the logged-in user (admin)
+    r_me = await client.get("/platform/user/me")
+    username = (r_me.json().get("username") if r_me.status_code == 200 else "admin")
+    r = await client.post(
+        "/platform/subscription/subscribe",
+        json={"username": username, "api_name": api_name, "api_version": api_version},
+    )
     assert r.status_code in (200, 201), r.text
+    return r

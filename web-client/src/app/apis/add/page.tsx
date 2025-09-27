@@ -4,6 +4,8 @@ import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
+import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 
@@ -19,11 +21,14 @@ const AddApiPage = () => {
     api_allowed_retry_count: 0,
     api_servers: [] as string[],
     api_allowed_roles: [] as string[],
-    api_allowed_groups: [] as string[],
+    api_allowed_groups: ['ALL'] as string[],
     api_allowed_headers: [] as string[],
     api_authorization_field_swap: '',
-    api_tokens_enabled: false,
-    api_token_group: '',
+    api_credits_enabled: false,
+    api_credit_group: '',
+    active: true,
+    // Frontend-only preference; stored in localStorage per API
+    use_protobuf: false,
     // kept for future use; backend ignores unknown fields
     validation_enabled: false
   })
@@ -41,11 +46,18 @@ const AddApiPage = () => {
       // Trim empty optional fields to keep payload clean
       const payload: any = { ...formData }
       if (!payload.api_authorization_field_swap) delete payload.api_authorization_field_swap
-      if (!payload.api_token_group) delete payload.api_token_group
+      if (!payload.api_credit_group) delete payload.api_credit_group
       if (!Array.isArray(payload.api_allowed_headers) || payload.api_allowed_headers.length === 0) delete payload.api_allowed_headers
       if (!Array.isArray(payload.api_allowed_roles) || payload.api_allowed_roles.length === 0) delete payload.api_allowed_roles
-      if (!Array.isArray(payload.api_allowed_groups) || payload.api_allowed_groups.length === 0) delete payload.api_allowed_groups
+      if (!Array.isArray(payload.api_allowed_groups) || payload.api_allowed_groups.length === 0) {
+        payload.api_allowed_groups = ['ALL']
+      }
       await postJson(`${SERVER_URL}/platform/api`, payload)
+      // Persist frontend-only preference for this API
+      try {
+        const { setUseProtobuf } = await import('@/utils/proto')
+        setUseProtobuf(formData.api_name, formData.api_version, !!formData.use_protobuf)
+      } catch {}
       router.push('/apis')
     } catch (err) {
       setError('Network error. Please try again.')
@@ -146,10 +158,28 @@ const AddApiPage = () => {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="card">
-            <div className="card-header">
+            <div className="card-header flex items-center justify-between">
               <h3 className="card-title">Basic Information</h3>
+              <FormHelp docHref="/docs/using-fields.html#apis">Fill API name/version; these form the base path clients call.</FormHelp>
             </div>
             <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Active</label>
+                <div className="flex items-center">
+                  <input
+                    id="active"
+                    name="active"
+                    type="checkbox"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    checked={formData.active as any}
+                    onChange={handleChange}
+                    disabled={loading}
+                  />
+                  <label htmlFor="active" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Enable this API
+                  </label>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                 <label htmlFor="api_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -187,7 +217,7 @@ const AddApiPage = () => {
                   disabled={loading}
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  API version (e.g., v1, v2, beta)
+                  API version (e.g., v1, v2)
                 </p>
               </div>
               </div>
@@ -236,39 +266,44 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Configuration</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Configuration</h3>
+              <FormHelp docHref="/docs/using-fields.html#api-config">Set credits, auth header mapping, and validations.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Tokens Enabled
+                  Credits Enabled
+                  <InfoTooltip text="When enabled, each request to this API deducts credits from the caller's assigned credit group before forwarding upstream." />
                 </label>
                 <div className="flex items-center">
                   <input
-                    id="api_tokens_enabled"
-                    name="api_tokens_enabled"
+                    id="api_credits_enabled"
+                    name="api_credits_enabled"
                     type="checkbox"
                     className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                    checked={formData.api_tokens_enabled}
+                    checked={formData.api_credits_enabled}
                     onChange={handleChange}
                     disabled={loading}
                   />
-                  <label htmlFor="api_tokens_enabled" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                    Enable API tokens
+                  <label htmlFor="api_credits_enabled" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Enable API credits
                   </label>
                 </div>
               </div>
-              {formData.api_tokens_enabled && (
+              {formData.api_credits_enabled && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Token Group
+                    Credit Group
+                    <InfoTooltip text="Name of a configured credit group (e.g., ai-basic). Determines where to deduct and which API key header to inject." />
                   </label>
                   <input
                     type="text"
-                    name="api_token_group"
+                    name="api_credit_group"
                     className="input"
                     placeholder="ai-group-1"
-                    value={formData.api_token_group}
+                    value={formData.api_credit_group}
                     onChange={handleChange}
                     disabled={loading}
                   />
@@ -276,16 +311,25 @@ const AddApiPage = () => {
               )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Authorization Field Swap</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Authorization Field Swap
+                  <InfoTooltip text="Map inbound Authorization header into a different header name expected by the upstream service. Example: X-Api-Key." />
+                </label>
                 <input type="text" name="api_authorization_field_swap" className="input" placeholder="backend-auth-header" value={formData.api_authorization_field_swap} onChange={handleChange} disabled={loading} />
               </div>
             </div>
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Servers</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Servers</h3>
+              <FormHelp docHref="/docs/using-fields.html#servers">Add one or more upstream base URLs used for proxying.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">API Servers</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                API Servers
+                <InfoTooltip text="Base URLs for upstreams. Include scheme and port. Example: http://localhost:8080" />
+              </label>
               <div className="flex gap-2">
                 <input type="text" className="input flex-1" placeholder="e.g., http://localhost:8080" value={newServer} onChange={(e) => setNewServer(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addServer()} disabled={loading} />
                 <button type="button" onClick={addServer} className="btn btn-secondary" disabled={loading}>Add</button>
@@ -310,11 +354,15 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Allowed Roles</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Allowed Roles</h3>
+              <FormHelp docHref="/docs/using-fields.html#access-control">Grant access by platform roles and groups.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Roles
+                  <InfoTooltip text="Only users with any of these platform roles can access this API." />
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -341,15 +389,40 @@ const AddApiPage = () => {
                   ))}
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Use Protobuf
+                  <InfoTooltip text="Frontend preference enabling proto-aware features (e.g., proto editor). Does not affect gateway behavior." />
+                </label>
+                <div className="flex items-center">
+                  <input
+                    id="use_protobuf"
+                    name="use_protobuf"
+                    type="checkbox"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    checked={formData.use_protobuf}
+                    onChange={handleChange}
+                    disabled={loading}
+                  />
+                  <label htmlFor="use_protobuf" className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                    Enable proto-based features for this API
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Frontend setting; controls proto UI and client behavior.</p>
+              </div>
             </div>
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Allowed Groups</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Allowed Groups</h3>
+              <FormHelp docHref="/docs/using-fields.html#access-control">Restrict by user groups; use ALL to allow any group.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Groups
+                  <InfoTooltip text="User must belong to any of these groups to access this API." />
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -380,10 +453,16 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Allowed Headers</h3></div>
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Allowed Headers</h3>
+              <FormHelp docHref="/docs/using-fields.html#header-forwarding">Choose which upstream response headers are forwarded.</FormHelp>
+            </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Allowed Headers</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Allowed Headers
+                  <InfoTooltip text="Response headers from upstream that Doorman may forward back to the client. Use lowercase names; examples: x-rate-limit, retry-after." />
+                </label>
                 <div className="flex gap-2">
                   <input type="text" className="input flex-1" placeholder="e.g., Authorization" value={newHeader} onChange={(e) => setNewHeader(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addHeader()} disabled={loading} />
                   <button type="button" onClick={addHeader} className="btn btn-secondary" disabled={loading}>Add</button>

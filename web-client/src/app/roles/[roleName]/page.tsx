@@ -5,8 +5,9 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
-import { fetchJson } from '@/utils/http'
 import { SERVER_URL } from '@/utils/config'
+import FormHelp from '@/components/FormHelp'
+import { fetchJson } from '@/utils/http'
 
 interface Role {
   role_name: string
@@ -74,6 +75,24 @@ const RoleDetailPage = () => {
 
   const handleBack = () => {
     router.push('/roles')
+  }
+
+  const handleExport = async () => {
+    try {
+      const name = role?.role_name || roleName
+      if (!name) throw new Error('Missing role name')
+      const res = await fetch(`${SERVER_URL}/platform/config/export/roles?role_name=${encodeURIComponent(String(name))}`, { credentials: 'include' })
+      const data = await res.json()
+      const payload = data?.response || data
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `doorman-role-${name}.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e:any) {
+      alert(e?.message || 'Export failed')
+    }
   }
 
   const handleEdit = () => {
@@ -215,6 +234,7 @@ const RoleDetailPage = () => {
                   </svg>
                   Delete Role
                 </button>
+                <button onClick={handleExport} className="btn btn-secondary">Export</button>
               </>
             ) : (
               <>
@@ -279,8 +299,9 @@ const RoleDetailPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Basic Information */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
+                <FormHelp docHref="/docs/using-fields.html#roles">Update role name/description used for platform permissions.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div>
@@ -332,8 +353,9 @@ const RoleDetailPage = () => {
 
             {/* Permissions */}
             <div className="card">
-              <div className="card-header">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Permissions</h3>
+                <FormHelp docHref="/docs/using-fields.html#access-control">Grant least-privilege access to platform features.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-1 gap-3">
@@ -347,7 +369,7 @@ const RoleDetailPage = () => {
                   { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
                   { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
                   { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' },
-                  { key: 'manage_tokens', label: 'Manage Tokens', description: 'Manage API tokens and user token balances' },
+                  { key: 'manage_credits', label: 'Manage Credits', description: 'Manage API credits and user credit balances' },
                   { key: 'manage_auth', label: 'Manage Auth', description: 'Revoke tokens and enable/disable users' },
                   { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
                   { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }

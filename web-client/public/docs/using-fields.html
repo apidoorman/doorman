@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Doorman Field Guide</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif;line-height:1.5;margin:0;padding:0;color:#1f2937;background:#fff}
+    header{background:#111827;color:#e5e7eb;padding:16px 24px}
+    main{max-width:920px;margin:24px auto;padding:0 16px}
+    h1{font-size:24px;margin:0}
+    h2{margin-top:28px;border-bottom:1px solid #e5e7eb;padding-bottom:6px}
+    h3{margin-top:20px}
+    code{background:#f3f4f6;padding:2px 4px;border-radius:4px}
+    pre{background:#0b1020;color:#e5e7eb;padding:12px;border-radius:8px;overflow:auto}
+    .tip{background:#ecfeff;border:1px solid #a5f3fc;color:#155e75;padding:10px;border-radius:8px}
+    .warn{background:#fef3c7;border:1px solid #fde68a;color:#7c2d12;padding:10px;border-radius:8px}
+    a{color:#2563eb}
+    ul{margin-left:20px}
+  </style>
+  </head>
+<body>
+  <header><h1>Doorman Field Guide</h1></header>
+  <main>
+    <p>This guide explains sensitive fields and common configurations with examples.</p>
+
+    <h2 id="apis">APIs</h2>
+    <p><strong>API Name/Version</strong> define the base path clients call: <code>/api/rest/&lt;name&gt;/&lt;version&gt;/...</code>.</p>
+    <div class="tip">Example: name <code>users</code>, version <code>v1</code> → client calls <code>/api/rest/users/v1/list</code></div>
+
+    <h3 id="api-config">Configuration</h3>
+    <ul>
+      <li><strong>Credits Enabled</strong>: deducts credits before proxying; configure a <em>Credit Group</em> that injects an API key header.</li>
+      <li><strong>Authorization Field Swap</strong>: maps inbound <code>Authorization</code> into a custom upstream header (e.g., <code>X-Api-Key</code>).</li>
+      <li><strong>Allowed Headers</strong>: restrict which upstream response headers are forwarded back (use lowercase names).</li>
+    </ul>
+    <pre>
+# Example curl
+curl -H "Authorization: Bearer ..." \
+     http://localhost:5001/api/rest/users/v1/list
+    </pre>
+
+    <h3 id="servers">Servers</h3>
+    <p>Add one or more upstream base URLs (scheme + host + port). Endpoint-level servers can override. Selection defaults to round-robin.</p>
+
+    <h3 id="access-control">Access Control</h3>
+    <p>Access requires BOTH an allowed <em>role</em> and membership in ANY allowed <em>group</em>.</p>
+
+    <h2 id="endpoints">Endpoints</h2>
+    <p>Define <strong>Method</strong> and <strong>URI</strong> relative to the API base. Use <code>{param}</code> syntax for path variables.</p>
+    <div class="tip">Example: <code>GET /items/{id}</code> matches <code>/api/rest/users/v1/items/123</code></div>
+    <p>Enable <strong>Endpoint Servers</strong> to override API servers for this endpoint only.</p>
+
+    <h2 id="routing">Routing</h2>
+    <p>Create named routing sets with an ordered list of upstreams. Doorman may choose an upstream based on client key, method, and policies.</p>
+
+    <h2 id="users">Users</h2>
+    <ul>
+      <li><strong>Password</strong>: minimum 16 chars with upper/lower/digit/symbol.</li>
+      <li><strong>Role</strong>: determines platform permissions (e.g., manage_apis, view_logs).</li>
+      <li><strong>UI Access</strong>: controls login to admin UI; API access is independent.</li>
+      <li><strong>Groups</strong>: used in API group checks (see Access Control).</li>
+    </ul>
+
+    <h3 id="rate-limit">Rate Limiting</h3>
+    <p>Limits requests per user over a time window (e.g., 100 per minute). Exceeding limits returns 429.</p>
+
+    <h3 id="throttle">Throttling</h3>
+    <p>Controls burst behavior with <em>duration</em>, <em>wait</em>, and optional <em>queue size</em>.</p>
+    <ul>
+      <li><strong>Throttle Duration</strong>: period length before reset.</li>
+      <li><strong>Wait Duration</strong>: how long requests wait when throttled before retry.</li>
+      <li><strong>Queue Limit</strong>: max queued requests; null disables queuing.</li>
+    </ul>
+
+    <h2 id="credits">Credits</h2>
+    <p>Credit definitions specify a <strong>credit group</strong>, an API key header name, a default API key value, and one or more tiers.</p>
+    <ul>
+      <li><strong>API Credit Group</strong>: reference name used by APIs to deduct credits and inject keys.</li>
+      <li><strong>API Key Header</strong>: header name injected when proxying (e.g., <code>x-api-key</code>).</li>
+      <li><strong>API Key</strong>: default key used when proxying; users can also have per-user keys.</li>
+      <li><strong>Tiers</strong>: JSON array with <code>tier_name</code>, <code>credits</code>, <code>input_limit</code>, <code>output_limit</code>, and <code>reset_frequency</code>.</li>
+    </ul>
+
+    <h2 id="security">Security</h2>
+    <p><strong>Auto-save</strong> writes encrypted memory dumps periodically (requires <code>MEM_ENCRYPTION_KEY</code>). <strong>Dump Path</strong> stores the file; use an encrypted volume.
+    <div class="warn">Restart is required to apply server TLS changes when running with built-in HTTPS. Use an edge proxy for zero-downtime rotation.</div>
+
+    <h2 id="auth-admin">Auth Admin</h2>
+    <p>Check status, revoke tokens, and enable/disable users. Revocation immediately invalidates tokens; enable/disable toggles login capability.</p>
+
+    <h2 id="examples">Examples</h2>
+    <pre>
+# REST call through Doorman
+curl -H "Authorization: Bearer &lt;token&gt;" \
+     -H "client-key: demo-client" \
+     http://localhost:5001/api/rest/users/v1/items/42
+
+# GraphQL
+curl -H "Authorization: Bearer &lt;token&gt;" \
+     -H "X-API-Version: v1" \
+     -H "Content-Type: application/json" \
+     -d '{"query":"{ hello }"}' \
+     http://localhost:5001/api/graphql/example
+    </pre>
+  </main>
+</body>
+</html>

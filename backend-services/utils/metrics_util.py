@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Tuple
+from typing import Deque, Dict, List, Optional
 
 
 @dataclass
@@ -17,12 +17,36 @@ class MinuteBucket:
     count: int = 0
     error_count: int = 0
     total_ms: float = 0.0
+    # Per-minute breakdowns for richer reporting
+    status_counts: Dict[int, int] = field(default_factory=dict)
+    api_counts: Dict[str, int] = field(default_factory=dict)
+    api_error_counts: Dict[str, int] = field(default_factory=dict)
+    user_counts: Dict[str, int] = field(default_factory=dict)
 
-    def add(self, ms: float, status: int) -> None:
+    def add(self, ms: float, status: int, username: Optional[str], api_key: Optional[str]) -> None:
         self.count += 1
         if status >= 400:
             self.error_count += 1
         self.total_ms += ms
+        # status distribution
+        try:
+            self.status_counts[status] = self.status_counts.get(status, 0) + 1
+        except Exception:
+            pass
+        # per-api
+        if api_key:
+            try:
+                self.api_counts[api_key] = self.api_counts.get(api_key, 0) + 1
+                if status >= 400:
+                    self.api_error_counts[api_key] = self.api_error_counts.get(api_key, 0) + 1
+            except Exception:
+                pass
+        # per-user
+        if username:
+            try:
+                self.user_counts[username] = self.user_counts.get(username, 0) + 1
+            except Exception:
+                pass
 
 
 class MetricsStore:
@@ -50,11 +74,11 @@ class MetricsStore:
             self._buckets.popleft()
         return mb
 
-    def record(self, status: int, duration_ms: float, username: str | None = None, api_key: str | None = None) -> None:
+    def record(self, status: int, duration_ms: float, username: Optional[str] = None, api_key: Optional[str] = None) -> None:
         now = time.time()
         minute_start = self._minute_floor(now)
         bucket = self._ensure_bucket(minute_start)
-        bucket.add(duration_ms, status)
+        bucket.add(duration_ms, status, username, api_key)
         self.total_requests += 1
         self.total_ms += duration_ms
         self.status_counts[status] += 1

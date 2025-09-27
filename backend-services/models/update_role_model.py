@@ -20,7 +20,7 @@ class UpdateRoleModel(BaseModel):
     manage_gateway: Optional[bool] = Field(None, description="Permission to manage gateway", example=True)
     manage_subscriptions: Optional[bool] = Field(None, description="Permission to manage subscriptions", example=True)
     manage_security: Optional[bool] = Field(None, description="Permission to manage security settings", example=True)
-    manage_tokens: Optional[bool] = Field(None, description="Permission to manage tokens", example=True)
+    manage_credits: Optional[bool] = Field(None, description="Permission to manage credits", example=True)
     manage_auth: Optional[bool] = Field(None, description="Permission to manage auth (revoke tokens/disable users)", example=True)
     view_logs: Optional[bool] = Field(None, description="Permission to view logs", example=True)
     export_logs: Optional[bool] = Field(None, description="Permission to export logs", example=True)

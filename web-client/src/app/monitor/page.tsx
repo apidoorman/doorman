@@ -30,7 +30,7 @@ const MonitorPage: React.FC = () => {
   const [metrics, setMetrics] = useState<any | null>(null)
   const [timeRange, setTimeRange] = useState('24h')
   const [liveness, setLiveness] = useState<string | null>(null)
-  const [readiness, setReadiness] = useState<{ status: string; mongodb?: boolean; redis?: boolean } | null>(null)
+  const [readiness, setReadiness] = useState<{ status: string; mongodb?: boolean; redis?: boolean; mode?: string; cache_backend?: string } | null>(null)
 
   useEffect(() => {
     fetchMetrics()
@@ -67,7 +67,7 @@ const MonitorPage: React.FC = () => {
     try {
       const readyResp = await fetch(`${SERVER_URL}/platform/monitor/readiness`, { credentials: 'include' })
       const ready = await readyResp.json().catch(() => ({}))
-      setReadiness({ status: ready?.status, mongodb: ready?.mongodb, redis: ready?.redis })
+      setReadiness({ status: ready?.status, mongodb: ready?.mongodb, redis: ready?.redis, mode: ready?.mode, cache_backend: ready?.cache_backend })
     } catch {
       setReadiness(null)
     }
@@ -162,8 +162,16 @@ const MonitorPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="stats-label">Dependencies</p>
-                  <p className="text-sm text-gray-700 dark:text-gray-300">MongoDB: {readiness?.mongodb ? 'ok' : 'degraded'}</p>
-                  <p className="text-sm text-gray-700 dark:text-gray-300">Redis: {readiness?.redis ? 'ok' : 'degraded'}</p>
+                  {readiness?.mode === 'memory' ? (
+                    <p className="text-sm text-gray-700 dark:text-gray-300">Database: memory mode</p>
+                  ) : (
+                    <p className="text-sm text-gray-700 dark:text-gray-300">MongoDB: {readiness?.mongodb ? 'ok' : 'degraded'}</p>
+                  )}
+                  {readiness?.cache_backend === 'memory' ? (
+                    <p className="text-sm text-gray-700 dark:text-gray-300">Cache: memory mode</p>
+                  ) : (
+                    <p className="text-sm text-gray-700 dark:text-gray-300">Redis: {readiness?.redis ? 'ok' : 'degraded'}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -228,7 +236,7 @@ const MonitorPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="stats-label">Active Users</p>
-                  <p className="stats-value">--</p>
+                  <p className="stats-value">{Array.isArray(metrics?.top_users) ? metrics.top_users.length : 0}</p>
                   <p className="stats-change">&nbsp;</p>
                 </div>
                 <div className="h-12 w-12 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
@@ -288,25 +296,28 @@ const MonitorPage: React.FC = () => {
           </div>
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex items-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <div className="h-3 w-3 bg-green-500 rounded-full mr-3"></div>
+              {/* API Gateway */}
+              <div className={`flex items-center p-4 rounded-lg ${liveness === 'alive' ? 'bg-green-50 dark:bg-green-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'}`}>
+                <div className={`h-3 w-3 rounded-full mr-3 ${liveness === 'alive' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
                 <div>
                   <p className="font-medium text-green-900 dark:text-green-100">API Gateway</p>
-                  <p className="text-sm text-green-600 dark:text-green-400">Operational</p>
+                  <p className="text-sm text-green-600 dark:text-green-400">{liveness === 'alive' ? 'Operational' : 'Degraded'}</p>
                 </div>
               </div>
-              <div className="flex items-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <div className="h-3 w-3 bg-green-500 rounded-full mr-3"></div>
+              {/* Database */}
+              <div className={`flex items-center p-4 rounded-lg ${(readiness?.mode === 'memory' || readiness?.mongodb) ? 'bg-green-50 dark:bg-green-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'}`}>
+                <div className={`h-3 w-3 rounded-full mr-3 ${(readiness?.mode === 'memory' || readiness?.mongodb) ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
                 <div>
                   <p className="font-medium text-green-900 dark:text-green-100">Database</p>
-                  <p className="text-sm text-green-600 dark:text-green-400">Operational</p>
+                  <p className="text-sm text-green-600 dark:text-green-400">{readiness?.mode === 'memory' ? 'Memory Mode' : (readiness?.mongodb ? 'Operational' : 'Degraded')}</p>
                 </div>
               </div>
-              <div className="flex items-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <div className="h-3 w-3 bg-green-500 rounded-full mr-3"></div>
+              {/* Cache */}
+              <div className={`flex items-center p-4 rounded-lg ${(readiness?.cache_backend === 'memory' || readiness?.redis) ? 'bg-green-50 dark:bg-green-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'}`}>
+                <div className={`h-3 w-3 rounded-full mr-3 ${(readiness?.cache_backend === 'memory' || readiness?.redis) ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
                 <div>
                   <p className="font-medium text-green-900 dark:text-green-100">Cache</p>
-                  <p className="text-sm text-green-600 dark:text-green-400">Operational</p>
+                  <p className="text-sm text-green-600 dark:text-green-400">{readiness?.cache_backend === 'memory' ? 'Memory Mode' : (readiness?.redis ? 'Operational' : 'Degraded')}</p>
                 </div>
               </div>
             </div>

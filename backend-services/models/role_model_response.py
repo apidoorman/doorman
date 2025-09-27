@@ -19,7 +19,7 @@ class RoleModelResponse(BaseModel):
     manage_routings: Optional[bool] = Field(None, description="Permission to manage routings", example=True)
     manage_gateway: Optional[bool] = Field(None, description="Permission to manage gateway", example=True)
     manage_subscriptions: Optional[bool] = Field(None, description="Permission to manage subscriptions", example=True)
-    manage_tokens: Optional[bool] = Field(None, description="Permission to manage API tokens", example=True)
+    manage_credits: Optional[bool] = Field(None, description="Permission to manage API credits", example=True)
     manage_auth: Optional[bool] = Field(None, description="Permission to manage auth (revoke tokens/disable users)", example=True)
     view_logs: Optional[bool] = Field(None, description="Permission to view logs", example=True)
     export_logs: Optional[bool] = Field(None, description="Permission to export logs", example=True)
