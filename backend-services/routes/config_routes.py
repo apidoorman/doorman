@@ -14,6 +14,7 @@ from utils.response_util import process_response
 from utils.auth_util import auth_required
 from utils.role_util import platform_role_required_bool
 from utils.doorman_cache_util import doorman_cache
+from utils.audit_util import audit
 from utils.database import (
     api_collection,
     endpoint_collection,
@@ -60,6 +61,7 @@ async def export_all(request: Request):
         if not await platform_role_required_bool(username, 'manage_gateway'):
             return process_response(ResponseModel(status_code=403, error_code="CFG001", error_message="Insufficient permissions").dict(), "rest")
         data = _export_all()
+        audit(request, actor=username, action='config.export_all', target='all', status='success', details={"counts": {k: len(v) for k,v in data.items()}}, request_id=request_id)
         return process_response(ResponseModel(status_code=200, response_headers={"request_id": request_id}, response=data).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | export_all error: {e}")
@@ -85,11 +87,13 @@ async def export_apis(request: Request, api_name: Optional[str] = None, api_vers
                 return process_response(ResponseModel(status_code=404, error_code="CFG404", error_message="API not found").dict(), "rest")
             aid = api.get('api_id')
             eps = endpoint_collection.find({"api_name": api_name, "api_version": api_version}).to_list(length=None)
+            audit(request, actor=username, action='config.export_api', target=f"{api_name}/{api_version}", status='success', details={"endpoints": len(eps)}, request_id=request_id)
             return process_response(ResponseModel(status_code=200, response={
                 "api": _strip_id(api),
                 "endpoints": [_strip_id(e) for e in eps]
             }).dict(), "rest")
         apis = [_strip_id(a) for a in api_collection.find().to_list(length=None)]
+        audit(request, actor=username, action='config.export_apis', target='list', status='success', details={"count": len(apis)}, request_id=request_id)
         return process_response(ResponseModel(status_code=200, response={"apis": apis}).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | export_apis error: {e}")
@@ -110,8 +114,10 @@ async def export_roles(request: Request, role_name: Optional[str] = None):
             role = role_collection.find_one({"role_name": role_name})
             if not role:
                 return process_response(ResponseModel(status_code=404, error_code="CFG404", error_message="Role not found").dict(), "rest")
+            audit(request, actor=username, action='config.export_role', target=role_name, status='success', details=None, request_id=request_id)
             return process_response(ResponseModel(status_code=200, response={"role": _strip_id(role)}).dict(), "rest")
         roles = [_strip_id(r) for r in role_collection.find().to_list(length=None)]
+        audit(request, actor=username, action='config.export_roles', target='list', status='success', details={"count": len(roles)}, request_id=request_id)
         return process_response(ResponseModel(status_code=200, response={"roles": roles}).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | export_roles error: {e}")
@@ -130,8 +136,10 @@ async def export_groups(request: Request, group_name: Optional[str] = None):
             group = group_collection.find_one({"group_name": group_name})
             if not group:
                 return process_response(ResponseModel(status_code=404, error_code="CFG404", error_message="Group not found").dict(), "rest")
+            audit(request, actor=username, action='config.export_group', target=group_name, status='success', details=None, request_id=request_id)
             return process_response(ResponseModel(status_code=200, response={"group": _strip_id(group)}).dict(), "rest")
         groups = [_strip_id(g) for g in group_collection.find().to_list(length=None)]
+        audit(request, actor=username, action='config.export_groups', target='list', status='success', details={"count": len(groups)}, request_id=request_id)
         return process_response(ResponseModel(status_code=200, response={"groups": groups}).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | export_groups error: {e}")
@@ -150,8 +158,10 @@ async def export_routings(request: Request, client_key: Optional[str] = None):
             routing = routing_collection.find_one({"client_key": client_key})
             if not routing:
                 return process_response(ResponseModel(status_code=404, error_code="CFG404", error_message="Routing not found").dict(), "rest")
+            audit(request, actor=username, action='config.export_routing', target=client_key, status='success', details=None, request_id=request_id)
             return process_response(ResponseModel(status_code=200, response={"routing": _strip_id(routing)}).dict(), "rest")
         routings = [_strip_id(r) for r in routing_collection.find().to_list(length=None)]
+        audit(request, actor=username, action='config.export_routings', target='list', status='success', details={"count": len(routings)}, request_id=request_id)
         return process_response(ResponseModel(status_code=200, response={"routings": routings}).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | export_routings error: {e}")
@@ -295,10 +305,10 @@ async def import_all(request: Request, body: Dict[str, Any]):
             doorman_cache.clear_all_caches()
         except Exception:
             pass
+        audit(request, actor=username, action='config.import', target='bulk', status='success', details={"imported": counts}, request_id=request_id)
         return process_response(ResponseModel(status_code=200, response={"imported": counts}).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | import_all error: {e}")
         return process_response(ResponseModel(status_code=500, error_code="GTW999", error_message="An unexpected error occurred").dict(), "rest")
     finally:
         logger.info(f"{request_id} | import_all took {time.time()*1000 - start:.2f}ms")
-

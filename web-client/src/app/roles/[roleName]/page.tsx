@@ -5,9 +5,9 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
+import { SERVER_URL } from '@/utils/config'
 import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
-import { SERVER_URL } from '@/utils/config'
 
 interface Role {
   role_name: string
@@ -75,6 +75,24 @@ const RoleDetailPage = () => {
 
   const handleBack = () => {
     router.push('/roles')
+  }
+
+  const handleExport = async () => {
+    try {
+      const name = role?.role_name || roleName
+      if (!name) throw new Error('Missing role name')
+      const res = await fetch(`${SERVER_URL}/platform/config/export/roles?role_name=${encodeURIComponent(String(name))}`, { credentials: 'include' })
+      const data = await res.json()
+      const payload = data?.response || data
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `doorman-role-${name}.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e:any) {
+      alert(e?.message || 'Export failed')
+    }
   }
 
   const handleEdit = () => {
@@ -216,6 +234,7 @@ const RoleDetailPage = () => {
                   </svg>
                   Delete Role
                 </button>
+                <button onClick={handleExport} className="btn btn-secondary">Export</button>
               </>
             ) : (
               <>

@@ -16,6 +16,7 @@ from utils.response_util import process_response
 from utils.auth_util import auth_required
 from utils.role_util import platform_role_required_bool
 from utils.security_settings_util import load_settings, save_settings
+from utils.audit_util import audit
 
 security_router = APIRouter()
 logger = logging.getLogger("doorman.gateway")
@@ -86,6 +87,7 @@ async def update_security_settings(request: Request, body: SecuritySettingsModel
                 error_message="You do not have permission to update security settings"
             ).dict(), "rest")
         new_settings = await save_settings(body.dict(exclude_none=True))
+        audit(request, actor=username, action='security.update_settings', target='security_settings', status='success', details={k: new_settings.get(k) for k in ('enable_auto_save','auto_save_frequency_seconds','dump_path')}, request_id=request_id)
         # Echo memory-only mode in response for UI convenience
         settings_with_mode = dict(new_settings)
         try:
@@ -160,6 +162,7 @@ async def restart_gateway(request: Request):
                 error_code="SEC005",
                 error_message="Failed to schedule restart"
             ).dict(), "rest")
+        audit(request, actor=username, action='security.restart', target='gateway', status='scheduled', details=None, request_id=request_id)
         return process_response(ResponseModel(
             status_code=202,
             response_headers={"request_id": request_id},
