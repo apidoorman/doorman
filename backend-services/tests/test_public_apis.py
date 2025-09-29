@@ -64,6 +64,7 @@ async def test_graphql_public_api_allows_unauthenticated(client, authed_client):
 @pytest.mark.asyncio
 async def test_public_api_bypasses_credits_check(client, authed_client):
     name, ver = "pubcredits", "v1"
+    # Creating Public + Credits should be rejected now
     cr = await authed_client.post(
         "/platform/api",
         json={
@@ -77,7 +78,23 @@ async def test_public_api_bypasses_credits_check(client, authed_client):
             "api_credit_group": "any-group",
         },
     )
-    assert cr.status_code in (200, 201), cr.text
+    assert cr.status_code == 400
+    body = cr.json()
+    assert (body.get("error_code") or body.get("response", {}).get("error_code")) == "API013"
+
+    # Create instead as public without credits and verify unauthenticated access is not blocked by 401
+    cr2 = await authed_client.post(
+        "/platform/api",
+        json={
+            "api_name": name,
+            "api_version": ver,
+            "api_description": "Public REST",
+            "api_servers": ["http://upstream.invalid"],
+            "api_type": "REST",
+            "api_public": True,
+        },
+    )
+    assert cr2.status_code in (200, 201), cr2.text
     ce = await authed_client.post(
         "/platform/endpoint",
         json={
@@ -89,9 +106,7 @@ async def test_public_api_bypasses_credits_check(client, authed_client):
         },
     )
     assert ce.status_code in (200, 201), ce.text
-
     r = await client.get(f"/api/rest/{name}/{ver}/ping")
-    # Should not 401 due to credits check since API is public
     assert r.status_code != 401
 
 

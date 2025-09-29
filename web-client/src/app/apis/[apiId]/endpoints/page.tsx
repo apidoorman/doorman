@@ -189,7 +189,7 @@ export default function ApiEndpointsPage() {
   const loadEndpoints = async () => {
     setLoading(true)
     setError(null)
-    try {
+    const attempt = async () => {
       if (!apiName || !apiVersion) {
         // Fallback: find API by id via listing
         const data = await getJson<any>(`${SERVER_URL}/platform/api/all`)
@@ -219,8 +219,17 @@ export default function ApiEndpointsPage() {
       }
       setEndpoints(list)
       setAllEndpoints(list)
+    }
+    try {
+      await attempt()
     } catch (e:any) {
-      setError(e?.message || 'Failed to load endpoints')
+      // Retry once on transient failures
+      try {
+        await new Promise(r => setTimeout(r, 200))
+        await attempt()
+      } catch (err:any) {
+        setError(err?.message || 'Failed to load endpoints')
+      }
     } finally {
       setLoading(false)
     }

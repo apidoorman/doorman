@@ -78,6 +78,8 @@ const ApiDetailPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
   const [pendingPublicValue, setPendingPublicValue] = useState<boolean | null>(null)
+  const [pubCredsConfirmOpen, setPubCredsConfirmOpen] = useState(false)
+  const [pendingPubCredsField, setPendingPubCredsField] = useState<null | { field: 'api_public' | 'api_credits_enabled'; value: boolean }>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const toast = useToast()
@@ -340,6 +342,18 @@ const ApiDetailPage = () => {
     if (field === 'api_public' && value === true) {
       setPendingPublicValue(true)
       setPublicConfirmOpen(true)
+      return
+    }
+    const currentPublic = (isEditing ? (editData as any)?.api_public : (api as any)?.api_public) ?? false
+    const currentCredits = (isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false
+    if (field === 'api_public' && value === true && currentCredits) {
+      setPendingPubCredsField({ field: 'api_public', value: true })
+      setPubCredsConfirmOpen(true)
+      return
+    }
+    if (field === 'api_credits_enabled' && value === true && (currentPublic || (field === 'api_public' && value === true))) {
+      setPendingPubCredsField({ field: 'api_credits_enabled', value: true })
+      setPubCredsConfirmOpen(true)
       return
     }
     setEditData(prev => ({ ...prev, [field]: value }))
@@ -658,6 +672,20 @@ const ApiDetailPage = () => {
                 <h3 className="card-title">Basic Information</h3>
               </div>
               <div className="p-6 space-y-4">
+                {(((isEditing ? (editData as any)?.api_public : (api as any)?.api_public) ?? false) && ((isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false)) && (
+                  <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                    Public + Credits: Anyone can call this API and the group API key will be injected. Per-user deductions/keys are skipped.
+                  </div>
+                )}
+                {(
+                  ((isEditing ? (editData as any)?.api_public : (api as any)?.api_public) ?? false) === false &&
+                  ((isEditing ? (editData as any)?.api_auth_required : (api as any)?.api_auth_required) ?? true) === false &&
+                  ((isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false) === true
+                ) && (
+                  <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                    No Auth + Credits: Unauthenticated requests are allowed and the group API key will be injected. Per-user deductions/keys are skipped. Consider enabling Auth Required or disabling Credits.
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     API Name
@@ -782,6 +810,7 @@ const ApiDetailPage = () => {
                         checked={!!(editData as any).api_public}
                         onChange={(e) => handleInputChange('api_public' as any, e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        disabled={!!(editData as any).api_credits_enabled}
                       />
                       <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Anyone with the URL can call this API</label>
                     </div>
@@ -823,6 +852,7 @@ const ApiDetailPage = () => {
                         checked={editData.api_credits_enabled || false}
                         onChange={(e) => handleInputChange('api_credits_enabled', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        disabled={!!(editData as any).api_public}
                       />
                       <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
                         Enable API credits
@@ -1252,8 +1282,36 @@ const ApiDetailPage = () => {
           setPendingPublicValue(null)
         }}
       />
+
+      {/* Public + Credits confirmation */}
+      <ConfirmModal
+        open={pubCredsConfirmOpen}
+        title="Public API with Credits?"
+        message={<div>
+          <p className="mb-2">Enabling Credits on a Public API injects the group API key for anyone calling this API.</p>
+          <p className="text-amber-600">User-level deductions/keys are skipped for public/no-auth calls.</p>
+        </div>}
+        confirmLabel="Proceed"
+        onConfirm={() => {
+          setPubCredsConfirmOpen(false)
+          if (pendingPubCredsField) {
+            setEditData(prev => ({ ...prev, [pendingPubCredsField.field]: pendingPubCredsField.value as any }))
+          }
+          setPendingPubCredsField(null)
+        }}
+        onCancel={() => {
+          setPubCredsConfirmOpen(false)
+          setPendingPubCredsField(null)
+        }}
+      />
     </Layout>
   )
 }
 
+                  {isEditing && (editData as any).api_credits_enabled && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable Credits to change Public status.</p>
+                  )}
 export default ApiDetailPage 
+                {isEditing && (editData as any).api_public && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable Public to enable Credits.</p>
+                )}
