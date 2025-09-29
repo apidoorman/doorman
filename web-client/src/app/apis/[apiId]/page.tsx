@@ -319,10 +319,10 @@ const ApiDetailPage = () => {
         setApi(merged as any)
         sessionStorage.setItem('selectedApi', JSON.stringify(merged))
       }
-      // Persist current protobuf preference
+      // Persist current protobuf preference (use target name/version)
       try {
         const { setUseProtobuf } = await import('@/utils/proto')
-        setUseProtobuf(refreshedApi.api_name, refreshedApi.api_version, useProtobuf)
+        setUseProtobuf(targetName, targetVersion, useProtobuf)
       } catch {}
       setIsEditing(false)
       setSuccess('API updated successfully!')
