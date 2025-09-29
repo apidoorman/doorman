@@ -150,7 +150,8 @@ class GatewayService:
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 method = request.method.upper()
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_credits_enabled'):
+                # Enforce credits only for non-public APIs
+                if api.get('api_credits_enabled') and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
@@ -161,9 +162,11 @@ class GatewayService:
                 ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
-                user_specific_api_key = await credit_util.get_user_api_key(api.get('api_credit_group'), username)
-                if user_specific_api_key:
-                    headers[ai_token_headers[0]] = user_specific_api_key
+                # Skip user-specific key injection for public APIs
+                if not bool(api.get('api_public')):
+                    user_specific_api_key = await credit_util.get_user_api_key(api.get('api_credit_group'), username)
+                    if user_specific_api_key:
+                        headers[ai_token_headers[0]] = user_specific_api_key
             content_type = request.headers.get("Content-Type", "").upper()
             logger.info(f"{request_id} | REST gateway to: {url}")
             if api.get('api_authorization_field_swap'):
@@ -283,7 +286,7 @@ class GatewayService:
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 logger.info(f"{request_id} | SOAP gateway to: {url}")
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_credits_enabled'):
+                if api.get('api_credits_enabled') and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api, username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
@@ -382,7 +385,7 @@ class GatewayService:
                     return GatewayService.error_response(request_id, 'GTW001', 'No upstream servers configured')
                 url = server.rstrip('/')
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_credits_enabled'):
+                if api.get('api_credits_enabled') and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000

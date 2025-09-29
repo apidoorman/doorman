@@ -270,8 +270,11 @@ const APIsPage = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                           </div>
-                          <div>
+                          <div className="flex items-center gap-2">
                             <p className="font-medium text-gray-900 dark:text-white">{api.api_name}</p>
+                            {((api as any).api_public ?? false) && (
+                              <span className="badge badge-warning" title="This API is public">Public</span>
+                            )}
                           </div>
                         </div>
                       </td>

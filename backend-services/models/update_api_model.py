@@ -32,5 +32,8 @@ class UpdateApiModel(BaseModel):
     api_cors_allow_credentials: Optional[bool] = Field(None, description="Whether to include Access-Control-Allow-Credentials=true in responses")
     api_cors_expose_headers: Optional[List[str]] = Field(None, description="Response headers to expose to the browser via Access-Control-Expose-Headers")
 
+    # Public access
+    api_public: Optional[bool] = Field(None, description="If true, this API can be called without authentication or subscription")
+
     class Config:
         arbitrary_types_allowed = True
