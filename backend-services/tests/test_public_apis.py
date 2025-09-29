@@ -93,3 +93,37 @@ async def test_public_api_bypasses_credits_check(client, authed_client):
     r = await client.get(f"/api/rest/{name}/{ver}/ping")
     # Should not 401 due to credits check since API is public
     assert r.status_code != 401
+
+
+@pytest.mark.asyncio
+async def test_auth_not_required_but_not_public(client, authed_client):
+    name, ver = "noauthsub", "v1"
+    # Create API with auth not required but not public
+    cr = await authed_client.post(
+        "/platform/api",
+        json={
+            "api_name": name,
+            "api_version": ver,
+            "api_description": "Auth not required",
+            "api_servers": ["http://upstream.invalid"],
+            "api_type": "REST",
+            "api_public": False,
+            "api_auth_required": False,
+        },
+    )
+    assert cr.status_code in (200, 201), cr.text
+    ce = await authed_client.post(
+        "/platform/endpoint",
+        json={
+            "api_name": name,
+            "api_version": ver,
+            "endpoint_method": "GET",
+            "endpoint_uri": "/ping",
+            "endpoint_description": "ping",
+        },
+    )
+    assert ce.status_code in (200, 201), ce.text
+
+    # Can call without auth, but not public; our current behavior allows it without JWT
+    r = await client.get(f"/api/rest/{name}/{ver}/ping")
+    assert r.status_code in (200, 400, 404, 429, 500)

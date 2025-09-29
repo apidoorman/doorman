@@ -35,5 +35,8 @@ class UpdateApiModel(BaseModel):
     # Public access
     api_public: Optional[bool] = Field(None, description="If true, this API can be called without authentication or subscription")
 
+    # Auth requirement (non-public)
+    api_auth_required: Optional[bool] = Field(None, description="If true (default), JWT auth is required for this API when not public. If false, requests may be unauthenticated but must meet other checks as configured.")
+
     class Config:
         arbitrary_types_allowed = True

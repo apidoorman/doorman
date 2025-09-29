@@ -33,6 +33,9 @@ class CreateApiModel(BaseModel):
 
     # Public access
     api_public: Optional[bool] = Field(False, description="If true, this API can be called without authentication or subscription")
+
+    # Auth requirement (non-public)
+    api_auth_required: Optional[bool] = Field(True, description="If true (default), JWT auth is required for this API when not public. If false, requests may be unauthenticated but must meet other checks as configured.")
     
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
     api_path: Optional[str] = Field(None, description="Unique path for the API, auto-generated", example=None)
