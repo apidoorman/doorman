@@ -351,7 +351,7 @@ const ApiDetailPage = () => {
       setPubCredsConfirmOpen(true)
       return
     }
-    if (field === 'api_credits_enabled' && value === true && (currentPublic || (field === 'api_public' && value === true))) {
+    if (field === 'api_credits_enabled' && value === true && currentPublic) {
       setPendingPubCredsField({ field: 'api_credits_enabled', value: true })
       setPubCredsConfirmOpen(true)
       return
