@@ -28,13 +28,23 @@ class CorsCheckRequest(BaseModel):
 
 def _compute_cors_config() -> Dict[str, Any]:
     origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+    # Treat empty env values as unset to use sane defaults
+    if not (origins_env or "").strip():
+        origins_env = "http://localhost:3000"
     origins = [o.strip() for o in origins_env.split(",") if o.strip()]
     credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
     methods_env = os.getenv("ALLOW_METHODS", "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD")
+    if not (methods_env or "").strip():
+        methods_env = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
     methods = [m.strip().upper() for m in methods_env.split(",") if m.strip()]
+    if any(m == "*" for m in methods):
+        methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
     if "OPTIONS" not in methods:
         methods.append("OPTIONS")
-    raw_headers = [h.strip() for h in os.getenv("ALLOW_HEADERS", "*").split(",") if h.strip()]
+    headers_env = os.getenv("ALLOW_HEADERS", "*")
+    if not (headers_env or "").strip():
+        headers_env = "*"
+    raw_headers = [h.strip() for h in headers_env.split(",") if h.strip()]
     # Mirror doorman.py behavior: avoid wildcard for credentialed requests
     if any(h == "*" for h in raw_headers):
         headers = ["Accept", "Content-Type", "X-CSRF-Token", "Authorization"]
@@ -168,4 +178,3 @@ async def cors_check(request: Request, body: CorsCheckRequest):
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-
