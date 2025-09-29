@@ -774,7 +774,7 @@ const ApiDetailPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
@@ -794,7 +794,7 @@ const ApiDetailPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auth Required</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auth Required <InfoTooltip text="When enabled (default), requests must be authenticated and pass subscription/group checks. Disable to allow unauthenticated access (not public)." /></label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
@@ -839,7 +839,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credit Group
-                    <InfoTooltip text="Configured credit group name used to deduct and inject keys." />
+                    <InfoTooltip text="Credit group used to deduct credits and inject the API key header. Per-user keys apply only when Auth Required is enabled; public APIs skip deductions." />
                   </label>
                     {isEditing ? (
                       <input
@@ -858,7 +858,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Authorization Field Swap
-                    <InfoTooltip text="Map Authorization to a different header (e.g., X-Api-Key)." />
+                    <InfoTooltip text="Map Authorization to a different header expected by your upstream (e.g., X-Api-Key)." />
                   </label>
                   {isEditing ? (
                     <input
@@ -876,7 +876,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Use Protobuf
-                    <InfoTooltip text="Frontend preference; enables proto-aware UI only." />
+                    <InfoTooltip text="Frontend preference; enables proto-aware UI only. Does not change gateway behavior." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">

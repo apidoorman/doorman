@@ -176,7 +176,7 @@ const AddApiPage = () => {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
                 <div className="flex items-center">
                   <input
                     id="api_public"
@@ -302,9 +302,7 @@ const AddApiPage = () => {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Auth Required
-                </label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auth Required <InfoTooltip text="When enabled (default), requests must be authenticated and pass subscription/group checks. Disable to allow unauthenticated access (not public)." /></label>
                 <div className="flex items-center">
                   <input
                     id="api_auth_required"
@@ -325,7 +323,7 @@ const AddApiPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Credits Enabled
-                  <InfoTooltip text="When enabled, each request to this API deducts credits from the caller's assigned credit group before forwarding upstream." />
+                  <InfoTooltip text="When enabled, each request to this API deducts credits before proxying. Note: Public APIs skip credit deductions and per-user keys." />
                 </label>
                 <div className="flex items-center">
                   <input
@@ -346,7 +344,7 @@ const AddApiPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credit Group
-                    <InfoTooltip text="Name of a configured credit group (e.g., ai-basic). Determines where to deduct and which API key header to inject." />
+                    <InfoTooltip text="Configured credit group (e.g., ai-basic). Determines the API key header injected. Per-user keys apply only when Auth Required is enabled." />
                   </label>
                   <input
                     type="text"
@@ -412,7 +410,7 @@ const AddApiPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Roles
-                  <InfoTooltip text="Only users with any of these platform roles can access this API." />
+                  <InfoTooltip text="Only enforced when Auth Required is enabled. Users must have any of these platform roles." />
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -472,7 +470,7 @@ const AddApiPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Groups
-                  <InfoTooltip text="User must belong to any of these groups to access this API." />
+                  <InfoTooltip text="Only enforced when Auth Required is enabled. User must belong to any listed group (e.g., ALL)." />
                 </label>
                 <div className="flex gap-2">
                   <input
