@@ -180,16 +180,18 @@ async def rest_preflight(request: Request, path: str):
         api_key = _cache.get_cache('api_id_cache', name_ver)
         api = await _api_util.get_api(api_key, name_ver)
         if not api:
-            # No API found; reply with minimal OK
-            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+            from fastapi.responses import Response as StarletteResponse
+            return StarletteResponse(status_code=204, headers={"request_id": request_id})
         origin = request.headers.get('origin') or request.headers.get('Origin')
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
         headers = {**(headers or {}), "request_id": request_id}
-        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers=headers)
     except Exception:
-        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers={"request_id": request_id})
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -261,15 +263,18 @@ async def soap_preflight(request: Request, path: str):
         api_key = _cache.get_cache('api_id_cache', name_ver)
         api = await _api_util.get_api(api_key, name_ver)
         if not api:
-            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+            from fastapi.responses import Response as StarletteResponse
+            return StarletteResponse(status_code=204, headers={"request_id": request_id})
         origin = request.headers.get('origin') or request.headers.get('Origin')
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
         headers = {**(headers or {}), "request_id": request_id}
-        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers=headers)
     except Exception:
-        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers={"request_id": request_id})
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -356,15 +361,18 @@ async def graphql_preflight(request: Request, path: str):
         api_key = _cache.get_cache('api_id_cache', api_path)
         api = await _api_util.get_api(api_key, f"{api_name}/{api_version}")
         if not api:
-            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+            from fastapi.responses import Response as StarletteResponse
+            return StarletteResponse(status_code=204, headers={"request_id": request_id})
         origin = request.headers.get('origin') or request.headers.get('Origin')
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
         headers = {**(headers or {}), "request_id": request_id}
-        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers=headers)
     except Exception:
-        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers={"request_id": request_id})
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

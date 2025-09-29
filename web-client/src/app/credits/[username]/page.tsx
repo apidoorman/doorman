@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
+import InfoTooltip from '@/components/InfoTooltip'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { SERVER_URL } from '@/utils/config'
 import { getJson, postJson } from '@/utils/api'
@@ -142,7 +143,7 @@ export default function UserCreditsDetailPage() {
                 <div className="card-header"><h3 className="card-title">Add Credit Group</h3></div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Group</label>
+                    <label className="block text-sm font-medium mb-1">Group <InfoTooltip text="Credit group to assign to this user" /></label>
                     <select className="input" value={addGroupName} onChange={e => { setAddGroupName(e.target.value); setAddGroupTier('') }}>
                       <option value="">Select group</option>
                       {availableGroupsToAdd.map(g => (
@@ -151,7 +152,7 @@ export default function UserCreditsDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Tier</label>
+                    <label className="block text-sm font-medium mb-1">Tier <InfoTooltip text="Tier within the selected group determining total credits" /></label>
                     <select className="input" value={addGroupTier} onChange={e => setAddGroupTier(e.target.value)} disabled={!addGroupName}>
                       <option value="">{addGroupName ? 'Select tier' : 'Select group first'}</option>
                       {addGroupName && Object.keys(defs[addGroupName] || {}).map(t => (
@@ -160,12 +161,12 @@ export default function UserCreditsDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Available Credits</label>
+                    <label className="block text-sm font-medium mb-1">Available Credits <InfoTooltip text="Initial available credits; must be between 0 and the tier total" /></label>
                     <input className="input" type="number" value={addGroupCredits as any}
                            onChange={e => setAddGroupCredits(e.target.value === '' ? '' : Number(e.target.value))} placeholder="auto" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Tier Total</label>
+                    <label className="block text-sm font-medium mb-1">Tier Total <InfoTooltip text="Total credits configured for the chosen tier" /></label>
                     <div className="flex items-center gap-2">
                       <div className="text-sm text-gray-700 dark:text-gray-300">
                         {addGroupName && (defs[addGroupName]?.[addGroupTier || Object.keys(defs[addGroupName]||{})[0]]?.credits || 0)}
@@ -184,7 +185,7 @@ export default function UserCreditsDetailPage() {
                     })()}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Reset Date</label>
+                    <label className="block text-sm font-medium mb-1">Reset Date <InfoTooltip text="Optional date when the user's credits reset for this group" /></label>
                     <input className="input" type="date" value={addResetDate} onChange={e => setAddResetDate(e.target.value)} />
                   </div>
                   <div>
