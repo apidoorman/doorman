@@ -49,6 +49,54 @@ class GatewayService:
                 error_message=message
             ).dict()
 
+    @staticmethod
+    def _compute_api_cors_headers(api: dict, origin: str | None, req_method: str | None, req_headers: str | None):
+        try:
+            origin = (origin or '').strip()
+            req_method = (req_method or '').strip().upper()
+            requested_headers = [h.strip() for h in (req_headers or '').split(',') if h.strip()]
+            allow_origins = api.get('api_cors_allow_origins') or ['*']
+            allow_methods = [m.strip().upper() for m in (api.get('api_cors_allow_methods') or ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']) if m]
+            if 'OPTIONS' not in allow_methods:
+                allow_methods.append('OPTIONS')
+            allow_headers = api.get('api_cors_allow_headers') or ['*']
+            allow_credentials = bool(api.get('api_cors_allow_credentials'))
+            expose_headers = api.get('api_cors_expose_headers') or []
+
+            # Origin allowed?
+            origin_allowed = False
+            if '*' in allow_origins:
+                origin_allowed = True
+            elif origin and origin in allow_origins:
+                origin_allowed = True
+
+            # Requested method allowed (preflight case)
+            method_allowed = True if not req_method else (req_method in allow_methods)
+            # Requested headers allowed (treat '*' as all)
+            if any(h == '*' for h in allow_headers):
+                headers_allowed = True
+            else:
+                allowed_lower = {h.lower() for h in allow_headers}
+                headers_allowed = all(h.lower() in allowed_lower for h in requested_headers)
+
+            preflight_ok = origin_allowed and method_allowed and headers_allowed
+            # Build headers
+            cors_headers = {}
+            if origin_allowed:
+                cors_headers['Access-Control-Allow-Origin'] = origin
+                cors_headers['Vary'] = 'Origin'
+            if allow_credentials:
+                cors_headers['Access-Control-Allow-Credentials'] = 'true'
+            if req_method:
+                cors_headers['Access-Control-Allow-Methods'] = ', '.join(allow_methods)
+            if req_headers is not None:
+                cors_headers['Access-Control-Allow-Headers'] = ', '.join(allow_headers)
+            if expose_headers:
+                cors_headers['Access-Control-Expose-Headers'] = ', '.join(expose_headers)
+            return preflight_ok, cors_headers
+        except Exception:
+            return False, {}
+
     def parse_response(response):
         content_type = response.headers.get("Content-Type", "")
         if "application/json" in content_type:
@@ -173,6 +221,13 @@ class GatewayService:
             for key, value in http_response.headers.items():
                 if key.lower() in allowed_headers:
                     response_headers[key] = value
+            # Inject per-API CORS headers for actual response
+            try:
+                origin = request.headers.get('origin') or request.headers.get('Origin')
+                _, cors_headers = GatewayService._compute_api_cors_headers(api, origin, None, None)
+                response_headers.update(cors_headers)
+            except Exception:
+                pass
             return ResponseModel(
                 status_code=http_response.status_code,
                 response_headers=response_headers,
@@ -272,6 +327,13 @@ class GatewayService:
             for key, value in http_response.headers.items():
                 if key.lower() in allowed_headers:
                     response_headers[key] = value
+            # Inject per-API CORS headers for actual response
+            try:
+                origin = request.headers.get('origin') or request.headers.get('Origin')
+                _, cors_headers = GatewayService._compute_api_cors_headers(api, origin, None, None)
+                response_headers.update(cors_headers)
+            except Exception:
+                pass
             return ResponseModel(
                 status_code=http_response.status_code,
                 response_headers=response_headers,
@@ -361,6 +423,13 @@ class GatewayService:
                     for key, value in headers.items():
                         if key.lower() in allowed_headers:
                             response_headers[key] = value
+                    # Inject per-API CORS headers for actual response
+                    try:
+                        origin = request.headers.get('origin') or request.headers.get('Origin')
+                        _, cors_headers = GatewayService._compute_api_cors_headers(api, origin, None, None)
+                        response_headers.update(cors_headers)
+                    except Exception:
+                        pass
                     return ResponseModel(
                         status_code=200,
                         response_headers=response_headers,

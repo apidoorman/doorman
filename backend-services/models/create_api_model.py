@@ -23,6 +23,13 @@ class CreateApiModel(BaseModel):
     api_credits_enabled: Optional[bool] = Field(False, description="Enable credit-based authentication for the API", example=True)
     api_credit_group: Optional[str] = Field(None, description="API credit group for the API credits", example="ai-group-1")
     active: Optional[bool] = Field(True, description="Whether the API is active (enabled)", example=True)
+
+    # CORS configuration (per-API)
+    api_cors_allow_origins: Optional[List[str]] = Field(None, description="Allowed origins for CORS (e.g., ['http://localhost:3000']). Use ['*'] to allow all.")
+    api_cors_allow_methods: Optional[List[str]] = Field(None, description="Allowed methods for CORS preflight (e.g., ['GET','POST','PUT','DELETE','OPTIONS'])")
+    api_cors_allow_headers: Optional[List[str]] = Field(None, description="Allowed request headers for CORS preflight (e.g., ['Content-Type','Authorization'])")
+    api_cors_allow_credentials: Optional[bool] = Field(False, description="Whether to include Access-Control-Allow-Credentials=true in responses")
+    api_cors_expose_headers: Optional[List[str]] = Field(None, description="Response headers to expose to the browser via Access-Control-Expose-Headers")
     
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
     api_path: Optional[str] = Field(None, description="Unique path for the API, auto-generated", example=None)
