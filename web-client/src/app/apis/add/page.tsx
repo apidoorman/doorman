@@ -8,6 +8,7 @@ import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
+import ConfirmModal from '@/components/ConfirmModal'
 
 const AddApiPage = () => {
   const router = useRouter()
@@ -32,6 +33,8 @@ const AddApiPage = () => {
     // kept for future use; backend ignores unknown fields
     validation_enabled: false
   })
+  const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
+  const [pendingPublicValue, setPendingPublicValue] = useState<boolean | null>(null)
   const [newServer, setNewServer] = useState('')
   const [newRole, setNewRole] = useState('')
   const [newGroup, setNewGroup] = useState('')
@@ -68,6 +71,14 @@ const AddApiPage = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
+    if (name === 'api_public' && type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked
+      if (checked) {
+        setPendingPublicValue(true)
+        setPublicConfirmOpen(true)
+        return
+      }
+    }
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : (name === 'api_allowed_retry_count' ? Number(value || 0) : value)
@@ -163,6 +174,24 @@ const AddApiPage = () => {
               <FormHelp docHref="/docs/using-fields.html#apis">Fill API name/version; these form the base path clients call.</FormHelp>
             </div>
             <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API</label>
+                <div className="flex items-center">
+                  <input
+                    id="api_public"
+                    name="api_public"
+                    type="checkbox"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    checked={(formData as any).api_public || false}
+                    onChange={handleChange}
+                    disabled={loading}
+                  />
+                  <label htmlFor="api_public" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Anyone with the URL can call this API
+                  </label>
+                </div>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Active</label>
                 <div className="flex items-center">
@@ -504,6 +533,27 @@ const AddApiPage = () => {
           </div>
         </form>
       </div>
+      {/* Public API confirmation */}
+      <ConfirmModal
+        open={publicConfirmOpen}
+        title="Make API Public?"
+        message={<div>
+          <p className="mb-2">This API will be public. Anyone with the URL can call it.</p>
+          <p className="text-amber-600">Authentication, subscriptions, and group checks will be skipped.</p>
+        </div>}
+        confirmLabel="Make Public"
+        onConfirm={() => {
+          setPublicConfirmOpen(false)
+          if (pendingPublicValue) {
+            setFormData(prev => ({ ...prev, api_public: true as any }))
+          }
+          setPendingPublicValue(null)
+        }}
+        onCancel={() => {
+          setPublicConfirmOpen(false)
+          setPendingPublicValue(null)
+        }}
+      />
     </Layout>
   )
 }

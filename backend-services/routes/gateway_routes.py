@@ -116,11 +116,20 @@ async def gateway(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        await subscription_required(request)
-        await group_required(request)
-        await limit_and_throttle(request)
-        payload = await auth_required(request)
-        username = payload.get("sub")
+        # Identify API, check if public to bypass auth/subscription/group/limits
+        parts = [p for p in (path or '').split('/') if p]
+        api_public = False
+        if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+            api_key = doorman_cache.get_cache('api_id_cache', f"/{parts[0]}/{parts[1]}")
+            api = await api_util.get_api(api_key, f"/{parts[0]}/{parts[1]}")
+            api_public = bool(api.get('api_public')) if api else False
+        username = None
+        if not api_public:
+            await subscription_required(request)
+            await group_required(request)
+            await limit_and_throttle(request)
+            payload = await auth_required(request)
+            username = payload.get("sub")
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
@@ -185,11 +194,19 @@ async def soap_gateway(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        await subscription_required(request)
-        await group_required(request)
-        await limit_and_throttle(request)
-        payload = await auth_required(request)
-        username = payload.get("sub")
+        parts = [p for p in (path or '').split('/') if p]
+        api_public = False
+        if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+            api_key = doorman_cache.get_cache('api_id_cache', f"/{parts[0]}/{parts[1]}")
+            api = await api_util.get_api(api_key, f"/{parts[0]}/{parts[1]}")
+            api_public = bool(api.get('api_public')) if api else False
+        username = None
+        if not api_public:
+            await subscription_required(request)
+            await group_required(request)
+            await limit_and_throttle(request)
+            payload = await auth_required(request)
+            username = payload.get("sub")
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
@@ -254,11 +271,18 @@ async def graphql_gateway(request: Request, path: str):
     try:
         if not request.headers.get('X-API-Version'):
             raise HTTPException(status_code=400, detail="X-API-Version header is required")
-        await subscription_required(request)
-        await group_required(request)
-        await limit_and_throttle(request)
-        payload = await auth_required(request)
-        username = payload.get("sub")
+        # Determine public visibility for this API
+        api_name = re.sub(r"^.*/", "",request.url.path)
+        api_key = doorman_cache.get_cache('api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        api = await api_util.get_api(api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        api_public = bool(api.get('api_public')) if api else False
+        username = None
+        if not api_public:
+            await subscription_required(request)
+            await group_required(request)
+            await limit_and_throttle(request)
+            payload = await auth_required(request)
+            username = payload.get("sub")
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")

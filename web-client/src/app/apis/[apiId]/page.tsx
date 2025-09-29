@@ -51,6 +51,7 @@ interface UpdateApiData {
   api_allowed_headers?: string[]
   api_credits_enabled?: boolean
   api_credit_group?: string
+  api_public?: boolean
 }
 
 const ApiDetailPage = () => {
@@ -72,6 +73,8 @@ const ApiDetailPage = () => {
   const [epNewServer, setEpNewServer] = useState<Record<string, string>>({})
   const [epSaving, setEpSaving] = useState<Record<string, boolean>>({})
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
+  const [pendingPublicValue, setPendingPublicValue] = useState<boolean | null>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const toast = useToast()
@@ -166,7 +169,8 @@ const ApiDetailPage = () => {
           api_authorization_field_swap: parsedApi.api_authorization_field_swap,
           api_allowed_headers: [...(parsedApi.api_allowed_headers || [])],
           api_credits_enabled: parsedApi.api_credits_enabled,
-          api_credit_group: parsedApi.api_credit_group
+          api_credit_group: parsedApi.api_credit_group,
+          api_public: (parsedApi as any).api_public
         })
         setLoading(false)
       } catch (err) {
@@ -198,7 +202,8 @@ const ApiDetailPage = () => {
               api_authorization_field_swap: found.api_authorization_field_swap,
               api_allowed_headers: [...(found.api_allowed_headers || [])],
               api_credits_enabled: found.api_credits_enabled,
-              api_credit_group: found.api_credit_group
+              api_credit_group: found.api_credit_group,
+              api_public: (found as any).api_public
             })
             setError(null)
           } else {
@@ -331,6 +336,11 @@ const ApiDetailPage = () => {
   }
 
   const handleInputChange = (field: keyof UpdateApiData, value: any) => {
+    if (field === 'api_public' && value === true) {
+      setPendingPublicValue(true)
+      setPublicConfirmOpen(true)
+      return
+    }
     setEditData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -761,6 +771,26 @@ const ApiDetailPage = () => {
                     </span>
                   )}
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API</label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!(editData as any).api_public}
+                        onChange={(e) => handleInputChange('api_public' as any, e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Anyone with the URL can call this API</label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${((api as any).api_public ?? false) ? 'badge-warning' : 'badge-secondary'}`}>
+                      {((api as any).api_public ?? false) ? 'Public' : 'Private'}
+                    </span>
+                  )}
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
+                </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credits Enabled
@@ -1178,6 +1208,28 @@ const ApiDetailPage = () => {
           inputPlaceholder="Enter API name to confirm"
         />
       </div>
+
+      {/* Public confirmation modal */}
+      <ConfirmModal
+        open={publicConfirmOpen}
+        title="Make API Public?"
+        message={<div>
+          <p className="mb-2">This API will be public. Anyone with the URL can call it.</p>
+          <p className="text-amber-600">Authentication, subscriptions, and group checks will be skipped.</p>
+        </div>}
+        confirmLabel="Make Public"
+        onConfirm={() => {
+          setPublicConfirmOpen(false)
+          if (pendingPublicValue) {
+            setEditData(prev => ({ ...prev, api_public: true }))
+          }
+          setPendingPublicValue(null)
+        }}
+        onCancel={() => {
+          setPublicConfirmOpen(false)
+          setPendingPublicValue(null)
+        }}
+      />
     </Layout>
   )
 }

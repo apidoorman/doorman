@@ -30,6 +30,9 @@ class CreateApiModel(BaseModel):
     api_cors_allow_headers: Optional[List[str]] = Field(None, description="Allowed request headers for CORS preflight (e.g., ['Content-Type','Authorization'])")
     api_cors_allow_credentials: Optional[bool] = Field(False, description="Whether to include Access-Control-Allow-Credentials=true in responses")
     api_cors_expose_headers: Optional[List[str]] = Field(None, description="Response headers to expose to the browser via Access-Control-Expose-Headers")
+
+    # Public access
+    api_public: Optional[bool] = Field(False, description="If true, this API can be called without authentication or subscription")
     
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
     api_path: Optional[str] = Field(None, description="Unique path for the API, auto-generated", example=None)
