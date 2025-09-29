@@ -18,11 +18,10 @@ export async function fetchJson<T = any>(url: string, init: RequestInit = {}): P
     headers
   })
   const data = await resp.json().catch(() => ({}))
-  const unwrapped = (data && typeof data === 'object' && 'response' in data) ? data.response : data
+  const unwrapped = (data && typeof data === 'object' && 'response' in data) ? (data as any).response : data
   if (!resp.ok) {
     const msg = (unwrapped && (unwrapped.error_message || unwrapped.message)) || resp.statusText
     throw new Error(msg)
   }
   return unwrapped as T
 }
-

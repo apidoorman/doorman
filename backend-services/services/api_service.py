@@ -1,5 +1,5 @@
 """
-The contents of this file are property of doorman.so
+The contents of this file are property of Doorman Dev, LLC
 Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
@@ -24,6 +24,16 @@ class ApiService:
         Onboard an API to the platform.
         """
         logger.info(request_id + " | Creating API: " + data.api_name + " " + data.api_version)
+        # Prevent unsafe combination: public API with credits enabled
+        try:
+            if getattr(data, 'api_public', False) and getattr(data, 'api_credits_enabled', False):
+                return ResponseModel(
+                    status_code=400,
+                    error_code='API013',
+                    error_message='Public API cannot have credits enabled'
+                ).dict()
+        except Exception:
+            pass
         cache_key = f"{data.api_name}/{data.api_version}"
         existing = doorman_cache.get_cache('api_cache', cache_key)
         if not existing:
@@ -100,6 +110,18 @@ class ApiService:
             doorman_cache.delete_cache('api_cache', doorman_cache.get_cache('api_id_cache', f"/{api_name}/{api_version}"))
             doorman_cache.delete_cache('api_id_cache', f"/{api_name}/{api_version}")
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
+        # Validate unsafe combination on the desired state (existing + updates)
+        try:
+            desired_public = bool(not_null_data.get('api_public', api.get('api_public')))
+            desired_credits = bool(not_null_data.get('api_credits_enabled', api.get('api_credits_enabled')))
+            if desired_public and desired_credits:
+                return ResponseModel(
+                    status_code=400,
+                    error_code='API013',
+                    error_message='Public API cannot have credits enabled'
+                ).dict()
+        except Exception:
+            pass
         if not_null_data:
             update_result = api_collection.update_one(
                 {'api_name': api_name, 'api_version': api_version},

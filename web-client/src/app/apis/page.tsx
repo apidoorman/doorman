@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import InfoTooltip from '@/components/InfoTooltip'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { SERVER_URL } from '@/utils/config'
@@ -270,8 +271,20 @@ const APIsPage = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                           </div>
-                          <div>
+                          <div className="flex items-center gap-2">
                             <p className="font-medium text-gray-900 dark:text-white">{api.api_name}</p>
+                            {((api as any).api_public ?? false) && (
+                              <span className="badge badge-warning flex items-center gap-1" title="This API is public">
+                                Public
+                                <InfoTooltip text="Anyone can call this API; auth, subscription, and group checks are skipped." />
+                              </span>
+                            )}
+                            {!((api as any).api_public ?? false) && ((api as any).api_auth_required === false) && (
+                              <span className="badge badge-secondary flex items-center gap-1" title="No authentication required">
+                                No Auth
+                                <InfoTooltip text="Unauthenticated access is allowed. Subscription and group checks do not apply without auth." />
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>

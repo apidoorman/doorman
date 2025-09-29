@@ -8,6 +8,7 @@ import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
+import ConfirmModal from '@/components/ConfirmModal'
 
 const AddApiPage = () => {
   const router = useRouter()
@@ -27,11 +28,16 @@ const AddApiPage = () => {
     api_credits_enabled: false,
     api_credit_group: '',
     active: true,
+    api_auth_required: true,
     // Frontend-only preference; stored in localStorage per API
     use_protobuf: false,
     // kept for future use; backend ignores unknown fields
     validation_enabled: false
   })
+  const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
+  const [pendingPublicValue, setPendingPublicValue] = useState<boolean | null>(null)
+  const [pubCredsConfirmOpen, setPubCredsConfirmOpen] = useState(false)
+  const [pendingPubCredsField, setPendingPubCredsField] = useState<null | { field: 'api_public' | 'api_credits_enabled'; value: boolean }>(null)
   const [newServer, setNewServer] = useState('')
   const [newRole, setNewRole] = useState('')
   const [newGroup, setNewGroup] = useState('')
@@ -68,6 +74,25 @@ const AddApiPage = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
+    if (name === 'api_public' && type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked
+      if (checked) {
+        setPendingPublicValue(true)
+        setPublicConfirmOpen(true)
+        return
+      }
+    }
+    // Guard: Public + Credits enabled risk confirmation
+    if (name === 'api_public' && (e.target as HTMLInputElement).checked && (formData as any).api_credits_enabled) {
+      setPendingPubCredsField({ field: 'api_public', value: true })
+      setPubCredsConfirmOpen(true)
+      return
+    }
+    if (name === 'api_credits_enabled' && (e.target as HTMLInputElement).checked && ((formData as any).api_public || pendingPublicValue)) {
+      setPendingPubCredsField({ field: 'api_credits_enabled', value: true })
+      setPubCredsConfirmOpen(true)
+      return
+    }
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : (name === 'api_allowed_retry_count' ? Number(value || 0) : value)
@@ -163,6 +188,32 @@ const AddApiPage = () => {
               <FormHelp docHref="/docs/using-fields.html#apis">Fill API name/version; these form the base path clients call.</FormHelp>
             </div>
             <div className="p-6 space-y-4">
+              {((formData as any).api_public && (formData as any).api_credits_enabled) && (
+                <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                  Public + Credits: Anyone can call this API and the group API key will be injected. Per-user deductions/keys are skipped.
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
+                <div className="flex items-center">
+                  <input
+                    id="api_public"
+                    name="api_public"
+                    type="checkbox"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    checked={(formData as any).api_public || false}
+                    onChange={handleChange}
+                    disabled={loading || ((formData as any).api_credits_enabled === true)}
+                  />
+                  <label htmlFor="api_public" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Anyone with the URL can call this API
+                  </label>
+                </div>
+                {((formData as any).api_credits_enabled === true) && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable Credits to change Public status.</p>
+                )}
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Active</label>
                 <div className="flex items-center">
@@ -271,11 +322,29 @@ const AddApiPage = () => {
               <FormHelp docHref="/docs/using-fields.html#api-config">Set credits, auth header mapping, and validations.</FormHelp>
             </div>
             <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auth Required <InfoTooltip text="When enabled (default), requests must be authenticated and pass subscription/group checks. Disable to allow unauthenticated access (not public)." /></label>
+                <div className="flex items-center">
+                  <input
+                    id="api_auth_required"
+                    name="api_auth_required"
+                    type="checkbox"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    checked={(formData as any).api_auth_required}
+                    onChange={handleChange}
+                    disabled={loading}
+                  />
+                  <label htmlFor="api_auth_required" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Require platform auth (JWT) for this API
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable to accept unauthenticated requests. Not public — but subscription/group checks are skipped without auth.</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Credits Enabled
-                  <InfoTooltip text="When enabled, each request to this API deducts credits from the caller's assigned credit group before forwarding upstream." />
+                  <InfoTooltip text="When enabled, each request to this API deducts credits before proxying. Note: Public APIs skip credit deductions and per-user keys." />
                 </label>
                 <div className="flex items-center">
                   <input
@@ -285,18 +354,21 @@ const AddApiPage = () => {
                     className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                     checked={formData.api_credits_enabled}
                     onChange={handleChange}
-                    disabled={loading}
+                    disabled={loading || ((formData as any).api_public === true)}
                   />
                   <label htmlFor="api_credits_enabled" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
                     Enable API credits
                   </label>
                 </div>
+                {((formData as any).api_public === true) && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable Public to enable Credits.</p>
+                )}
               </div>
               {formData.api_credits_enabled && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credit Group
-                    <InfoTooltip text="Name of a configured credit group (e.g., ai-basic). Determines where to deduct and which API key header to inject." />
+                    <InfoTooltip text="Configured credit group (e.g., ai-basic). Determines the API key header injected. Per-user keys apply only when Auth Required is enabled." />
                   </label>
                   <input
                     type="text"
@@ -362,7 +434,7 @@ const AddApiPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Roles
-                  <InfoTooltip text="Only users with any of these platform roles can access this API." />
+                  <InfoTooltip text="Only enforced when Auth Required is enabled. Users must have any of these platform roles." />
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -422,7 +494,7 @@ const AddApiPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Groups
-                  <InfoTooltip text="User must belong to any of these groups to access this API." />
+                  <InfoTooltip text="Only enforced when Auth Required is enabled. User must belong to any listed group (e.g., ALL)." />
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -504,6 +576,49 @@ const AddApiPage = () => {
           </div>
         </form>
       </div>
+      {/* Public API confirmation */}
+      <ConfirmModal
+        open={publicConfirmOpen}
+        title="Make API Public?"
+        message={<div>
+          <p className="mb-2">This API will be public. Anyone with the URL can call it.</p>
+          <p className="text-amber-600">Authentication, subscriptions, and group checks will be skipped.</p>
+        </div>}
+        confirmLabel="Make Public"
+        onConfirm={() => {
+          setPublicConfirmOpen(false)
+          if (pendingPublicValue) {
+            setFormData(prev => ({ ...prev, api_public: true as any }))
+          }
+          setPendingPublicValue(null)
+        }}
+        onCancel={() => {
+          setPublicConfirmOpen(false)
+          setPendingPublicValue(null)
+        }}
+      />
+
+      {/* Public + Credits confirmation */}
+      <ConfirmModal
+        open={pubCredsConfirmOpen}
+        title="Public API with Credits?"
+        message={<div>
+          <p className="mb-2">Enabling Credits on a Public API injects the group API key for anyone calling this API.</p>
+          <p className="text-amber-600">User-level deductions/keys are skipped for public/no-auth calls.</p>
+        </div>}
+        confirmLabel="Proceed"
+        onConfirm={() => {
+          setPubCredsConfirmOpen(false)
+          if (pendingPubCredsField) {
+            setFormData(prev => ({ ...prev, [pendingPubCredsField.field]: pendingPubCredsField.value as any }))
+          }
+          setPendingPubCredsField(null)
+        }}
+        onCancel={() => {
+          setPubCredsConfirmOpen(false)
+          setPendingPubCredsField(null)
+        }}
+      />
     </Layout>
   )
 }

@@ -32,7 +32,7 @@ jobs:
           HTTPS_ENABLED: 'false'
           STRICT_RESPONSE_ENVELOPE: 'false'
           JWT_SECRET_KEY: test-secret-key-please-change
-          STARTUP_ADMIN_EMAIL: admin@doorman.so
+          STARTUP_ADMIN_EMAIL: admin@doorman.dev
           STARTUP_ADMIN_PASSWORD: password1
           MEM_ENCRYPTION_KEY: unit-test-key-32chars-abcdef123456!!
           ALLOWED_HEADERS: '*'

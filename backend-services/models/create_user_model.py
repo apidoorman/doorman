@@ -1,16 +1,16 @@
 """
-The contents of this file are property of doorman.so
+The contents of this file are property of Doorman Dev, LLC
 Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class CreateUserModel(BaseModel):
 
     username: str = Field(..., min_length=3, max_length=50, description="Username of the user", example="john_doe")
-    email: EmailStr = Field(..., description="Email of the user", example="john@mail.com")
+    email: str = Field(..., min_length=3, max_length=127, description="Email of the user (no strict format validation)", example="john@mail.com")
     password: str = Field(..., min_length=16, max_length=50, description="Password of the user", example="SecurePassword@123")
     role: str = Field(..., min_length=2, max_length=50, description="Role of the user", example="admin")
     groups: List[str] = Field(default_factory=list, description="List of groups the user belongs to", example=["client-1-group"])

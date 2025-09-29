@@ -144,6 +144,7 @@ async def cors_check(request: Request, body: CorsCheckRequest):
                 "origin": origin,
                 "method": method,
                 "request_headers": requested_headers,
+                "request_headers_normalized": requested_lower,
                 "with_credentials": with_credentials,
             },
             "preflight": {

@@ -140,8 +140,14 @@ const UserDetailPage = () => {
       }
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`, editData)
 
-      // Refresh from server to get the latest canonical data
-      const refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
+      // Refresh from server to get the latest canonical data (retry once on transient failure)
+      let refreshedUser: any
+      try {
+        refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 200))
+        refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
+      }
       setUser(refreshedUser)
       // Keep sessionStorage in sync for back-navigation
       sessionStorage.setItem('selectedUser', JSON.stringify(refreshedUser))
@@ -447,7 +453,7 @@ const UserDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Status
-                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled." />
+                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled. Does not affect public or no-auth APIs." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
@@ -471,7 +477,7 @@ const UserDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     UI Access
-                    <InfoTooltip text="Controls access to the admin UI; API access is separate." />
+                    <InfoTooltip text="Controls access to the admin UI. API access is controlled per API (Public/Auth Required settings)." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
