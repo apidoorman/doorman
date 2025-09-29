@@ -189,44 +189,80 @@ doorman = FastAPI(
     lifespan=app_lifespan,
 )
 
-origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
-credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
-methods = [m.strip().upper() for m in os.getenv("ALLOW_METHODS", "GET, POST, PUT, DELETE, OPTIONS").split(",") if m.strip()]
-if "OPTIONS" not in methods:
-    methods.append("OPTIONS")
-raw_headers = [h.strip() for h in os.getenv("ALLOW_HEADERS", "*").split(",") if h.strip()]
-# Some browsers reject "*" for Access-Control-Allow-Headers with credentialed requests.
-# Provide a concrete, conservative default set if wildcard is configured.
-if any(h == "*" for h in raw_headers):
-    headers = [
-        "Accept",
-        "Content-Type",
-        "X-CSRF-Token",
-        "Authorization",
-    ]
-else:
-    headers = raw_headers
 https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
 domain = os.getenv("COOKIE_DOMAIN", "localhost")
 
-def _safe_cors(origins, credentials):
-    # If credentials are allowed, avoid wildcard origins for security
-    if credentials and any(o.strip() == "*" for o in origins):
-        # Fallback to localhost only to avoid insecure wildcard+credentials
-        return ["http://localhost", "http://localhost:3000"]
-    # Optional strict mode: disallow wildcard entirely
-    if os.getenv("CORS_STRICT", "false").lower() == "true":
-        safe = [o for o in origins if o.strip() != "*"]
-        return safe if safe else ["http://localhost", "http://localhost:3000"]
-    return origins
+# Replace global CORSMiddleware with path-aware CORS handling:
+# - Platform routes (/platform/*): preserve env-based behavior for now
+# - API gateway routes (/api/*): CORS controlled per-API in gateway routes/services
 
-doorman.add_middleware(
-    CORSMiddleware,
-    allow_origins=_safe_cors(origins, credentials),
-    allow_credentials=credentials,
-    allow_methods=methods,
-    allow_headers=headers,
-)
+def _env_cors_config():
+    origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+    if not (origins_env or "").strip():
+        origins_env = "http://localhost:3000"
+    origins = [o.strip() for o in origins_env.split(",") if o.strip()]
+    credentials = os.getenv("ALLOW_CREDENTIALS", "true").lower() == "true"
+    methods_env = os.getenv("ALLOW_METHODS", "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD")
+    if not (methods_env or "").strip():
+        methods_env = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
+    methods = [m.strip().upper() for m in methods_env.split(",") if m.strip()]
+    if "OPTIONS" not in methods:
+        methods.append("OPTIONS")
+    headers_env = os.getenv("ALLOW_HEADERS", "*")
+    if not (headers_env or "").strip():
+        headers_env = "*"
+    raw_headers = [h.strip() for h in headers_env.split(",") if h.strip()]
+    if any(h == "*" for h in raw_headers):
+        headers = ["Accept", "Content-Type", "X-CSRF-Token", "Authorization"]
+    else:
+        headers = raw_headers
+    def _safe(origins, credentials):
+        if credentials and any(o.strip() == "*" for o in origins):
+            return ["http://localhost", "http://localhost:3000"]
+        if os.getenv("CORS_STRICT", "false").lower() == "true":
+            safe = [o for o in origins if o.strip() != "*"]
+            return safe if safe else ["http://localhost", "http://localhost:3000"]
+        return origins
+    return {
+        'origins': origins,
+        'safe_origins': _safe(origins, credentials),
+        'credentials': credentials,
+        'methods': methods,
+        'headers': headers,
+    }
+
+@doorman.middleware("http")
+async def platform_cors(request: Request, call_next):
+    # Only apply env-based CORS to /platform/* paths to keep behavior/stability
+    resp = None
+    if str(request.url.path).startswith('/platform/'):
+        cfg = _env_cors_config()
+        origin = request.headers.get('origin') or request.headers.get('Origin')
+        origin_allowed = origin in cfg['safe_origins'] or ('*' in cfg['origins'] and not os.getenv("CORS_STRICT", "false").lower() == "true")
+        # Handle preflight for platform
+        if request.method.upper() == 'OPTIONS':
+            from models.response_model import ResponseModel
+            headers = {}
+            if origin and origin_allowed:
+                headers['Access-Control-Allow-Origin'] = origin
+                headers['Vary'] = 'Origin'
+            headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
+            headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
+            headers['Access-Control-Allow-Credentials'] = 'true' if cfg['credentials'] else 'false'
+            headers['request_id'] = request.headers.get('X-Request-ID') or str(uuid.uuid4())
+            from utils.response_util import process_response
+            return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), 'rest')
+        resp = await call_next(request)
+        try:
+            if origin and origin_allowed:
+                resp.headers.setdefault('Access-Control-Allow-Origin', origin)
+                resp.headers.setdefault('Vary', 'Origin')
+            resp.headers.setdefault('Access-Control-Allow-Credentials', 'true' if cfg['credentials'] else 'false')
+        except Exception:
+            pass
+        return resp
+    # Non-platform: let downstream handlers control CORS (per-API)
+    return await call_next(request)
 
 # Body size limit middleware (Content-Length based)
 MAX_BODY_SIZE = int(os.getenv("MAX_BODY_SIZE_BYTES", 1_048_576))  # 1MB default

@@ -148,6 +148,35 @@ async def gateway(request: Request, path: str):
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
+@gateway_router.api_route("/rest/{path:path}", methods=["OPTIONS"],
+    description="REST gateway CORS preflight")
+async def rest_preflight(request: Request, path: str):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        # Identify API from path prefix: <api_name>/vN/<endpoint>
+        import re as _re
+        from utils import api_util as _api_util
+        from utils.doorman_cache_util import doorman_cache as _cache
+        m = _re.match(r"([^/]+/v\d+)", path)
+        name_ver = '/' + m.group(1) if m else ''
+        api_key = _cache.get_cache('api_id_cache', name_ver)
+        api = await _api_util.get_api(api_key, name_ver)
+        if not api:
+            # No API found; reply with minimal OK
+            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        origin = request.headers.get('origin') or request.headers.get('Origin')
+        req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
+        req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
+        ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
+        headers = {**(headers or {}), "request_id": request_id}
+        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+    except Exception:
+        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
 @gateway_router.api_route("/soap/{path:path}", methods=["POST"],
     description="SOAP gateway endpoint",
     response_model=ResponseModel)
@@ -183,6 +212,33 @@ async def soap_gateway(request: Request, path: str):
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict(), "soap")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@gateway_router.api_route("/soap/{path:path}", methods=["OPTIONS"],
+    description="SOAP gateway CORS preflight")
+async def soap_preflight(request: Request, path: str):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        import re as _re
+        from utils import api_util as _api_util
+        from utils.doorman_cache_util import doorman_cache as _cache
+        m = _re.match(r"([^/]+/v\d+)", path)
+        name_ver = '/' + m.group(1) if m else ''
+        api_key = _cache.get_cache('api_id_cache', name_ver)
+        api = await _api_util.get_api(api_key, name_ver)
+        if not api:
+            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        origin = request.headers.get('origin') or request.headers.get('Origin')
+        req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
+        req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
+        ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
+        headers = {**(headers or {}), "request_id": request_id}
+        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+    except Exception:
+        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -240,6 +296,33 @@ async def graphql_gateway(request: Request, path: str):
             error_code="GTW999",
             error_message="An unexpected error occurred"
             ).dict(), "graphql")
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+
+@gateway_router.api_route("/graphql/{path:path}", methods=["OPTIONS"],
+    description="GraphQL gateway CORS preflight")
+async def graphql_preflight(request: Request, path: str):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        from utils import api_util as _api_util
+        from utils.doorman_cache_util import doorman_cache as _cache
+        api_name = path.replace('graphql/', '')
+        api_version = request.headers.get('X-API-Version', 'v1')
+        api_path = f"/{api_name}/{api_version}"
+        api_key = _cache.get_cache('api_id_cache', api_path)
+        api = await _api_util.get_api(api_key, f"{api_name}/{api_version}")
+        if not api:
+            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        origin = request.headers.get('origin') or request.headers.get('Origin')
+        req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
+        req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
+        ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
+        headers = {**(headers or {}), "request_id": request_id}
+        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+    except Exception:
+        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
