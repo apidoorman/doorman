@@ -25,5 +25,12 @@ class UpdateApiModel(BaseModel):
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
     api_path: Optional[str] = Field(None, description="Unqiue path for the API, auto-generated", example=None)
 
+    # CORS configuration (per-API)
+    api_cors_allow_origins: Optional[List[str]] = Field(None, description="Allowed origins for CORS (e.g., ['http://localhost:3000']). Use ['*'] to allow all.")
+    api_cors_allow_methods: Optional[List[str]] = Field(None, description="Allowed methods for CORS preflight (e.g., ['GET','POST','PUT','DELETE','OPTIONS'])")
+    api_cors_allow_headers: Optional[List[str]] = Field(None, description="Allowed request headers for CORS preflight (e.g., ['Content-Type','Authorization'])")
+    api_cors_allow_credentials: Optional[bool] = Field(None, description="Whether to include Access-Control-Allow-Credentials=true in responses")
+    api_cors_expose_headers: Optional[List[str]] = Field(None, description="Response headers to expose to the browser via Access-Control-Expose-Headers")
+
     class Config:
         arbitrary_types_allowed = True
