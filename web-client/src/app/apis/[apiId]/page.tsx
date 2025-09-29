@@ -1128,6 +1128,7 @@ const ApiDetailPage = () => {
                               }}
                             />
                             <span className="text-sm text-gray-600 dark:text-gray-300">Use endpoint servers</span>
+                            <InfoTooltip text="Provide endpoint-specific upstreams. If disabled or empty, the API-level servers are used." />
                           </div>
                         </div>
                         <div className={`mt-3 space-y-2 ${enabled ? '' : 'opacity-60'}`}>
