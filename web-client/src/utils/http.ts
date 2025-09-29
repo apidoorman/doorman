@@ -5,24 +5,37 @@ export function getCookie(name: string): string | null {
 }
 
 export async function fetchJson<T = any>(url: string, init: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...(init.headers as any)
-  }
-  const csrf = getCookie('csrf_token')
-  if (csrf) headers['X-CSRF-Token'] = csrf
+  const attempt = async (): Promise<T> => {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...(init.headers as any)
+    }
+    const csrf = getCookie('csrf_token')
+    if (csrf) headers['X-CSRF-Token'] = csrf
 
-  const resp = await fetch(url, {
-    credentials: 'include',
-    ...init,
-    headers
-  })
-  const data = await resp.json().catch(() => ({}))
-  const unwrapped = (data && typeof data === 'object' && 'response' in data) ? data.response : data
-  if (!resp.ok) {
-    const msg = (unwrapped && (unwrapped.error_message || unwrapped.message)) || resp.statusText
-    throw new Error(msg)
+    const resp = await fetch(url, {
+      credentials: 'include',
+      ...init,
+      headers
+    })
+    const data = await resp.json().catch(() => ({}))
+    const unwrapped = (data && typeof data === 'object' && 'response' in data) ? (data as any).response : data
+    if (!resp.ok) {
+      const msg = (unwrapped && (unwrapped.error_message || unwrapped.message)) || resp.statusText
+      throw new Error(msg)
+    }
+    return unwrapped as T
   }
-  return unwrapped as T
+
+  // Try once; on transient failure for GET, retry quickly once
+  try {
+    return await attempt()
+  } catch (e) {
+    const method = (init.method || 'GET').toString().toUpperCase()
+    if (method === 'GET') {
+      await new Promise(r => setTimeout(r, 200))
+      return await attempt()
+    }
+    throw e
+  }
 }
-

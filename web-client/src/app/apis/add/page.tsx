@@ -28,6 +28,7 @@ const AddApiPage = () => {
     api_credits_enabled: false,
     api_credit_group: '',
     active: true,
+    api_auth_required: true,
     // Frontend-only preference; stored in localStorage per API
     use_protobuf: false,
     // kept for future use; backend ignores unknown fields
@@ -300,6 +301,26 @@ const AddApiPage = () => {
               <FormHelp docHref="/docs/using-fields.html#api-config">Set credits, auth header mapping, and validations.</FormHelp>
             </div>
             <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Auth Required
+                </label>
+                <div className="flex items-center">
+                  <input
+                    id="api_auth_required"
+                    name="api_auth_required"
+                    type="checkbox"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    checked={(formData as any).api_auth_required}
+                    onChange={handleChange}
+                    disabled={loading}
+                  />
+                  <label htmlFor="api_auth_required" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Require platform auth (JWT) for this API
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable to accept unauthenticated requests. Not public — but subscription/group checks are skipped without auth.</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

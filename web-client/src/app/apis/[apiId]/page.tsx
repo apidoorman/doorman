@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { fetchJson, getCookie } from '@/utils/http'
+import { putJson } from '@/utils/api'
 import { useToast } from '@/contexts/ToastContext'
 import { SERVER_URL } from '@/utils/config'
 import InfoTooltip from '@/components/InfoTooltip'
@@ -52,6 +53,8 @@ interface UpdateApiData {
   api_credits_enabled?: boolean
   api_credit_group?: string
   api_public?: boolean
+  api_auth_required?: boolean
+  active?: boolean
 }
 
 const ApiDetailPage = () => {
@@ -170,7 +173,9 @@ const ApiDetailPage = () => {
           api_allowed_headers: [...(parsedApi.api_allowed_headers || [])],
           api_credits_enabled: parsedApi.api_credits_enabled,
           api_credit_group: parsedApi.api_credit_group,
-          api_public: (parsedApi as any).api_public
+          api_public: (parsedApi as any).api_public,
+          api_auth_required: (parsedApi as any).api_auth_required,
+          active: (parsedApi as any).active
         })
         setLoading(false)
       } catch (err) {
@@ -203,7 +208,9 @@ const ApiDetailPage = () => {
               api_allowed_headers: [...(found.api_allowed_headers || [])],
               api_credits_enabled: found.api_credits_enabled,
               api_credit_group: found.api_credit_group,
-              api_public: (found as any).api_public
+              api_public: (found as any).api_public,
+              api_auth_required: (found as any).api_auth_required,
+              active: (found as any).active
             })
             setError(null)
           } else {
@@ -294,28 +301,22 @@ const ApiDetailPage = () => {
       
       const targetName = (api?.['api_name'] as string) || ''
       const targetVersion = (api?.['api_version'] as string) || ''
-      const response = await fetch(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(editData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to update API')
-      }
+      await putJson(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, editData)
 
       // Refresh from server to get the latest canonical data
-      if (!api) throw new Error('API context missing for refresh')
-      const name = (api as any).api_name as string
-      const version = (api as any).api_version as string
-      const refreshedApi = await fetchJson(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`)
-      setApi(refreshedApi)
-      sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
+      try {
+        if (!api) throw new Error('API context missing for refresh')
+        const name = (api as any).api_name as string
+        const version = (api as any).api_version as string
+        const refreshedApi = await fetchJson(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`)
+        setApi(refreshedApi)
+        sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
+      } catch (e) {
+        // Fallback: optimistically merge editData into current API to avoid a confusing error on first save
+        const merged = { ...(api as any), ...(editData as any) }
+        setApi(merged as any)
+        sessionStorage.setItem('selectedApi', JSON.stringify(merged))
+      }
       // Persist current protobuf preference
       try {
         const { setUseProtobuf } = await import('@/utils/proto')
@@ -790,6 +791,26 @@ const ApiDetailPage = () => {
                     </span>
                   )}
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auth Required</label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!(editData as any).api_auth_required}
+                        onChange={(e) => handleInputChange('api_auth_required' as any, e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Require platform auth (JWT) for this API</label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${((api as any).api_auth_required ?? true) ? 'badge-primary' : 'badge-secondary'}`}>
+                      {((api as any).api_auth_required ?? true) ? 'Auth Required' : 'No Auth'}
+                    </span>
+                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">If disabled (and not public), unauthenticated requests are accepted. Subscription/group checks don’t apply without an authenticated user.</p>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
