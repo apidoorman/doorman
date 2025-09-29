@@ -1308,10 +1308,4 @@ const ApiDetailPage = () => {
   )
 }
 
-                  {isEditing && (editData as any).api_credits_enabled && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable Credits to change Public status.</p>
-                  )}
-export default ApiDetailPage 
-                {isEditing && (editData as any).api_public && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable Public to enable Credits.</p>
-                )}
+export default ApiDetailPage
