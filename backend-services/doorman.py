@@ -1,5 +1,5 @@
 """
-The contents of this file are property of doorman.so
+The contents of this file are property of Doorman Dev, LLC
 Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
@@ -241,7 +241,6 @@ async def platform_cors(request: Request, call_next):
         origin_allowed = origin in cfg['safe_origins'] or ('*' in cfg['origins'] and not os.getenv("CORS_STRICT", "false").lower() == "true")
         # Handle preflight for platform
         if request.method.upper() == 'OPTIONS':
-            from models.response_model import ResponseModel
             headers = {}
             if origin and origin_allowed:
                 headers['Access-Control-Allow-Origin'] = origin
@@ -250,8 +249,8 @@ async def platform_cors(request: Request, call_next):
             headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
             headers['Access-Control-Allow-Credentials'] = 'true' if cfg['credentials'] else 'false'
             headers['request_id'] = request.headers.get('X-Request-ID') or str(uuid.uuid4())
-            from utils.response_util import process_response
-            return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), 'rest')
+            from fastapi.responses import Response as StarletteResponse
+            return StarletteResponse(status_code=204, headers=headers)
         resp = await call_next(request)
         try:
             if origin and origin_allowed:

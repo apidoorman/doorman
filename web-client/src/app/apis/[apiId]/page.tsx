@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { fetchJson, getCookie } from '@/utils/http'
+import { putJson } from '@/utils/api'
 import { useToast } from '@/contexts/ToastContext'
 import { SERVER_URL } from '@/utils/config'
 import InfoTooltip from '@/components/InfoTooltip'
@@ -51,6 +52,9 @@ interface UpdateApiData {
   api_allowed_headers?: string[]
   api_credits_enabled?: boolean
   api_credit_group?: string
+  api_public?: boolean
+  api_auth_required?: boolean
+  active?: boolean
 }
 
 const ApiDetailPage = () => {
@@ -72,6 +76,10 @@ const ApiDetailPage = () => {
   const [epNewServer, setEpNewServer] = useState<Record<string, string>>({})
   const [epSaving, setEpSaving] = useState<Record<string, boolean>>({})
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
+  const [pendingPublicValue, setPendingPublicValue] = useState<boolean | null>(null)
+  const [pubCredsConfirmOpen, setPubCredsConfirmOpen] = useState(false)
+  const [pendingPubCredsField, setPendingPubCredsField] = useState<null | { field: 'api_public' | 'api_credits_enabled'; value: boolean }>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const toast = useToast()
@@ -166,7 +174,10 @@ const ApiDetailPage = () => {
           api_authorization_field_swap: parsedApi.api_authorization_field_swap,
           api_allowed_headers: [...(parsedApi.api_allowed_headers || [])],
           api_credits_enabled: parsedApi.api_credits_enabled,
-          api_credit_group: parsedApi.api_credit_group
+          api_credit_group: parsedApi.api_credit_group,
+          api_public: (parsedApi as any).api_public,
+          api_auth_required: (parsedApi as any).api_auth_required,
+          active: (parsedApi as any).active
         })
         setLoading(false)
       } catch (err) {
@@ -198,7 +209,10 @@ const ApiDetailPage = () => {
               api_authorization_field_swap: found.api_authorization_field_swap,
               api_allowed_headers: [...(found.api_allowed_headers || [])],
               api_credits_enabled: found.api_credits_enabled,
-              api_credit_group: found.api_credit_group
+              api_credit_group: found.api_credit_group,
+              api_public: (found as any).api_public,
+              api_auth_required: (found as any).api_auth_required,
+              active: (found as any).active
             })
             setError(null)
           } else {
@@ -289,32 +303,26 @@ const ApiDetailPage = () => {
       
       const targetName = (api?.['api_name'] as string) || ''
       const targetVersion = (api?.['api_version'] as string) || ''
-      const response = await fetch(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(editData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to update API')
-      }
+      await putJson(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, editData)
 
       // Refresh from server to get the latest canonical data
-      if (!api) throw new Error('API context missing for refresh')
-      const name = (api as any).api_name as string
-      const version = (api as any).api_version as string
-      const refreshedApi = await fetchJson(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`)
-      setApi(refreshedApi)
-      sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
-      // Persist current protobuf preference
+      try {
+        if (!api) throw new Error('API context missing for refresh')
+        const name = (api as any).api_name as string
+        const version = (api as any).api_version as string
+        const refreshedApi = await fetchJson(`${SERVER_URL}/platform/api/${encodeURIComponent(name)}/${encodeURIComponent(version)}`)
+        setApi(refreshedApi)
+        sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
+      } catch (e) {
+        // Fallback: optimistically merge editData into current API to avoid a confusing error on first save
+        const merged = { ...(api as any), ...(editData as any) }
+        setApi(merged as any)
+        sessionStorage.setItem('selectedApi', JSON.stringify(merged))
+      }
+      // Persist current protobuf preference (use target name/version)
       try {
         const { setUseProtobuf } = await import('@/utils/proto')
-        setUseProtobuf(refreshedApi.api_name, refreshedApi.api_version, useProtobuf)
+        setUseProtobuf(targetName, targetVersion, useProtobuf)
       } catch {}
       setIsEditing(false)
       setSuccess('API updated successfully!')
@@ -331,6 +339,23 @@ const ApiDetailPage = () => {
   }
 
   const handleInputChange = (field: keyof UpdateApiData, value: any) => {
+    if (field === 'api_public' && value === true) {
+      setPendingPublicValue(true)
+      setPublicConfirmOpen(true)
+      return
+    }
+    const currentPublic = (isEditing ? (editData as any)?.api_public : (api as any)?.api_public) ?? false
+    const currentCredits = (isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false
+    if (field === 'api_public' && value === true && currentCredits) {
+      setPendingPubCredsField({ field: 'api_public', value: true })
+      setPubCredsConfirmOpen(true)
+      return
+    }
+    if (field === 'api_credits_enabled' && value === true && currentPublic) {
+      setPendingPubCredsField({ field: 'api_credits_enabled', value: true })
+      setPubCredsConfirmOpen(true)
+      return
+    }
     setEditData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -647,6 +672,20 @@ const ApiDetailPage = () => {
                 <h3 className="card-title">Basic Information</h3>
               </div>
               <div className="p-6 space-y-4">
+                {(((isEditing ? (editData as any)?.api_public : (api as any)?.api_public) ?? false) && ((isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false)) && (
+                  <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                    Public + Credits: Anyone can call this API and the group API key will be injected. Per-user deductions/keys are skipped.
+                  </div>
+                )}
+                {(
+                  ((isEditing ? (editData as any)?.api_public : (api as any)?.api_public) ?? false) === false &&
+                  ((isEditing ? (editData as any)?.api_auth_required : (api as any)?.api_auth_required) ?? true) === false &&
+                  ((isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false) === true
+                ) && (
+                  <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                    No Auth + Credits: Unauthenticated requests are allowed and the group API key will be injected. Per-user deductions/keys are skipped. Consider enabling Auth Required or disabling Credits.
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     API Name
@@ -761,6 +800,47 @@ const ApiDetailPage = () => {
                     </span>
                   )}
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!(editData as any).api_public}
+                        onChange={(e) => handleInputChange('api_public' as any, e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        disabled={!!(editData as any).api_credits_enabled}
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Anyone with the URL can call this API</label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${((api as any).api_public ?? false) ? 'badge-warning' : 'badge-secondary'}`}>
+                      {((api as any).api_public ?? false) ? 'Public' : 'Private'}
+                    </span>
+                  )}
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auth Required <InfoTooltip text="When enabled (default), requests must be authenticated and pass subscription/group checks. Disable to allow unauthenticated access (not public)." /></label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!(editData as any).api_auth_required}
+                        onChange={(e) => handleInputChange('api_auth_required' as any, e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Require platform auth (JWT) for this API</label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${((api as any).api_auth_required ?? true) ? 'badge-primary' : 'badge-secondary'}`}>
+                      {((api as any).api_auth_required ?? true) ? 'Auth Required' : 'No Auth'}
+                    </span>
+                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">If disabled (and not public), unauthenticated requests are accepted. Subscription/group checks don’t apply without an authenticated user.</p>
+                </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credits Enabled
@@ -772,6 +852,7 @@ const ApiDetailPage = () => {
                         checked={editData.api_credits_enabled || false}
                         onChange={(e) => handleInputChange('api_credits_enabled', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        disabled={!!(editData as any).api_public}
                       />
                       <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
                         Enable API credits
@@ -788,7 +869,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credit Group
-                    <InfoTooltip text="Configured credit group name used to deduct and inject keys." />
+                    <InfoTooltip text="Credit group used to deduct credits and inject the API key header. Per-user keys apply only when Auth Required is enabled; public APIs skip deductions." />
                   </label>
                     {isEditing ? (
                       <input
@@ -807,7 +888,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Authorization Field Swap
-                    <InfoTooltip text="Map Authorization to a different header (e.g., X-Api-Key)." />
+                    <InfoTooltip text="Map Authorization to a different header expected by your upstream (e.g., X-Api-Key)." />
                   </label>
                   {isEditing ? (
                     <input
@@ -825,7 +906,7 @@ const ApiDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Use Protobuf
-                    <InfoTooltip text="Frontend preference; enables proto-aware UI only." />
+                    <InfoTooltip text="Frontend preference; enables proto-aware UI only. Does not change gateway behavior." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
@@ -1077,6 +1158,7 @@ const ApiDetailPage = () => {
                               }}
                             />
                             <span className="text-sm text-gray-600 dark:text-gray-300">Use endpoint servers</span>
+                            <InfoTooltip text="Provide endpoint-specific upstreams. If disabled or empty, the API-level servers are used." />
                           </div>
                         </div>
                         <div className={`mt-3 space-y-2 ${enabled ? '' : 'opacity-60'}`}>
@@ -1178,8 +1260,52 @@ const ApiDetailPage = () => {
           inputPlaceholder="Enter API name to confirm"
         />
       </div>
+
+      {/* Public confirmation modal */}
+      <ConfirmModal
+        open={publicConfirmOpen}
+        title="Make API Public?"
+        message={<div>
+          <p className="mb-2">This API will be public. Anyone with the URL can call it.</p>
+          <p className="text-amber-600">Authentication, subscriptions, and group checks will be skipped.</p>
+        </div>}
+        confirmLabel="Make Public"
+        onConfirm={() => {
+          setPublicConfirmOpen(false)
+          if (pendingPublicValue) {
+            setEditData(prev => ({ ...prev, api_public: true }))
+          }
+          setPendingPublicValue(null)
+        }}
+        onCancel={() => {
+          setPublicConfirmOpen(false)
+          setPendingPublicValue(null)
+        }}
+      />
+
+      {/* Public + Credits confirmation */}
+      <ConfirmModal
+        open={pubCredsConfirmOpen}
+        title="Public API with Credits?"
+        message={<div>
+          <p className="mb-2">Enabling Credits on a Public API injects the group API key for anyone calling this API.</p>
+          <p className="text-amber-600">User-level deductions/keys are skipped for public/no-auth calls.</p>
+        </div>}
+        confirmLabel="Proceed"
+        onConfirm={() => {
+          setPubCredsConfirmOpen(false)
+          if (pendingPubCredsField) {
+            setEditData(prev => ({ ...prev, [pendingPubCredsField.field]: pendingPubCredsField.value as any }))
+          }
+          setPendingPubCredsField(null)
+        }}
+        onCancel={() => {
+          setPubCredsConfirmOpen(false)
+          setPendingPubCredsField(null)
+        }}
+      />
     </Layout>
   )
 }
 
-export default ApiDetailPage 
+export default ApiDetailPage

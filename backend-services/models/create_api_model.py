@@ -1,5 +1,5 @@
 """
-The contents of this file are property of doorman.so
+The contents of this file are property of Doorman Dev, LLC
 Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
@@ -30,6 +30,12 @@ class CreateApiModel(BaseModel):
     api_cors_allow_headers: Optional[List[str]] = Field(None, description="Allowed request headers for CORS preflight (e.g., ['Content-Type','Authorization'])")
     api_cors_allow_credentials: Optional[bool] = Field(False, description="Whether to include Access-Control-Allow-Credentials=true in responses")
     api_cors_expose_headers: Optional[List[str]] = Field(None, description="Response headers to expose to the browser via Access-Control-Expose-Headers")
+
+    # Public access
+    api_public: Optional[bool] = Field(False, description="If true, this API can be called without authentication or subscription")
+
+    # Auth requirement (non-public)
+    api_auth_required: Optional[bool] = Field(True, description="If true (default), JWT auth is required for this API when not public. If false, requests may be unauthenticated but must meet other checks as configured.")
     
     api_id: Optional[str] = Field(None, description="Unique identifier for the API, auto-generated", example=None)
     api_path: Optional[str] = Field(None, description="Unique path for the API, auto-generated", example=None)

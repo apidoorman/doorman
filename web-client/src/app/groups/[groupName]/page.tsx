@@ -105,8 +105,14 @@ const GroupDetailPage = () => {
       
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, editData)
       
-      // Refresh from server to get the latest canonical data
-      const refreshedGroup = await fetchJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
+      // Refresh from server to get the latest canonical data (retry once on transient failure)
+      let refreshedGroup: any
+      try {
+        refreshedGroup = await fetchJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 200))
+        refreshedGroup = await fetchJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
+      }
       setGroup(refreshedGroup)
       setEditData(refreshedGroup)
       // Keep sessionStorage in sync for back-navigation

@@ -13,7 +13,7 @@ async def test_auth_admin_endpoints(authed_client):
     # Re-authenticate to get a token with updated permissions
     relog = await authed_client.post(
         "/platform/authorization",
-        json={"email": "admin@doorman.so", "password": "password1"},
+        json={"email": "admin@doorman.dev", "password": "password1"},
     )
     assert relog.status_code == 200, relog.text
 

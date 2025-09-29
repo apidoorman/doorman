@@ -1,5 +1,5 @@
 """
-The contents of this file are property of doorman.so
+The contents of this file are property of Doorman Dev, LLC
 Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
@@ -116,11 +116,27 @@ async def gateway(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        await subscription_required(request)
-        await group_required(request)
-        await limit_and_throttle(request)
-        payload = await auth_required(request)
-        username = payload.get("sub")
+        # Identify API, check if public or auth_required to decide gates
+        parts = [p for p in (path or '').split('/') if p]
+        api_public = False
+        api_auth_required = True
+        if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+            api_key = doorman_cache.get_cache('api_id_cache', f"/{parts[0]}/{parts[1]}")
+            api = await api_util.get_api(api_key, f"/{parts[0]}/{parts[1]}")
+            api_public = bool(api.get('api_public')) if api else False
+            api_auth_required = bool(api.get('api_auth_required')) if api and api.get('api_auth_required') is not None else True
+        username = None
+        if not api_public:
+            if api_auth_required:
+                await subscription_required(request)
+                await group_required(request)
+                await limit_and_throttle(request)
+                payload = await auth_required(request)
+                username = payload.get("sub")
+            else:
+                # Unauthenticated mode: require at least client-key for routing if present; skip auth/sub/group/limits
+                # You can add custom checks here (e.g., IP allowlist) if needed
+                pass
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
@@ -164,16 +180,18 @@ async def rest_preflight(request: Request, path: str):
         api_key = _cache.get_cache('api_id_cache', name_ver)
         api = await _api_util.get_api(api_key, name_ver)
         if not api:
-            # No API found; reply with minimal OK
-            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+            from fastapi.responses import Response as StarletteResponse
+            return StarletteResponse(status_code=204, headers={"request_id": request_id})
         origin = request.headers.get('origin') or request.headers.get('Origin')
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
         headers = {**(headers or {}), "request_id": request_id}
-        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers=headers)
     except Exception:
-        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers={"request_id": request_id})
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -185,11 +203,24 @@ async def soap_gateway(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        await subscription_required(request)
-        await group_required(request)
-        await limit_and_throttle(request)
-        payload = await auth_required(request)
-        username = payload.get("sub")
+        parts = [p for p in (path or '').split('/') if p]
+        api_public = False
+        api_auth_required = True
+        if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+            api_key = doorman_cache.get_cache('api_id_cache', f"/{parts[0]}/{parts[1]}")
+            api = await api_util.get_api(api_key, f"/{parts[0]}/{parts[1]}")
+            api_public = bool(api.get('api_public')) if api else False
+            api_auth_required = bool(api.get('api_auth_required')) if api and api.get('api_auth_required') is not None else True
+        username = None
+        if not api_public:
+            if api_auth_required:
+                await subscription_required(request)
+                await group_required(request)
+                await limit_and_throttle(request)
+                payload = await auth_required(request)
+                username = payload.get("sub")
+            else:
+                pass
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
@@ -232,15 +263,18 @@ async def soap_preflight(request: Request, path: str):
         api_key = _cache.get_cache('api_id_cache', name_ver)
         api = await _api_util.get_api(api_key, name_ver)
         if not api:
-            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+            from fastapi.responses import Response as StarletteResponse
+            return StarletteResponse(status_code=204, headers={"request_id": request_id})
         origin = request.headers.get('origin') or request.headers.get('Origin')
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
         headers = {**(headers or {}), "request_id": request_id}
-        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers=headers)
     except Exception:
-        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers={"request_id": request_id})
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
@@ -254,11 +288,22 @@ async def graphql_gateway(request: Request, path: str):
     try:
         if not request.headers.get('X-API-Version'):
             raise HTTPException(status_code=400, detail="X-API-Version header is required")
-        await subscription_required(request)
-        await group_required(request)
-        await limit_and_throttle(request)
-        payload = await auth_required(request)
-        username = payload.get("sub")
+        # Determine public visibility and auth requirement for this API
+        api_name = re.sub(r"^.*/", "",request.url.path)
+        api_key = doorman_cache.get_cache('api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        api = await api_util.get_api(api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        api_public = bool(api.get('api_public')) if api else False
+        api_auth_required = bool(api.get('api_auth_required')) if api and api.get('api_auth_required') is not None else True
+        username = None
+        if not api_public:
+            if api_auth_required:
+                await subscription_required(request)
+                await group_required(request)
+                await limit_and_throttle(request)
+                payload = await auth_required(request)
+                username = payload.get("sub")
+            else:
+                pass
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
@@ -316,15 +361,18 @@ async def graphql_preflight(request: Request, path: str):
         api_key = _cache.get_cache('api_id_cache', api_path)
         api = await _api_util.get_api(api_key, f"{api_name}/{api_version}")
         if not api:
-            return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+            from fastapi.responses import Response as StarletteResponse
+            return StarletteResponse(status_code=204, headers={"request_id": request_id})
         origin = request.headers.get('origin') or request.headers.get('Origin')
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
         headers = {**(headers or {}), "request_id": request_id}
-        return process_response(ResponseModel(status_code=204, response_headers=headers).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers=headers)
     except Exception:
-        return process_response(ResponseModel(status_code=204, response_headers={"request_id": request_id}).dict(), "rest")
+        from fastapi.responses import Response as StarletteResponse
+        return StarletteResponse(status_code=204, headers={"request_id": request_id})
     finally:
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")

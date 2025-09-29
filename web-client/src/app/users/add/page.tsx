@@ -249,7 +249,7 @@ const AddUserPage = () => {
                 <div>
                   <label htmlFor="status" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Status
-                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled." />
+                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled. Does not affect public or no-auth APIs." />
                   </label>
                   <select
                     id="status"

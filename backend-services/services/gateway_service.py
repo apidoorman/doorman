@@ -1,5 +1,5 @@
 """
-The contents of this file are property of doorman.so
+The contents of this file are property of Doorman Dev, LLC
 Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
@@ -125,9 +125,13 @@ class GatewayService:
         current_time = backend_end_time = None
         try:
             if not url and not method:
-                match = re.match(r"([^/]+/v\d+)", path)
-                api_name_version = '/' + match.group(1) if match else ""
-                endpoint_uri = re.sub(r"^[^/]+/v\d+/", "", path)
+                # Parse API name/version without regex to avoid ReDoS and be consistent with preflight
+                parts = [p for p in (path or '').split('/') if p]
+                api_name_version = ''
+                endpoint_uri = ''
+                if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+                    api_name_version = f"/{parts[0]}/{parts[1]}"
+                    endpoint_uri = '/'.join(parts[2:])
                 api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
                 api = await api_util.get_api(api_key, api_name_version)
                 if not api:
@@ -150,7 +154,8 @@ class GatewayService:
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 method = request.method.upper()
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_credits_enabled'):
+                # Enforce credits only for non-public APIs and when we have an authenticated user
+                if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
@@ -161,9 +166,11 @@ class GatewayService:
                 ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
-                user_specific_api_key = await credit_util.get_user_api_key(api.get('api_credit_group'), username)
-                if user_specific_api_key:
-                    headers[ai_token_headers[0]] = user_specific_api_key
+                # Skip user-specific key injection when public or no authenticated user
+                if username and not bool(api.get('api_public')):
+                    user_specific_api_key = await credit_util.get_user_api_key(api.get('api_credit_group'), username)
+                    if user_specific_api_key:
+                        headers[ai_token_headers[0]] = user_specific_api_key
             content_type = request.headers.get("Content-Type", "").upper()
             logger.info(f"{request_id} | REST gateway to: {url}")
             if api.get('api_authorization_field_swap'):
@@ -259,9 +266,13 @@ class GatewayService:
         current_time = backend_end_time = None
         try:
             if not url:
-                match = re.match(r"([^/]+/v\d+)", path)
-                api_name_version = '/' + match.group(1) if match else ""
-                endpoint_uri = re.sub(r"^[^/]+/v\d+/", "", path)
+                # Parse API name/version without regex to avoid ReDoS
+                parts = [p for p in (path or '').split('/') if p]
+                api_name_version = ''
+                endpoint_uri = ''
+                if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+                    api_name_version = f"/{parts[0]}/{parts[1]}"
+                    endpoint_uri = '/'.join(parts[2:])
                 api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
                 api = await api_util.get_api(api_key, api_name_version)
                 if not api:
@@ -283,7 +294,7 @@ class GatewayService:
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 logger.info(f"{request_id} | SOAP gateway to: {url}")
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_credits_enabled'):
+                if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api, username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
@@ -382,7 +393,7 @@ class GatewayService:
                     return GatewayService.error_response(request_id, 'GTW001', 'No upstream servers configured')
                 url = server.rstrip('/')
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_credits_enabled'):
+                if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
@@ -394,9 +405,10 @@ class GatewayService:
                 ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
-                user_specific_api_key = await credit_util.get_user_api_key(api.get('api_credit_group'), username)
-                if user_specific_api_key:
-                    headers[ai_token_headers[0]] = user_specific_api_key
+                if username and not bool(api.get('api_public')):
+                    user_specific_api_key = await credit_util.get_user_api_key(api.get('api_credit_group'), username)
+                    if user_specific_api_key:
+                        headers[ai_token_headers[0]] = user_specific_api_key
             if api.get('api_authorization_field_swap'):
                 headers[api.get('Authorization')] = headers.get(api.get('api_authorization_field_swap'))
             body = await request.json()

@@ -107,23 +107,16 @@ const RoutingDetailPage = () => {
       setSaving(true)
       setError(null)
       
-      const response = await fetch(`${SERVER_URL}/platform/routing/${clientKey}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(editData)
-      })
+      await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/routing/${clientKey}`, editData)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to update routing')
+      // Refresh from server to get the latest canonical data (retry once on transient failure)
+      let refreshedRouting: any
+      try {
+        refreshedRouting = await fetchJson(`${SERVER_URL}/platform/routing/${encodeURIComponent(clientKey)}`)
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 200))
+        refreshedRouting = await fetchJson(`${SERVER_URL}/platform/routing/${encodeURIComponent(clientKey)}`)
       }
-
-      // Refresh from server to get the latest canonical data
-      const refreshedRouting = await fetchJson(`${SERVER_URL}/platform/routing/${encodeURIComponent(clientKey)}`)
       setRouting(refreshedRouting)
       sessionStorage.setItem('selectedRouting', JSON.stringify(refreshedRouting))
       setIsEditing(false)
