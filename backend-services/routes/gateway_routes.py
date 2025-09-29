@@ -154,12 +154,13 @@ async def rest_preflight(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        # Identify API from path prefix: <api_name>/vN/<endpoint>
-        import re as _re
+        # Identify API from path prefix: <api_name>/vN/<endpoint> without regex
         from utils import api_util as _api_util
         from utils.doorman_cache_util import doorman_cache as _cache
-        m = _re.match(r"([^/]+/v\d+)", path)
-        name_ver = '/' + m.group(1) if m else ''
+        parts = [p for p in (path or '').split('/') if p]
+        name_ver = ''
+        if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+            name_ver = f"/{parts[0]}/{parts[1]}"
         api_key = _cache.get_cache('api_id_cache', name_ver)
         api = await _api_util.get_api(api_key, name_ver)
         if not api:
@@ -222,11 +223,12 @@ async def soap_preflight(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        import re as _re
         from utils import api_util as _api_util
         from utils.doorman_cache_util import doorman_cache as _cache
-        m = _re.match(r"([^/]+/v\d+)", path)
-        name_ver = '/' + m.group(1) if m else ''
+        parts = [p for p in (path or '').split('/') if p]
+        name_ver = ''
+        if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+            name_ver = f"/{parts[0]}/{parts[1]}"
         api_key = _cache.get_cache('api_id_cache', name_ver)
         api = await _api_util.get_api(api_key, name_ver)
         if not api:

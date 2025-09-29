@@ -37,6 +37,8 @@ def _compute_cors_config() -> Dict[str, Any]:
     if not (methods_env or "").strip():
         methods_env = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
     methods = [m.strip().upper() for m in methods_env.split(",") if m.strip()]
+    if any(m == "*" for m in methods):
+        methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
     if "OPTIONS" not in methods:
         methods.append("OPTIONS")
     headers_env = os.getenv("ALLOW_HEADERS", "*")
