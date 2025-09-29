@@ -140,8 +140,14 @@ const UserDetailPage = () => {
       }
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`, editData)
 
-      // Refresh from server to get the latest canonical data
-      const refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
+      // Refresh from server to get the latest canonical data (retry once on transient failure)
+      let refreshedUser: any
+      try {
+        refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 200))
+        refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
+      }
       setUser(refreshedUser)
       // Keep sessionStorage in sync for back-navigation
       sessionStorage.setItem('selectedUser', JSON.stringify(refreshedUser))

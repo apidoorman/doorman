@@ -111,8 +111,14 @@ const RoleDetailPage = () => {
       
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, editData)
       
-      // Refresh from server to get the latest canonical data
-      const rolePayload = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
+      // Refresh from server to get the latest canonical data (retry once on transient failure)
+      let rolePayload: any
+      try {
+        rolePayload = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 200))
+        rolePayload = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
+      }
       setRole(rolePayload)
       setEditData(rolePayload)
       // Keep sessionStorage in sync for back-navigation
