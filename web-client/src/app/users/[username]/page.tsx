@@ -447,7 +447,7 @@ const UserDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Status
-                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled." />
+                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled. Does not affect public or no-auth APIs." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">
@@ -471,7 +471,7 @@ const UserDetailPage = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     UI Access
-                    <InfoTooltip text="Controls access to the admin UI; API access is separate." />
+                    <InfoTooltip text="Controls access to the admin UI. API access is controlled per API (Public/Auth Required settings)." />
                   </label>
                   {isEditing ? (
                     <div className="flex items-center">

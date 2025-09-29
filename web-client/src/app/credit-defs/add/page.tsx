@@ -13,7 +13,10 @@ export default function AddCreditDefPage() {
   const [api_credit_group, setGroup] = useState('')
   const [api_key_header, setHeader] = useState('x-api-key')
   const [api_key, setKey] = useState('')
-  const [creditTiersText, setTiersText] = useState('[\n  {"tier_name":"basic","credits":100,"input_limit":150,"output_limit":150,"reset_frequency":"monthly"}\n]')
+  type Tier = { tier_name: string; credits: number; input_limit: number; output_limit: number; reset_frequency: string }
+  const [tiers, setTiers] = useState<Tier[]>([
+    { tier_name: 'basic', credits: 100, input_limit: 150, output_limit: 150, reset_frequency: 'monthly' }
+  ])
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -22,7 +25,6 @@ export default function AddCreditDefPage() {
     setWorking(true); setError(null); setSuccess(null)
     try {
       if (!api_credit_group.trim()) throw new Error('Group is required')
-      const tiers = JSON.parse(creditTiersText || '[]')
       await postJson(`${SERVER_URL}/platform/credit`, { api_credit_group: api_credit_group.trim(), api_key, api_key_header, credit_tiers: tiers })
       setSuccess('Credit definition created')
     } catch (e: any) {
@@ -51,7 +53,7 @@ export default function AddCreditDefPage() {
               {success && <div className="text-sm text-success-600">{success}</div>}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium">API Credit Group <InfoTooltip text="Reference name used by APIs to deduct credits and inject keys." /></label>
+                  <label className="block text-sm font-medium">API Credit Group <InfoTooltip text="Reference name used by APIs to deduct credits and inject the key header." /></label>
                   <input className="input" value={api_credit_group} onChange={e => setGroup(e.target.value)} placeholder="ai-basic" />
                 </div>
                 <div>
@@ -59,12 +61,42 @@ export default function AddCreditDefPage() {
                   <input className="input" value={api_key_header} onChange={e => setHeader(e.target.value)} placeholder="x-api-key" />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium">API Key <InfoTooltip text="Default key used when proxying; users can also have per-user keys." /></label>
+                  <label className="block text-sm font-medium">API Key <InfoTooltip text="Default key injected for this group; per-user keys may override when Auth Required is enabled." /></label>
                   <input className="input" value={api_key} onChange={e => setKey(e.target.value)} placeholder="sk_live_..." />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium">Credit Tiers (JSON) <InfoTooltip text="Array of tiers with tier_name, credits, input_limit, output_limit, reset_frequency." /></label>
-                  <textarea className="input font-mono text-xs h-48" value={creditTiersText} onChange={e => setTiersText(e.target.value)} />
+                  <label className="block text-sm font-medium">Credit Tiers</label>
+                  <div className="overflow-x-auto border rounded">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Tier Name</th>
+                          <th>Credits</th>
+                          <th>Input Limit</th>
+                          <th>Output Limit</th>
+                          <th>Reset Freq</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tiers.map((t, idx) => (
+                          <tr key={idx}>
+                            <td><input className="input" value={t.tier_name} onChange={e => setTiers(prev => prev.map((x,i)=> i===idx?{...x, tier_name: e.target.value}:x))} /></td>
+                            <td><input className="input" type="number" value={t.credits} onChange={e => setTiers(prev => prev.map((x,i)=> i===idx?{...x, credits: Number(e.target.value||0)}:x))} /></td>
+                            <td><input className="input" type="number" value={t.input_limit} onChange={e => setTiers(prev => prev.map((x,i)=> i===idx?{...x, input_limit: Number(e.target.value||0)}:x))} /></td>
+                            <td><input className="input" type="number" value={t.output_limit} onChange={e => setTiers(prev => prev.map((x,i)=> i===idx?{...x, output_limit: Number(e.target.value||0)}:x))} /></td>
+                            <td><input className="input" value={t.reset_frequency} onChange={e => setTiers(prev => prev.map((x,i)=> i===idx?{...x, reset_frequency: e.target.value}:x))} placeholder="monthly" /></td>
+                            <td>
+                              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTiers(prev => prev.filter((_,i)=>i!==idx))}>Remove</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-2">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTiers(prev => [...prev, { tier_name: '', credits: 0, input_limit: 0, output_limit: 0, reset_frequency: 'monthly' }])}>Add Tier</button>
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">
