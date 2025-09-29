@@ -1,5 +1,5 @@
 """
-The contents of this file are property of doorman.so
+The contents of this file are property of Doorman Dev, LLC
 Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """

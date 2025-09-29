@@ -11,7 +11,7 @@ async def test_update_other_user_denied_without_permission(authed_client):
     # Create a secondary user to target
     cu = await authed_client.post(
         "/platform/user",
-        json={"username": "qa_user", "email": "qa@doorman.so", "password": "QaPass123_ValidLen!!", "role": "user"},
+        json={"username": "qa_user", "email": "qa@doorman.dev", "password": "QaPass123_ValidLen!!", "role": "user"},
     )
     assert cu.status_code in (200, 201), cu.text
 
@@ -22,7 +22,7 @@ async def test_update_other_user_denied_without_permission(authed_client):
     # Attempt to update another user's email as admin without manage_users
     up = await authed_client.put(
         "/platform/user/qa_user",
-        json={"email": "qa2@doorman.so"},
+        json={"email": "qa2@doorman.dev"},
     )
     assert up.status_code == 403
 
@@ -31,6 +31,6 @@ async def test_update_other_user_denied_without_permission(authed_client):
     assert r2.status_code in (200, 201)
     up2 = await authed_client.put(
         "/platform/user/qa_user",
-        json={"email": "qa3@doorman.so"},
+        json={"email": "qa3@doorman.dev"},
     )
     assert up2.status_code in (200, 201)

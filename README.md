@@ -116,7 +116,7 @@ npm run dev OR npm run build
 ```
 
 ## License Information
-The contents of this repository are property of doorman.so.
+The contents of this repository are property of Doorman Dev, LLC.
 
 Review the Apache License 2.0 for valid authorization of use.
 
