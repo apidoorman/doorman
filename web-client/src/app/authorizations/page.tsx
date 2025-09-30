@@ -69,8 +69,8 @@ const AuthorizationsPage = () => {
       setUsers(allUsers)
       return
     }
-    
-    const filteredUsers = allUsers.filter(user => 
+
+    const filteredUsers = allUsers.filter(user =>
       user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.roles || []).some(role => role.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -140,7 +140,7 @@ const AuthorizationsPage = () => {
                   {users.map((user) => {
                     const isMe = currentUser?.username === user.username
                     return (
-                    <tr 
+                    <tr
                       key={user.username}
                       onClick={() => handleManageSubscriptions(user)}
                       className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors ${isMe ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}

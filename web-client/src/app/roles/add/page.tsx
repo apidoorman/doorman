@@ -50,7 +50,7 @@ const AddRolePage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!formData.role_name.trim()) {
       setError('Role name is required')
       return
@@ -93,7 +93,6 @@ const AddRolePage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Add Role</h1>
@@ -103,7 +102,6 @@ const AddRolePage = () => {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -117,7 +115,6 @@ const AddRolePage = () => {
           </div>
         )}
 
-        {/* Form */}
         <div className="card max-w-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
             <FormHelp docHref="/docs/using-fields.html#roles">Define a role and toggle platform permissions. Apply least privilege.</FormHelp>
@@ -212,4 +209,4 @@ const AddRolePage = () => {
   )
 }
 
-export default AddRolePage 
+export default AddRolePage

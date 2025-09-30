@@ -74,4 +74,4 @@ export function AccessDeniedNotification({ requiredPermission }: AccessDeniedNot
       </div>
     </div>
   )
-} 
+}

@@ -2,35 +2,35 @@
 Utilities to manage security-related settings and schedule auto-save of memory dumps.
 """
 
+# External imports
 import asyncio
 import os
 from typing import Optional, Dict, Any
 import logging
 
+# Internal imports
 from .database import database, db
 from .memory_dump_util import dump_memory_to_file
 
-logger = logging.getLogger("doorman.gateway")
+logger = logging.getLogger('doorman.gateway')
 
 _CACHE: Dict[str, Any] = {}
 _AUTO_TASK: Optional[asyncio.Task] = None
 _STOP_EVENT: Optional[asyncio.Event] = None
 
 DEFAULTS = {
-    "type": "security_settings",
-    "enable_auto_save": False,
-    "auto_save_frequency_seconds": 900,  # 15 minutes
-    "dump_path": os.getenv("MEM_DUMP_PATH", "generated/memory_dump.bin"),
+    'type': 'security_settings',
+    'enable_auto_save': False,
+    'auto_save_frequency_seconds': 900,
+    'dump_path': os.getenv('MEM_DUMP_PATH', 'generated/memory_dump.bin'),
 }
 
 # Persist settings to a small JSON file so memory-only mode
 # can restore across restarts (before any DB state exists).
-SETTINGS_FILE = os.getenv("SECURITY_SETTINGS_FILE", "generated/security_settings.json")
-
+SETTINGS_FILE = os.getenv('SECURITY_SETTINGS_FILE', 'generated/security_settings.json')
 
 def _get_collection():
     return db.settings if not database.memory_only else database.db.settings
-
 
 def _merge_settings(doc: Dict[str, Any]) -> Dict[str, Any]:
     merged = DEFAULTS.copy()
@@ -38,105 +38,95 @@ def _merge_settings(doc: Dict[str, Any]) -> Dict[str, Any]:
         merged.update({k: v for k, v in doc.items() if v is not None})
     return merged
 
-
 def get_cached_settings() -> Dict[str, Any]:
     global _CACHE
     if not _CACHE:
-        # initialize with defaults until load is called
+
         _CACHE = DEFAULTS.copy()
     return _CACHE
-
 
 def _load_from_file() -> Optional[Dict[str, Any]]:
     try:
         if not os.path.exists(SETTINGS_FILE):
             return None
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
             data = f.read().strip()
             if not data:
                 return None
             import json
             obj = json.loads(data)
-            # Only accept dicts that look like our settings
+
             if isinstance(obj, dict):
                 return obj
     except Exception as e:
-        logger.error("Failed to read settings file %s: %s", SETTINGS_FILE, e)
+        logger.error('Failed to read settings file %s: %s', SETTINGS_FILE, e)
     return None
-
 
 def _save_to_file(settings: Dict[str, Any]) -> None:
     try:
-        os.makedirs(os.path.dirname(SETTINGS_FILE) or ".", exist_ok=True)
+        os.makedirs(os.path.dirname(SETTINGS_FILE) or '.', exist_ok=True)
         import json
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            f.write(json.dumps(settings, separators=(",", ":")))
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(settings, separators=(',', ':')))
     except Exception as e:
-        logger.error("Failed to write settings file %s: %s", SETTINGS_FILE, e)
-
+        logger.error('Failed to write settings file %s: %s', SETTINGS_FILE, e)
 
 async def load_settings() -> Dict[str, Any]:
     coll = _get_collection()
-    doc = coll.find_one({"type": "security_settings"})
-    # In memory-only mode, the collection starts empty on fresh boot.
-    # Try to restore from settings file so we can locate the last dump path
-    # before DB state is restored from dump.
+    doc = coll.find_one({'type': 'security_settings'})
+
     if not doc and database.memory_only:
         file_obj = _load_from_file()
         if file_obj:
-            # Seed in-memory collection with file settings for the runtime
+
             try:
                 to_set = _merge_settings(file_obj)
-                coll.update_one({"type": "security_settings"}, {"$set": to_set})
+                coll.update_one({'type': 'security_settings'}, {'$set': to_set})
                 doc = to_set
             except Exception:
-                # If update fails for any reason, just continue with file data
+
                 doc = file_obj
     settings = _merge_settings(doc or {})
     _CACHE.update(settings)
     return settings
 
-
 async def save_settings(partial: Dict[str, Any]) -> Dict[str, Any]:
     coll = _get_collection()
-    current = _merge_settings(coll.find_one({"type": "security_settings"}) or {})
+    current = _merge_settings(coll.find_one({'type': 'security_settings'}) or {})
     current.update({k: v for k, v in partial.items() if v is not None})
-    result = coll.update_one({"type": "security_settings"}, {"$set": current},)
-    # If nothing was updated (e.g., first time in memory mode), insert
+    result = coll.update_one({'type': 'security_settings'}, {'$set': current},)
+
     try:
         modified = getattr(result, 'modified_count', 0)
     except Exception:
         modified = 0
-    if not modified and not coll.find_one({"type": "security_settings"}):
+    if not modified and not coll.find_one({'type': 'security_settings'}):
         coll.insert_one(current)
     _CACHE.update(current)
-    # Always persist to file so memory-only mode can restore on next start
+
     _save_to_file(_CACHE)
     await restart_auto_save_task()
     return current
-
 
 async def _auto_save_loop(stop_event: asyncio.Event):
     while not stop_event.is_set():
         try:
             settings = get_cached_settings()
-            # Auto-save triggers in memory-only mode when frequency > 0.
-            # (dumping is not supported in persistent DB mode)
-            freq = int(settings.get("auto_save_frequency_seconds", 0) or 0)
+
+            freq = int(settings.get('auto_save_frequency_seconds', 0) or 0)
             if database.memory_only and freq > 0:
                 try:
-                    dump_memory_to_file(settings.get("dump_path"))
-                    logger.info("Auto-saved memory dump to %s", settings.get("dump_path"))
+                    dump_memory_to_file(settings.get('dump_path'))
+                    logger.info('Auto-saved memory dump to %s', settings.get('dump_path'))
                 except Exception as e:
-                    logger.error("Auto-save memory dump failed: %s", e)
-            # Sleep for at least 60s if misconfigured
+                    logger.error('Auto-save memory dump failed: %s', e)
+
             await asyncio.wait_for(stop_event.wait(), timeout=max(freq, 60) if freq > 0 else 60)
         except asyncio.TimeoutError:
             continue
         except Exception as e:
-            logger.error("Auto-save loop error: %s", e)
+            logger.error('Auto-save loop error: %s', e)
             await asyncio.sleep(60)
-
 
 async def start_auto_save_task():
     global _AUTO_TASK, _STOP_EVENT
@@ -144,8 +134,7 @@ async def start_auto_save_task():
         return
     _STOP_EVENT = asyncio.Event()
     _AUTO_TASK = asyncio.create_task(_auto_save_loop(_STOP_EVENT))
-    logger.info("Security auto-save task started")
-
+    logger.info('Security auto-save task started')
 
 async def stop_auto_save_task():
     global _AUTO_TASK, _STOP_EVENT
@@ -158,7 +147,6 @@ async def stop_auto_save_task():
             pass
     _AUTO_TASK = None
     _STOP_EVENT = None
-
 
 async def restart_auto_save_task():
     await stop_auto_save_task()

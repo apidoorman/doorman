@@ -358,7 +358,6 @@ export default function ApiEndpointsPage() {
           </div>
         )}
 
-        {/* Search and Filters */}
         <div className="card">
           <div className="flex flex-col sm:flex-row gap-4">
             <form onSubmit={(e) => { e.preventDefault(); }} className="flex-1">
@@ -375,7 +374,7 @@ export default function ApiEndpointsPage() {
                 />
               </div>
             </form>
-            
+
             <div className="flex gap-2">
               <button onClick={() => setSortBy('method')} className={`btn ${sortBy === 'method' ? 'btn-primary' : 'btn-secondary'}`}>Method</button>
               <button onClick={() => setSortBy('uri')} className={`btn ${sortBy === 'uri' ? 'btn-primary' : 'btn-secondary'}`}>URI</button>
@@ -395,7 +394,7 @@ export default function ApiEndpointsPage() {
                   <th>Description</th>
                   <th>Routing</th>
                   <th>Servers</th>
-                  
+
                 </tr>
               </thead>
               <tbody>
@@ -432,7 +431,7 @@ export default function ApiEndpointsPage() {
                           <td>
                             <span className="badge badge-secondary">{(ep.endpoint_servers || []).length}</span>
                           </td>
-                          
+
                         </tr>
                         {expandedKeys.has(k) && (
                           <tr>
@@ -478,7 +477,6 @@ export default function ApiEndpointsPage() {
                                       <button disabled={saving || !hasOverride} onClick={() => addEndpointServer(ep)} className="btn btn-secondary">{saving ? <div className="flex items-center"><div className="spinner mr-2"></div>Saving...</div> : 'Add'}</button>
                                     </div>
                                   </div>
-                                  {/* Validation */}
                                   {ep.endpoint_id && (
                                     <div className="mt-4 p-3 rounded border bg-white dark:bg-gray-900">
                                       <div className="flex items-center justify-between mb-2">

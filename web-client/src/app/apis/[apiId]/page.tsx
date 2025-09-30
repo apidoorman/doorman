@@ -300,7 +300,7 @@ const ApiDetailPage = () => {
     try {
       setSaving(true)
       setError(null)
-      
+
       const targetName = (api?.['api_name'] as string) || ''
       const targetVersion = (api?.['api_version'] as string) || ''
       await putJson(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, editData)
@@ -569,7 +569,6 @@ const ApiDetailPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">{api?.api_name || 'API Details'}</h1>
@@ -636,7 +635,6 @@ const ApiDetailPage = () => {
           </div>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="rounded-lg bg-success-50 border border-success-200 p-4 dark:bg-success-900/20 dark:border-success-800">
             <div className="flex">
@@ -650,7 +648,6 @@ const ApiDetailPage = () => {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -666,7 +663,6 @@ const ApiDetailPage = () => {
 
         {api && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Basic Information */}
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Basic Information</h3>
@@ -776,7 +772,6 @@ const ApiDetailPage = () => {
               </div>
             </div>
 
-            {/* Configuration */}
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Configuration</h3>
@@ -936,7 +931,6 @@ const ApiDetailPage = () => {
               </div>
             </div>
 
-            {/* Proto Management */}
             {useProtobuf ? (
               <div className="card">
                 <div className="card-header">
@@ -983,7 +977,6 @@ const ApiDetailPage = () => {
               </div>
             )}
 
-            {/* Allowed Roles */}
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Allowed Roles</h3>
@@ -1004,7 +997,7 @@ const ApiDetailPage = () => {
                     </button>
                   </div>
                 )}
-                
+
                 <div className="flex flex-wrap gap-2">
                   {(isEditing ? editData.api_allowed_roles : api.api_allowed_roles)?.map((role, index) => (
                     <div key={index} className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full">
@@ -1022,14 +1015,13 @@ const ApiDetailPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {(!isEditing ? api.api_allowed_roles : editData.api_allowed_roles)?.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No roles assigned</p>
                 )}
               </div>
             </div>
 
-            {/* Allowed Groups */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Allowed Groups</h3>
@@ -1051,7 +1043,7 @@ const ApiDetailPage = () => {
                     </button>
                   </div>
                 )}
-                
+
                 <div className="flex flex-wrap gap-2">
                   {(isEditing ? editData.api_allowed_groups : api.api_allowed_groups)?.map((group, index) => (
                     <div key={index} className="flex items-center gap-2 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-3 py-1 rounded-full">
@@ -1069,14 +1061,13 @@ const ApiDetailPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {(!isEditing ? api.api_allowed_groups : editData.api_allowed_groups)?.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No groups assigned</p>
                 )}
               </div>
             </div>
 
-            {/* Servers */}
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Servers</h3>
@@ -1099,7 +1090,7 @@ const ApiDetailPage = () => {
                     </button>
                   </div>
                 )}
-                
+
                 <div className="space-y-2">
                   {(isEditing ? editData.api_servers : api.api_servers)?.map((server, index) => (
                     <div key={index} className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded">
@@ -1117,14 +1108,13 @@ const ApiDetailPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {(!isEditing ? api.api_servers : editData.api_servers)?.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No servers configured</p>
                 )}
               </div>
             </div>
 
-            {/* Endpoint Overrides */}
             <div className="card lg:col-span-2">
               <div className="card-header">
                 <h3 className="card-title">Endpoint Overrides</h3>
@@ -1152,7 +1142,7 @@ const ApiDetailPage = () => {
                               onChange={async (e) => {
                                 const on = e.target.checked
                                 if (!on) {
-                                  await removeEndpointServer(ep, -1) // noop fallback
+                                  await removeEndpointServer(ep, -1)
                                   await saveEndpointServers(ep, [])
                                 }
                               }}
@@ -1197,7 +1187,6 @@ const ApiDetailPage = () => {
               </div>
             </div>
 
-            {/* Allowed Headers */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Allowed Headers</h3>
@@ -1219,7 +1208,7 @@ const ApiDetailPage = () => {
                     </button>
                   </div>
                 )}
-                
+
                 <div className="flex flex-wrap gap-2">
                   {(isEditing ? editData.api_allowed_headers : api.api_allowed_headers)?.map((header, index) => (
                     <div key={index} className="flex items-center gap-2 bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200 px-3 py-1 rounded-full">
@@ -1237,7 +1226,7 @@ const ApiDetailPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {(!isEditing ? api.api_allowed_headers : editData.api_allowed_headers)?.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No headers configured</p>
                 )}
@@ -1261,7 +1250,6 @@ const ApiDetailPage = () => {
         />
       </div>
 
-      {/* Public confirmation modal */}
       <ConfirmModal
         open={publicConfirmOpen}
         title="Make API Public?"
@@ -1283,7 +1271,6 @@ const ApiDetailPage = () => {
         }}
       />
 
-      {/* Public + Credits confirmation */}
       <ConfirmModal
         open={pubCredsConfirmOpen}
         title="Public API with Credits?"

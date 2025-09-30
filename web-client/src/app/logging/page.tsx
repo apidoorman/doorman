@@ -51,10 +51,10 @@ interface GroupedLogs {
   endpoint?: string
   response_time?: string
   has_error: boolean
-  expanded_logs?: Log[] // Store all logs for this request when expanded
+  expanded_logs?: Log[]
 }
 
-type OverrideKey = string // `${method}|${api_name}|${api_version}|${endpoint_uri}`
+type OverrideKey = string
 
 export default function LogsPage() {
   const { permissions } = useAuth()
@@ -78,7 +78,7 @@ export default function LogsPage() {
   const [filters, setFilters] = useState<FilterState>(() => {
     const now = new Date()
     const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0')
-    
+
     return {
       startDate: today,
       endDate: today,
@@ -146,31 +146,31 @@ export default function LogsPage() {
     try {
       setLoading(true)
       setError(null)
-      
+
       const queryParams = toQueryParams(filters)
       queryParams.append('limit', String(logsPageSize))
       queryParams.append('offset', String((logsPage - 1) * logsPageSize))
-      
+
       const { fetchJson } = await import('@/utils/http')
       const csrf = getCookie('csrf_token')
       const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept':'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }})
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch logs')
       }
-      
+
       // Capture the request ID from response headers to filter it out
       const responseRequestId = response.headers.get('request_id')
       if (responseRequestId) {
         setCurrentRequestId(responseRequestId)
       }
-      
+
       const data = await response.json()
       const logList = data.response?.logs || data.logs || []
       const hasMore = (data.response?.has_more ?? data.has_more) ?? (Array.isArray(logList) && logList.length === logsPageSize)
       setLogs(logList)
       setLogsHasNext(!!hasMore)
-      
+
       // Get unique request IDs from the filtered results
       const uniqueRequestIds: string[] = Array.from(
         new Set<string>(
@@ -179,7 +179,7 @@ export default function LogsPage() {
             .filter((id: string | undefined): id is string => typeof id === 'string' && id.length > 0)
         )
       )
-      
+
       // Fetch complete data for each request ID to get user and response time info
       const completeLogs: Log[] = []
       for (const requestId of uniqueRequestIds) {
@@ -188,10 +188,10 @@ export default function LogsPage() {
             const completeQueryParams = new URLSearchParams()
             completeQueryParams.append('request_id', requestId)
             completeQueryParams.append('limit', '1000')
-            
+
             const csrf2 = getCookie('csrf_token')
             const completeResponse = await fetch(`${SERVER_URL}/platform/logging/logs?${completeQueryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf2 ? { 'X-CSRF-Token': csrf2 } : {}) }})
-            
+
             if (completeResponse.ok) {
               const completeData = await completeResponse.json()
               const requestLogs = completeData.response?.logs || completeData.logs || []
@@ -202,7 +202,7 @@ export default function LogsPage() {
           }
         }
       }
-      
+
       // Group logs by request_id using the complete data
       const grouped = groupLogsByRequestId(completeLogs)
       setGroupedLogs(grouped)
@@ -243,35 +243,35 @@ export default function LogsPage() {
   const fetchLogsForRequestId = useCallback(async (requestId: string) => {
     try {
       setLoadingExpanded(prev => new Set(prev).add(requestId))
-      
+
       // Fetch all logs for this specific request ID, ignoring all filters
       const queryParams = new URLSearchParams()
       queryParams.append('request_id', requestId)
-      queryParams.append('limit', '1000') // Get a large number to ensure we get all logs
-      
+      queryParams.append('limit', '1000')
+
       const csrf3 = getCookie('csrf_token')
       const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf3 ? { 'X-CSRF-Token': csrf3 } : {}) }})
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch logs for request ID')
       }
-      
+
       const data = await response.json()
       const allLogsForRequest = data.response?.logs || data.logs || []
-      
+
       // Update the grouped logs with the expanded logs and recalculate summary data
       setGroupedLogs(prev => prev.map(group => {
         if (group.request_id === requestId) {
           const sortedExpandedLogs = allLogsForRequest.sort((a: Log, b: Log) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
           const firstLog = sortedExpandedLogs[0]
           const lastLog = sortedExpandedLogs[sortedExpandedLogs.length - 1]
-          
+
           // Find the response time log from expanded logs
           const responseTimeLog = sortedExpandedLogs.find((log: Log) => log.response_time)
           const userLog = sortedExpandedLogs.find((log: Log) => log.user)
           const endpointLog = sortedExpandedLogs.find((log: Log) => log.endpoint && log.method)
           const hasError = sortedExpandedLogs.some((log: Log) => log.level.toLowerCase() === 'error')
-          
+
           // Debug logging
           console.log(`Expanding request ${requestId}:`, {
             totalLogs: allLogsForRequest.length,
@@ -281,7 +281,7 @@ export default function LogsPage() {
             responseTimeLog: responseTimeLog?.response_time,
             hasError
           })
-          
+
           return {
             ...group,
             expanded_logs: allLogsForRequest,
@@ -310,7 +310,7 @@ export default function LogsPage() {
 
   const groupLogsByRequestId = (logList: Log[]): GroupedLogs[] => {
     const groups: { [key: string]: Log[] } = {}
-    
+
     logList.forEach(log => {
       const requestId = log.request_id || 'no-request-id'
       if (!groups[requestId]) {
@@ -318,7 +318,7 @@ export default function LogsPage() {
       }
       groups[requestId].push(log)
     })
-    
+
     return Object.entries(groups)
       .filter(([requestId, logs]) => {
         // Filter out the current request ID that was used to fetch logs
@@ -331,7 +331,7 @@ export default function LogsPage() {
         const sortedLogs = logs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
         const firstLog = sortedLogs[0]
         const lastLog = sortedLogs[sortedLogs.length - 1]
-        
+
         // Find the response time log
         const responseTimeLog = sortedLogs.find(log => log.response_time)
         const userLog = sortedLogs.find(log => log.user)
@@ -342,7 +342,7 @@ export default function LogsPage() {
           ensureEndpointOverridesLoaded(apiHintLog as string)
         }
         const hasError = sortedLogs.some(log => log.level.toLowerCase() === 'error')
-        
+
         return {
           request_id: requestId,
           logs: sortedLogs,
@@ -375,7 +375,7 @@ export default function LogsPage() {
     const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000)
     const startTime = thirtyMinutesAgo.toTimeString().slice(0, 5)
     const endTime = now.toTimeString().slice(0, 5)
-    
+
     setFilters({
       startDate: today,
       endDate: today,
@@ -411,7 +411,7 @@ export default function LogsPage() {
       // Expand - fetch all logs for this request ID
       newExpanded.add(requestId)
       setExpandedRequests(newExpanded)
-      
+
       // Check if we already have expanded logs for this request
       const group = groupedLogs.find(g => g.request_id === requestId)
       if (!group?.expanded_logs) {
@@ -495,7 +495,6 @@ export default function LogsPage() {
     <ProtectedRoute requiredPermission="view_logs">
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Logs</h1>
@@ -516,13 +515,11 @@ export default function LogsPage() {
           )}
         </div>
 
-        {/* Filters */}
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">Filters</h3>
             </div>
             <div className="p-6">
-              {/* Log files quick view and download controls */}
               <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <button onClick={fetchLogFiles} className="btn btn-secondary" disabled={filesLoading}>
@@ -720,7 +717,7 @@ export default function LogsPage() {
               <button onClick={handleSearch} className="btn btn-primary">
                 Search Logs
               </button>
-              <button 
+              <button
                 onClick={() => setShowMoreFilters(!showMoreFilters)}
                 className="btn btn-outline"
               >
@@ -736,7 +733,6 @@ export default function LogsPage() {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -750,7 +746,6 @@ export default function LogsPage() {
           </div>
         )}
 
-        {/* Loading State */}
         {loading ? (
           <div className="card">
             <div className="flex items-center justify-center py-12">
@@ -782,16 +777,16 @@ export default function LogsPage() {
                 <tbody>
                   {groupedLogs.map((group) => (
                     <React.Fragment key={group.request_id}>
-                      <tr 
+                      <tr
                         onClick={() => toggleRequestExpansion(group.request_id)}
                         className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
                       >
                         <td>
                           <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                            <svg 
-                              className={`h-4 w-4 transform transition-transform ${expandedRequests.has(group.request_id) ? 'rotate-90' : ''}`} 
-                              fill="none" 
-                              stroke="currentColor" 
+                            <svg
+                              className={`h-4 w-4 transform transition-transform ${expandedRequests.has(group.request_id) ? 'rotate-90' : ''}`}
+                              fill="none"
+                              stroke="currentColor"
                               viewBox="0 0 24 24"
                             >
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -859,8 +854,7 @@ export default function LogsPage() {
                           </span>
                         </td>
                       </tr>
-                      
-                      {/* Expanded logs for this request */}
+
                       {expandedRequests.has(group.request_id) && (
                         <tr>
                           <td colSpan={10} className="p-0">
@@ -869,7 +863,7 @@ export default function LogsPage() {
                                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
                                   All Logs for Request: {group.request_id}
                                 </h4>
-                                
+
                                 {loadingExpanded.has(group.request_id) ? (
                                   <div className="flex items-center justify-center py-8">
                                     <div className="spinner mr-3"></div>
@@ -917,7 +911,6 @@ export default function LogsPage() {
               hasNext={logsHasNext}
             />
 
-            {/* Empty State */}
             {!hasSearched ? (
               <div className="text-center py-12">
                 <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">

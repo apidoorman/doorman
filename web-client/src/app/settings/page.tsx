@@ -127,7 +127,6 @@ const SettingsPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Settings</h1>
@@ -157,7 +156,6 @@ const SettingsPage = () => {
           </div>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="rounded-lg bg-success-50 border border-success-200 p-4 dark:bg-success-900/20 dark:border-success-800">
             <div className="flex">
@@ -171,7 +169,6 @@ const SettingsPage = () => {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -185,7 +182,6 @@ const SettingsPage = () => {
           </div>
         )}
 
-        {/* Loading State */}
         {loading ? (
           <div className="card">
             <div className="flex items-center justify-center py-12">
@@ -202,10 +198,9 @@ const SettingsPage = () => {
               <h3 className="card-title">Account Settings</h3>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              {/* Profile Information */}
               <div className="space-y-4">
                 <h4 className="text-lg font-medium text-gray-900 dark:text-white">Profile Information</h4>
-                
+
                 <div>
                   <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Username
@@ -239,10 +234,9 @@ const SettingsPage = () => {
                 </div>
               </div>
 
-              {/* Password Change */}
               <div className="space-y-4 pt-6 border-t border-gray-200 dark:border-gray-700">
                 <h4 className="text-lg font-medium text-gray-900 dark:text-white">Change Password</h4>
-                
+
                 <div>
                   <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Current Password
@@ -292,7 +286,6 @@ const SettingsPage = () => {
                 </div>
               </div>
 
-              {/* Submit Button */}
               <div className="flex gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
                 <button
                   type="submit"
@@ -335,4 +328,4 @@ const SettingsPage = () => {
   )
 }
 
-export default SettingsPage 
+export default SettingsPage

@@ -138,7 +138,6 @@ export default function UserCreditsDetailPage() {
             <div className="card"><div className="p-6 text-gray-500">Loading…</div></div>
           ) : (
             <>
-              {/* Add credit group */}
               <div className="card">
                 <div className="card-header"><h3 className="card-title">Add Credit Group</h3></div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
@@ -201,7 +200,6 @@ export default function UserCreditsDetailPage() {
                 </div>
               </div>
 
-              {/* Existing allocations */}
               <div className="card">
                 <div className="card-header"><h3 className="card-title">Allocations</h3></div>
                 <div className="p-6 space-y-4">

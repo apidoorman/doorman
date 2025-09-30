@@ -2,57 +2,54 @@
 Utilities to dump and restore in-memory database state with encryption.
 """
 
+# External imports
 import os
 import json
 import base64
 from typing import Optional, Any
 from datetime import datetime, timezone
-
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+# Internal imports
 from .database import database
 
-DEFAULT_DUMP_PATH = os.getenv("MEM_DUMP_PATH", "generated/memory_dump.bin")
-
+DEFAULT_DUMP_PATH = os.getenv('MEM_DUMP_PATH', 'generated/memory_dump.bin')
 
 def _derive_key(key_material: str, salt: bytes) -> bytes:
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        info=b"doorman-mem-dump-v1",
+        info=b'doorman-mem-dump-v1',
     )
-    return hkdf.derive(key_material.encode("utf-8"))
-
+    return hkdf.derive(key_material.encode('utf-8'))
 
 def _encrypt_blob(plaintext: bytes, key_str: str) -> bytes:
     if not key_str or len(key_str) < 8:
-        raise ValueError("MEM_ENCRYPTION_KEY must be set and at least 8 characters")
+        raise ValueError('MEM_ENCRYPTION_KEY must be set and at least 8 characters')
     salt = os.urandom(16)
     key = _derive_key(key_str, salt)
     aesgcm = AESGCM(key)
     nonce = os.urandom(12)
     ct = aesgcm.encrypt(nonce, plaintext, None)
-    # File format: b'DMP1' + salt(16) + nonce(12) + ciphertext+tag
-    return b"DMP1" + salt + nonce + ct
 
+    return b'DMP1' + salt + nonce + ct
 
 def _decrypt_blob(blob: bytes, key_str: str) -> bytes:
     if not key_str or len(key_str) < 8:
-        raise ValueError("MEM_ENCRYPTION_KEY must be set and at least 8 characters")
+        raise ValueError('MEM_ENCRYPTION_KEY must be set and at least 8 characters')
     if len(blob) < 4 + 16 + 12:
-        raise ValueError("Invalid dump file")
-    if blob[:4] != b"DMP1":
-        raise ValueError("Unsupported dump format")
+        raise ValueError('Invalid dump file')
+    if blob[:4] != b'DMP1':
+        raise ValueError('Unsupported dump format')
     salt = blob[4:20]
     nonce = blob[20:32]
     ct = blob[32:]
     key = _derive_key(key_str, salt)
     aesgcm = AESGCM(key)
     return aesgcm.decrypt(nonce, ct, None)
-
 
 def _split_dir_and_stem(path_hint: Optional[str]) -> tuple[str, str]:
     """Return (directory, stem) for naming timestamped dump files.
@@ -62,23 +59,21 @@ def _split_dir_and_stem(path_hint: Optional[str]) -> tuple[str, str]:
     - If hint is None, use DEFAULT_DUMP_PATH and derive as above.
     """
     hint = path_hint or DEFAULT_DUMP_PATH
-    # Normalize paths
+
     if hint.endswith(os.sep):
         dump_dir = hint
-        stem = "memory_dump"
+        stem = 'memory_dump'
     elif os.path.isdir(hint):
         dump_dir = hint
-        stem = "memory_dump"
+        stem = 'memory_dump'
     else:
-        dump_dir = os.path.dirname(hint) or "."
+        dump_dir = os.path.dirname(hint) or '.'
         base = os.path.basename(hint)
         stem, _ext = os.path.splitext(base)
-        stem = stem or "memory_dump"
+        stem = stem or 'memory_dump'
     return dump_dir, stem
 
-
-BYTES_KEY_PREFIX = "__byteskey__:"
-
+BYTES_KEY_PREFIX = '__byteskey__:'
 
 def _to_jsonable(obj: Any) -> Any:
     """Recursively convert arbitrary objects to JSON-serializable structures.
@@ -91,51 +86,49 @@ def _to_jsonable(obj: Any) -> Any:
     if isinstance(obj, (str, int, float, bool)) or obj is None:
         return obj
     if isinstance(obj, bytes):
-        return {"__type__": "bytes", "data": base64.b64encode(obj).decode("ascii")}
+        return {'__type__': 'bytes', 'data': base64.b64encode(obj).decode('ascii')}
     if isinstance(obj, dict):
         out = {}
         for k, v in obj.items():
-            # Ensure keys are strings for JSON
+
             if isinstance(k, bytes):
-                sk = BYTES_KEY_PREFIX + base64.b64encode(k).decode("ascii")
+                sk = BYTES_KEY_PREFIX + base64.b64encode(k).decode('ascii')
             elif isinstance(k, (str, int, float, bool)) or k is None:
                 sk = str(k)
             else:
                 try:
                     sk = str(k)
                 except Exception:
-                    sk = "__invalid_key__"
+                    sk = '__invalid_key__'
             out[sk] = _to_jsonable(v)
         return out
     if isinstance(obj, list):
         return [_to_jsonable(v) for v in obj]
     if isinstance(obj, tuple) or isinstance(obj, set):
         return [_to_jsonable(v) for v in obj]
-    # Fallback to string representation for anything else
+
     try:
         return str(obj)
     except Exception:
         return None
 
-
 def _json_default(o: Any) -> Any:
     if isinstance(o, bytes):
-        return {"__type__": "bytes", "data": base64.b64encode(o).decode("ascii")}
+        return {'__type__': 'bytes', 'data': base64.b64encode(o).decode('ascii')}
     try:
-        # Attempt to stringify as a last resort
+
         return str(o)
     except Exception:
         return None
 
-
 def _from_jsonable(obj: Any) -> Any:
     """Inverse of _to_jsonable for the specific encodings we apply."""
     if isinstance(obj, dict):
-        if obj.get("__type__") == "bytes" and isinstance(obj.get("data"), str):
+        if obj.get('__type__') == 'bytes' and isinstance(obj.get('data'), str):
             try:
-                return base64.b64decode(obj["data"])
+                return base64.b64decode(obj['data'])
             except Exception:
-                return b""
+                return b''
         restored: dict[str, Any] = {}
         for k, v in obj.items():
             rk: Any = k
@@ -144,51 +137,48 @@ def _from_jsonable(obj: Any) -> Any:
                 try:
                     rk = base64.b64decode(b64)
                 except Exception:
-                    rk = k  # leave as-is if decode fails
+                    rk = k
             restored[rk] = _from_jsonable(v)
         return restored
     if isinstance(obj, list):
         return [_from_jsonable(v) for v in obj]
     return obj
 
-
 def dump_memory_to_file(path: Optional[str] = None) -> str:
     if not database.memory_only:
-        raise RuntimeError("Memory dump is only available in memory-only mode")
+        raise RuntimeError('Memory dump is only available in memory-only mode')
     dump_dir, stem = _split_dir_and_stem(path)
     os.makedirs(dump_dir, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    dump_path = os.path.join(dump_dir, f"{stem}-{ts}.bin")
+    ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    dump_path = os.path.join(dump_dir, f'{stem}-{ts}.bin')
     payload = {
-        "version": 1,
-        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        # Ensure data is JSON-serializable by normalizing bytes, sets, tuples, etc.
-        "data": _to_jsonable(database.db.dump_data()),
+        'version': 1,
+        'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+
+        'data': _to_jsonable(database.db.dump_data()),
     }
-    plaintext = json.dumps(payload, separators=(",", ":"), default=_json_default).encode("utf-8")
-    key = os.getenv("MEM_ENCRYPTION_KEY", "")
+    plaintext = json.dumps(payload, separators=(',', ':'), default=_json_default).encode('utf-8')
+    key = os.getenv('MEM_ENCRYPTION_KEY', '')
     blob = _encrypt_blob(plaintext, key)
-    with open(dump_path, "wb") as f:
+    with open(dump_path, 'wb') as f:
         f.write(blob)
     return dump_path
 
-
 def restore_memory_from_file(path: Optional[str] = None) -> dict:
     if not database.memory_only:
-        raise RuntimeError("Memory restore is only available in memory-only mode")
+        raise RuntimeError('Memory restore is only available in memory-only mode')
     dump_path = path or DEFAULT_DUMP_PATH
     if not os.path.exists(dump_path):
-        raise FileNotFoundError("Dump file not found")
-    key = os.getenv("MEM_ENCRYPTION_KEY", "")
-    with open(dump_path, "rb") as f:
+        raise FileNotFoundError('Dump file not found')
+    key = os.getenv('MEM_ENCRYPTION_KEY', '')
+    with open(dump_path, 'rb') as f:
         blob = f.read()
     plaintext = _decrypt_blob(blob, key)
-    payload = json.loads(plaintext.decode("utf-8"))
-    # Convert any encoded bytes or container types back to runtime shapes
-    data = _from_jsonable(payload.get("data", {}))
-    database.db.load_data(data)
-    return {"version": payload.get("version", 1), "created_at": payload.get("created_at")}
+    payload = json.loads(plaintext.decode('utf-8'))
 
+    data = _from_jsonable(payload.get('data', {}))
+    database.db.load_data(data)
+    return {'version': payload.get('version', 1), 'created_at': payload.get('created_at')}
 
 def find_latest_dump_path(path_hint: Optional[str] = None) -> Optional[str]:
     """Return the most recent dump file path based on a hint.
@@ -214,21 +204,16 @@ def find_latest_dump_path(path_hint: Optional[str] = None) -> Optional[str]:
         except Exception:
             return None
 
-    # Split hint into (dir, stem)
     dump_dir, stem = _split_dir_and_stem(path_hint)
 
-    # 1) If hint is a file path, prefer the newest timestamped file with same stem in its dir
-    # regardless of whether that exact hint exists.
     latest = newest_bin_in_dir(dump_dir, stem)
     if latest:
         return latest
 
-    # 2) Try the default path
     def_dir, def_stem = _split_dir_and_stem(DEFAULT_DUMP_PATH)
     latest = newest_bin_in_dir(def_dir, def_stem)
     if latest:
         return latest
 
-    # 3) Try scanning the default directory
     latest = newest_bin_in_dir(def_dir)
     return latest

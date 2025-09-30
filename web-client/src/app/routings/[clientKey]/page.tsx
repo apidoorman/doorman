@@ -106,7 +106,7 @@ const RoutingDetailPage = () => {
     try {
       setSaving(true)
       setError(null)
-      
+
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/routing/${clientKey}`, editData)
 
       // Refresh from server to get the latest canonical data (retry once on transient failure)
@@ -179,7 +179,7 @@ const RoutingDetailPage = () => {
     try {
       setDeleting(true)
       setError(null)
-      
+
       const { delJson } = await import('@/utils/api')
       await delJson(`${SERVER_URL}/platform/routing/${encodeURIComponent(clientKey)}`)
 
@@ -242,7 +242,6 @@ const RoutingDetailPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">{routing?.routing_name || 'Routing Details'}</h1>
@@ -298,7 +297,6 @@ const RoutingDetailPage = () => {
           </div>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="rounded-lg bg-success-50 border border-success-200 p-4 dark:bg-success-900/20 dark:border-success-800">
             <div className="flex">
@@ -312,7 +310,6 @@ const RoutingDetailPage = () => {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -328,7 +325,6 @@ const RoutingDetailPage = () => {
 
         {routing && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Basic Information */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
@@ -398,7 +394,6 @@ const RoutingDetailPage = () => {
               </div>
             </div>
 
-            {/* Servers Configuration */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Servers Configuration</h3>
@@ -420,7 +415,7 @@ const RoutingDetailPage = () => {
                     </button>
                   </div>
                 )}
-                
+
                 <div className="space-y-2">
                   {(isEditing ? editData.routing_servers : routing.routing_servers)?.map((server, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -450,7 +445,7 @@ const RoutingDetailPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {(!isEditing ? routing.routing_servers : editData.routing_servers)?.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No servers configured</p>
                 )}
@@ -475,4 +470,4 @@ const RoutingDetailPage = () => {
   )
 }
 
-export default RoutingDetailPage 
+export default RoutingDetailPage

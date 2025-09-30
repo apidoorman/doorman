@@ -20,7 +20,7 @@ const GroupDetailPage = () => {
   const router = useRouter()
   const params = useParams()
   const groupName = params.groupName as string
-  
+
   const [group, setGroup] = useState<Group | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -41,7 +41,7 @@ const GroupDetailPage = () => {
     try {
       setLoading(true)
       setError(null)
-      
+
       // Try to get from sessionStorage first
       const savedGroup = sessionStorage.getItem('selectedGroup')
       if (savedGroup) {
@@ -102,9 +102,9 @@ const GroupDetailPage = () => {
     try {
       setSaving(true)
       setError(null)
-      
+
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, editData)
-      
+
       // Refresh from server to get the latest canonical data (retry once on transient failure)
       let refreshedGroup: any
       try {
@@ -135,10 +135,10 @@ const GroupDetailPage = () => {
     try {
       setDeleting(true)
       setError(null)
-      
+
       const { delJson } = await import('@/utils/api')
       await delJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
-      
+
       router.push('/groups')
     } catch (err) {
       if (err instanceof Error) {
@@ -226,7 +226,6 @@ const GroupDetailPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">{group?.group_name || 'Group Details'}</h1>
@@ -282,7 +281,6 @@ const GroupDetailPage = () => {
           </div>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="rounded-lg bg-success-50 border border-success-200 p-4 dark:bg-success-900/20 dark:border-success-800">
             <div className="flex">
@@ -296,7 +294,6 @@ const GroupDetailPage = () => {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -312,7 +309,6 @@ const GroupDetailPage = () => {
 
         {group && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Basic Information */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
@@ -356,7 +352,6 @@ const GroupDetailPage = () => {
               </div>
             </div>
 
-            {/* API Access */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">API Access</h3>
@@ -378,7 +373,7 @@ const GroupDetailPage = () => {
                     </button>
                   </div>
                 )}
-                
+
                 <div className="space-y-2">
                   {(isEditing ? editData.api_access : group.api_access)?.map((api, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -408,7 +403,7 @@ const GroupDetailPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {(!isEditing ? group.api_access : editData.api_access)?.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No APIs assigned</p>
                 )}
@@ -427,11 +422,11 @@ const GroupDetailPage = () => {
           cancelLabel="Cancel"
           onCancel={() => setShowDeleteModal(false)}
           onConfirm={handleDelete}
-          
+
         />
       </div>
     </Layout>
   )
 }
 
-export default GroupDetailPage 
+export default GroupDetailPage

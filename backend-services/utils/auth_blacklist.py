@@ -1,3 +1,4 @@
+# External imports
 from datetime import datetime, timedelta
 import heapq
 
@@ -32,7 +33,7 @@ class TimedHeap:
         self.purge()
         if self.heap:
             return heapq.heappop(self.heap)[1]
-        raise IndexError("pop from an empty priority queue")
+        raise IndexError('pop from an empty priority queue')
 
     def purge(self):
         current_time = datetime.now()
