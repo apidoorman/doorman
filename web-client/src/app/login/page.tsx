@@ -72,13 +72,11 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100 dark:from-dark-bg dark:via-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-gradient-to-br from-primary-400/20 to-primary-600/20 blur-3xl"></div>
         <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-gradient-to-tr from-purple-400/20 to-purple-600/20 blur-3xl"></div>
       </div>
 
-      {/* Theme toggle */}
       <button
         onClick={toggleTheme}
         className="absolute top-6 right-6 rounded-lg p-2 text-gray-500 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-dark-surface/50 transition-colors"
@@ -96,7 +94,6 @@ const LoginPage = () => {
       </button>
 
       <div className="relative w-full max-w-md">
-        {/* Logo and title */}
         <div className="text-center mb-8">
           <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-lg">
             <span className="text-white font-bold text-2xl">D</span>
@@ -109,7 +106,6 @@ const LoginPage = () => {
           </p>
         </div>
 
-        {/* Login form */}
         <div className="card animate-fade-in">
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
@@ -187,7 +183,6 @@ const LoginPage = () => {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Need help?{' '}

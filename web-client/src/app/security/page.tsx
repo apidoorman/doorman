@@ -79,23 +79,23 @@ const SecurityPage = () => {
     try {
       setLoading(true)
       setError(null)
-      
+
       // Mock data for demonstration
       setApiKeys([
         { id: '1', name: 'Production API Key', key: 'sk_prod_123456789', created: '2024-01-15', lastUsed: '2024-01-20', status: 'active' },
         { id: '2', name: 'Development API Key', key: 'sk_dev_987654321', created: '2024-01-10', lastUsed: '2024-01-19', status: 'active' }
       ])
-      
+
       setRateLimits([
         { id: '1', path: '/api/v1/*', limit: 1000, window: '1 hour', status: 'active' },
         { id: '2', path: '/api/v1/auth/*', limit: 100, window: '1 hour', status: 'active' }
       ])
-      
+
       setIpWhitelist([
         { id: '1', ip: '192.168.1.100', description: 'Office Network', created: '2024-01-15', status: 'active' },
         { id: '2', ip: '10.0.0.50', description: 'VPN Server', created: '2024-01-10', status: 'active' }
       ])
-      
+
       setSecurityPolicies([
         { id: '1', name: 'JWT Authentication', type: 'jwt', status: 'active', createdAt: '2024-01-15' },
         { id: '2', name: 'API Key Authentication', type: 'api-key', status: 'active', createdAt: '2024-01-10' }
@@ -194,7 +194,7 @@ const SecurityPage = () => {
 
   const handleRevokeApiKey = async (keyId: string) => {
     try {
-      setApiKeys(prev => prev.map(key => 
+      setApiKeys(prev => prev.map(key =>
         key.id === keyId ? { ...key, status: 'revoked' as const } : key
       ))
       setSuccess('API key revoked successfully!')
@@ -237,7 +237,6 @@ const SecurityPage = () => {
     <ProtectedRoute requiredPermission="manage_security">
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <div className="flex items-center gap-2">
@@ -252,7 +251,6 @@ const SecurityPage = () => {
           </div>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="rounded-lg bg-success-50 border border-success-200 p-4 dark:bg-success-900/20 dark:border-success-800">
             <div className="flex">
@@ -266,7 +264,6 @@ const SecurityPage = () => {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -280,7 +277,6 @@ const SecurityPage = () => {
           </div>
         )}
 
-        {/* Loading State */}
         {loading ? (
           <div className="card">
             <div className="flex items-center justify-center py-12">
@@ -292,7 +288,6 @@ const SecurityPage = () => {
           </div>
         ) : (
           <>
-            {/* Settings (always visible) */}
             <div className="card">
               <div className="p-6 space-y-6">
                 <div className="flex items-center justify-between">
@@ -399,7 +394,6 @@ const SecurityPage = () => {
                 </div>
               </div>
             </div>
-            {/* Tabs */}
             <div className="card">
               <div className="border-b border-gray-200 dark:border-gray-700">
                 <nav className="-mb-px flex space-x-8">
@@ -499,7 +493,6 @@ const SecurityPage = () => {
                     </div>
                   </div>
                 )}
-                {/* API Keys Tab */}
                 {activeTab === 'api-keys' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -563,7 +556,6 @@ const SecurityPage = () => {
                   </div>
                 )}
 
-                {/* Rate Limits Tab */}
                 {activeTab === 'rate-limits' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -610,7 +602,6 @@ const SecurityPage = () => {
                   </div>
                 )}
 
-                {/* IP Whitelist Tab */}
                 {activeTab === 'ip-whitelist' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -657,7 +648,6 @@ const SecurityPage = () => {
                   </div>
                 )}
 
-                {/* Security Policies Tab */}
                 {activeTab === 'policies' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">

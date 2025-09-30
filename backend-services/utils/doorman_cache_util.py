@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
+# External imports
 import redis
 import json
 import os
@@ -14,7 +15,7 @@ class MemoryCache:
     def __init__(self):
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
-    
+
     def setex(self, key: str, ttl: int, value: str):
         with self._lock:
             self._cache[key] = {
@@ -31,20 +32,20 @@ class MemoryCache:
                 else:
                     del self._cache[key]
             return None
-    
+
     def delete(self, *keys):
         with self._lock:
             for key in keys:
                 if key in self._cache:
                     self._cache.pop(key, None)
-    
+
     def keys(self, pattern: str) -> list:
         with self._lock:
             if pattern.endswith('*'):
                 prefix = pattern[:-1]
                 return [key for key in self._cache.keys() if key.startswith(prefix)]
             return [key for key in self._cache.keys() if key == pattern]
-    
+
     def _get_current_time(self) -> int:
         import time
         return int(time.time())
@@ -53,7 +54,7 @@ class MemoryCache:
         with self._lock:
             current_time = self._get_current_time()
             total_entries = len(self._cache)
-            expired_entries = sum(1 for entry in self._cache.values() 
+            expired_entries = sum(1 for entry in self._cache.values()
                                 if current_time >= entry['expires_at'])
             active_entries = total_entries - expired_entries
             return {
@@ -61,52 +62,51 @@ class MemoryCache:
                 'active_entries': active_entries,
                 'expired_entries': expired_entries
             }
-    
+
     def _cleanup_expired(self):
         with self._lock:
             current_time = self._get_current_time()
             expired_keys = [
-                key for key, entry in self._cache.items() 
+                key for key, entry in self._cache.items()
                 if current_time >= entry['expires_at']
             ]
             for key in expired_keys:
                 del self._cache[key]
             if expired_keys:
-                print(f"Cleaned up {len(expired_keys)} expired cache entries")
+                print(f'Cleaned up {len(expired_keys)} expired cache entries')
 
-    # No-op stubs to keep interface compatibility
     def stop_auto_save(self):
         return
 
 class DoormanCacheManager:
     def __init__(self):
-        # Unified flag MEM_OR_EXTERNAL with backward-compatible alias MEM_OR_REDIS
-        cache_flag = os.getenv("MEM_OR_EXTERNAL")
+
+        cache_flag = os.getenv('MEM_OR_EXTERNAL')
         if cache_flag is None:
-            cache_flag = os.getenv("MEM_OR_REDIS", "MEM")
+            cache_flag = os.getenv('MEM_OR_REDIS', 'MEM')
         self.cache_type = str(cache_flag).upper()
-        if self.cache_type == "MEM":
+        if self.cache_type == 'MEM':
             self.cache = MemoryCache()
             self.is_redis = False
         else:
             try:
-                redis_host = os.getenv("REDIS_HOST", "localhost")
-                redis_port = int(os.getenv("REDIS_PORT", 6379))
-                redis_db = int(os.getenv("REDIS_DB", 0))
+                redis_host = os.getenv('REDIS_HOST', 'localhost')
+                redis_port = int(os.getenv('REDIS_PORT', 6379))
+                redis_db = int(os.getenv('REDIS_DB', 0))
                 pool = redis.ConnectionPool(
-                    host=redis_host, 
-                    port=redis_port, 
-                    db=redis_db, 
-                    decode_responses=True, 
+                    host=redis_host,
+                    port=redis_port,
+                    db=redis_db,
+                    decode_responses=True,
                     max_connections=100
                 )
                 self.cache = redis.StrictRedis(connection_pool=pool)
                 self.is_redis = True
             except Exception as e:
-                print(f"Warning: Redis connection failed, falling back to memory cache: {e}")
+                print(f'Warning: Redis connection failed, falling back to memory cache: {e}')
                 self.cache = MemoryCache()
                 self.is_redis = False
-                self.cache_type = "MEM"
+                self.cache_type = 'MEM'
         self.prefixes = {
             'api_cache': 'api_cache:',
             'api_endpoint_cache': 'api_endpoint_cache:',
@@ -144,7 +144,7 @@ class DoormanCacheManager:
         }
 
     def _get_key(self, cache_name, key):
-        return f"{self.prefixes[cache_name]}{key}"
+        return f'{self.prefixes[cache_name]}{key}'
 
     def set_cache(self, cache_name, key, value):
         ttl = self.default_ttls.get(cache_name, 86400)
@@ -169,7 +169,7 @@ class DoormanCacheManager:
         self.cache.delete(cache_key)
 
     def clear_cache(self, cache_name):
-        pattern = f"{self.prefixes[cache_name]}*"
+        pattern = f'{self.prefixes[cache_name]}*'
         keys = self.cache.keys(pattern)
         if keys:
             self.cache.delete(*keys)
@@ -187,7 +187,7 @@ class DoormanCacheManager:
         }
         if not self.is_redis and hasattr(self.cache, 'get_cache_stats'):
             info['memory_stats'] = self.cache.get_cache_stats()
-        
+
         return info
 
     def cleanup_expired_entries(self):
@@ -195,7 +195,7 @@ class DoormanCacheManager:
             self.cache._cleanup_expired()
 
     def force_save_cache(self):
-        # No-op: cache persistence removed
+
         return
 
     def stop_cache_persistence(self):
@@ -205,8 +205,8 @@ class DoormanCacheManager:
     @staticmethod
     def is_operational():
         try:
-            test_key = "health_check_test"
-            test_value = "test"
+            test_key = 'health_check_test'
+            test_value = 'test'
             doorman_cache.set_cache('api_cache', test_key, test_value)
             retrieved_value = doorman_cache.get_cache('api_cache', test_key)
             doorman_cache.delete_cache('api_cache', test_key)

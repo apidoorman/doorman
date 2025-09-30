@@ -4,9 +4,15 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
+# External imports
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from jose import JWTError
+import uuid
+import time
+import logging
+import os
 
+# Internal imports
 from models.response_model import ResponseModel
 from services.user_service import UserService
 from utils.response_util import respond_rest
@@ -16,37 +22,43 @@ from utils.role_util import platform_role_required_bool
 from utils.role_util import is_admin_user
 from models.update_user_model import UpdateUserModel
 
-import uuid
-import time
-import logging
-import os
-
 authorization_router = APIRouter()
 
-logger = logging.getLogger("doorman.gateway")
+logger = logging.getLogger('doorman.gateway')
 
-@authorization_router.post("/authorization",
-    description="Create authorization token",
+"""
+Create authorization token
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.post('/authorization',
+    description='Create authorization token',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "access_token": "******************"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'access_token': '******************'
                     }
                 }
             }
         }
     }
 )
+
 async def authorization(request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        logger.info(f"{request_id} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        logger.info(f'{request_id} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         data = await request.json()
         email = data.get('email')
         password = data.get('password')
@@ -54,103 +66,97 @@ async def authorization(request: Request):
             return respond_rest(ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
-                error_code="AUTH001",
-                error_message="Missing email or password"
+                error_code='AUTH001',
+                error_message='Missing email or password'
             ))
         user = await UserService.check_password_return_user(email, password)
         if not user:
             return respond_rest(ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
-                error_code="AUTH002",
-                error_message="Invalid email or password"
+                error_code='AUTH002',
+                error_message='Invalid email or password'
             ))
-        if not user["active"]:
+        if not user['active']:
             return respond_rest(ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
-                error_code="AUTH007",
-                error_message="User is not active"
+                error_code='AUTH007',
+                error_message='User is not active'
             ))
-        access_token = create_access_token({"sub": user["username"], "role": user["role"]}, False)
-        
-        # Minimal logging to avoid leaking PII
+        access_token = create_access_token({'sub': user['username'], 'role': user['role']}, False)
+
         logger.info(f"Login successful for user: {user['username']}")
-        
+
         response = respond_rest(ResponseModel(
             status_code=200,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            response={"access_token": access_token}
+            response={'access_token': access_token}
         ))
-        response.delete_cookie("access_token_cookie")
-        # CSRF double-submit cookie (for HTTPS-enabled deployments)
+        response.delete_cookie('access_token_cookie')
+
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
-        # Use Secure cookies when HTTPS is enabled; allow insecure in local dev/tests
-        _secure = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
-        _domain = os.getenv("COOKIE_DOMAIN", None)
-        _samesite = (os.getenv("COOKIE_SAMESITE", "Strict") or "Strict").strip().lower()
-        if _samesite not in ("strict", "lax", "none"):
-            _samesite = "strict"
+
+        _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+        _domain = os.getenv('COOKIE_DOMAIN', None)
+        _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
+        if _samesite not in ('strict', 'lax', 'none'):
+            _samesite = 'strict'
         host = request.url.hostname or (request.client.host if request.client else None)
-        # Set Domain attribute when the configured domain matches the host.
-        # For test environments with bare hosts (e.g., "testserver"), allow exact match.
-        # Set Domain only when host matches configured domain (exact or subdomain).
+
         if _domain and host and (host == _domain or host.endswith('.' + _domain)):
             safe_domain = _domain
         else:
             safe_domain = None
-        # codeql[py/insecure-cookie]: In dev, HTTPS may be disabled for localhost; production enables HTTPS_ONLY/HTTPS_ENABLED
-        # Set CSRF cookie with configured domain when applicable
+
         response.set_cookie(
-            key="csrf_token",
+            key='csrf_token',
             value=csrf_token,
             httponly=False,
             secure=_secure,
             samesite=_samesite,
-            path="/",
+            path='/',
             domain=safe_domain,
             max_age=1800
         )
-        # Also set a host-only CSRF cookie to accommodate test/dev hosts
-        # codeql[py/insecure-cookie]: Host-only variant for localhost/dev
+
         response.set_cookie(
-            key="csrf_token",
+            key='csrf_token',
             value=csrf_token,
             httponly=False,
             secure=_secure,
             samesite=_samesite,
-            path="/",
+            path='/',
             max_age=1800
         )
-        # codeql[py/insecure-cookie]: In dev, HTTPS may be disabled for localhost; production enables HTTPS_ONLY/HTTPS_ENABLED
-        # Set auth cookie with configured domain when applicable
+
         response.set_cookie(
-            key="access_token_cookie",
+            key='access_token_cookie',
             value=access_token,
             httponly=True,
             secure=_secure,
             samesite=_samesite,
-            path="/",
+            path='/',
             domain=safe_domain,
-            max_age=1800  # 30 minutes
+            max_age=1800
         )
-        # Also set a host-only auth cookie for local/test transports
+
         response.set_cookie(
-            key="access_token_cookie",
+            key='access_token_cookie',
             value=access_token,
             httponly=True,
             secure=_secure,
             samesite=_samesite,
-            path="/",
+            path='/',
             max_age=1800
         )
         return response
@@ -158,239 +164,294 @@ async def authorization(request: Request):
         return respond_rest(ResponseModel(
             status_code=401,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="AUTH003",
-            error_message="Unable to validate credentials"
+            error_code='AUTH003',
+            error_message='Unable to validate credentials'
             ))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
             ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
 # Admin endpoints for revoking tokens and disabling/enabling users
-@authorization_router.post("/authorization/admin/revoke/{username}",
-    description="Revoke all active tokens for a user (admin)",
+"""
+Endpoint
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.post('/authorization/admin/revoke/{username}',
+    description='Revoke all active tokens for a user (admin)',
     response_model=ResponseModel)
+
 async def admin_revoke_user_tokens(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        admin_user = payload.get("sub")
-        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        admin_user = payload.get('sub')
+        logger.info(f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
-                error_code="AUTH900",
-                error_message="You do not have permission to manage auth"
+                response_headers={'request_id': request_id},
+                error_code='AUTH900',
+                error_message='You do not have permission to manage auth'
             ))
-        # Only admin may revoke tokens for admin users
+
         try:
             if await is_admin_user(username) and not await is_admin_user(admin_user):
                 return respond_rest(ResponseModel(
                     status_code=404,
-                    response_headers={"request_id": request_id},
-                    error_message="User not found"
+                    response_headers={'request_id': request_id},
+                    error_message='User not found'
                 ))
         except Exception:
             pass
         revoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
-            response_headers={"request_id": request_id},
-            message=f"All tokens revoked for {username}"
+            response_headers={'request_id': request_id},
+            message=f'All tokens revoked for {username}'
         ))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            response_headers={'request_id': request_id},
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
         ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@authorization_router.post("/authorization/admin/unrevoke/{username}",
-    description="Clear token revocation for a user (admin)",
+"""
+Endpoint
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.post('/authorization/admin/unrevoke/{username}',
+    description='Clear token revocation for a user (admin)',
     response_model=ResponseModel)
+
 async def admin_unrevoke_user_tokens(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        admin_user = payload.get("sub")
-        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        admin_user = payload.get('sub')
+        logger.info(f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
-                error_code="AUTH900",
-                error_message="You do not have permission to manage auth"
+                response_headers={'request_id': request_id},
+                error_code='AUTH900',
+                error_message='You do not have permission to manage auth'
             ))
-        # Only admin may clear revocation for admin users
+
         try:
             if await is_admin_user(username) and not await is_admin_user(admin_user):
                 return respond_rest(ResponseModel(
                     status_code=404,
-                    response_headers={"request_id": request_id},
-                    error_message="User not found"
+                    response_headers={'request_id': request_id},
+                    error_message='User not found'
                 ))
         except Exception:
             pass
         unrevoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
-            response_headers={"request_id": request_id},
-            message=f"Token revocation cleared for {username}"
+            response_headers={'request_id': request_id},
+            message=f'Token revocation cleared for {username}'
         ))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            response_headers={'request_id': request_id},
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
         ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@authorization_router.post("/authorization/admin/disable/{username}",
-    description="Disable a user (admin)",
+"""
+Endpoint
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.post('/authorization/admin/disable/{username}',
+    description='Disable a user (admin)',
     response_model=ResponseModel)
+
 async def admin_disable_user(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        admin_user = payload.get("sub")
-        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        admin_user = payload.get('sub')
+        logger.info(f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
-                error_code="AUTH900",
-                error_message="You do not have permission to manage auth"
+                response_headers={'request_id': request_id},
+                error_code='AUTH900',
+                error_message='You do not have permission to manage auth'
             ))
-        # Only admin may disable admin users
+
         try:
             if await is_admin_user(username) and not await is_admin_user(admin_user):
                 return respond_rest(ResponseModel(
                     status_code=404,
-                    response_headers={"request_id": request_id},
-                    error_message="User not found"
+                    response_headers={'request_id': request_id},
+                    error_message='User not found'
                 ))
         except Exception:
             pass
-        # Disable user
+
         await UserService.update_user(username, UpdateUserModel(active=False), request_id)
-        # Revoke all tokens for immediate effect
+
         revoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
-            response_headers={"request_id": request_id},
-            message=f"User {username} disabled and tokens revoked"
+            response_headers={'request_id': request_id},
+            message=f'User {username} disabled and tokens revoked'
         ))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            response_headers={'request_id': request_id},
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
         ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@authorization_router.post("/authorization/admin/enable/{username}",
-    description="Enable a user (admin)",
+"""
+Endpoint
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.post('/authorization/admin/enable/{username}',
+    description='Enable a user (admin)',
     response_model=ResponseModel)
+
 async def admin_enable_user(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        admin_user = payload.get("sub")
-        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        admin_user = payload.get('sub')
+        logger.info(f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
-                error_code="AUTH900",
-                error_message="You do not have permission to manage auth"
+                response_headers={'request_id': request_id},
+                error_code='AUTH900',
+                error_message='You do not have permission to manage auth'
             ))
-        # Only admin may enable admin users
+
         try:
             if await is_admin_user(username) and not await is_admin_user(admin_user):
                 return respond_rest(ResponseModel(
                     status_code=404,
-                    response_headers={"request_id": request_id},
-                    error_message="User not found"
+                    response_headers={'request_id': request_id},
+                    error_message='User not found'
                 ))
         except Exception:
             pass
         await UserService.update_user(username, UpdateUserModel(active=True), request_id)
-        # Do not automatically unrevoke; keep admin control explicit
+
         return respond_rest(ResponseModel(
             status_code=200,
-            response_headers={"request_id": request_id},
-            message=f"User {username} enabled"
+            response_headers={'request_id': request_id},
+            message=f'User {username} enabled'
         ))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            response_headers={'request_id': request_id},
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
         ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@authorization_router.get("/authorization/admin/status/{username}",
-    description="Get auth status for a user (admin)",
+"""
+Endpoint
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.get('/authorization/admin/status/{username}',
+    description='Get auth status for a user (admin)',
     response_model=ResponseModel)
+
 async def admin_user_status(username: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        admin_user = payload.get("sub")
-        logger.info(f"{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        admin_user = payload.get('sub')
+        logger.info(f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
-                error_code="AUTH900",
-                error_message="You do not have permission to manage auth"
+                response_headers={'request_id': request_id},
+                error_code='AUTH900',
+                error_message='You do not have permission to manage auth'
             ))
-        # Hide admin user status from non-admins
+
         try:
             if await is_admin_user(username) and not await is_admin_user(admin_user):
                 return respond_rest(ResponseModel(
                     status_code=404,
-                    response_headers={"request_id": request_id},
-                    error_message="User not found"
+                    response_headers={'request_id': request_id},
+                    error_message='User not found'
                 ))
         except Exception:
             pass
@@ -401,234 +462,267 @@ async def admin_user_status(username: str, request: Request):
         }
         return respond_rest(ResponseModel(
             status_code=200,
-            response_headers={"request_id": request_id},
+            response_headers={'request_id': request_id},
             response=status
         ))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            response_headers={'request_id': request_id},
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
         ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-    
-@authorization_router.post("/authorization/refresh",
-    description="Create authorization refresh token",
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+"""
+Create authorization refresh token
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.post('/authorization/refresh',
+    description='Create authorization refresh token',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "refresh_token": "******************"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'refresh_token': '******************'
                     }
                 }
             }
         }
     }
 )
+
 async def extended_authorization(request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         user = await UserService.get_user_by_username_helper(username)
-        if not user["active"]:
+        if not user['active']:
             return respond_rest(ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
-                error_code="AUTH007",
-                error_message="User is not active"
+                error_code='AUTH007',
+                error_message='User is not active'
             ))
-        refresh_token = create_access_token({"sub": username, "role": user["role"]}, True)
+        refresh_token = create_access_token({'sub': username, 'role': user['role']}, True)
         response = respond_rest(ResponseModel(
             status_code=200,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            response={"refresh_token": refresh_token}
+            response={'refresh_token': refresh_token}
         ))
-        # Refresh CSRF token as well to keep parity with new cookie
+
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
-        # Use Secure cookies when HTTPS is enabled; allow insecure in local dev/tests
-        _secure = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
-        _domain = os.getenv("COOKIE_DOMAIN", None)
-        _samesite = (os.getenv("COOKIE_SAMESITE", "Strict") or "Strict").strip().lower()
-        if _samesite not in ("strict", "lax", "none"):
-            _samesite = "strict"
+
+        _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+        _domain = os.getenv('COOKIE_DOMAIN', None)
+        _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
+        if _samesite not in ('strict', 'lax', 'none'):
+            _samesite = 'strict'
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
-        # codeql[py/insecure-cookie]: In dev, HTTPS may be disabled for localhost; production enables HTTPS_ONLY/HTTPS_ENABLED
+
         response.set_cookie(
-            key="csrf_token",
+            key='csrf_token',
             value=csrf_token,
             httponly=False,
             secure=_secure,
             samesite=_samesite,
-            path="/",
+            path='/',
             domain=safe_domain,
             max_age=604800
         )
-        # codeql[py/insecure-cookie] Secure flag is tied to HTTPS env; dev uses HTTP on localhost for ease of testing
+
         response.set_cookie(
-            key="access_token_cookie",
+            key='access_token_cookie',
             value=refresh_token,
             httponly=True,
             secure=_secure,
             samesite=_samesite,
-            path="/",
+            path='/',
             domain=safe_domain,
-            max_age=604800  # 7 days
+            max_age=604800
         )
         return response
     except HTTPException as e:
         return respond_rest(ResponseModel(
             status_code=401,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="AUTH003",
-            error_message="Unable to validate credentials"
+            error_code='AUTH003',
+            error_message='Unable to validate credentials'
             ))
     except JWTError as e:
-        logging.error(f"Token refresh failed: {str(e)}")
+        logging.error(f'Token refresh failed: {str(e)}')
         return respond_rest(ResponseModel(
             status_code=401,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="AUTH004",
-            error_message="Token refresh failed"
+            error_code='AUTH004',
+            error_message='Token refresh failed'
             ))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
             ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@authorization_router.get("/authorization/status",
-    description="Get authorization token status",
+"""
+Get authorization token status
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.get('/authorization/status',
+    description='Get authorization token status',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "authorized"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'status': 'authorized'
                     }
                 }
             }
         }
     }
 )
+
 async def authorization_status(request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(ResponseModel(
             status_code=200,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            message="Token is valid"
+            message='Token is valid'
             ))
     except JWTError:
         return respond_rest(ResponseModel(
             status_code=401,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="AUTH005",
-            error_message="Token is invalid"
+            error_code='AUTH005',
+            error_message='Token is invalid'
             ))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
             ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-    
-@authorization_router.post("/authorization/invalidate",
-    description="Invalidate authorization token",
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+"""
+Invalidate authorization token
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@authorization_router.post('/authorization/invalidate',
+    description='Invalidate authorization token',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Your token has been invalidated"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'Your token has been invalidated'
                     }
                 }
             }
         }
     }
 )
+
 async def authorization_invalidate(response: Response, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if username not in jwt_blacklist:
             jwt_blacklist[username] = TimedHeap()
-        jwt_blacklist[username].push(payload.get("jti"))
+        jwt_blacklist[username].push(payload.get('jti'))
         response = respond_rest(ResponseModel(
             status_code=200,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            message="Your token has been invalidated"
+            message='Your token has been invalidated'
             ))
-        # Delete cookie on the configured domain if provided (helps when using subdomains)
-        _domain = os.getenv("COOKIE_DOMAIN", None)
+
+        _domain = os.getenv('COOKIE_DOMAIN', None)
         host = request.url.hostname or (request.client.host if request.client else None)
         safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
-        response.delete_cookie("access_token_cookie", domain=safe_domain, path="/")
+        response.delete_cookie('access_token_cookie', domain=safe_domain, path='/')
         return response
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
             ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')

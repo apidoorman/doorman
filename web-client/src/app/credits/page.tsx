@@ -156,9 +156,6 @@ export default function CreditsPage() {
           </div>
         </div>
 
-        {/* Search moved below Credit Definitions and above User Credits rows */}
-
-        {/* Credit Definitions CTA */}
         <div className="card">
           <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
@@ -172,7 +169,6 @@ export default function CreditsPage() {
           </div>
         </div>
 
-        {/* Search Users (separate section under Credit Definitions) */}
         <div className="card -mt-3">
           <form onSubmit={(e) => { e.preventDefault(); setUsersPage(1); loadAllUserTokens() }} className="flex-1">
             <div className="relative">
@@ -200,14 +196,11 @@ export default function CreditsPage() {
           </form>
         </div>
 
-        {/* User Credits */}
         <div className="card">
           <div className="card-header"><h3 className="card-title">User Credits</h3></div>
           <div className="p-6 space-y-4">
             {userError && <div className="text-sm text-error-600">{userError}</div>}
             {userSuccess && <div className="text-sm text-success-600">{userSuccess}</div>}
-            {/* Select a user from the table below to view/edit credits */}
-            {/* Detail view moved to /credits/[username] */}
 
             <div className="mt-2">
               {usersLoading ? (
@@ -267,7 +260,6 @@ export default function CreditsPage() {
         </div>
       </div>
 
-      {/* No delete modal needed on this page anymore */}
     </Layout>
     </ProtectedRoute>
   )

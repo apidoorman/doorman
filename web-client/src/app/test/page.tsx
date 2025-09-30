@@ -11,7 +11,7 @@ export default function TestPage() {
   useEffect(() => {
     // Set cookies in useEffect to avoid SSR issues
     setCookies(document.cookie)
-    
+
     const token = getTokenFromCookie()
     if (token) {
       const payload = decodeJWT(token)
@@ -40,7 +40,7 @@ export default function TestPage() {
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4">Authentication Test</h1>
-      
+
       <div className="mb-4">
         <label className="flex items-center">
           <input
@@ -92,4 +92,4 @@ export default function TestPage() {
       </div>
     </div>
   )
-} 
+}

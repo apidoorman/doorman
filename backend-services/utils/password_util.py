@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
+# External imports
 import bcrypt
 
 def hash_password(password: str):
@@ -13,7 +14,7 @@ def hash_password(password: str):
 def verify_password(password: str, hashed_password: str):
     password = password.encode('utf-8')
     return bcrypt.checkpw(password, hashed_password)
-    
+
 def is_secure_password(password: str):
     if len(password) < 16:
         return False

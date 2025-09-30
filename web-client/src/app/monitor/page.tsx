@@ -92,7 +92,6 @@ const MonitorPage: React.FC = () => {
     <ProtectedRoute requiredPermission="manage_gateway">
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Monitor</h1>
@@ -121,7 +120,6 @@ const MonitorPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -135,7 +133,6 @@ const MonitorPage: React.FC = () => {
           </div>
         )}
 
-        {/* Loading State */}
         {loading ? (
           <div className="card">
             <div className="flex items-center justify-center py-12">
@@ -148,7 +145,6 @@ const MonitorPage: React.FC = () => {
         ) : (
           /* Metrics Grid */
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Health Probes */}
             <div className="card">
               <div className="card-header"><h3 className="card-title">Health Probes</h3></div>
               <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -175,7 +171,6 @@ const MonitorPage: React.FC = () => {
                 </div>
               </div>
             </div>
-            {/* Total Requests */}
             <div className="stats-card">
               <div className="flex items-center justify-between">
                 <div>
@@ -191,7 +186,6 @@ const MonitorPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Error Rate */}
             <div className="stats-card">
               <div className="flex items-center justify-between">
                 <div>
@@ -215,7 +209,6 @@ const MonitorPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Average Response Time */}
             <div className="stats-card">
               <div className="flex items-center justify-between">
                 <div>
@@ -231,7 +224,6 @@ const MonitorPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Active Users */}
             <div className="stats-card">
               <div className="flex items-center justify-between">
                 <div>
@@ -249,7 +241,6 @@ const MonitorPage: React.FC = () => {
           </div>
         )}
 
-        {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="card">
             <div className="card-header"><h3 className="card-title">Status Codes</h3></div>
@@ -289,14 +280,12 @@ const MonitorPage: React.FC = () => {
           </div>
         </div>
 
-        {/* System Status */}
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">System Status</h3>
           </div>
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* API Gateway */}
               <div className={`flex items-center p-4 rounded-lg ${liveness === 'alive' ? 'bg-green-50 dark:bg-green-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'}`}>
                 <div className={`h-3 w-3 rounded-full mr-3 ${liveness === 'alive' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
                 <div>
@@ -304,7 +293,6 @@ const MonitorPage: React.FC = () => {
                   <p className="text-sm text-green-600 dark:text-green-400">{liveness === 'alive' ? 'Operational' : 'Degraded'}</p>
                 </div>
               </div>
-              {/* Database */}
               <div className={`flex items-center p-4 rounded-lg ${(readiness?.mode === 'memory' || readiness?.mongodb) ? 'bg-green-50 dark:bg-green-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'}`}>
                 <div className={`h-3 w-3 rounded-full mr-3 ${(readiness?.mode === 'memory' || readiness?.mongodb) ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
                 <div>
@@ -312,7 +300,6 @@ const MonitorPage: React.FC = () => {
                   <p className="text-sm text-green-600 dark:text-green-400">{readiness?.mode === 'memory' ? 'Memory Mode' : (readiness?.mongodb ? 'Operational' : 'Degraded')}</p>
                 </div>
               </div>
-              {/* Cache */}
               <div className={`flex items-center p-4 rounded-lg ${(readiness?.cache_backend === 'memory' || readiness?.redis) ? 'bg-green-50 dark:bg-green-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'}`}>
                 <div className={`h-3 w-3 rounded-full mr-3 ${(readiness?.cache_backend === 'memory' || readiness?.redis) ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
                 <div>
@@ -329,4 +316,4 @@ const MonitorPage: React.FC = () => {
   )
 }
 
-export default MonitorPage 
+export default MonitorPage

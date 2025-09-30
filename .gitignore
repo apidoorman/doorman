@@ -55,3 +55,9 @@ env/
 **/venv/
 **/env/
 backend-services/platform-logs/doorman.log
+
+# Local helper scripts (never commit)
+scripts/cleanup_inline_comments.py
+scripts/style_unify_python.py
+scripts/add_route_docblocks.py
+scripts/dedupe_docblocks.py
