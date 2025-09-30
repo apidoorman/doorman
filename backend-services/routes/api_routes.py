@@ -14,6 +14,7 @@ from models.create_api_model import CreateApiModel
 from models.update_api_model import UpdateApiModel
 from models.api_model_response import ApiModelResponse
 from utils.response_util import respond_rest, process_response
+from utils.constants import ErrorCodes, Messages, Defaults, Roles, Headers
 from utils.role_util import platform_role_required_bool
 from utils.audit_util import audit
 
@@ -48,12 +49,12 @@ async def create_api(request: Request, api_data: CreateApiModel):
     logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
     logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
     try:
-        if not await platform_role_required_bool(username, 'manage_apis'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             logger.warning(f"{request_id} | Permission denied for user: {username}")
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="API007",
                 error_message="You do not have permission to create APIs"
@@ -66,10 +67,10 @@ async def create_api(request: Request, api_data: CreateApiModel):
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -99,11 +100,11 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_apis'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="API008",
                 error_message="You do not have permission to update APIs"
@@ -116,10 +117,10 @@ async def update_api(api_name: str, api_version: str, request: Request, api_data
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -155,10 +156,10 @@ async def get_api_by_name_version(api_name: str, api_version: str, request: Requ
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -209,7 +210,7 @@ async def delete_api(api_name: str, api_version: str, request: Request):
     description="Get all APIs",
     response_model=List[ApiModelResponse]
 )
-async def get_all_apis(request: Request, page: int = 1, page_size: int = 10):
+async def get_all_apis(request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -223,10 +224,10 @@ async def get_all_apis(request: Request, page: int = 1, page_size: int = 10):
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000

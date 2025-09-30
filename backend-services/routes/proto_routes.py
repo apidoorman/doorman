@@ -11,6 +11,7 @@ from pathlib import Path
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required
 from utils.response_util import process_response
+from utils.constants import Headers, Defaults, Roles, ErrorCodes, Messages
 from utils.role_util import platform_role_required_bool
 
 import os
@@ -89,16 +90,15 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        # Per-route multipart size limit (default 5MB)
-        max_size = int(os.getenv("MAX_MULTIPART_SIZE_BYTES", 5_242_880))
+        max_size = int(os.getenv(Defaults.MAX_MULTIPART_SIZE_BYTES_ENV, Defaults.MAX_MULTIPART_SIZE_BYTES_DEFAULT))
         cl = request.headers.get('content-length') if request else None
         try:
             if cl and int(cl) > max_size:
                 return process_response(ResponseModel(
                     status_code=413,
-                    response_headers={"request_id": request_id},
-                    error_code="REQ002",
-                    error_message="Uploaded file too large"
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_code=ErrorCodes.REQUEST_TOO_LARGE,
+                    error_message=Messages.FILE_TOO_LARGE
                 ).dict(), "rest")
         except Exception:
             pass
@@ -106,21 +106,20 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username}")
         logger.info(f"{request_id} | Endpoint: POST /proto/{api_name}/{api_version}")
-        if not await platform_role_required_bool(username, 'manage_apis'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return process_response(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
-                error_code="AUTH001",
-                error_message="User does not have permission to manage APIs"
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.AUTH_REQUIRED,
+                error_message=Messages.PERMISSION_MANAGE_APIS
             ).dict(), "rest")
-        # Restrict uploads to .proto extension only
         original_name = file.filename or ""
         if not original_name.lower().endswith('.proto'):
             return process_response(ResponseModel(
                 status_code=400,
-                response_headers={"request_id": request_id},
-                error_code="REQ003",
-                error_message="Only .proto files are allowed"
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.REQUEST_FILE_TYPE,
+                error_message=Messages.ONLY_PROTO_ALLOWED
             ).dict(), "rest")
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
         content = await file.read()
@@ -164,24 +163,24 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
             logger.error(f"{request_id} | Failed to generate gRPC code: {str(e)}")
             return process_response(ResponseModel(
                 status_code=500,
-                response_headers={"request_id": request_id},
-                error_code="GTW012",
-                error_message=f"Failed to generate gRPC code: {str(e)}"
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.GRPC_GENERATION_FAILED,
+                error_message=f"{Messages.GRPC_GEN_FAILED}: {str(e)}"
             ).dict(), "rest")
     except HTTPException as e:
         logger.error(f"{request_id} | Path validation error: {str(e)}")
         return process_response(ResponseModel(
             status_code=e.status_code,
-            response_headers={"request_id": request_id},
-            error_code="GTW013",
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.PATH_VALIDATION,
             error_message=str(e.detail)
         ).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | Error uploading proto file: {str(e)}")
         return process_response(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW012",
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.GRPC_GENERATION_FAILED,
             error_message=f"Failed to upload proto file: {str(e)}"
         ).dict(), "rest")
     finally:
@@ -211,25 +210,25 @@ async def get_proto_file(api_name: str, api_version: str, request: Request):
     logger.info(f"{request_id} | Username: {username} | From: {request.client.host}")
     logger.info(f"{request_id} | Endpoint: {request.method} {request.url.path}")
     try:
-        if not await platform_role_required_bool(username, 'manage_apis'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return process_response(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
-                error_code="AUTH001",
-                error_message="User does not have permission to manage APIs"
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.AUTH_REQUIRED,
+                error_message=Messages.PERMISSION_MANAGE_APIS
             ).dict(), "rest")
         proto_path, _ = get_safe_proto_path(api_name, api_version)
         if not proto_path.exists():
             return process_response(ResponseModel(
                 status_code=404,
-                response_headers={"request_id": request_id},
-                error_code="API002",
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.API_NOT_FOUND,
                 error_message=f"Proto file not found for API {api_name}/{api_version}"
             ).dict(), "rest")
         proto_content = proto_path.read_text()
         return process_response(ResponseModel(
             status_code=200,
-            response_headers={"request_id": request_id},
+            response_headers={Headers.REQUEST_ID: request_id},
             message="Proto file retrieved successfully",
             response={"content": proto_content}
         ).dict(), "rest")
@@ -237,16 +236,16 @@ async def get_proto_file(api_name: str, api_version: str, request: Request):
         logger.error(f"{request_id} | Path validation error: {str(e)}")
         return process_response(ResponseModel(
             status_code=e.status_code,
-            response_headers={"request_id": request_id},
-            error_code="GTW013",
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.PATH_VALIDATION,
             error_message=str(e.detail)
         ).dict(), "rest")
     except Exception as e:
         logger.error(f"{request_id} | Failed to get proto file: {str(e)}")
         return process_response(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="API002",
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.API_NOT_FOUND,
             error_message=f"Failed to get proto file: {str(e)}"
         ).dict(), "rest")
     finally:
@@ -276,21 +275,20 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_apis'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return process_response(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
+                response_headers={Headers.REQUEST_ID: request_id},
                 error_code="API008",
                 error_message="You do not have permission to update proto files"
             ).dict(), "rest")
-        # Restrict uploads to .proto extension only
         original_name = proto_file.filename or ""
         if not original_name.lower().endswith('.proto'):
             return process_response(ResponseModel(
                 status_code=400,
-                response_headers={"request_id": request_id},
-                error_code="REQ003",
-                error_message="Only .proto files are allowed"
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.REQUEST_FILE_TYPE,
+                error_message=Messages.ONLY_PROTO_ALLOWED
             ).dict(), "rest")
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
         proto_path.write_bytes(await proto_file.read())
@@ -306,13 +304,13 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
             logger.error(f"{request_id} | Failed to generate gRPC code: {str(e)}")
             return process_response(ResponseModel(
                 status_code=500,
-                response_headers={"request_id": request_id},
+                response_headers={Headers.REQUEST_ID: request_id},
                 error_code="API009",
                 error_message="Failed to generate gRPC code from proto file"
             ).dict(), "rest")
         return process_response(ResponseModel(
             status_code=200,
-            response_headers={"request_id": request_id},
+            response_headers={Headers.REQUEST_ID: request_id},
             message="Proto file updated successfully"
         ).dict(), "rest")
     except HTTPException as e:
@@ -327,9 +325,9 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
         ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -359,10 +357,10 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_apis'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return process_response(ResponseModel(
                 status_code=403,
-                response_headers={"request_id": request_id},
+                response_headers={Headers.REQUEST_ID: request_id},
                 error_code="API008",
                 error_message="You do not have permission to delete proto files"
             ).dict(), "rest")
@@ -386,24 +384,24 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
                 logger.info(f"{request_id} | Deleted generated file: {file_path}")
         return process_response(ResponseModel(
             status_code=200,
-            response_headers={"request_id": request_id},
+            response_headers={Headers.REQUEST_ID: request_id},
             message="Proto file and generated files deleted successfully"
         ).dict(), "rest")
     except ValueError as e:
         logger.error(f"{request_id} | Path validation error: {str(e)}")
         return process_response(ResponseModel(
             status_code=400,
-            response_headers={"request_id": request_id},
-            error_code="GTW013",
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.PATH_VALIDATION,
             error_message=str(e)
         ).dict(), "rest")
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
-            response_headers={"request_id": request_id},
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
         ).dict(), "rest")
     finally:
         end_time = time.time() * 1000

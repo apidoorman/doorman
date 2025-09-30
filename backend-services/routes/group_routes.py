@@ -14,6 +14,7 @@ from services.group_service import GroupService
 from utils.auth_util import auth_required
 from models.create_group_model import CreateGroupModel
 from utils.response_util import respond_rest, process_response
+from utils.constants import Headers, Roles, ErrorCodes, Messages, Defaults
 from utils.role_util import platform_role_required_bool
 
 import uuid
@@ -48,11 +49,11 @@ async def create_group(api_data: CreateGroupModel, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_groups'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="GRP008",
                 error_message="You do not have permission to create groups"
@@ -63,10 +64,10 @@ async def create_group(api_data: CreateGroupModel, request: Request):
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ))
     finally:
         end_time = time.time() * 1000
@@ -96,11 +97,11 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_groups'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="GRP009",
                 error_message="You do not have permission to update groups"
@@ -111,10 +112,10 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ))
     finally:
         end_time = time.time() * 1000
@@ -144,11 +145,11 @@ async def delete_group(group_name: str, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_groups'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="GRP010",
                 error_message="You do not have permission to delete groups"
@@ -159,10 +160,10 @@ async def delete_group(group_name: str, request: Request):
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ))
     finally:
         end_time = time.time() * 1000
@@ -172,7 +173,7 @@ async def delete_group(group_name: str, request: Request):
     description="Get all groups",
     response_model=List[GroupModelResponse]
 )
-async def get_groups(request: Request, page: int = 1, page_size: int = 10):
+async def get_groups(request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -186,10 +187,10 @@ async def get_groups(request: Request, page: int = 1, page_size: int = 10):
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -213,10 +214,10 @@ async def get_group(group_name: str, request: Request):
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
