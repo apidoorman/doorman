@@ -178,7 +178,6 @@ export default function ProtosPage() {
               <button className="btn btn-secondary" onClick={() => { setPage(1); setPageSize(pageSize) }}>Refresh</button>
             </div>
           </div>
-          {/* Search */}
           <div className="card">
             <form onSubmit={(e) => { e.preventDefault() }} className="flex-1">
               <div className="relative">
@@ -258,7 +257,6 @@ export default function ProtosPage() {
             </div>
           </div>
 
-          {/* Simple modal substitute: show latest viewed content below table */}
           {Object.entries(protoByKey).some(([_, v]) => v?.content) && (
             <div className="card">
               <div className="card-header"><h3 className="card-title">Proto Content</h3></div>

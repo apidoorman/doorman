@@ -63,7 +63,6 @@ const Dashboard = () => {
     <ProtectedRoute>
       <Layout>
         <div className="space-y-6">
-          {/* Page Header */}
           <div className="page-header">
             <div>
               <h1 className="page-title">Dashboard</h1>
@@ -83,7 +82,6 @@ const Dashboard = () => {
             </button>
           </div>
 
-          {/* Error Message */}
           {error && (
             <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
               <div className="flex">
@@ -97,7 +95,6 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="stats-card">
               <div className="flex items-center justify-between">
@@ -146,9 +143,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Charts and Lists */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Monthly Usage Chart */}
             <div className="lg:col-span-2 card">
               <div className="card-header">
                 <h3 className="card-title">Monthly Usage</h3>
@@ -156,13 +151,13 @@ const Dashboard = () => {
               <div className="h-64 flex items-end justify-between gap-2 px-4 pb-8">
                 {(() => {
                   const values = months.map(month => dashboardData.monthlyUsage[month] || 0)
-                  const maxValue = Math.max(...values, 1) // Ensure we don't divide by zero
-                  const chartHeight = 200 // Available height for bars (256px - padding - labels)
-                  
+                  const maxValue = Math.max(...values, 1)
+                  const chartHeight = 200
+
                   return months.map((month) => {
                     const value = dashboardData.monthlyUsage[month] || 0
                     const barHeight = maxValue > 0 ? (value / maxValue) * chartHeight : 4
-                    
+
                     return (
                       <div key={month} className="flex-1 flex flex-col items-center">
                         <div
@@ -179,7 +174,6 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Active Users */}
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Most Active Users</h3>
@@ -207,7 +201,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Popular APIs Table */}
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">Popular APIs This Month</h3>

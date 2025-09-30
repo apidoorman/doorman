@@ -32,6 +32,9 @@ const eslintConfig = [
       "react/no-unescaped-entities": "off",
       // Some files use expressions for JSX-only conditions
       "@typescript-eslint/no-unused-expressions": "off",
+      // Consistent style like early backend code
+      "quotes": ["error", "single", { "avoidEscape": true, "allowTemplateLiterals": true }],
+      "semi": ["error", "never"],
     },
     linterOptions: {
       reportUnusedDisableDirectives: true,

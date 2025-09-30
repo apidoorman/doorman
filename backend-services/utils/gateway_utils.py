@@ -1,8 +1,7 @@
+# External imports
 import re
 from typing import Dict, List
-
 from fastapi import Request
-
 
 def sanitize_headers(value: str):
     value = value.replace('\n', '').replace('\r', '')

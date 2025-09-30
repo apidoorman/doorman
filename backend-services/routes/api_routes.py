@@ -4,9 +4,14 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
+# External imports
 from fastapi import APIRouter, Depends, Request
 from typing import List
+import logging
+import uuid
+import time
 
+# Internal imports
 from models.response_model import ResponseModel
 from services.api_service import ApiService
 from utils.auth_util import auth_required
@@ -14,220 +19,272 @@ from models.create_api_model import CreateApiModel
 from models.update_api_model import UpdateApiModel
 from models.api_model_response import ApiModelResponse
 from utils.response_util import respond_rest, process_response
+from utils.constants import ErrorCodes, Messages, Defaults, Roles, Headers
 from utils.role_util import platform_role_required_bool
 from utils.audit_util import audit
 
-import logging
-import uuid
-import time
+api_router = APIRouter()
+logger = logging.getLogger('doorman.gateway')
 
-api_router = APIRouter() 
-logger = logging.getLogger("doorman.gateway")
+"""
+Add API
 
-@api_router.post("",
-    description="Add API",
+Request:
+{}
+Response:
+{}
+"""
+
+
+@api_router.post('',
+    description='Add API',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "API created successfully"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'API created successfully'
                     }
                 }
             }
         }
     }
 )
+
 async def create_api(request: Request, api_data: CreateApiModel):
     payload = await auth_required(request)
-    username = payload.get("sub")
+    username = payload.get('sub')
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
-    logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-    logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+    logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+    logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
     try:
-        if not await platform_role_required_bool(username, 'manage_apis'):
-            logger.warning(f"{request_id} | Permission denied for user: {username}")
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
+            logger.warning(f'{request_id} | Permission denied for user: {username}')
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
-                error_code="API007",
-                error_message="You do not have permission to create APIs"
+                error_code='API007',
+                error_message='You do not have permission to create APIs'
             ))
         result = await ApiService.create_api(api_data, request_id)
-        audit(request, actor=username, action='api.create', target=f"{api_data.api_name}/{api_data.api_version}", status=result.get('status_code'), details={"message": result.get('message')}, request_id=request_id)
+        audit(request, actor=username, action='api.create', target=f'{api_data.api_name}/{api_data.api_version}', status=result.get('status_code'), details={'message': result.get('message')}, request_id=request_id)
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-            ).dict(), "rest")
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
+            ).dict(), 'rest')
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@api_router.put("/{api_name}/{api_version}",
-    description="Update API",
+"""
+Update API
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@api_router.put('/{api_name}/{api_version}',
+    description='Update API',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "API updated successfully"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'API updated successfully'
                     }
                 }
             }
         }
     }
 )
+
 async def update_api(api_name: str, api_version: str, request: Request, api_data: UpdateApiModel):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_apis'):
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
-                error_code="API008",
-                error_message="You do not have permission to update APIs"
+                error_code='API008',
+                error_message='You do not have permission to update APIs'
             ))
         result = await ApiService.update_api(api_name, api_version, api_data, request_id)
-        audit(request, actor=username, action='api.update', target=f"{api_name}/{api_version}", status=result.get('status_code'), details={"message": result.get('message')}, request_id=request_id)
+        audit(request, actor=username, action='api.update', target=f'{api_name}/{api_version}', status=result.get('status_code'), details={'message': result.get('message')}, request_id=request_id)
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-            ).dict(), "rest")
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
+            ).dict(), 'rest')
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@api_router.get("/{api_name}/{api_version}",
-    description="Get API",
+"""
+Get API
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@api_router.get('/{api_name}/{api_version}',
+    description='Get API',
     response_model=ApiModelResponse,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "API retrieved successfully"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'API retrieved successfully'
                     }
                 }
             }
         }
     }
 )
+
 async def get_api_by_name_version(api_name: str, api_version: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await ApiService.get_api_by_name_version(api_name, api_version, request_id))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-            ).dict(), "rest")
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
+            ).dict(), 'rest')
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
-    
-@api_router.delete("/{api_name}/{api_version}",
-    description="Delete API",
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+"""
+Delete API
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@api_router.delete('/{api_name}/{api_version}',
+    description='Delete API',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "API deleted successfully"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'API deleted successfully'
                     }
                 }
             }
         }
     }
 )
+
 async def delete_api(api_name: str, api_version: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         result = await ApiService.delete_api(api_name, api_version, request_id)
-        audit(request, actor=username, action='api.delete', target=f"{api_name}/{api_version}", status=result.get('status_code'), details={"message": result.get('message')}, request_id=request_id)
+        audit(request, actor=username, action='api.delete', target=f'{api_name}/{api_version}', status=result.get('status_code'), details={'message': result.get('message')}, request_id=request_id)
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-            ).dict(), "rest")
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
+            ).dict(), 'rest')
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@api_router.get("/all",
-    description="Get all APIs",
+"""
+Endpoint
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@api_router.get('/all',
+    description='Get all APIs',
     response_model=List[ApiModelResponse]
 )
-async def get_all_apis(request: Request, page: int = 1, page_size: int = 10):
+
+async def get_all_apis(request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await ApiService.get_apis(page, page_size, request_id))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
-            ).dict(), "rest")
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
+            ).dict(), 'rest')
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')

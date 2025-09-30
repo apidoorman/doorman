@@ -1,3 +1,4 @@
+# Internal imports
 from utils.database import user_credit_collection, credit_def_collection
 from utils.encryption_util import decrypt_value
 

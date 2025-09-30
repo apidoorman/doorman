@@ -69,8 +69,8 @@ const RolesPage = () => {
       setRoles(allRoles)
       return
     }
-    
-    const filteredRoles = allRoles.filter(role => 
+
+    const filteredRoles = allRoles.filter(role =>
       role.role_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       role.role_description?.toLowerCase().includes(searchTerm.toLowerCase())
     )
@@ -104,7 +104,6 @@ const RolesPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Roles</h1>
@@ -120,7 +119,6 @@ const RolesPage = () => {
           </Link>
         </div>
 
-        {/* Search and Filters */}
         <div className="card">
           <div className="flex flex-col sm:flex-row gap-4">
             <form onSubmit={handleSearch} className="flex-1">
@@ -137,7 +135,7 @@ const RolesPage = () => {
                 />
               </div>
             </form>
-            
+
             <div className="flex gap-2">
               <button
                 onClick={() => handleSort('role_name')}
@@ -155,7 +153,6 @@ const RolesPage = () => {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -169,7 +166,6 @@ const RolesPage = () => {
           </div>
         )}
 
-        {/* Loading State */}
         {loading ? (
           <div className="card">
             <div className="flex items-center justify-center py-12">
@@ -194,7 +190,7 @@ const RolesPage = () => {
                 </thead>
                 <tbody>
                   {roles.map((role) => (
-                    <tr 
+                    <tr
                       key={role.role_name}
                       onClick={() => handleRoleClick(role)}
                       className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
@@ -242,7 +238,6 @@ const RolesPage = () => {
               hasNext={hasNext}
             />
 
-            {/* Empty State */}
             {roles.length === 0 && !loading && (
               <div className="text-center py-12">
                 <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">

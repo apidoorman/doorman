@@ -14,7 +14,7 @@ export default function ReportsPage() {
   const preset = (hours: number) => {
     const now = new Date()
     const startDate = new Date(now.getTime() - hours * 3600 * 1000)
-    const toStr = (d: Date) => d.toISOString().slice(0,16) // YYYY-MM-DDTHH:MM
+    const toStr = (d: Date) => d.toISOString().slice(0,16)
     setStart(toStr(startDate))
     setEnd(toStr(now))
   }

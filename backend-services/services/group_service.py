@@ -4,17 +4,19 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
+# External imports
+from pymongo.errors import DuplicateKeyError
+import logging
+
+# Internal imports
 from models.response_model import ResponseModel
 from models.update_group_model import UpdateGroupModel
 from utils.database import group_collection
 from utils.cache_manager_util import cache_manager
 from utils.doorman_cache_util import doorman_cache
 from models.create_group_model import CreateGroupModel
-from pymongo.errors import DuplicateKeyError
 
-import logging
-
-logger = logging.getLogger("doorman.gateway")
+logger = logging.getLogger('doorman.gateway')
 
 class GroupService:
 
@@ -23,12 +25,12 @@ class GroupService:
         """
         Onboard a group to the platform.
         """
-        logger.info(request_id + " | Creating group: " + data.group_name)
+        logger.info(request_id + ' | Creating group: ' + data.group_name)
         if doorman_cache.get_cache('group_cache', data.group_name):
             return ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
                 error_code='GRP001',
                 error_message='Group already exists'
@@ -37,7 +39,7 @@ class GroupService:
         try:
             insert_result = group_collection.insert_one(group_dict)
             if not insert_result.acknowledged:
-                logger.error(request_id + " | Group creation failed with code GRP002")
+                logger.error(request_id + ' | Group creation failed with code GRP002')
                 return ResponseModel(
                     status_code=400,
                     error_code='GRP002',
@@ -45,33 +47,33 @@ class GroupService:
                 ).dict()
             group_dict['_id'] = str(insert_result.inserted_id)
             doorman_cache.set_cache('group_cache', data.group_name, group_dict)
-            logger.info(request_id + " | Group creation successful")
+            logger.info(request_id + ' | Group creation successful')
             return ResponseModel(
                 status_code=201,
                 message='Group created successfully'
             ).dict()
         except DuplicateKeyError as e:
-            logger.error(request_id + " | Group creation failed with code GRP001")
+            logger.error(request_id + ' | Group creation failed with code GRP001')
             return ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
                 error_code='GRP001',
                 error_message='Group already exists'
             ).dict()
-        
+
     @staticmethod
     async def update_group(group_name, data: UpdateGroupModel, request_id):
         """
         Update a group.
         """
-        logger.info(request_id + " | Updating group: " + group_name)
+        logger.info(request_id + ' | Updating group: ' + group_name)
         if data.group_name and data.group_name != group_name:
             return ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
                 error_code='GRP004',
                 error_message='Group name cannot be updated'
@@ -82,7 +84,7 @@ class GroupService:
                 'group_name': group_name
             })
             if not group:
-                logger.error(request_id + " | Group update failed with code GRP003")
+                logger.error(request_id + ' | Group update failed with code GRP003')
                 return ResponseModel(
                     status_code=400,
                     error_code='GRP003',
@@ -97,41 +99,41 @@ class GroupService:
                 {'$set': not_null_data}
             )
             if not update_result.acknowledged or update_result.modified_count == 0:
-                logger.error(request_id + " | Group update failed with code GRP002")
+                logger.error(request_id + ' | Group update failed with code GRP002')
                 return ResponseModel(
                     status_code=400,
                     error_code='GRP005',
                     error_message='Unable to update group'
                 ).dict()
-            logger.info(request_id + " | Group updated successful")
+            logger.info(request_id + ' | Group updated successful')
             return ResponseModel(
                 status_code=200,
                 message='Group updated successfully'
                 ).dict()
         else:
-            logger.error(request_id + " | Group update failed with code GRP006")
+            logger.error(request_id + ' | Group update failed with code GRP006')
             return ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
                 error_code='GRP006',
                 error_message='No data to update'
             ).dict()
-        
+
     @staticmethod
     async def delete_group(group_name, request_id):
         """
         Delete a group.
         """
-        logger.info(request_id + " | Deleting group: " + group_name)
+        logger.info(request_id + ' | Deleting group: ' + group_name)
         group = doorman_cache.get_cache('group_cache', group_name)
         if not group:
             group = group_collection.find_one({
                 'group_name': group_name
             })
             if not group:
-                logger.error(request_id + " | Group deletion failed with code GRP003")
+                logger.error(request_id + ' | Group deletion failed with code GRP003')
                 return ResponseModel(
                     status_code=400,
                     error_code='GRP003',
@@ -139,21 +141,21 @@ class GroupService:
                 ).dict()
         delete_result = group_collection.delete_one({'group_name': group_name})
         if not delete_result.acknowledged:
-            logger.error(request_id + " | Group deletion failed with code GRP002")
+            logger.error(request_id + ' | Group deletion failed with code GRP002')
             return ResponseModel(
                 status_code=400,
                 response_headers={
-                    "request_id": request_id
+                    'request_id': request_id
                 },
                 error_code='GRP007',
                 error_message='Unable to delete group'
             ).dict()
         doorman_cache.delete_cache('group_cache', group_name)
-        logger.info(request_id + " | Group deletion successful")
+        logger.info(request_id + ' | Group deletion successful')
         return ResponseModel(
             status_code=200,
             response_headers={
-                "request_id": request_id
+                'request_id': request_id
             },
             message='Group deleted successfully'
         ).dict()
@@ -172,13 +174,13 @@ class GroupService:
         """
         Get all groups.
         """
-        logger.info(request_id + " | Getting groups: Page=" + str(page) + " Page Size=" + str(page_size))
+        logger.info(request_id + ' | Getting groups: Page=' + str(page) + ' Page Size=' + str(page_size))
         skip = (page - 1) * page_size
         cursor = group_collection.find().sort('group_name', 1).skip(skip).limit(page_size)
         groups = cursor.to_list(length=None)
         for group in groups:
             if group.get('_id'): del group['_id']
-        logger.info(request_id + " | Groups retrieval successful")
+        logger.info(request_id + ' | Groups retrieval successful')
         return ResponseModel(
             status_code=200,
             response={'groups': groups}
@@ -189,12 +191,12 @@ class GroupService:
         """
         Get a group by name.
         """
-        logger.info(request_id + " | Getting group: " + group_name)
+        logger.info(request_id + ' | Getting group: ' + group_name)
         group = doorman_cache.get_cache('group_cache', group_name)
         if not group:
             group = group_collection.find_one({'group_name': group_name})
             if not group:
-                logger.error(request_id + " | Group retrieval failed with code GRP003")
+                logger.error(request_id + ' | Group retrieval failed with code GRP003')
                 return ResponseModel(
                     status_code=404,
                     error_code='GRP003',
@@ -203,7 +205,7 @@ class GroupService:
             if group.get('_id'): del group['_id']
             doorman_cache.set_cache('group_cache', group_name, group)
         if group.get('_id'): del group['_id']
-        logger.info(request_id + " | Group retrieval successful")
+        logger.info(request_id + ' | Group retrieval successful')
         return ResponseModel(
             status_code=200,
             response=group

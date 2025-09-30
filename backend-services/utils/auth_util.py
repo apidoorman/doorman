@@ -4,13 +4,15 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
+# External imports
 from datetime import datetime, timedelta
+
 try:
-    # Python 3.11+
-    from datetime import UTC  # type: ignore
-except Exception:  # Python <3.11 fallback
-    from datetime import timezone as _timezone  # type: ignore
-    UTC = _timezone.utc  # type: ignore
+
+    from datetime import UTC
+except Exception:
+    from datetime import timezone as _timezone
+    UTC = _timezone.utc
 import os
 import uuid
 from fastapi import HTTPException, Request
@@ -22,14 +24,14 @@ from utils.doorman_cache_util import doorman_cache
 
 import logging
 
-logger = logging.getLogger("doorman.gateway")
+logger = logging.getLogger('doorman.gateway')
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-ALGORITHM = "HS256"
+SECRET_KEY = os.getenv('JWT_SECRET_KEY')
+ALGORITHM = 'HS256'
 
 def is_jwt_configured() -> bool:
     """Return True if a JWT secret key is configured."""
-    return bool(os.getenv("JWT_SECRET_KEY"))
+    return bool(os.getenv('JWT_SECRET_KEY'))
 
 def _read_int_env(name: str, default: int) -> int:
     try:
@@ -38,29 +40,29 @@ def _read_int_env(name: str, default: int) -> int:
             return default
         val = int(str(raw).strip())
         if val <= 0:
-            logger.warning(f"{name} must be > 0; using default {default}")
+            logger.warning(f'{name} must be > 0; using default {default}')
             return default
         return val
     except Exception:
-        logger.warning(f"Invalid value for {name}; using default {default}")
+        logger.warning(f'Invalid value for {name}; using default {default}')
         return default
 
 def _normalize_unit(unit: str) -> str:
-    u = (unit or "").strip().lower()
+    u = (unit or '').strip().lower()
     mapping = {
-        "s": "seconds", "sec": "seconds", "second": "seconds", "seconds": "seconds",
-        "m": "minutes", "min": "minutes", "minute": "minutes", "minutes": "minutes",
-        "h": "hours", "hr": "hours", "hour": "hours", "hours": "hours",
-        "d": "days", "day": "days", "days": "days",
-        "w": "weeks", "wk": "weeks", "week": "weeks", "weeks": "weeks",
+        's': 'seconds', 'sec': 'seconds', 'second': 'seconds', 'seconds': 'seconds',
+        'm': 'minutes', 'min': 'minutes', 'minute': 'minutes', 'minutes': 'minutes',
+        'h': 'hours', 'hr': 'hours', 'hour': 'hours', 'hours': 'hours',
+        'd': 'days', 'day': 'days', 'days': 'days',
+        'w': 'weeks', 'wk': 'weeks', 'week': 'weeks', 'weeks': 'weeks',
     }
-    return mapping.get(u, "minutes")
+    return mapping.get(u, 'minutes')
 
 def _expiry_from_env(value_key: str, unit_key: str, default_value: int, default_unit: str) -> timedelta:
     value = _read_int_env(value_key, default_value)
     unit = _normalize_unit(os.getenv(unit_key, default_unit))
     try:
-        # Build timedelta with dynamic unit
+
         return timedelta(**{unit: value})
     except Exception:
         logger.warning(
@@ -78,64 +80,62 @@ async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> b
 
 async def auth_required(request: Request):
     """Validate JWT token and CSRF for HTTPS"""
-    token = request.cookies.get("access_token_cookie")
+    token = request.cookies.get('access_token_cookie')
     if not token:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    # Enforce CSRF on HTTPS deployments; support both env flags for consistency
-    https_enabled = os.getenv("HTTPS_ENABLED", "false").lower() == "true" or os.getenv("HTTPS_ONLY", "false").lower() == "true"
+        raise HTTPException(status_code=401, detail='Unauthorized')
+
+    https_enabled = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
     if https_enabled:
-        csrf_header = request.headers.get("X-CSRF-Token")
-        csrf_cookie = request.cookies.get("csrf_token")
+        csrf_header = request.headers.get('X-CSRF-Token')
+        csrf_cookie = request.cookies.get('csrf_token')
         if not await validate_csrf_double_submit(csrf_header, csrf_cookie):
-            raise HTTPException(status_code=401, detail="Invalid CSRF token")
+            raise HTTPException(status_code=401, detail='Invalid CSRF token')
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        jti = payload.get("jti")
+        username = payload.get('sub')
+        jti = payload.get('jti')
         if not username or not jti:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail='Invalid token')
         if is_user_revoked(username):
-            raise HTTPException(status_code=401, detail="Token has been revoked")
+            raise HTTPException(status_code=401, detail='Token has been revoked')
         if username in jwt_blacklist:
             timed_heap = jwt_blacklist[username]
             for _, token_jti in timed_heap.heap:
                 if token_jti == jti:
-                    raise HTTPException(status_code=401, detail="Token has been revoked")
+                    raise HTTPException(status_code=401, detail='Token has been revoked')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = user_collection.find_one({'username': username})
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise HTTPException(status_code=404, detail='User not found')
             if user.get('_id'): del user['_id']
             if user.get('password'): del user['password']
             doorman_cache.set_cache('user_cache', username, user)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        if user.get("active") is False:
-            logger.error(f"Unauthorized access: User {username} is inactive")
-            raise HTTPException(status_code=401, detail="User is inactive")
+            raise HTTPException(status_code=404, detail='User not found')
+        if user.get('active') is False:
+            logger.error(f'Unauthorized access: User {username} is inactive')
+            raise HTTPException(status_code=401, detail='User is inactive')
         return payload
     except JWTError:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=401, detail='Unauthorized')
     except Exception as e:
-        logger.error(f"Unexpected error in auth_required: {str(e)}")
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        logger.error(f'Unexpected error in auth_required: {str(e)}')
+        raise HTTPException(status_code=401, detail='Unauthorized')
 
 def create_access_token(data: dict, refresh: bool = False):
     to_encode = data.copy()
-    # Expiry is configurable via env:
-    # - AUTH_EXPIRE_TIME (int), AUTH_EXPIRE_TIME_FREQ (seconds|minutes|hours|days|weeks)
-    # - AUTH_REFRESH_EXPIRE_TIME (int), AUTH_REFRESH_EXPIRE_FREQ (seconds|minutes|hours|days|weeks)
+
     if refresh:
-        expire = _expiry_from_env("AUTH_REFRESH_EXPIRE_TIME", "AUTH_REFRESH_EXPIRE_FREQ", 7, "days")
+        expire = _expiry_from_env('AUTH_REFRESH_EXPIRE_TIME', 'AUTH_REFRESH_EXPIRE_FREQ', 7, 'days')
     else:
-        expire = _expiry_from_env("AUTH_EXPIRE_TIME", "AUTH_EXPIRE_TIME_FREQ", 30, "minutes")
-    
-    username = data.get("sub")
+        expire = _expiry_from_env('AUTH_EXPIRE_TIME', 'AUTH_EXPIRE_TIME_FREQ', 30, 'minutes')
+
+    username = data.get('sub')
     if not username:
-        logger.error("No username provided for token creation")
-        raise ValueError("Username is required for token creation")
-    
+        logger.error('No username provided for token creation')
+        raise ValueError('Username is required for token creation')
+
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
         user = user_collection.find_one({'username': username})
@@ -143,12 +143,12 @@ def create_access_token(data: dict, refresh: bool = False):
             if user.get('_id'): del user['_id']
             if user.get('password'): del user['password']
             doorman_cache.set_cache('user_cache', username, user)
-    
+
     if not user:
-        logger.error(f"User not found: {username}")
-        raise ValueError(f"User {username} not found")
-    
-    role_name = user.get("role")
+        logger.error(f'User not found: {username}')
+        raise ValueError(f'User {username} not found')
+
+    role_name = user.get('role')
     role = None
     if role_name:
         role = doorman_cache.get_cache('role_cache', role_name)
@@ -157,10 +157,9 @@ def create_access_token(data: dict, refresh: bool = False):
             if role:
                 if role.get('_id'): del role['_id']
                 doorman_cache.set_cache('role_cache', role_name, role)
-    
-    # Create accesses object with defaults
+
     accesses = {
-        "ui_access": True,
+        'ui_access': True,
         'manage_users': role.get('manage_users', False) if role else False,
         'manage_apis': role.get('manage_apis', False) if role else False,
         'manage_endpoints': role.get('manage_endpoints', False) if role else False,
@@ -173,13 +172,13 @@ def create_access_token(data: dict, refresh: bool = False):
         'export_logs': role.get('export_logs', False) if role else False,
         'view_logs': role.get('view_logs', False) if role else False,
     }
-    
+
     to_encode.update({
-        "exp": datetime.now(UTC) + expire,
-        "jti": str(uuid.uuid4()),
-        "accesses": accesses
+        'exp': datetime.now(UTC) + expire,
+        'jti': str(uuid.uuid4()),
+        'accesses': accesses
     })
-    
-    logger.info(f"Creating token for user {username} with accesses: {accesses}")
+
+    logger.info(f'Creating token for user {username} with accesses: {accesses}')
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

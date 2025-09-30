@@ -1,6 +1,9 @@
+# External imports
+from typing import Optional, Dict
+
+# Internal imports
 from utils.doorman_cache_util import doorman_cache
 from utils.database import api_collection, endpoint_collection
-from typing import Optional, Dict
 
 async def get_api(api_key, api_name_version):
     api = doorman_cache.get_cache('api_cache', api_key) if api_key else None
@@ -28,7 +31,6 @@ async def get_api_endpoints(api_id):
         doorman_cache.set_cache('api_endpoint_cache', api_id, endpoints)
     return endpoints
 
-
 async def get_endpoint(api: Dict, method: str, endpoint_uri: str) -> Optional[Dict]:
     """Return the endpoint document for a given API, method, and uri.
 
@@ -36,7 +38,7 @@ async def get_endpoint(api: Dict, method: str, endpoint_uri: str) -> Optional[Di
     """
     api_name = api.get('api_name')
     api_version = api.get('api_version')
-    cache_key = f"/{method}/{api_name}/{api_version}/{endpoint_uri}".replace("//", "/")
+    cache_key = f'/{method}/{api_name}/{api_version}/{endpoint_uri}'.replace('//', '/')
     endpoint = doorman_cache.get_cache('endpoint_cache', cache_key)
     if endpoint:
         return endpoint

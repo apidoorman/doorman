@@ -133,7 +133,7 @@ const UserDetailPage = () => {
     try {
       setSaving(true)
       setError(null)
-      
+
       if (isProtected) {
         setError('Editing this user is disabled by policy')
         return
@@ -227,7 +227,7 @@ const UserDetailPage = () => {
     try {
       setDeleting(true)
       setError(null)
-      
+
       if (isProtected) {
         setError('Deleting this user is disabled by policy')
         return
@@ -294,7 +294,6 @@ const UserDetailPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">{user?.username || 'User Details'}</h1>
@@ -349,7 +348,6 @@ const UserDetailPage = () => {
           </div>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="rounded-lg bg-success-50 border border-success-200 p-4 dark:bg-success-900/20 dark:border-success-800">
             <div className="flex">
@@ -363,7 +361,6 @@ const UserDetailPage = () => {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -391,7 +388,6 @@ const UserDetailPage = () => {
                 </div>
               </div>
             )}
-            {/* Basic Information */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
@@ -500,7 +496,6 @@ const UserDetailPage = () => {
               </div>
             </div>
 
-            {/* Groups */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Groups</h3>
@@ -515,7 +510,7 @@ const UserDetailPage = () => {
                     Add Group
                   </button>
                 )}
-                
+
                 <div className="space-y-2">
                   {(isEditing ? editData.groups : user.groups)?.map((group, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -545,14 +540,13 @@ const UserDetailPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {(!isEditing ? user.groups : editData.groups)?.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No groups assigned</p>
                 )}
               </div>
             </div>
 
-            {/* Rate Limiting */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Rate Limiting</h3>
@@ -593,7 +587,6 @@ const UserDetailPage = () => {
               </div>
             </div>
 
-            {/* Throttling */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Throttling</h3>
@@ -683,7 +676,6 @@ const UserDetailPage = () => {
               </div>
             </div>
 
-            {/* Custom Attributes */}
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Custom Attributes</h3>
@@ -710,7 +702,7 @@ const UserDetailPage = () => {
                     </button>
                   </div>
                 )}
-                
+
                 <div className="space-y-2">
                   {Object.entries(isEditing ? editData.custom_attributes || {} : user.custom_attributes).map(([key, value]) => (
                     <div key={key} className="flex items-center gap-2">
@@ -730,7 +722,7 @@ const UserDetailPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {Object.keys(isEditing ? editData.custom_attributes || {} : user.custom_attributes).length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No custom attributes</p>
                 )}
@@ -749,11 +741,11 @@ const UserDetailPage = () => {
           cancelLabel="Cancel"
           onCancel={handleDeleteCancel}
           onConfirm={handleDeleteConfirm}
-          
+
         />
       </div>
     </Layout>
   )
 }
 
-export default UserDetailPage 
+export default UserDetailPage

@@ -46,7 +46,7 @@ const AddRoutingPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     // Validate required fields
     if (!formData.routing_name || formData.routing_servers.length === 0) {
       setError('Please fill in routing name and add at least one server')
@@ -74,7 +74,6 @@ const AddRoutingPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Add Routing</h1>
@@ -84,7 +83,6 @@ const AddRoutingPage = () => {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -98,7 +96,6 @@ const AddRoutingPage = () => {
           </div>
         )}
 
-        {/* Form */}
         <div className="card max-w-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
             <FormHelp docHref="/docs/using-fields.html#routing">Create a routing set with ordered upstreams and optional fixed index.</FormHelp>
@@ -163,7 +160,7 @@ const AddRoutingPage = () => {
                     Add
                   </button>
                 </div>
-                
+
                 <div className="space-y-2">
                   {formData.routing_servers.map((server, index) => (
                     <div key={index} className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-3 py-2 rounded">
@@ -181,7 +178,7 @@ const AddRoutingPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {formData.routing_servers.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No servers added yet</p>
                 )}
@@ -214,4 +211,4 @@ const AddRoutingPage = () => {
   )
 }
 
-export default AddRoutingPage 
+export default AddRoutingPage
