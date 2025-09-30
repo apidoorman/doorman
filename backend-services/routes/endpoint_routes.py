@@ -17,6 +17,7 @@ from services.endpoint_service import EndpointService
 from utils.auth_util import auth_required
 from models.create_endpoint_model import CreateEndpointModel
 from utils.response_util import respond_rest, process_response
+from utils.constants import Headers, Roles, ErrorCodes, Messages
 from utils.role_util import platform_role_required_bool
 
 import uuid
@@ -51,28 +52,27 @@ async def create_endpoint(endpoint_data: CreateEndpointModel, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_endpoints'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_ENDPOINTS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="END010",
                 error_message="You do not have permission to create endpoints"
             ))
         return respond_rest(await EndpointService.create_endpoint(endpoint_data, request_id))
     except HTTPException as he:
-        # Preserve proper auth/permission status codes (401/403/etc.)
         raise he
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -102,11 +102,11 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_endpoints'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_ENDPOINTS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="END011",
                 error_message="You do not have permission to update endpoints"
@@ -119,10 +119,10 @@ async def update_endpoint(endpoint_method: str, api_name: str, api_version: str,
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -152,11 +152,11 @@ async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str,
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_endpoints'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_ENDPOINTS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="END012",
                 error_message="You do not have permission to delete endpoints"
@@ -169,10 +169,10 @@ async def delete_endpoint(endpoint_method: str, api_name: str, api_version: str,
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -198,10 +198,10 @@ async def get_endpoint(endpoint_method: str, api_name: str, api_version: str, en
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -260,11 +260,11 @@ async def create_endpoint_validation(endpoint_validation_data: CreateEndpointVal
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_endpoints'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_ENDPOINTS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="END013",
                 error_message="You do not have permission to create endpoint validations"
@@ -277,10 +277,10 @@ async def create_endpoint_validation(endpoint_validation_data: CreateEndpointVal
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -298,11 +298,11 @@ async def update_endpoint_validation(endpoint_id: str, endpoint_validation_data:
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_endpoints'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_ENDPOINTS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="END014",
                 error_message="You do not have permission to update endpoint validations"
@@ -315,10 +315,10 @@ async def update_endpoint_validation(endpoint_id: str, endpoint_validation_data:
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -336,11 +336,11 @@ async def delete_endpoint_validation(endpoint_id: str, request: Request):
         username = payload.get("sub")
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
-        if not await platform_role_required_bool(username, 'manage_endpoints'):
+        if not await platform_role_required_bool(username, Roles.MANAGE_ENDPOINTS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="END015",
                 error_message="You do not have permission to delete endpoint validations"
@@ -353,10 +353,10 @@ async def delete_endpoint_validation(endpoint_id: str, request: Request):
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
             ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -391,7 +391,7 @@ async def get_endpoint_validation(endpoint_id: str, request: Request):
         end_time = time.time() * 1000
         logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
 
-# Normalized aliases for endpoint validation (without leading /endpoint segment)
+ 
 @endpoint_router.post("/validation",
     description="Create a new endpoint validation (alias)",
     response_model=ResponseModel)

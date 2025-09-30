@@ -12,6 +12,7 @@ from models.response_model import ResponseModel
 from services.logging_service import LoggingService
 from utils.auth_util import auth_required
 from utils.response_util import respond_rest, process_response
+from utils.constants import Headers, Roles, ErrorCodes, Messages
 from utils.role_util import platform_role_required_bool
 
 import uuid
@@ -83,12 +84,11 @@ async def get_logs(
         logger.info(f"{request_id_param} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id_param} | Endpoint: {request.method} {str(request.url.path)}")
         
-        # Check if user has permission to view logs
-        if not await platform_role_required_bool(username, 'view_logs'):
+        if not await platform_role_required_bool(username, Roles.VIEW_LOGS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id_param
+                    Headers.REQUEST_ID: request_id_param
                 },
                 error_code="LOG001",
                 error_message="You do not have permission to view logs"
@@ -122,17 +122,16 @@ async def get_logs(
         ))
         
     except HTTPException as e:
-        # Re-raise HTTP exceptions (like 401 Unauthorized) as-is
         raise e
     except Exception as e:
         logger.critical(f"{request_id_param} | Unexpected error: {str(e)}", exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id_param
+                Headers.REQUEST_ID: request_id_param
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
         ))
     finally:
         end_time_param = time.time() * 1000
@@ -151,12 +150,11 @@ async def get_log_files(request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         
-        # Check if user has permission to view logs
-        if not await platform_role_required_bool(username, 'view_logs'):
+        if not await platform_role_required_bool(username, Roles.VIEW_LOGS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="LOG005",
                 error_message="You do not have permission to view log files"
@@ -177,17 +175,16 @@ async def get_log_files(request: Request):
         ))
         
     except HTTPException as e:
-        # Re-raise HTTP exceptions (like 401 Unauthorized) as-is
         raise e
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
         ))
     finally:
         end_time = time.time() * 1000
@@ -235,12 +232,11 @@ async def get_log_statistics(request: Request):
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         
-        # Check if user has permission to view logs
-        if not await platform_role_required_bool(username, 'view_logs'):
+        if not await platform_role_required_bool(username, Roles.VIEW_LOGS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="LOG002",
                 error_message="You do not have permission to view log statistics"
@@ -258,17 +254,16 @@ async def get_log_statistics(request: Request):
         ))
         
     except HTTPException as e:
-        # Re-raise HTTP exceptions (like 401 Unauthorized) as-is
         raise e
     except Exception as e:
         logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
         ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -309,12 +304,11 @@ async def export_logs(
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         
-        # Check if user has permission to export logs
-        if not await platform_role_required_bool(username, 'export_logs'):
+        if not await platform_role_required_bool(username, Roles.EXPORT_LOGS):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="LOG003",
                 error_message="You do not have permission to export logs"
@@ -322,7 +316,6 @@ async def export_logs(
         
         logging_service = LoggingService()
         
-        # Prepare filters
         filters = {}
         if user:
             filters['user'] = user
@@ -344,7 +337,7 @@ async def export_logs(
         return respond_rest(ResponseModel(
             status_code=200,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
             response=export_result
         ))
@@ -354,10 +347,10 @@ async def export_logs(
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
         ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
@@ -393,12 +386,11 @@ async def download_logs(
         logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
         logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
         
-        # Check if user has permission to export logs
-        if not await platform_role_required_bool(username, 'export_logs'):
+        if not await platform_role_required_bool(username, Roles.EXPORT_LOGS):
             return process_response(ResponseModel(
                 status_code=403,
                 response_headers={
-                    "request_id": request_id
+                    Headers.REQUEST_ID: request_id
                 },
                 error_code="LOG004",
                 error_message="You do not have permission to download logs"
@@ -406,7 +398,6 @@ async def download_logs(
         
         logging_service = LoggingService()
         
-        # Prepare filters
         filters = {}
         if user:
             filters['user'] = user
@@ -425,11 +416,9 @@ async def download_logs(
             request_id=request_id
         )
         
-        # Create file-like object for streaming
         file_data = export_result['data'].encode('utf-8')
         file_obj = io.BytesIO(file_data)
         
-        # Determine content type
         content_type = "application/json" if format.lower() == "json" else "text/csv"
         
         return StreamingResponse(
@@ -437,7 +426,7 @@ async def download_logs(
             media_type=content_type,
             headers={
                 "Content-Disposition": f"attachment; filename={export_result['filename']}",
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             }
         )
         
@@ -446,10 +435,10 @@ async def download_logs(
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
-                "request_id": request_id
+                Headers.REQUEST_ID: request_id
             },
-            error_code="GTW999",
-            error_message="An unexpected error occurred"
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
         ).dict(), "rest")
     finally:
         end_time = time.time() * 1000
