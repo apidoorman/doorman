@@ -83,15 +83,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg">
-      {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'translate-x-0' : ''}`}>
         <div className="flex h-full flex-col">
-          {/* Logo */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Doorman</h1>
           </div>
-          
-          {/* Menu Items */}
+
           <div className="flex-1 p-3 overflow-y-auto no-scrollbar">
             <nav className="space-y-1">
               {filteredMenuItems.map((item) => {
@@ -115,10 +112,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               })}
             </nav>
           </div>
-          
-          {/* Bottom Actions */}
+
           <div className="p-3 border-t border-gray-200 dark:border-gray-700 space-y-1.5">
-            {/* Dark mode toggle */}
             <button
               onClick={toggleTheme}
               className="flex items-center w-full px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-700 rounded-md transition-colors"
@@ -135,7 +130,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               )}
               {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
             </button>
-            
+
             {user && (
               <button
                 onClick={logout}
@@ -151,7 +146,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </aside>
 
-      {/* Overlay for mobile */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/50 lg:hidden"
@@ -159,10 +153,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         />
       )}
 
-      {/* Main content */}
       <main className="main-content">
         <div className="px-4 pb-4 lg:px-6 lg:pb-6 pt-5 lg:pt-4">
-          {/* Mobile menu button */}
           <button
             onClick={() => setSidebarOpen(true)}
             className={`lg:hidden fixed top-4 left-4 z-50 p-2 rounded-md bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 shadow-lg transition-opacity duration-200 ${sidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
@@ -178,4 +170,4 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   )
 }
 
-export default Layout 
+export default Layout

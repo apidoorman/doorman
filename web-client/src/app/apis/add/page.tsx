@@ -150,7 +150,6 @@ const AddApiPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Add API</h1>
@@ -166,7 +165,6 @@ const AddApiPage = () => {
           </Link>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -180,7 +178,6 @@ const AddApiPage = () => {
           </div>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="card">
             <div className="card-header flex items-center justify-between">
@@ -576,7 +573,6 @@ const AddApiPage = () => {
           </div>
         </form>
       </div>
-      {/* Public API confirmation */}
       <ConfirmModal
         open={publicConfirmOpen}
         title="Make API Public?"
@@ -598,7 +594,6 @@ const AddApiPage = () => {
         }}
       />
 
-      {/* Public + Credits confirmation */}
       <ConfirmModal
         open={pubCredsConfirmOpen}
         title="Public API with Credits?"
@@ -623,4 +618,4 @@ const AddApiPage = () => {
   )
 }
 
-export default AddApiPage 
+export default AddApiPage

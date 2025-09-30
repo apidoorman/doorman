@@ -62,7 +62,6 @@ export default function CreditDefsPage() {
     <ProtectedRoute requiredPermission="manage_credits">
       <Layout>
         <div className="space-y-6">
-          {/* Header */}
           <div className="page-header">
             <div>
               <h1 className="page-title">Credit Definitions</h1>
@@ -84,7 +83,6 @@ export default function CreditDefsPage() {
             </div>
           </div>
 
-          {/* Search */}
           <div className="card">
             <form onSubmit={onSearch} className="flex-1">
               <div className="relative">
@@ -96,7 +94,6 @@ export default function CreditDefsPage() {
             </form>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
               <div className="flex">
@@ -110,7 +107,6 @@ export default function CreditDefsPage() {
             </div>
           )}
 
-          {/* Loading */}
           {loading ? (
             <div className="card"><div className="flex items-center justify-center py-12"><div className="text-center"><div className="spinner mx-auto mb-4"></div><p className="text-gray-600 dark:text-gray-400">Loading credit definitions...</p></div></div></div>
           ) : (

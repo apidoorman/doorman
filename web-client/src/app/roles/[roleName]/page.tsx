@@ -29,7 +29,7 @@ const RoleDetailPage = () => {
   const router = useRouter()
   const params = useParams()
   const roleName = params.roleName as string
-  
+
   const [role, setRole] = useState<Role | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -49,7 +49,7 @@ const RoleDetailPage = () => {
     try {
       setLoading(true)
       setError(null)
-      
+
       // Try to get from sessionStorage first
       const savedRole = sessionStorage.getItem('selectedRole')
       if (savedRole) {
@@ -108,9 +108,9 @@ const RoleDetailPage = () => {
     try {
       setSaving(true)
       setError(null)
-      
+
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, editData)
-      
+
       // Refresh from server to get the latest canonical data (retry once on transient failure)
       let rolePayload: any
       try {
@@ -146,10 +146,10 @@ const RoleDetailPage = () => {
     try {
       setDeleting(true)
       setError(null)
-      
+
       const { delJson } = await import('@/utils/api')
       await delJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
-      
+
       router.push('/roles')
     } catch (err) {
       setError('Failed to delete role. Please try again later.')
@@ -217,7 +217,6 @@ const RoleDetailPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">{role?.role_name || 'Role Details'}</h1>
@@ -273,7 +272,6 @@ const RoleDetailPage = () => {
           </div>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="rounded-lg bg-success-50 border border-success-200 p-4 dark:bg-success-900/20 dark:border-success-800">
             <div className="flex">
@@ -287,7 +285,6 @@ const RoleDetailPage = () => {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -303,7 +300,6 @@ const RoleDetailPage = () => {
 
         {role && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Basic Information */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Basic Information</h3>
@@ -357,7 +353,6 @@ const RoleDetailPage = () => {
               </div>
             </div>
 
-            {/* Permissions */}
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Permissions</h3>
@@ -392,8 +387,8 @@ const RoleDetailPage = () => {
                         />
                       ) : (
                         <div className={`h-4 w-4 rounded mt-1 flex items-center justify-center ${
-                          (role[key as keyof Role] as boolean) 
-                            ? 'bg-success-500 text-white' 
+                          (role[key as keyof Role] as boolean)
+                            ? 'bg-success-500 text-white'
                             : 'bg-gray-300 dark:bg-gray-600'
                         }`}>
                           {(role[key as keyof Role] as boolean) && (
@@ -429,11 +424,11 @@ const RoleDetailPage = () => {
           cancelLabel="Cancel"
           onCancel={() => setShowDeleteModal(false)}
           onConfirm={handleDelete}
-          
+
         />
       </div>
     </Layout>
   )
 }
 
-export default RoleDetailPage 
+export default RoleDetailPage

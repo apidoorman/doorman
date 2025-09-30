@@ -4,18 +4,20 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
+# External imports
+from pymongo.errors import PyMongoError
+import logging
+from typing import Optional
+
+# Internal imports
 from models.response_model import ResponseModel
 from models.credit_model import CreditModel
 from models.user_credits_model import UserCreditModel
 from utils.database import credit_def_collection, user_credit_collection
 from utils.encryption_util import encrypt_value, decrypt_value
 from utils.doorman_cache_util import doorman_cache
-from pymongo.errors import PyMongoError
 
-import logging
-from typing import Optional
-
-logger = logging.getLogger("doorman.gateway")
+logger = logging.getLogger('doorman.gateway')
 
 class CreditService:
 
@@ -39,14 +41,14 @@ class CreditService:
     @staticmethod
     async def create_credit(data: CreditModel, request_id):
         """Create a credit definition."""
-        logger.info(request_id + " | Creating credit definition")
+        logger.info(request_id + ' | Creating credit definition')
         validation_error = CreditService._validate_credit_data(data)
         if validation_error:
-            logger.error(request_id + f" | Credit creation failed with code {validation_error.error_code}")
+            logger.error(request_id + f' | Credit creation failed with code {validation_error.error_code}')
             return validation_error.dict()
         try:
             if doorman_cache.get_cache('credit_def_cache', data.api_credit_group) or credit_def_collection.find_one({'api_credit_group': data.api_credit_group}):
-                logger.error(request_id + " | Credit creation failed with code CRD001")
+                logger.error(request_id + ' | Credit creation failed with code CRD001')
                 return ResponseModel(
                     status_code=400,
                     error_code='CRD001',
@@ -57,7 +59,7 @@ class CreditService:
                 credit_data['api_key'] = encrypt_value(credit_data['api_key'])
             insert_result = credit_def_collection.insert_one(credit_data)
             if not insert_result.acknowledged:
-                logger.error(request_id + " | Credit creation failed with code CRD002")
+                logger.error(request_id + ' | Credit creation failed with code CRD002')
                 return ResponseModel(
                     status_code=400,
                     error_code='CRD002',
@@ -65,14 +67,14 @@ class CreditService:
                 ).dict()
             credit_data['_id'] = str(insert_result.inserted_id)
             doorman_cache.set_cache('credit_def_cache', data.api_credit_group, credit_data)
-            logger.info(request_id + " | Credit creation successful")
+            logger.info(request_id + ' | Credit creation successful')
             return ResponseModel(
                 status_code=201,
-                response_headers={"request_id": request_id},
+                response_headers={'request_id': request_id},
                 message='Credit definition created successfully'
             ).dict()
         except PyMongoError as e:
-            logger.error(request_id + f" | Credit creation failed with database error: {str(e)}")
+            logger.error(request_id + f' | Credit creation failed with database error: {str(e)}')
             return ResponseModel(
                 status_code=500,
                 error_code='CRD011',
@@ -82,14 +84,14 @@ class CreditService:
     @staticmethod
     async def update_credit(api_credit_group: str, data: CreditModel, request_id):
         """Update a credit definition."""
-        logger.info(request_id + " | Updating credit definition")
+        logger.info(request_id + ' | Updating credit definition')
         validation_error = CreditService._validate_credit_data(data)
         if validation_error:
-            logger.error(request_id + f" | Credit update failed with code {validation_error.error_code}")
+            logger.error(request_id + f' | Credit update failed with code {validation_error.error_code}')
             return validation_error.dict()
         try:
             if data.api_credit_group and data.api_credit_group != api_credit_group:
-                logger.error(request_id + " | Credit update failed with code CRD003")
+                logger.error(request_id + ' | Credit update failed with code CRD003')
                 return ResponseModel(
                     status_code=400,
                     error_code='CRD003',
@@ -99,7 +101,7 @@ class CreditService:
             if not doc:
                 doc = credit_def_collection.find_one({'api_credit_group': api_credit_group})
                 if not doc:
-                    logger.error(request_id + " | Credit update failed with code CRD004")
+                    logger.error(request_id + ' | Credit update failed with code CRD004')
                     return ResponseModel(
                         status_code=400,
                         error_code='CRD004',
@@ -113,48 +115,48 @@ class CreditService:
             if not_null:
                 update_result = credit_def_collection.update_one({'api_credit_group': api_credit_group}, {'$set': not_null})
                 if not update_result.acknowledged or update_result.modified_count == 0:
-                    logger.error(request_id + " | Credit update failed with code CRD005")
+                    logger.error(request_id + ' | Credit update failed with code CRD005')
                     return ResponseModel(
                         status_code=400,
                         error_code='CRD005',
                         error_message='Unable to update credit definition'
                     ).dict()
-                logger.info(request_id + " | Credit update successful")
+                logger.info(request_id + ' | Credit update successful')
                 return ResponseModel(status_code=200, message='Credit definition updated successfully').dict()
             else:
-                logger.error(request_id + " | Credit update failed with code CRD006")
+                logger.error(request_id + ' | Credit update failed with code CRD006')
                 return ResponseModel(status_code=400, error_code='CRD006', error_message='No data to update').dict()
         except PyMongoError as e:
-            logger.error(request_id + f" | Credit update failed with database error: {str(e)}")
+            logger.error(request_id + f' | Credit update failed with database error: {str(e)}')
             return ResponseModel(status_code=500, error_code='CRD012', error_message='Database error occurred while updating credit definition').dict()
 
     @staticmethod
     async def delete_credit(api_credit_group: str, request_id):
         """Delete a credit definition."""
-        logger.info(request_id + " | Deleting credit definition")
+        logger.info(request_id + ' | Deleting credit definition')
         try:
             doc = doorman_cache.get_cache('credit_def_cache', api_credit_group)
             if not doc:
                 doc = credit_def_collection.find_one({'api_credit_group': api_credit_group})
                 if not doc:
-                    logger.error(request_id + " | Credit deletion failed with code CRD007")
+                    logger.error(request_id + ' | Credit deletion failed with code CRD007')
                     return ResponseModel(status_code=400, error_code='CRD007', error_message='Credit definition does not exist for the requested group').dict()
             else:
                 doorman_cache.delete_cache('credit_def_cache', api_credit_group)
             delete_result = credit_def_collection.delete_one({'api_credit_group': api_credit_group})
             if not delete_result.acknowledged or delete_result.deleted_count == 0:
-                logger.error(request_id + " | Credit deletion failed with code CRD008")
+                logger.error(request_id + ' | Credit deletion failed with code CRD008')
                 return ResponseModel(status_code=400, error_code='CRD008', error_message='Unable to delete credit definition').dict()
-            logger.info(request_id + " | Credit deletion successful")
+            logger.info(request_id + ' | Credit deletion successful')
             return ResponseModel(status_code=200, message='Credit definition deleted successfully').dict()
         except PyMongoError as e:
-            logger.error(request_id + f" | Credit deletion failed with database error: {str(e)}")
+            logger.error(request_id + f' | Credit deletion failed with database error: {str(e)}')
             return ResponseModel(status_code=500, error_code='CRD013', error_message='Database error occurred while deleting credit definition').dict()
 
     @staticmethod
     async def list_credit_defs(page: int, page_size: int, request_id):
         """List credit definitions (masked), paginated."""
-        logger.info(request_id + " | Listing credit definitions")
+        logger.info(request_id + ' | Listing credit definitions')
         try:
             cursor = credit_def_collection.find({}).sort('api_credit_group', 1)
             if page and page_size:
@@ -171,13 +173,13 @@ class CreditService:
                 })
             return ResponseModel(status_code=200, response={'items': items}).dict()
         except PyMongoError as e:
-            logger.error(request_id + f" | Credit list failed with database error: {str(e)}")
+            logger.error(request_id + f' | Credit list failed with database error: {str(e)}')
             return ResponseModel(status_code=500, error_code='CRD020', error_message='Database error occurred while listing credit definitions').dict()
 
     @staticmethod
     async def get_credit_def(api_credit_group: str, request_id):
         """Get a single credit definition (masked)."""
-        logger.info(request_id + " | Getting credit definition")
+        logger.info(request_id + ' | Getting credit definition')
         try:
             doc = credit_def_collection.find_one({'api_credit_group': api_credit_group})
             if not doc:
@@ -192,13 +194,13 @@ class CreditService:
             }
             return ResponseModel(status_code=200, response=masked).dict()
         except PyMongoError as e:
-            logger.error(request_id + f" | Credit fetch failed with database error: {str(e)}")
+            logger.error(request_id + f' | Credit fetch failed with database error: {str(e)}')
             return ResponseModel(status_code=500, error_code='CRD022', error_message='Database error occurred while retrieving credit definition').dict()
 
     @staticmethod
     async def add_credits(username: str, data: UserCreditModel, request_id):
         """Add or update a user's credit balances for one or more groups."""
-        logger.info(request_id + f" | Adding credits for user: {username}")
+        logger.info(request_id + f' | Adding credits for user: {username}')
         try:
             if data.username and data.username != username:
                 return ResponseModel(status_code=400, error_code='CRD014', error_message='Username in body does not match path').dict()
@@ -217,17 +219,17 @@ class CreditService:
                 user_credit_collection.insert_one(payload)
             return ResponseModel(status_code=200, message='Credits saved successfully').dict()
         except PyMongoError as e:
-            logger.error(request_id + f" | Add credits failed with database error: {str(e)}")
+            logger.error(request_id + f' | Add credits failed with database error: {str(e)}')
             return ResponseModel(status_code=500, error_code='CRD015', error_message='Database error occurred while saving user credits').dict()
 
     @staticmethod
-    async def get_all_credits(page: int, page_size: int, request_id, search: str = ""):
+    async def get_all_credits(page: int, page_size: int, request_id, search: str = ''):
         logger.info(request_id + " | Getting all users' credits")
         try:
-            # Load all, then filter and paginate in-memory to support MEM mode and Mongo uniformly
+
             cursor = user_credit_collection.find().sort('username', 1)
             all_items = cursor.to_list(length=None)
-            term = (search or "").strip().lower()
+            term = (search or '').strip().lower()
             if term:
                 filtered = []
                 for it in all_items:
@@ -238,7 +240,7 @@ class CreditService:
                 items_src = filtered
             else:
                 items_src = all_items
-            # Paginate
+
             start = max((page - 1), 0) * page_size
             end = start + page_size if page_size else None
             items = items_src[start:end]
@@ -253,12 +255,12 @@ class CreditService:
                             info['user_api_key'] = dec
             return ResponseModel(status_code=200, response={'user_credits': items}).dict()
         except PyMongoError as e:
-            logger.error(request_id + f" | Get all credits failed with database error: {str(e)}")
+            logger.error(request_id + f' | Get all credits failed with database error: {str(e)}')
             return ResponseModel(status_code=500, error_code='CRD016', error_message='Database error occurred while retrieving credits').dict()
 
     @staticmethod
     async def get_user_credits(username: str, request_id):
-        logger.info(request_id + f" | Getting credits for user: {username}")
+        logger.info(request_id + f' | Getting credits for user: {username}')
         try:
             doc = user_credit_collection.find_one({'username': username})
             if not doc:
@@ -273,5 +275,5 @@ class CreditService:
                         info['user_api_key'] = dec
             return ResponseModel(status_code=200, response=doc).dict()
         except PyMongoError as e:
-            logger.error(request_id + f" | Get user credits failed with database error: {str(e)}")
+            logger.error(request_id + f' | Get user credits failed with database error: {str(e)}')
             return ResponseModel(status_code=500, error_code='CRD018', error_message='Database error occurred while retrieving user credits').dict()

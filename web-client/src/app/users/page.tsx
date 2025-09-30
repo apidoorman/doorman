@@ -58,8 +58,8 @@ const UsersPage = () => {
       setUsers(allUsers)
       return
     }
-    
-    const filteredUsers = allUsers.filter(user => 
+
+    const filteredUsers = allUsers.filter(user =>
       user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.roles || []).some(role => role.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -99,7 +99,6 @@ const UsersPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Users</h1>
@@ -115,7 +114,6 @@ const UsersPage = () => {
           </Link>
         </div>
 
-        {/* Search and Filters */}
         <div className="card">
           <div className="flex flex-col sm:flex-row gap-4">
             <form onSubmit={handleSearch} className="flex-1">
@@ -132,7 +130,7 @@ const UsersPage = () => {
                 />
               </div>
             </form>
-            
+
             <div className="flex gap-2">
               <button
                 onClick={() => handleSort('username')}
@@ -156,7 +154,6 @@ const UsersPage = () => {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -170,7 +167,6 @@ const UsersPage = () => {
           </div>
         )}
 
-        {/* Loading State */}
         {loading ? (
           <div className="card">
             <div className="flex items-center justify-center py-12">
@@ -197,7 +193,7 @@ const UsersPage = () => {
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr 
+                    <tr
                       key={user.username}
                       onClick={() => handleUserClick(user)}
                       className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
@@ -262,7 +258,6 @@ const UsersPage = () => {
               hasNext={hasNext}
             />
 
-            {/* Empty State */}
             {users.length === 0 && !loading && (
               <div className="text-center py-12">
                 <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">

@@ -29,7 +29,7 @@ const UserSubscriptionsPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  
+
   const [selectedApi, setSelectedApi] = useState('')
   const [isAdding, setIsAdding] = useState(false)
 
@@ -140,7 +140,7 @@ const UserSubscriptionsPage = () => {
       await postJson(`${SERVER_URL}/platform/subscription/unsubscribe`, body)
 
       setSuccess(`Successfully revoked access to ${api_name}/${api_version} for ${username}.`)
-      await fetchSubscriptions() // Reconcile with server state
+      await fetchSubscriptions()
     } catch (err) {
       // Rollback optimistic change
       await fetchSubscriptions()
@@ -153,7 +153,7 @@ const UserSubscriptionsPage = () => {
     }
   }
 
-  const availableApis = allApis.filter(api => 
+  const availableApis = allApis.filter(api =>
     !subscriptions.some(sub => sub.api_name === api.api_name && sub.api_version === api.api_version)
   )
 
@@ -203,7 +203,7 @@ const UserSubscriptionsPage = () => {
                           <p className="font-medium text-gray-900 dark:text-white">{sub.api_name}</p>
                           <p className="text-sm text-gray-500 dark:text-gray-400">Version: {sub.api_version}</p>
                         </div>
-                        <button 
+                        <button
                           onClick={() => handleRevokeClick(sub)}
                           className="btn btn-error-outline btn-sm"
                         >
@@ -229,7 +229,7 @@ const UserSubscriptionsPage = () => {
                   <label htmlFor="api-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Available APIs
                   </label>
-                  <select 
+                  <select
                     id="api-select"
                     className="input"
                     value={selectedApi}

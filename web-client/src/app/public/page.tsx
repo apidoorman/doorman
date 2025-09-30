@@ -8,4 +8,4 @@ export default function PublicPage() {
       <p>If you can see this, routing is working correctly.</p>
     </div>
   )
-} 
+}

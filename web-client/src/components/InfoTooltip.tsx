@@ -21,7 +21,7 @@ export default function InfoTooltip({ text, className }: InfoTooltipProps) {
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
       >
-        <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>{/* info icon */}
+        <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>{}
           <path fillRule="evenodd" d="M18 10A8 8 0 11.001 9.999 8 8 0 0118 10zM9 9a1 1 0 112 0v5a1 1 0 11-2 0V9zm1-6a1.5 1.5 0 100 3 1.5 1.5 0 000-3z" clipRule="evenodd"/>
         </svg>
       </button>

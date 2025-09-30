@@ -25,7 +25,7 @@ export function decodeJWT(token: string): JWTPayload | null {
       console.log('=== JWT DECODE ===')
       console.log('Attempting to decode token:', token.substring(0, 50) + '...')
     }
-    
+
     const base64Url = token.split('.')[1]
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
     const jsonPayload = decodeURIComponent(
@@ -35,7 +35,7 @@ export function decodeJWT(token: string): JWTPayload | null {
         .join('')
     )
     const payload = JSON.parse(jsonPayload)
-    
+
     if (DEBUG) {
       console.log('JWT decode successful:', {
         sub: payload.sub,
@@ -45,7 +45,7 @@ export function decodeJWT(token: string): JWTPayload | null {
         exp: payload.exp
       })
     }
-    
+
     return payload
   } catch (error) {
     if (DEBUG) console.error('Error decoding JWT:', error)
@@ -63,16 +63,16 @@ export function isTokenValid(token: string): boolean {
     console.log('=== TOKEN VALIDATION ===')
     console.log('Validating token:', token.substring(0, 50) + '...')
   }
-  
+
   const payload = decodeJWT(token)
   if (!payload) {
     if (DEBUG) console.log('Token decode failed')
     return false
   }
-  
+
   const now = Math.floor(Date.now() / 1000)
   const isValid = payload.exp > now
-  
+
   if (DEBUG) {
     console.log('Token validation results:', {
       exp: payload.exp,
@@ -84,7 +84,7 @@ export function isTokenValid(token: string): boolean {
       role: payload.role
     })
   }
-  
+
   return isValid
 }
 
@@ -96,7 +96,7 @@ export function isUserActive(token: string): boolean {
 export function hasUIAccess(token: string): boolean {
   const payload = decodeJWT(token)
   const uiAccess = payload?.accesses?.ui_access === true
-  
+
   if (DEBUG) {
     console.log('=== UI ACCESS CHECK ===')
     console.log('Token payload:', payload)
@@ -104,14 +104,14 @@ export function hasUIAccess(token: string): boolean {
     console.log('UI access value:', payload?.accesses?.ui_access)
     console.log('UI access result:', uiAccess)
   }
-  
+
   return uiAccess
 }
 
 export function hasPermission(token: string, permission: keyof JWTPayload['accesses']): boolean {
   const payload = decodeJWT(token)
   const hasPerm = payload?.accesses?.[permission] === true
-  
+
   if (DEBUG) {
     console.log('=== PERMISSION CHECK ===')
     console.log('Checking permission:', permission)
@@ -119,7 +119,7 @@ export function hasPermission(token: string, permission: keyof JWTPayload['acces
     console.log('Permission value:', payload?.accesses?.[permission])
     console.log('Permission result:', hasPerm)
   }
-  
+
   return hasPerm
 }
 
@@ -131,7 +131,7 @@ export function getUserPermissions(token: string): JWTPayload['accesses'] | null
 export function getCurrentUser(token: string): { username: string; role: string } | null {
   const payload = decodeJWT(token)
   if (!payload) return null
-  
+
   return {
     username: payload.sub,
     role: payload.role
@@ -146,13 +146,13 @@ export function isAuthenticated(): boolean {
 export function canAccessUI(): boolean {
   const token = getTokenFromCookie()
   if (!token) return false
-  
+
   return isTokenValid(token) && hasUIAccess(token)
 }
 
 export function canAccessPage(permission: keyof JWTPayload['accesses']): boolean {
   const token = getTokenFromCookie()
   if (!token) return false
-  
+
   return isTokenValid(token) && hasUIAccess(token) && hasPermission(token, permission)
-} 
+}

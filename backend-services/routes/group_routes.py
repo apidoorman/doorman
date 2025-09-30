@@ -4,9 +4,14 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
+# External imports
 from typing import List
 from fastapi import APIRouter, Depends, Request
+import uuid
+import time
+import logging
 
+# Internal imports
 from models.group_model_response import GroupModelResponse
 from models.response_model import ResponseModel
 from models.update_group_model import UpdateGroupModel
@@ -17,50 +22,57 @@ from utils.response_util import respond_rest, process_response
 from utils.constants import Headers, Roles, ErrorCodes, Messages, Defaults
 from utils.role_util import platform_role_required_bool
 
-import uuid
-import time
-import logging
-
 group_router = APIRouter()
 
-logger = logging.getLogger("doorman.gateway")
+logger = logging.getLogger('doorman.gateway')
 
-@group_router.post("",
-    description="Add group",
+"""
+Add group
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@group_router.post('',
+    description='Add group',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Group created successfully"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'Group created successfully'
                     }
                 }
             }
         }
     }
 )
+
 async def create_group(api_data: CreateGroupModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     Headers.REQUEST_ID: request_id
                 },
-                error_code="GRP008",
-                error_message="You do not have permission to create groups"
+                error_code='GRP008',
+                error_message='You do not have permission to create groups'
             ))
         return respond_rest(await GroupService.create_group(api_data, request_id))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
@@ -71,44 +83,55 @@ async def create_group(api_data: CreateGroupModel, request: Request):
             ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@group_router.put("/{group_name}",
-    description="Update group",
+"""
+Update group
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@group_router.put('/{group_name}',
+    description='Update group',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Group updated successfully"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'Group updated successfully'
                     }
                 }
             }
         }
     }
 )
+
 async def update_group(group_name: str, api_data: UpdateGroupModel, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     Headers.REQUEST_ID: request_id
                 },
-                error_code="GRP009",
-                error_message="You do not have permission to update groups"
+                error_code='GRP009',
+                error_message='You do not have permission to update groups'
             ))
         return respond_rest(await GroupService.update_group(group_name, api_data, request_id))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
@@ -119,44 +142,55 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
             ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@group_router.delete("/{group_name}",
-    description="Delete group",
+"""
+Delete group
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@group_router.delete('/{group_name}',
+    description='Delete group',
     response_model=ResponseModel,
     responses={
         200: {
-            "description": "Successful Response",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "message": "Group deleted successfully"
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'Group deleted successfully'
                     }
                 }
             }
         }
     }
 )
+
 async def delete_group(group_name: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(ResponseModel(
                 status_code=403,
                 response_headers={
                     Headers.REQUEST_ID: request_id
                 },
-                error_code="GRP010",
-                error_message="You do not have permission to delete groups"
+                error_code='GRP010',
+                error_message='You do not have permission to delete groups'
             ))
         return respond_rest(await GroupService.delete_group(group_name, request_id))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
             status_code=500,
             response_headers={
@@ -167,23 +201,34 @@ async def delete_group(group_name: str, request: Request):
             ))
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@group_router.get("/all",
-    description="Get all groups",
+"""
+Endpoint
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@group_router.get('/all',
+    description='Get all groups',
     response_model=List[GroupModelResponse]
 )
+
 async def get_groups(request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await GroupService.get_groups(page, page_size, request_id))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
@@ -191,26 +236,37 @@ async def get_groups(request: Request, page: int = Defaults.PAGE, page_size: int
             },
             error_code=ErrorCodes.UNEXPECTED,
             error_message=Messages.UNEXPECTED
-            ).dict(), "rest")
+            ).dict(), 'rest')
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-@group_router.get("/{group_name}",
-    description="Get group",
+"""
+Endpoint
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@group_router.get('/{group_name}',
+    description='Get group',
     response_model=GroupModelResponse
 )
+
 async def get_group(group_name: str, request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
-        username = payload.get("sub")
-        logger.info(f"{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}")
-        logger.info(f"{request_id} | Endpoint: {request.method} {str(request.url.path)}")
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await GroupService.get_group(group_name, request_id))
     except Exception as e:
-        logger.critical(f"{request_id} | Unexpected error: {str(e)}", exc_info=True)
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={
@@ -218,7 +274,7 @@ async def get_group(group_name: str, request: Request):
             },
             error_code=ErrorCodes.UNEXPECTED,
             error_message=Messages.UNEXPECTED
-            ).dict(), "rest")
+            ).dict(), 'rest')
     finally:
         end_time = time.time() * 1000
-        logger.info(f"{request_id} | Total time: {str(end_time - start_time)}ms")
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')

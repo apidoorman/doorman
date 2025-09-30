@@ -62,8 +62,8 @@ const GroupsPage = () => {
       setGroups(allGroups)
       return
     }
-    
-    const filteredGroups = allGroups.filter(group => 
+
+    const filteredGroups = allGroups.filter(group =>
       group.group_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       group.group_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       group.api_access?.some(api => api.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -92,7 +92,6 @@ const GroupsPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Groups</h1>
@@ -108,7 +107,6 @@ const GroupsPage = () => {
           </Link>
         </div>
 
-        {/* Search and Filters */}
         <div className="card">
           <div className="flex flex-col sm:flex-row gap-4">
             <form onSubmit={handleSearch} className="flex-1">
@@ -125,7 +123,7 @@ const GroupsPage = () => {
                 />
               </div>
             </form>
-            
+
             <div className="flex gap-2">
               <button
                 onClick={() => handleSort('group_name')}
@@ -143,7 +141,6 @@ const GroupsPage = () => {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -157,7 +154,6 @@ const GroupsPage = () => {
           </div>
         )}
 
-        {/* Loading State */}
         {loading ? (
           <div className="card">
             <div className="flex items-center justify-center py-12">
@@ -182,7 +178,7 @@ const GroupsPage = () => {
                 </thead>
                 <tbody>
                   {groups.map((group) => (
-                    <tr 
+                    <tr
                       key={group.group_name}
                       onClick={() => handleGroupClick(group)}
                       className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
@@ -230,7 +226,6 @@ const GroupsPage = () => {
               hasNext={hasNext}
             />
 
-            {/* Empty State */}
             {groups.length === 0 && !loading && (
               <div className="text-center py-12">
                 <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">

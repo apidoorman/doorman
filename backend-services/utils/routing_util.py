@@ -1,11 +1,13 @@
+# External imports
+from typing import Optional, Dict
+import logging
+
+# Internal imports
 from utils.doorman_cache_util import doorman_cache
 from utils.database import routing_collection
 from utils import api_util
-from typing import Optional, Dict
 
-import logging
-
-logger = logging.getLogger("doorman.gateway")
+logger = logging.getLogger('doorman.gateway')
 
 async def get_client_routing(client_key):
     """
@@ -21,9 +23,9 @@ async def get_client_routing(client_key):
             doorman_cache.set_cache('client_routing_cache', client_key, client_routing)
         return client_routing
     except Exception as e:
-        logger.error(f"Error in get_client_routing: {e}")
+        logger.error(f'Error in get_client_routing: {e}')
         return None
-    
+
 async def get_routing_info(client_key):
     routing = await get_client_routing(client_key)
     if not routing:
@@ -36,7 +38,6 @@ async def get_routing_info(client_key):
     doorman_cache.set_cache('client_routing_cache', client_key, routing)
     return server
 
-
 async def pick_upstream_server(api: Dict, method: str, endpoint_uri: str, client_key: Optional[str]) -> Optional[str]:
     """Resolve upstream server with precedence: Routing (1) > Endpoint (2) > API (3).
 
@@ -44,13 +45,12 @@ async def pick_upstream_server(api: Dict, method: str, endpoint_uri: str, client
     - Endpoint: endpoint_servers list on the endpoint doc, round-robin via cache key endpoint_id.
     - API: api_servers list on the API doc, round-robin via cache key api_id.
     """
-    # 1) Client routing
+
     if client_key:
         server = await get_routing_info(client_key)
         if server:
             return server
 
-    # 2) Endpoint-level servers
     try:
         endpoint = await api_util.get_endpoint(api, method, endpoint_uri)
     except Exception:
@@ -64,7 +64,6 @@ async def pick_upstream_server(api: Dict, method: str, endpoint_uri: str, client
             doorman_cache.set_cache('endpoint_server_cache', idx_key, (server_index + 1) % len(ep_servers))
             return server
 
-    # 3) API-level servers
     api_servers = api.get('api_servers') or []
     if isinstance(api_servers, list) and len(api_servers) > 0:
         idx_key = api.get('api_id')

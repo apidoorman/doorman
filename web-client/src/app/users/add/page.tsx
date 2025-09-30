@@ -47,7 +47,7 @@ const AddUserPage = () => {
 
   const handleInputChange = (field: keyof CreateUserData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-    
+
     // Check password strength when password changes
     if (field === 'password') {
       checkPasswordStrength(value)
@@ -103,7 +103,7 @@ const AddUserPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     // Validate required fields
     if (!formData.username || !formData.email || !formData.password || !formData.role) {
       setError('Please fill in all required fields')
@@ -133,7 +133,6 @@ const AddUserPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Add New User</h1>
@@ -149,7 +148,6 @@ const AddUserPage = () => {
           </Link>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -163,10 +161,8 @@ const AddUserPage = () => {
           </div>
         )}
 
-        {/* Form */}
         <div className="card max-w-4xl">
           <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Basic Information */}
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Basic Information</h3>
@@ -281,7 +277,6 @@ const AddUserPage = () => {
               </div>
             </div>
 
-            {/* Groups */}
             <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Groups</h3>
@@ -322,7 +317,6 @@ const AddUserPage = () => {
               </div>
             </div>
 
-            {/* Rate Limiting */}
             <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Rate Limiting</h3>
@@ -367,7 +361,6 @@ const AddUserPage = () => {
               </div>
             </div>
 
-            {/* Throttling */}
             <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Throttling</h3>
@@ -463,7 +456,6 @@ const AddUserPage = () => {
               </div>
             </div>
 
-            {/* Custom Attributes */}
             <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Custom Attributes</h3>
               <div className="space-y-4">
@@ -508,7 +500,6 @@ const AddUserPage = () => {
               </div>
             </div>
 
-            {/* Form Actions */}
             <div className="flex gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
               <button type="submit" disabled={loading} className="btn btn-primary flex-1">
                 {loading ? (
@@ -531,4 +522,4 @@ const AddUserPage = () => {
   )
 }
 
-export default AddUserPage 
+export default AddUserPage

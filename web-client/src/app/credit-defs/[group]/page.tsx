@@ -43,7 +43,7 @@ export default function EditCreditDefPage() {
     setWorking(true); setError(null); setSuccess(null)
     try {
       const payload: any = { api_credit_group, api_key_header, credit_tiers: tiers }
-      if (api_key) payload.api_key = api_key // set only if provided
+      if (api_key) payload.api_key = api_key
       await putJson(`${SERVER_URL}/platform/credit/${encodeURIComponent(api_credit_group)}`, payload)
       setSuccess('Credit definition updated')
       setKey('')

@@ -49,7 +49,7 @@ const AddGroupPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!formData.group_name.trim()) {
       setError('Group name is required')
       return
@@ -76,7 +76,6 @@ const AddGroupPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Page Header */}
         <div className="page-header">
           <div>
             <h1 className="page-title">Add Group</h1>
@@ -86,7 +85,6 @@ const AddGroupPage = () => {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
             <div className="flex">
@@ -100,7 +98,6 @@ const AddGroupPage = () => {
           </div>
         )}
 
-        {/* Form */}
         <div className="card max-w-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
             <FormHelp docHref="/docs/using-fields.html#access-control">Groups gate API access alongside roles. Use clear names.</FormHelp>
@@ -166,7 +163,7 @@ const AddGroupPage = () => {
                     Add
                   </button>
                 </div>
-                
+
                 <div className="flex flex-wrap gap-2">
                   {formData.api_access.map((api, index) => (
                     <div key={index} className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full">
@@ -184,7 +181,7 @@ const AddGroupPage = () => {
                     </div>
                   ))}
                 </div>
-                
+
                 {formData.api_access.length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No APIs assigned yet</p>
                 )}
@@ -217,4 +214,4 @@ const AddGroupPage = () => {
   )
 }
 
-export default AddGroupPage 
+export default AddGroupPage

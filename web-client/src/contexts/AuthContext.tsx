@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (DEBUG) console.log('AuthContext - Initial auth check')
       checkAuth()
     }, 200)
-    
+
     // Check auth every minute
     const interval = setInterval(() => {
       if (DEBUG) console.log('AuthContext - Periodic auth check')
@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshAuth()
       }
     }, 10 * 60 * 1000)
-    
+
     return () => {
       clearTimeout(timer)
       clearInterval(interval)
@@ -160,4 +160,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
-} 
+}
