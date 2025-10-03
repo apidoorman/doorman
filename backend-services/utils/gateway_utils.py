@@ -10,7 +10,8 @@ def sanitize_headers(value: str):
 
 async def get_headers(request: Request, allowed_headers: List[str]):
     safe_headers = {}
+    allowed_lower = {h.lower() for h in (allowed_headers or [])}
     for key, value in request.headers.items():
-        if key in allowed_headers:
+        if key.lower() in allowed_lower:
             safe_headers[key] = sanitize_headers(value)
     return safe_headers

@@ -41,6 +41,17 @@ class GatewayService:
                 write=float(os.getenv('HTTP_WRITE_TIMEOUT', 30.0)),
                 pool=float(os.getenv('HTTP_TIMEOUT', 30.0))
             )
+    _http_client: httpx.AsyncClient | None = None
+
+    @classmethod
+    def get_http_client(cls) -> httpx.AsyncClient:
+        # Use a shared client only when explicitly enabled to preserve testability
+        if (os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() == 'true'):
+            if cls._http_client is None:
+                cls._http_client = httpx.AsyncClient(timeout=cls.timeout)
+            return cls._http_client
+        # Otherwise, return a fresh client instance to allow monkeypatching per call
+        return httpx.AsyncClient(timeout=cls.timeout)
 
     def error_response(request_id, code, message, status=404):
             logger.error(f'{request_id} | REST gateway failed with code {code}')
@@ -177,7 +188,6 @@ class GatewayService:
                 try:
                     swap_from = api.get('api_authorization_field_swap')
                     if swap_from:
-
                         val = headers.get(swap_from)
                         if val is not None:
                             headers['Authorization'] = val
@@ -197,7 +207,8 @@ class GatewayService:
             except Exception as e:
                 logger.error(f'{request_id} | Validation error: {e}')
                 return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
-            async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
+            client = GatewayService.get_http_client()
+            try:
                 if method == 'GET':
                     http_response = await client.get(url, params=query_params, headers=headers)
                 elif method in ('POST', 'PUT', 'DELETE', 'PATCH'):
@@ -213,6 +224,13 @@ class GatewayService:
                         )
                 else:
                     return GatewayService.error_response(request_id, 'GTW004', 'Method not supported', status=405)
+            finally:
+                # Close per-call client when not using cache
+                if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
+                    try:
+                        await client.aclose()
+                    except Exception:
+                        pass
             if 'application/json' in http_response.headers.get('Content-Type', '').lower():
                 response_content = http_response.json()
             else:
@@ -225,14 +243,23 @@ class GatewayService:
                 return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
             logger.info(f'{request_id} | REST gateway status code: {http_response.status_code}')
             response_headers = {'request_id': request_id}
+            allowed_lower = {h.lower() for h in (allowed_headers or [])}
             for key, value in http_response.headers.items():
-                if key.lower() in allowed_headers:
+                if key.lower() in allowed_lower:
                     response_headers[key] = value
 
             try:
                 origin = request.headers.get('origin') or request.headers.get('Origin')
                 _, cors_headers = GatewayService._compute_api_cors_headers(api, origin, None, None)
                 response_headers.update(cors_headers)
+            except Exception:
+                pass
+            # Attach timing headers when available
+            try:
+                if current_time and start_time:
+                    response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                if backend_end_time and current_time:
+                    response_headers['X-Backend-Time'] = str(int(backend_end_time - current_time))
             except Exception:
                 pass
             return ResponseModel(
@@ -294,7 +321,7 @@ class GatewayService:
                 logger.info(f'{request_id} | SOAP gateway to: {url}')
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api, username):
+                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
@@ -312,7 +339,14 @@ class GatewayService:
                 headers['SOAPAction'] = '""'
             envelope = (await request.body()).decode('utf-8')
             if api.get('api_authorization_field_swap'):
-                headers[api.get('Authorization')] = headers.get(api.get('api_authorization_field_swap'))
+                try:
+                    swap_from = api.get('api_authorization_field_swap')
+                    if swap_from:
+                        val = headers.get(swap_from)
+                        if val is not None:
+                            headers['Authorization'] = val
+                except Exception:
+                    pass
 
             try:
                 endpoint_doc = await api_util.get_endpoint(api, 'POST', '/' + endpoint_uri.lstrip('/'))
@@ -322,8 +356,15 @@ class GatewayService:
             except Exception as e:
                 logger.error(f'{request_id} | Validation error: {e}')
                 return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
-            async with httpx.AsyncClient(timeout=GatewayService.timeout) as client:
+            client = GatewayService.get_http_client()
+            try:
                 http_response = await client.post(url, content=envelope, params=query_params, headers=headers)
+            finally:
+                if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
+                    try:
+                        await client.aclose()
+                    except Exception:
+                        pass
             response_content = http_response.text
             logger.info(f'{request_id} | SOAP gateway response: {response_content}')
             backend_end_time = time.time() * 1000
@@ -334,14 +375,22 @@ class GatewayService:
                 return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
             logger.info(f'{request_id} | SOAP gateway status code: {http_response.status_code}')
             response_headers = {'request_id': request_id}
+            allowed_lower = {h.lower() for h in (allowed_headers or [])}
             for key, value in http_response.headers.items():
-                if key.lower() in allowed_headers:
+                if key.lower() in allowed_lower:
                     response_headers[key] = value
 
             try:
                 origin = request.headers.get('origin') or request.headers.get('Origin')
                 _, cors_headers = GatewayService._compute_api_cors_headers(api, origin, None, None)
                 response_headers.update(cors_headers)
+            except Exception:
+                pass
+            try:
+                if current_time and start_time:
+                    response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                if backend_end_time and current_time:
+                    response_headers['X-Backend-Time'] = str(int(backend_end_time - current_time))
             except Exception:
                 pass
             return ResponseModel(
@@ -409,7 +458,14 @@ class GatewayService:
                     if user_specific_api_key:
                         headers[ai_token_headers[0]] = user_specific_api_key
             if api.get('api_authorization_field_swap'):
-                headers[api.get('Authorization')] = headers.get(api.get('api_authorization_field_swap'))
+                try:
+                    swap_from = api.get('api_authorization_field_swap')
+                    if swap_from:
+                        val = headers.get(swap_from)
+                        if val is not None:
+                            headers['Authorization'] = val
+                except Exception:
+                    pass
             body = await request.json()
             query = body.get('query')
             variables = body.get('variables', {})
@@ -422,23 +478,28 @@ class GatewayService:
             except Exception as e:
                 return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
             transport = AIOHTTPTransport(url=url, headers=headers)
-            async with Client(transport=transport, fetch_schema_from_transport=True) as session:
+            async with Client(transport=transport, fetch_schema_from_transport=False) as session:
                 try:
                     result = await session.execute(gql(query), variable_values=variables)
                     backend_end_time = time.time() * 1000
-                    if retry > 0:
-                        logger.error(f'{request_id} | GraphQL gateway failed retrying')
-                        return await GatewayService.graphql_gateway(username, request, request_id, start_time, path, url, retry - 1)
                     logger.info(f'{request_id} | GraphQL gateway status code: 200')
                     response_headers = {'request_id': request_id}
+                    allowed_lower = {h.lower() for h in (allowed_headers or [])}
                     for key, value in headers.items():
-                        if key.lower() in allowed_headers:
+                        if key.lower() in allowed_lower:
                             response_headers[key] = value
 
                     try:
                         origin = request.headers.get('origin') or request.headers.get('Origin')
                         _, cors_headers = GatewayService._compute_api_cors_headers(api, origin, None, None)
                         response_headers.update(cors_headers)
+                    except Exception:
+                        pass
+                    try:
+                        if current_time and start_time:
+                            response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                        if backend_end_time and current_time:
+                            response_headers['X-Backend-Time'] = str(int(backend_end_time - current_time))
                     except Exception:
                         pass
                     return ResponseModel(
@@ -594,9 +655,17 @@ class GatewayService:
                     else:
                         response_dict[field.name] = value
                 backend_end_time = time.time() * 1000
+                response_headers = {'request_id': request_id}
+                try:
+                    if current_time and start_time:
+                        response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                    if backend_end_time and current_time:
+                        response_headers['X-Backend-Time'] = str(int(backend_end_time - current_time))
+                except Exception:
+                    pass
                 return ResponseModel(
                     status_code=200,
-                    response_headers={'request_id': request_id},
+                    response_headers=response_headers,
                     response=response_dict
                 ).dict()
             except ImportError as e:
