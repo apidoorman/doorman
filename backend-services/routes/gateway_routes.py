@@ -53,9 +53,10 @@ async def status():
     try:
         mongodb_status = await check_mongodb()
         redis_status = await check_redis()
-        memory_usage = await get_memory_usage()
-        active_connections = await get_active_connections()
-        uptime = await get_uptime()
+        # The following utilities are synchronous; do not await
+        memory_usage = get_memory_usage()
+        active_connections = get_active_connections()
+        uptime = get_uptime()
         return ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},

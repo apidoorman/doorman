@@ -5,9 +5,8 @@ See https://github.com/apidoorman/doorman for more information
 """
 
 # External imports
-from http.client import HTTPException
 from typing import List
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 import uuid
 import time
 import logging
@@ -328,6 +327,16 @@ async def get_user_by_username(request: Request):
         logger.info(f'{request_id} | Username: {auth_username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await UserService.get_user_by_username(auth_username, request_id))
+    except HTTPException as e:
+        # Preserve HTTPException status (e.g., 401 after token invalidation)
+        return respond_rest(ResponseModel(
+            status_code=e.status_code,
+            response_headers={
+                Headers.REQUEST_ID: request_id
+            },
+            error_code=ErrorCodes.HTTP_EXCEPTION,
+            error_message=e.detail
+            ))
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
