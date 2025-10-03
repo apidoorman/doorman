@@ -76,6 +76,7 @@ Core variables:
 
 - Gateway (proxy) responses can be optionally wrapped by STRICT_RESPONSE_ENVELOPE; confirm client contracts before enabling globally in front of external consumers.
 - Prefer Authorization: Bearer header for external API consumers to reduce CSRF surface.
+- User profile constraint: `custom_attributes` is limited to 10 key/value pairs per user. API returns HTTP 400 `USR016` if exceeded; UI prevents adding beyond 10.
 
 ## Strict Envelope Examples
 
@@ -105,4 +106,3 @@ When `STRICT_RESPONSE_ENVELOPE=true`, platform endpoints return a consistent str
   "error_message": "You do not have permission to create roles"
 }
 ```
-

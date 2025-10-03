@@ -44,6 +44,7 @@ const AddUserPage = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, message: '' })
+  const customAttrCount = Object.keys(formData.custom_attributes || {}).length
 
   const handleInputChange = (field: keyof CreateUserData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -83,6 +84,10 @@ const AddUserPage = () => {
   }
 
   const addCustomAttribute = () => {
+    if (customAttrCount >= 10) {
+      setError('Maximum 10 custom attributes allowed. Please replace an existing one.')
+      return
+    }
     if (newCustomAttribute.key && newCustomAttribute.value) {
       setFormData(prev => ({
         ...prev,
@@ -483,7 +488,7 @@ const AddUserPage = () => {
                     placeholder="Key"
                     value={newCustomAttribute.key}
                     onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, key: e.target.value }))}
-                    disabled={loading}
+                    disabled={loading || customAttrCount >= 10}
                   />
                   <input
                     type="text"
@@ -491,12 +496,15 @@ const AddUserPage = () => {
                     placeholder="Value"
                     value={newCustomAttribute.value}
                     onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, value: e.target.value }))}
-                    disabled={loading}
+                    disabled={loading || customAttrCount >= 10}
                   />
-                  <button type="button" className="btn btn-primary" onClick={addCustomAttribute} disabled={loading}>
+                  <button type="button" className="btn btn-primary" onClick={addCustomAttribute} disabled={loading || customAttrCount >= 10}>
                     Add
                   </button>
                 </div>
+                {customAttrCount >= 10 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Maximum of 10 custom attributes reached. Remove one to add another.</p>
+                )}
               </div>
             </div>
 
@@ -520,6 +528,10 @@ const AddUserPage = () => {
       </div>
     </Layout>
   )
+    if (Object.keys(formData.custom_attributes || {}).length > 10) {
+      setError('Maximum 10 custom attributes allowed. Please replace an existing one.')
+      return
+    }
 }
 
 export default AddUserPage

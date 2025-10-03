@@ -40,6 +40,15 @@ Local dev defaults are convenient but not secure; do not use them in production.
      - `npm ci`
      - `npm run dev` (or `npm run build && npm start`)
 
+## Users: Custom Attributes
+
+- Limit: Each user may have at most 10 custom attribute key/value pairs (`custom_attributes`).
+- API behavior: Create/Update requests that exceed 10 return HTTP 400 with `error_code=USR016` and message:
+  "Maximum 10 custom attributes allowed. Please replace an existing one."
+- UI behavior: The Add User and Edit User pages disable adding more attributes at 10 and show a helper message. Remove one to add another.
+
+Tip: Prefer short, stable keys (e.g., `dept`, `tier`, `region`) to stay within the limit.
+
 ## Secure Production Setup
 
 Use explicit, strong secrets and force HTTPS. You can terminate TLS either at Doorman itself or at a reverse proxy (Nginx/Traefik). In production, Doorman refuses to start if `ENV=production` and neither `HTTPS_ONLY` nor `HTTPS_ENABLED` are true.
