@@ -61,6 +61,8 @@ const UserDetailPage = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const isProtected = PROTECTED_USERS.includes((username || '').toLowerCase())
+  const currentCustomAttrs = (isEditing ? (editData.custom_attributes || {}) : (user?.custom_attributes || {})) as Record<string, string>
+  const editCustomAttrCount = Object.keys(currentCustomAttrs).length
 
   useEffect(() => {
     const userData = sessionStorage.getItem('selectedUser')
@@ -138,6 +140,10 @@ const UserDetailPage = () => {
         setError('Editing this user is disabled by policy')
         return
       }
+      if (Object.keys(editData.custom_attributes || {}).length > 10) {
+        setError('Maximum 10 custom attributes allowed. Please replace an existing one.')
+        return
+      }
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`, editData)
 
       // Refresh from server to get the latest canonical data (retry once on transient failure)
@@ -194,6 +200,10 @@ const UserDetailPage = () => {
   }
 
   const addCustomAttribute = () => {
+    if (editCustomAttrCount >= 10) {
+      setError('Maximum 10 custom attributes allowed. Please replace an existing one.')
+      return
+    }
     if (newCustomAttribute.key.trim() && newCustomAttribute.value.trim()) {
       setEditData(prev => ({
         ...prev,
@@ -688,6 +698,7 @@ const UserDetailPage = () => {
                       value={newCustomAttribute.key}
                       onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, key: e.target.value }))}
                       className="input"
+                      disabled={editCustomAttrCount >= 10}
                       placeholder="Attribute key"
                     />
                     <input
@@ -695,11 +706,15 @@ const UserDetailPage = () => {
                       value={newCustomAttribute.value}
                       onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, value: e.target.value }))}
                       className="input"
+                      disabled={editCustomAttrCount >= 10}
                       placeholder="Attribute value"
                     />
-                    <button onClick={addCustomAttribute} className="btn btn-primary col-span-2">
+                    <button onClick={addCustomAttribute} className="btn btn-primary col-span-2" disabled={editCustomAttrCount >= 10}>
                       Add Attribute
                     </button>
+                    {editCustomAttrCount >= 10 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 col-span-2">Maximum of 10 custom attributes reached. Remove one to add another.</p>
+                    )}
                   </div>
                 )}
 
