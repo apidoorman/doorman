@@ -16,6 +16,8 @@ from utils.database import user_collection, subscriptions_collection, api_collec
 from utils.doorman_cache_util import doorman_cache
 from models.create_user_model import CreateUserModel
 from utils.role_util import platform_role_required_bool
+from utils.bandwidth_util import get_current_usage
+import time
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -81,6 +83,29 @@ class UserService:
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
+        # Augment with bandwidth usage info
+        try:
+            limit = user.get('bandwidth_limit_bytes')
+            if limit and int(limit) > 0:
+                window = user.get('bandwidth_limit_window') or 'day'
+                used = int(get_current_usage(username, window))
+                # compute reset epoch (UTC)
+                mapping = {
+                    'second': 1,
+                    'minute': 60,
+                    'hour': 3600,
+                    'day': 86400,
+                    'week': 604800,
+                    'month': 2592000,
+                }
+                sec = mapping.get(str(window).lower().rstrip('s'), 86400)
+                now = int(time.time())
+                bucket_start = (now // sec) * sec
+                resets_at = bucket_start + sec
+                user['bandwidth_usage_bytes'] = used
+                user['bandwidth_resets_at'] = resets_at
+        except Exception:
+            pass
         logger.info(f'{request_id} | User retrieval successful')
         return ResponseModel(
             status_code=200,

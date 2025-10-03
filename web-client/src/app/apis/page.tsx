@@ -269,6 +269,12 @@ const APIsPage = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <p className="font-medium text-gray-900 dark:text-white">{api.api_name}</p>
+                            {(((api as any).api_ip_mode || 'allow_all') === 'whitelist') && (
+                              <span className="badge badge-secondary">IP Whitelist</span>
+                            )}
+                            {Array.isArray((api as any).api_ip_blacklist) && (api as any).api_ip_blacklist.length > 0 && (
+                              <span className="badge badge-error">Blacklist</span>
+                            )}
                             {((api as any).api_public ?? false) && (
                               <span className="badge badge-warning flex items-center gap-1" title="This API is public">
                                 Public
