@@ -23,6 +23,8 @@ interface CreateUserData {
   throttle_wait_duration_type?: string
   throttle_queue_limit?: number | null
   custom_attributes: Record<string, string>
+  bandwidth_limit_bytes?: number
+  bandwidth_limit_window?: string
   active: boolean
   ui_access: boolean
 }
@@ -36,6 +38,8 @@ const AddUserPage = () => {
     role: '',
     groups: [],
     custom_attributes: {},
+    bandwidth_limit_bytes: undefined,
+    bandwidth_limit_window: 'day',
     active: true,
     ui_access: false
   })
@@ -457,6 +461,34 @@ const AddUserPage = () => {
                     placeholder="10"
                     disabled={loading}
                   />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Bandwidth Limit</h3>
+                <FormHelp docHref="/docs/using-fields.html#bandwidth">Limit total bytes per user over a time window.</FormHelp>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bytes (limit)</label>
+                  <input type="number" className="input" min={0}
+                    value={formData.bandwidth_limit_bytes ?? ''}
+                    onChange={(e) => handleInputChange('bandwidth_limit_bytes', e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="e.g., 1073741824 for 1 GB" disabled={loading} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Window</label>
+                  <select className="input" value={formData.bandwidth_limit_window || 'day'}
+                    onChange={(e) => handleInputChange('bandwidth_limit_window', e.target.value)} disabled={loading}>
+                    <option value="second">Second</option>
+                    <option value="minute">Minute</option>
+                    <option value="hour">Hour</option>
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                  </select>
                 </div>
               </div>
             </div>

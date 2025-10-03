@@ -54,6 +54,14 @@ async def get_security_settings(request: Request):
                 error_message='You do not have permission to view security settings'
             ).dict(), 'rest')
         settings = await load_settings()
+        # Augment with client IP info for UI safety checks
+        try:
+            client_ip = request.client.host if request.client else None
+            xff = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
+            client_ip_xff = xff.split(',')[0].strip() if xff else None
+        except Exception:
+            client_ip = None
+            client_ip_xff = None
 
         settings_with_mode = dict(settings)
         try:
@@ -61,6 +69,8 @@ async def get_security_settings(request: Request):
             settings_with_mode['memory_only'] = bool(database.memory_only)
         except Exception:
             settings_with_mode['memory_only'] = False
+        settings_with_mode['client_ip'] = client_ip
+        settings_with_mode['client_ip_xff'] = client_ip_xff
         return process_response(ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},

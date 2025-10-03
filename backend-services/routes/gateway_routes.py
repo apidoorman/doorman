@@ -18,6 +18,7 @@ from models.response_model import ResponseModel
 from utils import api_util
 from utils.doorman_cache_util import doorman_cache
 from utils.limit_throttle_util import limit_and_throttle
+from utils.bandwidth_util import enforce_pre_request_limit
 from utils.auth_util import auth_required
 from utils.group_util import group_required
 from utils.response_util import process_response
@@ -27,6 +28,7 @@ from utils.health_check_util import check_mongodb, check_redis, get_memory_usage
 from services.gateway_service import GatewayService
 from utils.validation_util import validation_util
 from utils.audit_util import audit
+from utils.ip_policy_util import enforce_api_ip_policy
 
 gateway_router = APIRouter()
 
@@ -176,6 +178,11 @@ async def gateway(request: Request, path: str):
             api = await api_util.get_api(api_key, f'/{parts[0]}/{parts[1]}')
             api_public = bool(api.get('api_public')) if api else False
             api_auth_required = bool(api.get('api_auth_required')) if api and api.get('api_auth_required') is not None else True
+            if api:
+                try:
+                    enforce_api_ip_policy(request, api)
+                except HTTPException as e:
+                    return process_response(ResponseModel(status_code=e.status_code, error_code=e.detail, error_message='IP restricted').dict(), 'rest')
         username = None
         if not api_public:
             if api_auth_required:
@@ -184,6 +191,7 @@ async def gateway(request: Request, path: str):
                 await limit_and_throttle(request)
                 payload = await auth_required(request)
                 username = payload.get('sub')
+                await enforce_pre_request_limit(request, username)
             else:
 
                 pass
@@ -299,6 +307,11 @@ async def soap_gateway(request: Request, path: str):
             api = await api_util.get_api(api_key, f'/{parts[0]}/{parts[1]}')
             api_public = bool(api.get('api_public')) if api else False
             api_auth_required = bool(api.get('api_auth_required')) if api and api.get('api_auth_required') is not None else True
+            if api:
+                try:
+                    enforce_api_ip_policy(request, api)
+                except HTTPException as e:
+                    return process_response(ResponseModel(status_code=e.status_code, error_code=e.detail, error_message='IP restricted').dict(), 'soap')
         username = None
         if not api_public:
             if api_auth_required:
@@ -307,6 +320,7 @@ async def soap_gateway(request: Request, path: str):
                 await limit_and_throttle(request)
                 payload = await auth_required(request)
                 username = payload.get('sub')
+                await enforce_pre_request_limit(request, username)
             else:
                 pass
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
@@ -418,6 +432,11 @@ async def graphql_gateway(request: Request, path: str):
         api_name = re.sub(r'^.*/', '',request.url.path)
         api_key = doorman_cache.get_cache('api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0'))
         api = await api_util.get_api(api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+        if api:
+            try:
+                enforce_api_ip_policy(request, api)
+            except HTTPException as e:
+                return process_response(ResponseModel(status_code=e.status_code, error_code=e.detail, error_message='IP restricted').dict(), 'graphql')
         api_public = bool(api.get('api_public')) if api else False
         api_auth_required = bool(api.get('api_auth_required')) if api and api.get('api_auth_required') is not None else True
         username = None
@@ -428,6 +447,7 @@ async def graphql_gateway(request: Request, path: str):
                 await limit_and_throttle(request)
                 payload = await auth_required(request)
                 username = payload.get('sub')
+                await enforce_pre_request_limit(request, username)
             else:
                 pass
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
@@ -555,6 +575,14 @@ async def grpc_gateway(request: Request, path: str):
         await limit_and_throttle(request)
         payload = await auth_required(request)
         username = payload.get('sub')
+        try:
+            api_name = re.sub(r'^.*/', '',request.url.path)
+            api_key = doorman_cache.get_cache('api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+            api = await api_util.get_api(api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0'))
+            if api:
+                enforce_api_ip_policy(request, api)
+        except HTTPException as e:
+            return process_response(ResponseModel(status_code=e.status_code, error_code=e.detail, error_message='IP restricted').dict(), 'grpc')
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')

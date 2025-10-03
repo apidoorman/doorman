@@ -9,6 +9,7 @@ import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 import ConfirmModal from '@/components/ConfirmModal'
+import { getJson } from '@/utils/api'
 
 const AddApiPage = () => {
   const router = useRouter()
@@ -29,6 +30,8 @@ const AddApiPage = () => {
     api_credit_group: '',
     active: true,
     api_auth_required: true,
+    api_ip_mode: 'allow_all' as 'allow_all' | 'whitelist',
+    api_trust_x_forwarded_for: false,
     // Frontend-only preference; stored in localStorage per API
     use_protobuf: false,
     // kept for future use; backend ignores unknown fields
@@ -42,6 +45,28 @@ const AddApiPage = () => {
   const [newRole, setNewRole] = useState('')
   const [newGroup, setNewGroup] = useState('')
   const [newHeader, setNewHeader] = useState('')
+  const [ipWhitelistText, setIpWhitelistText] = useState('')
+  const [ipBlacklistText, setIpBlacklistText] = useState('')
+  const [clientIp, setClientIp] = useState('')
+  const [clientIpXff, setClientIpXff] = useState('')
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const data = await getJson<any>(`${SERVER_URL}/platform/security/settings`)
+        setClientIp(String(data.client_ip || ''))
+        setClientIpXff(String(data.client_ip_xff || ''))
+      } catch {}
+    })()
+  }, [])
+
+  const addMyIpToWhitelist = () => {
+    const effectiveIp = (((formData as any).api_trust_x_forwarded_for && clientIpXff) ? clientIpXff : clientIp)
+    if (!effectiveIp) return
+    const list = ipWhitelistText.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean)
+    if (list.includes(effectiveIp)) return
+    setIpWhitelistText(prev => (prev && prev.trim().length > 0) ? `${prev.trim()}\n${effectiveIp}` : effectiveIp)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -51,6 +76,8 @@ const AddApiPage = () => {
     try {
       // Trim empty optional fields to keep payload clean
       const payload: any = { ...formData }
+      payload.api_ip_whitelist = ipWhitelistText.split(/\r?\n|,/).map((s:string) => s.trim()).filter(Boolean)
+      payload.api_ip_blacklist = ipBlacklistText.split(/\r?\n|,/).map((s:string) => s.trim()).filter(Boolean)
       if (!payload.api_authorization_field_swap) delete payload.api_authorization_field_swap
       if (!payload.api_credit_group) delete payload.api_credit_group
       if (!Array.isArray(payload.api_allowed_headers) || payload.api_allowed_headers.length === 0) delete payload.api_allowed_headers
@@ -311,6 +338,74 @@ const AddApiPage = () => {
               </div>
             </div>
           </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">IP Access Control</h3>
+              <FormHelp docHref="/docs/using-fields.html#api-ip-policy">Control IP access per API.</FormHelp>
+            </div>
+            <div className="p-6 space-y-4">
+              {(() => {
+                const effectiveIp = (((formData as any).api_trust_x_forwarded_for && clientIpXff) ? clientIpXff : clientIp)
+                const listFromText = (t: string) => t.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
+                const wl = listFromText(ipWhitelistText)
+                const bl = listFromText(ipBlacklistText)
+                const toLong = (s: string) => { const parts = s.split('.'); if (parts.length !== 4) return NaN; return parts.reduce((a,p)=> (a<<8)+(parseInt(p,10)&255),0) }
+                const matches = (ip: string, patterns: string[]) => {
+                  if (!ip) return false
+                  const ipL = toLong(ip)
+                  return patterns.some(raw => {
+                    const p = raw.trim(); if (!p) return false
+                    if (p.includes('/')) {
+                      const [net, maskStr] = p.split('/'); const mask = parseInt(maskStr,10)
+                      const netL = toLong(net); if (isNaN(ipL) || isNaN(netL)) return false
+                      const maskBits = mask <= 0 ? 0 : (0xFFFFFFFF << (32 - Math.min(mask, 32))) >>> 0
+                      return (((ipL>>>0) & maskBits) === (netL & maskBits))
+                    }
+                    return p === ip
+                  })
+                }
+                const warnWL = ((formData as any).api_ip_mode === 'whitelist') && wl.length > 0 && !matches(effectiveIp, wl)
+                const warnBL = matches(effectiveIp, bl)
+                if (!(warnWL || warnBL)) return null
+                return (
+                  <div className="rounded-md bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                    {warnBL ? 'Warning: Your current IP appears in the blacklist and you may lose access after saving.' : 'Warning: Your current IP is not in the whitelist and you may lose access after saving.'}
+                    <div className="text-xs mt-1">Your IP: {effectiveIp || 'unknown'} {((formData as any).api_trust_x_forwarded_for ? '(using X-Forwarded-For)' : '')}</div>
+                  </div>
+                )
+              })()}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Policy</label>
+                  <select name="api_ip_mode" className="input" value={formData.api_ip_mode}
+                    onChange={(e)=>setFormData(p=>({...p, api_ip_mode: e.target.value as any}))}>
+                    <option value="allow_all">Allow All</option>
+                    <option value="whitelist">Whitelist</option>
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">When Whitelist is selected, only listed IPs/CIDRs can call this API. Blacklist applies always.</p>
+                </div>
+                <div className="md:col-span-2 flex items-center gap-2">
+                  <input id="api_trust_x_forwarded_for" type="checkbox" className="h-4 w-4" checked={!!(formData as any).api_trust_x_forwarded_for} onChange={(e)=>setFormData(p=>({...p, api_trust_x_forwarded_for: e.target.checked}))} />
+                  <label htmlFor="api_trust_x_forwarded_for" className="text-sm text-gray-700 dark:text-gray-300">Trust X-Forwarded-For (behind proxy)</label>
+                  <InfoTooltip text="Effective IP for this API: if enabled and X-Forwarded-For is present, use its first IP; otherwise use the direct client IP." />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist (one per line or comma-separated)</label>
+                    <button type="button" className="btn btn-ghost btn-xs" onClick={addMyIpToWhitelist}>Add My IP</button>
+                  </div>
+                  <textarea className="input min-h-[120px]" value={ipWhitelistText} onChange={(e)=>setIpWhitelistText(e.target.value)} placeholder="192.168.1.10\n10.0.0.0/8" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist (one per line or comma-separated)</label>
+                  <textarea className="input min-h-[120px]" value={ipBlacklistText} onChange={(e)=>setIpBlacklistText(e.target.value)} placeholder="203.0.113.0/24" />
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="card">

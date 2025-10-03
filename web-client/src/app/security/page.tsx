@@ -46,6 +46,9 @@ interface SecuritySettings {
   enable_auto_save: boolean
   auto_save_frequency_seconds: number
   dump_path: string
+  ip_whitelist?: string[]
+  ip_blacklist?: string[]
+  trust_x_forwarded_for?: boolean
 }
 
 const SecurityPage = () => {
@@ -64,9 +67,16 @@ const SecurityPage = () => {
   const [settings, setSettings] = useState<SecuritySettings>({
     enable_auto_save: false,
     auto_save_frequency_seconds: 900,
-    dump_path: 'generated/memory_dump.bin'
+    dump_path: 'generated/memory_dump.bin',
+    ip_whitelist: [],
+    ip_blacklist: [],
+    trust_x_forwarded_for: false,
   })
+  const [ipWhitelistText, setIpWhitelistText] = useState('')
+  const [ipBlacklistText, setIpBlacklistText] = useState('')
   const [memoryOnly, setMemoryOnly] = useState(false)
+  const [clientIp, setClientIp] = useState('')
+  const [clientIpXff, setClientIpXff] = useState('')
   const [restorePath, setRestorePath] = useState('')
   const { permissions } = useAuth()
 
@@ -115,9 +125,16 @@ const SecurityPage = () => {
       setSettings({
         enable_auto_save: !!data.enable_auto_save,
         auto_save_frequency_seconds: Number(data.auto_save_frequency_seconds || 900),
-        dump_path: data.dump_path || 'generated/memory_dump.bin'
+        dump_path: data.dump_path || 'generated/memory_dump.bin',
+        ip_whitelist: Array.isArray(data.ip_whitelist) ? data.ip_whitelist : [],
+        ip_blacklist: Array.isArray(data.ip_blacklist) ? data.ip_blacklist : [],
+        trust_x_forwarded_for: !!data.trust_x_forwarded_for,
       })
       setMemoryOnly(!!data.memory_only)
+      setClientIp(String(data.client_ip || ''))
+      setClientIpXff(String(data.client_ip_xff || ''))
+      setIpWhitelistText((Array.isArray(data.ip_whitelist) ? data.ip_whitelist : []).join('\n'))
+      setIpBlacklistText((Array.isArray(data.ip_blacklist) ? data.ip_blacklist : []).join('\n'))
     } catch (err) {
       setError('Failed to load security settings. Please try again later.')
     } finally {
@@ -129,7 +146,12 @@ const SecurityPage = () => {
     try {
       setSettingsSaving(true)
       setError(null)
-      await putJson(`${SERVER_URL}/platform/security/settings`, settings)
+      const payload = {
+        ...settings,
+        ip_whitelist: ipWhitelistText.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean),
+        ip_blacklist: ipBlacklistText.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean),
+      }
+      await putJson(`${SERVER_URL}/platform/security/settings`, payload)
       setSuccess('Security settings saved')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
@@ -232,6 +254,14 @@ const SecurityPage = () => {
   }
 
   // No tabs for this page; show all sections inline
+
+  const addMyIpToWhitelist = () => {
+    const effectiveIp = (settings.trust_x_forwarded_for && clientIpXff) ? clientIpXff : clientIp
+    if (!effectiveIp) return
+    const list = ipWhitelistText.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean)
+    if (list.includes(effectiveIp)) return
+    setIpWhitelistText(prev => (prev && prev.trim().length > 0) ? `${prev.trim()}\n${effectiveIp}` : effectiveIp)
+  }
 
   return (
     <ProtectedRoute requiredPermission="manage_security">
@@ -362,6 +392,61 @@ const SecurityPage = () => {
                       ) : 'Save Settings'}
                     </button>
                     <button onClick={handleDumpNow} className="btn btn-secondary">Dump Now</button>
+                  </div>
+
+                      <div className="md:col-span-2 border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 className="text-md font-medium text-gray-900 dark:text-white mb-2">IP Access Control <InfoTooltip text="Effective IP: if 'Trust X-Forwarded-For' is enabled and the request includes X-Forwarded-For, the first IP in that header is used. Otherwise the direct client IP is used. Warnings and enforcement follow this rule." /></h4>
+                    {(() => {
+                      // compute effective IP and risk inline to avoid stale values
+                      const effectiveIp = (settings.trust_x_forwarded_for && clientIpXff) ? clientIpXff : clientIp
+                      const listFromText = (t: string) => t.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
+                      const wl = listFromText(ipWhitelistText)
+                      const bl = listFromText(ipBlacklistText)
+                      const toLong = (s: string) => { const parts = s.split('.'); if (parts.length !== 4) return NaN; return parts.reduce((a,p)=> (a<<8)+(parseInt(p,10)&255),0) }
+                      const matches = (ip: string, patterns: string[]) => {
+                        if (!ip) return false
+                        const ipL = toLong(ip)
+                        return patterns.some(raw => {
+                          const p = raw.trim(); if (!p) return false
+                          if (p.includes('/')) {
+                            const [net, maskStr] = p.split('/'); const mask = parseInt(maskStr,10)
+                            const netL = toLong(net); if (isNaN(ipL) || isNaN(netL)) return false
+                            const maskBits = mask <= 0 ? 0 : (0xFFFFFFFF << (32 - Math.min(mask, 32))) >>> 0
+                            return (((ipL>>>0) & maskBits) === (netL & maskBits))
+                          }
+                          return p === ip
+                        })
+                      }
+                      const warnWL = wl.length > 0 && !matches(effectiveIp, wl)
+                      const warnBL = matches(effectiveIp, bl)
+                      if (!(warnWL || warnBL)) return null
+                      return (
+                        <div className="rounded-md bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200 mb-2">
+                          {warnBL ? 'Warning: Your current IP appears in the blacklist and you may lose access after saving.' : 'Warning: Your current IP is not in the whitelist and you may lose access after saving.'}
+                          <div className="text-xs mt-1">Your IP: {effectiveIp || 'unknown'} {settings.trust_x_forwarded_for ? '(using X-Forwarded-For)' : ''}</div>
+                        </div>
+                      )
+                    })()}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist (one per line or comma-separated)</label>
+                          <button type="button" className="btn btn-ghost btn-xs" onClick={addMyIpToWhitelist}>Add My IP</button>
+                        </div>
+                        <textarea className="input min-h-[120px]" value={ipWhitelistText} onChange={(e)=>setIpWhitelistText(e.target.value)} placeholder="192.168.1.10\n10.0.0.0/8" />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">If non-empty, only these IPs/CIDRs can access the platform and gateway.</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist (one per line or comma-separated)</label>
+                        <textarea className="input min-h-[120px]" value={ipBlacklistText} onChange={(e)=>setIpBlacklistText(e.target.value)} placeholder="203.0.113.0/24" />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Denied IPs/CIDRs. Checked after whitelist.</p>
+                      </div>
+                      <div className="md:col-span-2 flex items-center gap-2">
+                        <input type="checkbox" className="h-4 w-4" checked={!!settings.trust_x_forwarded_for} onChange={(e)=>setSettings(s => ({...s, trust_x_forwarded_for: e.target.checked}))} />
+                        <label className="text-sm text-gray-700 dark:text-gray-300">Trust X-Forwarded-For (when behind a proxy)</label>
+                        <InfoTooltip text="When enabled, the first IP in X-Forwarded-For is treated as the client IP. Otherwise, the direct source IP is used." />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="md:col-span-2">

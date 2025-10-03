@@ -456,8 +456,63 @@ class Settings(BaseSettings):
     jwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv('REFRESH_TOKEN_EXPIRES_DAYS', 30)))
 
 @doorman.middleware('http')
+async def ip_filter_middleware(request: Request, call_next):
+    try:
+        settings = get_cached_settings()
+        wl = settings.get('ip_whitelist') or []
+        bl = settings.get('ip_blacklist') or []
+        trust_xff = bool(settings.get('trust_x_forwarded_for'))
+        client_ip = None
+        if trust_xff:
+            xff = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
+            if xff:
+                client_ip = xff.split(',')[0].strip()
+        if not client_ip:
+            client_ip = request.client.host if request.client else None
+
+        def _ip_in_list(ip: str, patterns: list) -> bool:
+            try:
+                import ipaddress
+                ip_obj = ipaddress.ip_address(ip)
+                for pat in patterns:
+                    p = (pat or '').strip()
+                    if not p:
+                        continue
+                    try:
+                        if '/' in p:
+                            net = ipaddress.ip_network(p, strict=False)
+                            if ip_obj in net:
+                                return True
+                        else:
+                            if ip_obj == ipaddress.ip_address(p):
+                                return True
+                    except Exception:
+                        continue
+                return False
+            except Exception:
+                return False
+
+        if client_ip:
+            if wl and not _ip_in_list(client_ip, wl):
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=403, content={'status_code': 403, 'error_code': 'SEC010', 'error_message': 'IP not allowed'})
+            if bl and _ip_in_list(client_ip, bl):
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=403, content={'status_code': 403, 'error_code': 'SEC011', 'error_message': 'IP blocked'})
+    except Exception:
+        pass
+    return await call_next(request)
+
+@doorman.middleware('http')
 async def metrics_middleware(request: Request, call_next):
     start = asyncio.get_event_loop().time()
+    # Capture request bytes in via Content-Length header if available
+    def _parse_len(val: str | None) -> int:
+        try:
+            return int(val) if val is not None else 0
+        except Exception:
+            return 0
+    bytes_in = _parse_len(request.headers.get('content-length'))
     response = None
     try:
         response = await call_next(request)
@@ -494,7 +549,27 @@ async def metrics_middleware(request: Request, call_next):
                 elif p.startswith('/api/soap/'):
                     seg = p.rsplit('/', 1)[-1] or 'unknown'
                     api_key = f'soap:{seg}'
-                metrics_store.record(status=status, duration_ms=duration_ms, username=username, api_key=api_key)
+                # Try to compute response bytes out
+                clen = 0
+                try:
+                    clen = _parse_len(getattr(response, 'headers', {}).get('content-length'))
+                    if clen == 0:
+                        body = getattr(response, 'body', None)
+                        if isinstance(body, (bytes, bytearray)):
+                            clen = len(body)
+                except Exception:
+                    clen = 0
+
+                metrics_store.record(status=status, duration_ms=duration_ms, username=username, api_key=api_key, bytes_in=bytes_in, bytes_out=clen)
+                try:
+                    if username:
+                        from utils.bandwidth_util import add_usage, _get_user
+                        # Only track if user has a limit configured to avoid extra writes
+                        u = _get_user(username)
+                        if u and u.get('bandwidth_limit_bytes'):
+                            add_usage(username, int(bytes_in) + int(clen), u.get('bandwidth_limit_window') or 'day')
+                except Exception:
+                    pass
         except Exception:
 
             pass

@@ -24,6 +24,10 @@ interface API {
   api_allowed_retry_count: number
   api_authorization_field_swap?: string
   api_allowed_headers?: string[]
+  api_ip_mode?: 'allow_all' | 'whitelist'
+  api_ip_whitelist?: string[]
+  api_ip_blacklist?: string[]
+  api_trust_x_forwarded_for?: boolean
   api_credits_enabled: boolean
   api_credit_group?: string
   api_path?: string
@@ -50,6 +54,10 @@ interface UpdateApiData {
   api_allowed_retry_count?: number
   api_authorization_field_swap?: string
   api_allowed_headers?: string[]
+  api_ip_mode?: 'allow_all' | 'whitelist'
+  api_ip_whitelist?: string[]
+  api_ip_blacklist?: string[]
+  api_trust_x_forwarded_for?: boolean
   api_credits_enabled?: boolean
   api_credit_group?: string
   api_public?: boolean
@@ -72,6 +80,10 @@ const ApiDetailPage = () => {
   const [newGroup, setNewGroup] = useState('')
   const [newServer, setNewServer] = useState('')
   const [newHeader, setNewHeader] = useState('')
+  const [ipWhitelistText, setIpWhitelistText] = useState('')
+  const [ipBlacklistText, setIpBlacklistText] = useState('')
+  const [clientIp, setClientIp] = useState('')
+  const [clientIpXff, setClientIpXff] = useState('')
   const [endpoints, setEndpoints] = useState<EndpointItem[]>([])
   const [epNewServer, setEpNewServer] = useState<Record<string, string>>({})
   const [epSaving, setEpSaving] = useState<Record<string, boolean>>({})
@@ -173,6 +185,10 @@ const ApiDetailPage = () => {
           api_allowed_retry_count: parsedApi.api_allowed_retry_count,
           api_authorization_field_swap: parsedApi.api_authorization_field_swap,
           api_allowed_headers: [...(parsedApi.api_allowed_headers || [])],
+          api_ip_mode: (parsedApi as any).api_ip_mode || 'allow_all',
+          api_ip_whitelist: [...((parsedApi as any).api_ip_whitelist || [])],
+          api_ip_blacklist: [...((parsedApi as any).api_ip_blacklist || [])],
+          api_trust_x_forwarded_for: !!(parsedApi as any).api_trust_x_forwarded_for,
           api_credits_enabled: parsedApi.api_credits_enabled,
           api_credit_group: parsedApi.api_credit_group,
           api_public: (parsedApi as any).api_public,
@@ -180,6 +196,8 @@ const ApiDetailPage = () => {
           active: (parsedApi as any).active
         })
         setLoading(false)
+        setIpWhitelistText(((parsedApi as any).api_ip_whitelist || []).join('\n'))
+        setIpBlacklistText(((parsedApi as any).api_ip_blacklist || []).join('\n'))
       } catch (err) {
         setError('Failed to load API data')
         setLoading(false)
@@ -222,10 +240,37 @@ const ApiDetailPage = () => {
           setError('Failed to load API data')
         } finally {
           setLoading(false)
+          try {
+            const found = JSON.parse(sessionStorage.getItem('selectedApi') || 'null') || (api as any)
+            if (found) {
+              setIpWhitelistText(((found as any).api_ip_whitelist || []).join('\n'))
+              setIpBlacklistText(((found as any).api_ip_blacklist || []).join('\n'))
+            }
+          } catch {}
         }
       })()
     }
   }, [apiId])
+
+  // Fetch client IP info for warning checks
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchJson(`${SERVER_URL}/platform/security/settings`)
+        setClientIp(String((data as any).client_ip || ''))
+        setClientIpXff(String((data as any).client_ip_xff || ''))
+      } catch {}
+    })()
+  }, [])
+
+  const addMyIpToWhitelist = () => {
+    const trust = isEditing ? !!editData.api_trust_x_forwarded_for : !!(api as any)?.api_trust_x_forwarded_for
+    const effectiveIp = (trust && clientIpXff) ? clientIpXff : clientIp
+    if (!effectiveIp) return
+    const list = ipWhitelistText.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean)
+    if (list.includes(effectiveIp)) return
+    setIpWhitelistText(prev => (prev && prev.trim().length > 0) ? `${prev.trim()}\n${effectiveIp}` : effectiveIp)
+  }
 
   useEffect(() => {
     const loadEndpoints = async () => {
@@ -303,7 +348,10 @@ const ApiDetailPage = () => {
 
       const targetName = (api?.['api_name'] as string) || ''
       const targetVersion = (api?.['api_version'] as string) || ''
-      await putJson(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, editData)
+      const payload: any = { ...editData }
+      if (typeof ipWhitelistText === 'string') payload.api_ip_whitelist = ipWhitelistText.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
+      if (typeof ipBlacklistText === 'string') payload.api_ip_blacklist = ipBlacklistText.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
+      await putJson(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, payload)
 
       // Refresh from server to get the latest canonical data
       try {
@@ -927,6 +975,94 @@ const ApiDetailPage = () => {
                       {useProtobuf ? 'Enabled' : 'Disabled'}
                     </span>
                   )}
+                </div>
+              </div>
+            </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">IP Access Control</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600 dark:text-gray-400">Manage IP policy for this API</div>
+                <button type="button" className="btn btn-ghost btn-xs" onClick={addMyIpToWhitelist}>Add My IP</button>
+              </div>
+              {(() => {
+                const effectiveIp = (((isEditing ? editData.api_trust_x_forwarded_for : (api as any).api_trust_x_forwarded_for) && clientIpXff) ? clientIpXff : clientIp)
+                const listFromText = (t: string) => t.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
+                const wl = isEditing ? listFromText(ipWhitelistText) : (((api as any).api_ip_whitelist || []) as string[])
+                const bl = isEditing ? listFromText(ipBlacklistText) : (((api as any).api_ip_blacklist || []) as string[])
+                const toLong = (s: string) => { const parts = s.split('.'); if (parts.length !== 4) return NaN; return parts.reduce((a,p)=> (a<<8)+(parseInt(p,10)&255),0) }
+                const matches = (ip: string, patterns: string[]) => {
+                  if (!ip) return false
+                  const ipL = toLong(ip)
+                  return (patterns || []).some(raw => {
+                    const p = (raw || '').trim(); if (!p) return false
+                    if (p.includes('/')) {
+                      const [net, maskStr] = p.split('/'); const mask = parseInt(maskStr,10)
+                      const netL = toLong(net); if (isNaN(ipL) || isNaN(netL)) return false
+                      const maskBits = mask <= 0 ? 0 : (0xFFFFFFFF << (32 - Math.min(mask, 32))) >>> 0
+                      return (((ipL>>>0) & maskBits) === (netL & maskBits))
+                    }
+                    return p === ip
+                  })
+                }
+                const mode = (isEditing ? editData.api_ip_mode : (api as any).api_ip_mode) || 'allow_all'
+                const warnWL = (mode === 'whitelist') && (wl.length > 0) && !matches(effectiveIp, wl)
+                const warnBL = matches(effectiveIp, bl)
+                if (!(warnWL || warnBL)) return null
+                return (
+                  <div className="rounded-md bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                    {warnBL ? 'Warning: Your current IP appears in the blacklist and you may lose access after saving.' : 'Warning: Your current IP is not in the whitelist and you may lose access after saving.'}
+                    <div className="text-xs mt-1">Your IP: {effectiveIp || 'unknown'} {((isEditing ? editData.api_trust_x_forwarded_for : (api as any).api_trust_x_forwarded_for) ? '(using X-Forwarded-For)' : '')}</div>
+                  </div>
+                )
+              })()}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Policy</label>
+                    {isEditing ? (
+                      <select className="input" value={(editData.api_ip_mode as any) || 'allow_all'} onChange={(e)=>handleInputChange('api_ip_mode', e.target.value as any)}>
+                        <option value="allow_all">Allow All</option>
+                        <option value="whitelist">Whitelist</option>
+                      </select>
+                    ) : (
+                      <p className="text-gray-900 dark:text-white">{(api as any).api_ip_mode || 'allow_all'}</p>
+                    )}
+                  </div>
+                  <div className="md:col-span-2 flex items-center gap-2">
+                    {isEditing ? (
+                      <>
+                        <input type="checkbox" className="h-4 w-4" checked={!!editData.api_trust_x_forwarded_for} onChange={(e)=>handleInputChange('api_trust_x_forwarded_for', e.target.checked)} />
+                        <label className="text-sm text-gray-700 dark:text-gray-300">Trust X-Forwarded-For (behind proxy)</label>
+                        <InfoTooltip text="Effective IP for this API: if enabled and X-Forwarded-For is present, use its first IP; otherwise use the direct client IP." />
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-gray-900 dark:text-white">Trust XFF: {((api as any).api_trust_x_forwarded_for ? 'Yes' : 'No')}</p>
+                        <InfoTooltip text="Effective IP for this API: if X-Forwarded-For is trusted and present, the first IP is used; otherwise the direct client IP is used." />
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist</label>
+                    {isEditing ? (
+                      <textarea className="input min-h-[120px]" value={ipWhitelistText} onChange={(e)=>setIpWhitelistText(e.target.value)} />
+                    ) : (
+                      <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{((api as any).api_ip_whitelist || []).join('\n') || '—'}</pre>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist</label>
+                    {isEditing ? (
+                      <textarea className="input min-h-[120px]" value={ipBlacklistText} onChange={(e)=>setIpBlacklistText(e.target.value)} />
+                    ) : (
+                      <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{((api as any).api_ip_blacklist || []).join('\n') || '—'}</pre>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
