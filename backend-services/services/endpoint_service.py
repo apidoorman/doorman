@@ -75,6 +75,54 @@ class EndpointService:
         api_endpoints.append(endpoint_dict.get('endpoint_method') + endpoint_dict.get('endpoint_uri'))
         doorman_cache.set_cache('api_endpoint_cache', data.api_id, api_endpoints)
         logger.info(request_id + ' | Endpoint creation successful')
+        try:
+            if data.endpoint_method.upper() == 'POST' and str(data.endpoint_uri).strip().lower() == '/grpc':
+                import os
+                from grpc_tools import protoc as _protoc
+                api_name = data.api_name
+                api_version = data.api_version
+                module_base = f'{api_name}_{api_version}'.replace('-', '_')
+                project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                proto_dir = os.path.join(project_root, 'proto')
+                generated_dir = os.path.join(project_root, 'generated')
+                os.makedirs(proto_dir, exist_ok=True)
+                os.makedirs(generated_dir, exist_ok=True)
+                proto_path = os.path.join(proto_dir, f'{module_base}.proto')
+                if not os.path.exists(proto_path):
+                    proto_content = (
+                        'syntax = "proto3";\n'
+                        f'package {module_base};\n'
+                        'service Resource {\n'
+                        '  rpc Create (CreateRequest) returns (CreateReply) {}\n'
+                        '  rpc Read (ReadRequest) returns (ReadReply) {}\n'
+                        '  rpc Update (UpdateRequest) returns (UpdateReply) {}\n'
+                        '  rpc Delete (DeleteRequest) returns (DeleteReply) {}\n'
+                        '}\n'
+                        'message CreateRequest { string name = 1; }\n'
+                        'message CreateReply { string message = 1; }\n'
+                        'message ReadRequest { int32 id = 1; }\n'
+                        'message ReadReply { string message = 1; }\n'
+                        'message UpdateRequest { int32 id = 1; string name = 2; }\n'
+                        'message UpdateReply { string message = 1; }\n'
+                        'message DeleteRequest { int32 id = 1; }\n'
+                        'message DeleteReply { bool ok = 1; }\n'
+                    )
+                    with open(proto_path, 'w', encoding='utf-8') as f:
+                        f.write(proto_content)
+                code = _protoc.main([
+                    'protoc', f'--proto_path={proto_dir}', f'--python_out={generated_dir}', f'--grpc_python_out={generated_dir}', proto_path
+                ])
+                if code != 0:
+                    logger.warning(f'{request_id} | Pre-gen gRPC stubs returned {code} for {module_base}')
+                try:
+                    init_path = os.path.join(generated_dir, '__init__.py')
+                    if not os.path.exists(init_path):
+                        with open(init_path, 'w', encoding='utf-8') as f:
+                            f.write('"""Generated gRPC code."""\n')
+                except Exception:
+                    pass
+        except Exception as _e:
+            logger.debug(f'{request_id} | Skipping pre-gen gRPC stubs: {_e}')
         return ResponseModel(
             status_code=201,
             response_headers={

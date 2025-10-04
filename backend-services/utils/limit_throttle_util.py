@@ -57,12 +57,12 @@ async def limit_and_throttle(request: Request):
     redis_client = getattr(request.app.state, 'redis', None)
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
-        user = await user_collection.find_one({'username': username})
+        user = user_collection.find_one({'username': username})
     rate = int(user.get('rate_limit_duration') or 1)
     duration = user.get('rate_limit_duration_type', 'minute')
     window = duration_to_seconds(duration)
-    now = int(time.time())
-    key = f'rate_limit:{username}:{now // window}'
+    now_ms = int(time.time() * 1000)
+    key = f'rate_limit:{username}:{now_ms // (window * 1000)}'
     try:
         client = redis_client or _fallback_counter
         count = await client.incr(key)
@@ -78,7 +78,7 @@ async def limit_and_throttle(request: Request):
     throttle_limit = int(user.get('throttle_duration') or 5)
     throttle_duration = user.get('throttle_duration_type', 'second')
     throttle_window = duration_to_seconds(throttle_duration)
-    throttle_key = f'throttle_limit:{username}:{now // throttle_window}'
+    throttle_key = f'throttle_limit:{username}:{now_ms // (throttle_window * 1000)}'
     try:
         client = redis_client or _fallback_counter
         throttle_count = await client.incr(throttle_key)

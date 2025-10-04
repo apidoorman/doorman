@@ -66,6 +66,29 @@ def start_rest_echo_server():
             }
             self._json(200, payload)
 
+        def do_PUT(self):
+            content_length = int(self.headers.get('Content-Length', '0') or '0')
+            body = self.rfile.read(content_length) if content_length else b''
+            try:
+                parsed = json.loads(body.decode('utf-8') or '{}')
+            except Exception:
+                parsed = {'raw': body.decode('utf-8', errors='ignore')}
+            payload = {
+                'method': 'PUT',
+                'path': self.path,
+                'headers': {k: v for k, v in self.headers.items()},
+                'json': parsed
+            }
+            self._json(200, payload)
+
+        def do_DELETE(self):
+            payload = {
+                'method': 'DELETE',
+                'path': self.path,
+                'headers': {k: v for k, v in self.headers.items()},
+            }
+            self._json(200, payload)
+
     return _ThreadedHTTPServer(Handler).start()
 
 def start_soap_echo_server():
