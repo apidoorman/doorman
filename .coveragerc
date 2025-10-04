@@ -1,0 +1,13 @@
+[run]
+source = backend-services
+omit = 
+    */tests/*
+    */live-tests/*
+    */venv/*
+    */site-packages/*
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 1
+

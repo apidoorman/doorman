@@ -23,6 +23,8 @@ interface User {
   throttle_wait_duration_type: string
   throttle_queue_limit: number | null
   custom_attributes: Record<string, string>
+  bandwidth_limit_bytes?: number
+  bandwidth_limit_window?: string
   active: boolean
   ui_access?: boolean
 }
@@ -41,6 +43,8 @@ interface UpdateUserData {
   throttle_wait_duration_type?: string
   throttle_queue_limit?: number | null
   custom_attributes?: Record<string, string>
+  bandwidth_limit_bytes?: number
+  bandwidth_limit_window?: string
   active?: boolean
   ui_access?: boolean
 }
@@ -55,12 +59,15 @@ const UserDetailPage = () => {
   const [success, setSuccess] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [refreshingUsage, setRefreshingUsage] = useState(false)
   const [editData, setEditData] = useState<UpdateUserData>({})
   const [newCustomAttribute, setNewCustomAttribute] = useState({ key: '', value: '' })
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const isProtected = PROTECTED_USERS.includes((username || '').toLowerCase())
+  const currentCustomAttrs = (isEditing ? (editData.custom_attributes || {}) : (user?.custom_attributes || {})) as Record<string, string>
+  const editCustomAttrCount = Object.keys(currentCustomAttrs).length
 
   useEffect(() => {
     const userData = sessionStorage.getItem('selectedUser')
@@ -81,10 +88,24 @@ const UserDetailPage = () => {
           throttle_wait_duration_type: parsedUser.throttle_wait_duration_type,
           throttle_queue_limit: parsedUser.throttle_queue_limit,
           custom_attributes: { ...parsedUser.custom_attributes },
+          bandwidth_limit_bytes: parsedUser.bandwidth_limit_bytes,
+          bandwidth_limit_window: parsedUser.bandwidth_limit_window,
           active: parsedUser.active,
           ui_access: parsedUser.ui_access
         })
         setLoading(false)
+        ;(async () => {
+          try {
+            const refreshed = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(parsedUser.username)}`)
+            setUser(refreshed)
+            sessionStorage.setItem('selectedUser', JSON.stringify(refreshed))
+            setEditData(prev => ({
+              ...prev,
+              bandwidth_limit_bytes: refreshed.bandwidth_limit_bytes,
+              bandwidth_limit_window: refreshed.bandwidth_limit_window,
+            }))
+          } catch {}
+        })()
       } catch (err) {
         setError('Failed to load user data')
         setLoading(false)
@@ -123,6 +144,8 @@ const UserDetailPage = () => {
         throttle_wait_duration_type: user.throttle_wait_duration_type,
         throttle_queue_limit: user.throttle_queue_limit,
         custom_attributes: { ...user.custom_attributes },
+        bandwidth_limit_bytes: user.bandwidth_limit_bytes,
+        bandwidth_limit_window: user.bandwidth_limit_window,
         active: user.active,
         ui_access: user.ui_access
       })
@@ -138,9 +161,12 @@ const UserDetailPage = () => {
         setError('Editing this user is disabled by policy')
         return
       }
+      if (Object.keys(editData.custom_attributes || {}).length > 10) {
+        setError('Maximum 10 custom attributes allowed. Please replace an existing one.')
+        return
+      }
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`, editData)
 
-      // Refresh from server to get the latest canonical data (retry once on transient failure)
       let refreshedUser: any
       try {
         refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
@@ -149,7 +175,6 @@ const UserDetailPage = () => {
         refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
       }
       setUser(refreshedUser)
-      // Keep sessionStorage in sync for back-navigation
       sessionStorage.setItem('selectedUser', JSON.stringify(refreshedUser))
       setIsEditing(false)
       setSuccess('User updated successfully!')
@@ -194,6 +219,10 @@ const UserDetailPage = () => {
   }
 
   const addCustomAttribute = () => {
+    if (editCustomAttrCount >= 10) {
+      setError('Maximum 10 custom attributes allowed. Please replace an existing one.')
+      return
+    }
     if (newCustomAttribute.key.trim() && newCustomAttribute.value.trim()) {
       setEditData(prev => ({
         ...prev,
@@ -245,6 +274,20 @@ const UserDetailPage = () => {
     } finally {
       setDeleting(false)
       setShowDeleteModal(false)
+    }
+  }
+
+  const refreshUsage = async () => {
+    try {
+      setRefreshingUsage(true)
+      const refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
+      setUser(refreshedUser)
+      sessionStorage.setItem('selectedUser', JSON.stringify(refreshedUser))
+    } catch (err) {
+      if (err instanceof Error) setError(err.message)
+      else setError('Failed to refresh usage')
+    } finally {
+      setRefreshingUsage(false)
     }
   }
 
@@ -498,6 +541,58 @@ const UserDetailPage = () => {
 
             <div className="card">
               <div className="card-header flex items-center justify-between">
+                <h3 className="card-title">Bandwidth Limit</h3>
+                {!isEditing && (
+                  <button onClick={refreshUsage} className="btn btn-outline btn-sm" disabled={refreshingUsage}>
+                    {refreshingUsage ? (
+                      <span className="flex items-center"><span className="spinner mr-2"></span>Refreshing</span>
+                    ) : (
+                      'Refresh Usage'
+                    )}
+                  </button>
+                )}
+              </div>
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bytes (limit)</label>
+                  {isEditing ? (
+                    <input type="number" className="input" min={0}
+                      value={editData.bandwidth_limit_bytes ?? 0}
+                      onChange={(e) => handleInputChange('bandwidth_limit_bytes', e.target.value ? parseInt(e.target.value) : undefined)} />
+                  ) : (
+                    <p className="text-gray-900 dark:text-white">{user.bandwidth_limit_bytes ?? '—'}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Window</label>
+                  {isEditing ? (
+                    <select className="input" value={editData.bandwidth_limit_window || 'day'}
+                      onChange={(e) => handleInputChange('bandwidth_limit_window', e.target.value)}>
+                      <option value="second">Second</option>
+                      <option value="minute">Minute</option>
+                      <option value="hour">Hour</option>
+                      <option value="day">Day</option>
+                      <option value="week">Week</option>
+                      <option value="month">Month</option>
+                    </select>
+                  ) : (
+                    <p className="text-gray-900 dark:text-white">{user.bandwidth_limit_window || 'day'}</p>
+                  )}
+                </div>
+                {!isEditing && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Usage</label>
+                    <p className="text-gray-900 dark:text-white">
+                      {typeof (user as any).bandwidth_usage_bytes === 'number' ? (user as any).bandwidth_usage_bytes : 0} / {user.bandwidth_limit_bytes ?? '—'} bytes
+                      {(user as any).bandwidth_resets_at ? ` • resets ${new Date(((user as any).bandwidth_resets_at) * 1000).toLocaleString()}` : ''}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">Groups</h3>
                 <FormHelp docHref="/docs/using-fields.html#access-control">Groups are used in API access checks alongside roles.</FormHelp>
               </div>
@@ -688,6 +783,7 @@ const UserDetailPage = () => {
                       value={newCustomAttribute.key}
                       onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, key: e.target.value }))}
                       className="input"
+                      disabled={editCustomAttrCount >= 10}
                       placeholder="Attribute key"
                     />
                     <input
@@ -695,11 +791,15 @@ const UserDetailPage = () => {
                       value={newCustomAttribute.value}
                       onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, value: e.target.value }))}
                       className="input"
+                      disabled={editCustomAttrCount >= 10}
                       placeholder="Attribute value"
                     />
-                    <button onClick={addCustomAttribute} className="btn btn-primary col-span-2">
+                    <button onClick={addCustomAttribute} className="btn btn-primary col-span-2" disabled={editCustomAttrCount >= 10}>
                       Add Attribute
                     </button>
+                    {editCustomAttrCount >= 10 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 col-span-2">Maximum of 10 custom attributes reached. Remove one to add another.</p>
+                    )}
                   </div>
                 )}
 

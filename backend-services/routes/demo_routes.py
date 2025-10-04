@@ -29,7 +29,6 @@ Response:
 {}
 """
 
-
 @demo_router.post('/seed',
     description='Seed the running server with demo data',
     response_model=ResponseModel

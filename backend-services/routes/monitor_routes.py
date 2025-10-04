@@ -4,6 +4,7 @@ Routes to expose gateway metrics to the web client.
 
 # External imports
 from fastapi import APIRouter, Request
+from pydantic import BaseModel
 import uuid
 import time
 import logging
@@ -22,6 +23,16 @@ from utils.health_check_util import check_mongodb, check_redis
 from utils.doorman_cache_util import doorman_cache
 from utils.database import database
 
+class LivenessResponse(BaseModel):
+    status: str
+
+class ReadinessResponse(BaseModel):
+    status: str
+    mongodb: bool | None = None
+    redis: bool | None = None
+    mode: str | None = None
+    cache_backend: str | None = None
+
 monitor_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
 
@@ -34,13 +45,12 @@ Response:
 {}
 """
 
-
 @monitor_router.get('/monitor/metrics',
     description='Get aggregated gateway metrics',
     response_model=ResponseModel,
 )
 
-async def get_metrics(request: Request, range: str = '24h'):
+async def get_metrics(request: Request, range: str = '24h', group: str = 'minute', sort: str = 'asc'):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -55,7 +65,13 @@ async def get_metrics(request: Request, range: str = '24h'):
                 error_code='MON001',
                 error_message='You do not have permission to view monitor metrics'
             ).dict(), 'rest')
-        snap = metrics_store.snapshot(range)
+        grp = (group or 'minute').lower()
+        if grp not in ('minute', 'day'):
+            grp = 'minute'
+        srt = (sort or 'asc').lower()
+        if srt not in ('asc', 'desc'):
+            srt = 'asc'
+        snap = metrics_store.snapshot(range, group=grp, sort=srt)
         return process_response(ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},
@@ -82,10 +98,9 @@ Response:
 {}
 """
 
-
 @monitor_router.get('/monitor/liveness',
-    description='Kubernetes liveness probe endpoint (no auth)')
-
+    description='Kubernetes liveness probe endpoint (no auth)',
+    response_model=LivenessResponse)
 async def liveness():
     return {'status': 'alive'}
 
@@ -98,10 +113,9 @@ Response:
 {}
 """
 
-
 @monitor_router.get('/monitor/readiness',
-    description='Kubernetes readiness probe endpoint (no auth)')
-
+    description='Kubernetes readiness probe endpoint (no auth)',
+    response_model=ReadinessResponse)
 async def readiness():
     try:
         mongo_ok = await check_mongodb()
@@ -127,9 +141,9 @@ Response:
 {}
 """
 
-
 @monitor_router.get('/monitor/report',
-    description='Generate a CSV report for a date range (requires manage_gateway)')
+    description='Generate a CSV report for a date range (requires manage_gateway)',
+    include_in_schema=False)
 
 async def generate_report(request: Request, start: str, end: str):
     request_id = str(uuid.uuid4())
@@ -255,6 +269,17 @@ async def generate_report(request: Request, start: str, end: str):
                     api_errors[k] = api_errors.get(k, 0) + v
                 for k, v in (b.user_counts or {}).items():
                     user_totals[k] = user_totals.get(k, 0) + v
+        buckets = list(metrics_store._buckets)
+        sel = [b for b in buckets if b.start_ts >= start_ts and b.start_ts <= end_ts]
+        total_bytes_in = sum(getattr(b, 'bytes_in', 0) for b in sel)
+        total_bytes_out = sum(getattr(b, 'bytes_out', 0) for b in sel)
+        from collections import defaultdict
+        daily_bw = defaultdict(lambda: {'in': 0, 'out': 0})
+        for b in sel:
+            day_ts = int((b.start_ts // 86400) * 86400)
+            daily_bw[day_ts]['in'] += getattr(b, 'bytes_in', 0)
+            daily_bw[day_ts]['out'] += getattr(b, 'bytes_out', 0)
+
         avg_ms = (total_ms / total) if total else 0.0
 
         buf = io.StringIO()
@@ -267,6 +292,11 @@ async def generate_report(request: Request, start: str, end: str):
         w.writerow(['successes', max(total - errors, 0)])
         w.writerow(['success_rate', f'{(0 if total == 0 else (100.0 * (total - errors) / total)):.2f}%'])
         w.writerow(['avg_response_ms', f'{avg_ms:.2f}'])
+        w.writerow([])
+        w.writerow(['Bandwidth Overview'])
+        w.writerow(['total_bytes_in', int(total_bytes_in)])
+        w.writerow(['total_bytes_out', int(total_bytes_out)])
+        w.writerow(['total_bytes', int(total_bytes_in + total_bytes_out)])
         w.writerow([])
 
         w.writerow(['Status Codes'])
@@ -288,6 +318,16 @@ async def generate_report(request: Request, start: str, end: str):
         w.writerow(['username', 'requests'])
         for uname, cnt in sorted(user_totals.items(), key=lambda kv: kv[1], reverse=True):
             w.writerow([uname, cnt])
+
+        w.writerow([])
+        w.writerow(['Bandwidth (per day, UTC)'])
+        w.writerow(['date', 'bytes_in', 'bytes_out', 'total'])
+        for day_ts in sorted(daily_bw.keys()):
+            import datetime as _dt
+            date_str = _dt.datetime.utcfromtimestamp(day_ts).strftime('%Y-%m-%d')
+            bi = int(daily_bw[day_ts]['in'])
+            bo = int(daily_bw[day_ts]['out'])
+            w.writerow([date_str, bi, bo, bi + bo])
 
         csv_bytes = buf.getvalue().encode('utf-8')
         filename = f'doorman_report_{start}_to_{end}.csv'

@@ -77,7 +77,6 @@ Response:
 {}
 """
 
-
 @tools_router.post('/cors/check', description='Simulate CORS preflight/actual decisions against current gateway config', response_model=ResponseModel)
 
 async def cors_check(request: Request, body: CorsCheckRequest):

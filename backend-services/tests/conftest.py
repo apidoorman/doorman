@@ -51,6 +51,20 @@ async def authed_client():
                 )
     except Exception:
         pass
+    try:
+        await client.put('/platform/user/admin', json={
+            'bandwidth_limit_bytes': 0,
+            'bandwidth_limit_window': 'day',
+            'rate_limit_duration': 1000000,
+            'rate_limit_duration_type': 'second',
+            'throttle_duration': 1000000,
+            'throttle_duration_type': 'second',
+            'throttle_queue_limit': 1000000,
+            'throttle_wait_duration': 0,
+            'throttle_wait_duration_type': 'second'
+        })
+    except Exception:
+        pass
     return client
 
 @pytest.fixture

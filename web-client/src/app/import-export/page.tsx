@@ -22,7 +22,6 @@ export default function ImportExportPage() {
       const res = await fetch(`${SERVER_URL}${path}`, { credentials: 'include' })
       const data = await res.json()
       const payload = data?.response || data
-      // Ensure no sensitive fields (none are included by server for these types)
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
@@ -42,7 +41,6 @@ export default function ImportExportPage() {
       setImportWorking(true)
       const text = await file.text()
       const obj = JSON.parse(text)
-      // Detect API conflicts only (roles/groups/routings/endpoints are upserted safely)
       const apis: { api_name: string; api_version: string }[] = (obj?.apis || []).map((a:any) => ({ api_name: a.api_name, api_version: a.api_version }))
       const conflicts: { api_name: string; api_version: string }[] = []
       for (const a of apis) {
@@ -160,4 +158,3 @@ export default function ImportExportPage() {
     </Layout>
   )
 }
-

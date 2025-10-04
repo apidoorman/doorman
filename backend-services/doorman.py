@@ -29,6 +29,34 @@ import time
 import asyncio
 import uuid
 
+# Compatibility guard: ensure aiohttp is a Python 3.13–compatible version before
+# downstream modules import it (e.g., gateway_service). This avoids a cryptic
+# regex error inside older aiohttp builds on 3.13.
+try:
+    if sys.version_info >= (3, 13):
+        try:
+            from importlib.metadata import version, PackageNotFoundError  # type: ignore
+        except Exception:  # pragma: no cover
+            version = None  # type: ignore
+            PackageNotFoundError = Exception  # type: ignore
+        if version is not None:
+            try:
+                v = version('aiohttp')
+                parts = [int(p) for p in (v.split('.')[:3] + ['0', '0'])[:3] if p.isdigit() or p.isnumeric()]
+                while len(parts) < 3:
+                    parts.append(0)
+                if tuple(parts) < (3, 10, 10):
+                    raise SystemExit(
+                        f"Incompatible aiohttp {v} detected on Python {sys.version.split()[0]}. "
+                        "Please upgrade to aiohttp>=3.10.10 (pip install -U aiohttp) or run with Python 3.11."
+                    )
+            except PackageNotFoundError:
+                pass
+            except Exception:
+                pass
+except Exception:
+    pass
+
 # Internal imports
 from models.response_model import ResponseModel
 from utils.cache_manager_util import cache_manager
@@ -58,6 +86,8 @@ from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file
 from utils.metrics_util import metrics_store
 from utils.database import database
 from utils.response_util import process_response
+from utils.audit_util import audit
+from utils.ip_policy_util import _get_client_ip as _policy_get_client_ip, _ip_in_list as _policy_ip_in_list
 
 load_dotenv()
 
@@ -94,17 +124,26 @@ async def app_lifespan(app: FastAPI):
         gateway_logger.error(f'Failed to initialize security settings auto-save: {e}')
 
     try:
+        settings = get_cached_settings()
+        if bool(settings.get('trust_x_forwarded_for')) and not (settings.get('xff_trusted_proxies') or []):
+            gateway_logger.warning('Security: trust_x_forwarded_for enabled but xff_trusted_proxies is empty; header spoofing risk. Configure trusted proxy IPs/CIDRs.')
+    except Exception as e:
+        gateway_logger.debug(f'Startup security checks skipped: {e}')
+
+    try:
         spec = app.openapi()
         problems = []
         for route in app.routes:
             path = getattr(route, 'path', '')
             if not path.startswith(('/platform', '/api')):
                 continue
+            include = getattr(route, 'include_in_schema', True)
+            methods = set(getattr(route, 'methods', set()) or [])
+            if not include or 'OPTIONS' in methods:
+                continue
             if not getattr(route, 'description', None):
                 problems.append(f'Route {path} missing description')
-
             if not getattr(route, 'response_model', None):
-
                 problems.append(f'Route {path} missing response_model')
         if problems:
             gateway_logger.info('OpenAPI lint: \n' + '\n'.join(problems[:50]))
@@ -174,11 +213,21 @@ async def app_lifespan(app: FastAPI):
         except Exception:
             pass
 
+def _generate_unique_id(route):
+    try:
+        name = getattr(route, 'name', 'op') or 'op'
+        path = getattr(route, 'path', '').replace('/', '_').replace('{', '').replace('}', '')
+        methods = '_'.join(sorted(list(getattr(route, 'methods', []) or [])))
+        return f"{name}_{methods}_{path}".lower()
+    except Exception:
+        return (getattr(route, 'name', 'op') or 'op').lower()
+
 doorman = FastAPI(
     title='doorman',
     description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application's gateway to the world.",
     version='1.0.0',
     lifespan=app_lifespan,
+    generate_unique_id_function=_generate_unique_id,
 )
 
 https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
@@ -286,6 +335,14 @@ async def request_id_middleware(request: Request, call_next):
 
         try:
             request.state.request_id = rid
+        except Exception:
+            pass
+        try:
+            settings = get_cached_settings()
+            trust_xff = bool(settings.get('trust_x_forwarded_for'))
+            direct_ip = getattr(getattr(request, 'client', None), 'host', None)
+            effective_ip = _policy_get_client_ip(request, trust_xff)
+            gateway_logger.info(f"{rid} | Entry: client_ip={direct_ip} effective_ip={effective_ip} method={request.method} path={str(request.url.path)}")
         except Exception:
             pass
         response = await call_next(request)
@@ -456,8 +513,56 @@ class Settings(BaseSettings):
     jwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv('REFRESH_TOKEN_EXPIRES_DAYS', 30)))
 
 @doorman.middleware('http')
+async def ip_filter_middleware(request: Request, call_next):
+    try:
+        settings = get_cached_settings()
+        wl = settings.get('ip_whitelist') or []
+        bl = settings.get('ip_blacklist') or []
+        trust_xff = bool(settings.get('trust_x_forwarded_for'))
+        client_ip = _policy_get_client_ip(request, trust_xff)
+        xff_hdr = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
+
+        try:
+            import os, ipaddress
+            settings = get_cached_settings()
+            env_flag = os.getenv('LOCAL_HOST_IP_BYPASS')
+            allow_local = (env_flag.lower() == 'true') if isinstance(env_flag, str) and env_flag.strip() != '' else bool(settings.get('allow_localhost_bypass'))
+            if allow_local:
+                direct_ip = getattr(getattr(request, 'client', None), 'host', None)
+                has_forward = any(request.headers.get(h) for h in ('x-forwarded-for','X-Forwarded-For','x-real-ip','X-Real-IP','cf-connecting-ip','CF-Connecting-IP','forwarded','Forwarded'))
+                if direct_ip and ipaddress.ip_address(direct_ip).is_loopback and not has_forward:
+                    return await call_next(request)
+        except Exception:
+            pass
+
+        if client_ip:
+            if wl and not _policy_ip_in_list(client_ip, wl):
+                try:
+                    audit(request, actor=None, action='ip.global_deny', target=client_ip, status='blocked', details={'reason': 'not_in_whitelist', 'xff': xff_hdr, 'source_ip': getattr(getattr(request, 'client', None), 'host', None)})
+                except Exception:
+                    pass
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=403, content={'status_code': 403, 'error_code': 'SEC010', 'error_message': 'IP not allowed'})
+            if bl and _policy_ip_in_list(client_ip, bl):
+                try:
+                    audit(request, actor=None, action='ip.global_deny', target=client_ip, status='blocked', details={'reason': 'blacklisted', 'xff': xff_hdr, 'source_ip': getattr(getattr(request, 'client', None), 'host', None)})
+                except Exception:
+                    pass
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=403, content={'status_code': 403, 'error_code': 'SEC011', 'error_message': 'IP blocked'})
+    except Exception:
+        pass
+    return await call_next(request)
+
+@doorman.middleware('http')
 async def metrics_middleware(request: Request, call_next):
     start = asyncio.get_event_loop().time()
+    def _parse_len(val: str | None) -> int:
+        try:
+            return int(val) if val is not None else 0
+        except Exception:
+            return 0
+    bytes_in = _parse_len(request.headers.get('content-length'))
     response = None
     try:
         response = await call_next(request)
@@ -494,7 +599,25 @@ async def metrics_middleware(request: Request, call_next):
                 elif p.startswith('/api/soap/'):
                     seg = p.rsplit('/', 1)[-1] or 'unknown'
                     api_key = f'soap:{seg}'
-                metrics_store.record(status=status, duration_ms=duration_ms, username=username, api_key=api_key)
+                clen = 0
+                try:
+                    clen = _parse_len(getattr(response, 'headers', {}).get('content-length'))
+                    if clen == 0:
+                        body = getattr(response, 'body', None)
+                        if isinstance(body, (bytes, bytearray)):
+                            clen = len(body)
+                except Exception:
+                    clen = 0
+
+                metrics_store.record(status=status, duration_ms=duration_ms, username=username, api_key=api_key, bytes_in=bytes_in, bytes_out=clen)
+                try:
+                    if username:
+                        from utils.bandwidth_util import add_usage, _get_user
+                        u = _get_user(username)
+                        if u and u.get('bandwidth_limit_bytes'):
+                            add_usage(username, int(bytes_in) + int(clen), u.get('bandwidth_limit_window') or 'day')
+                except Exception:
+                    pass
         except Exception:
 
             pass

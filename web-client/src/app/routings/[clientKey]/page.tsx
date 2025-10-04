@@ -109,7 +109,6 @@ const RoutingDetailPage = () => {
 
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/routing/${clientKey}`, editData)
 
-      // Refresh from server to get the latest canonical data (retry once on transient failure)
       let refreshedRouting: any
       try {
         refreshedRouting = await fetchJson(`${SERVER_URL}/platform/routing/${encodeURIComponent(clientKey)}`)

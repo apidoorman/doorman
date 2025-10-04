@@ -50,7 +50,6 @@ const RoleDetailPage = () => {
       setLoading(true)
       setError(null)
 
-      // Try to get from sessionStorage first
       const savedRole = sessionStorage.getItem('selectedRole')
       if (savedRole) {
         const parsedRole = JSON.parse(savedRole)
@@ -62,7 +61,6 @@ const RoleDetailPage = () => {
         }
       }
 
-      // Fetch from API if not in sessionStorage
       const data = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
       setRole(data)
       setEditData(data)
@@ -111,7 +109,6 @@ const RoleDetailPage = () => {
 
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, editData)
 
-      // Refresh from server to get the latest canonical data (retry once on transient failure)
       let rolePayload: any
       try {
         rolePayload = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`)
@@ -121,7 +118,6 @@ const RoleDetailPage = () => {
       }
       setRole(rolePayload)
       setEditData(rolePayload)
-      // Keep sessionStorage in sync for back-navigation
       sessionStorage.setItem('selectedRole', JSON.stringify(rolePayload))
       setIsEditing(false)
       setSuccess('Role updated successfully!')

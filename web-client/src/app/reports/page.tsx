@@ -77,11 +77,11 @@ export default function ReportsPage() {
                   <button className="btn btn-secondary" onClick={() => preset(24*7)}>Last 7d</button>
                 </div>
               </div>
-              <div>
+              <div className="flex gap-2">
                 <button className="btn btn-primary" onClick={generate} disabled={downloading}>{downloading ? 'Generating…' : 'Download CSV'}</button>
               </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                The CSV includes overview, status code distribution, per-API usage (success/failure), and per-user request counts for the selected range.
+                The CSV includes overview, status code distribution, per-API usage (success/failure), per-user request counts, and bandwidth totals plus a per-day bandwidth breakdown for the selected range.
               </div>
             </div>
           </div>
@@ -90,4 +90,3 @@ export default function ReportsPage() {
     </ProtectedRoute>
   )
 }
-

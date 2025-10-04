@@ -35,7 +35,6 @@ Response:
 {}
 """
 
-
 @api_router.post('',
     description='Add API',
     response_model=ResponseModel,
@@ -97,7 +96,6 @@ Response:
 {}
 """
 
-
 @api_router.put('/{api_name}/{api_version}',
     description='Update API',
     response_model=ResponseModel,
@@ -158,7 +156,6 @@ Response:
 {}
 """
 
-
 @api_router.get('/{api_name}/{api_version}',
     description='Get API',
     response_model=ApiModelResponse,
@@ -207,7 +204,6 @@ Request:
 Response:
 {}
 """
-
 
 @api_router.delete('/{api_name}/{api_version}',
     description='Delete API',
@@ -259,7 +255,6 @@ Request:
 Response:
 {}
 """
-
 
 @api_router.get('/all',
     description='Get all APIs',

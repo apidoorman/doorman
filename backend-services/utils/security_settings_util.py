@@ -23,6 +23,11 @@ DEFAULTS = {
     'enable_auto_save': False,
     'auto_save_frequency_seconds': 900,
     'dump_path': os.getenv('MEM_DUMP_PATH', 'generated/memory_dump.bin'),
+    'ip_whitelist': [],
+    'ip_blacklist': [],
+    'trust_x_forwarded_for': False,
+    'xff_trusted_proxies': [],
+    'allow_localhost_bypass': (os.getenv('LOCAL_HOST_IP_BYPASS', 'false').lower() == 'true'),
 }
 
 # Persist settings to a small JSON file so memory-only mode

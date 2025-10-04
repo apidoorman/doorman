@@ -24,7 +24,6 @@ type ProtoState = {
 }
 
 async function fetchWithCsrf(input: RequestInfo, init: RequestInit = {}) {
-  // Attach CSRF token if present
   try {
     const mod = await import('@/utils/http')
     const csrf = mod.getCookie ? mod.getCookie('csrf_token') : null
@@ -64,7 +63,6 @@ export default function ProtosPage() {
         const data = await getJson<any>(`${SERVER_URL}/platform/api/all?page=${page}&page_size=${pageSize}`)
         const list: ApiItem[] = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
         setApis(list)
-        // Proactively check proto status for visible APIs so we don't show "Check" for missing/deleted
         await Promise.all(list.map(a => checkProto(a)))
       } catch (e: any) {
         setError(e?.message || 'Failed to load APIs')
@@ -101,7 +99,6 @@ export default function ProtosPage() {
       else form.append('proto_file', file)
       const url = `${SERVER_URL}/platform/proto/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}`
       const method = mode === 'create' ? 'POST' : 'PUT'
-      // Do not set Content-Type; browser will set boundary for multipart
       await fetchWithCsrf(url, { method, body: form })
       setSuccess(mode === 'create' ? 'Proto uploaded' : 'Proto updated')
       toast.success(mode === 'create' ? 'Proto uploaded' : 'Proto updated')

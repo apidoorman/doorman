@@ -13,7 +13,6 @@ fastapi>=0.100.0  # Updated for compatibility with newer Starlette
 starlette>=0.40.0  # Updated to fix DoS vulnerability
 pydantic>=1.10.13,<2.0.0  # Keep v1 for compatibility
 uvicorn[standard]>=0.27.1
-aiohttp>=3.9.3
 slowapi>=0.1.8
 
 # Caching

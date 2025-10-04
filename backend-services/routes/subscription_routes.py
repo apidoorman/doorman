@@ -34,7 +34,6 @@ Response:
 {}
 """
 
-
 @subscription_router.post('/subscribe',
     description='Subscribe to API',
     response_model=ResponseModel,
@@ -109,7 +108,6 @@ Request:
 Response:
 {}
 """
-
 
 @subscription_router.post('/unsubscribe',
     description='Unsubscribe from API',
@@ -186,7 +184,6 @@ Response:
 {}
 """
 
-
 @subscription_router.get('/subscriptions',
     description="Get current user's subscriptions",
     response_model=ResponseModel,
@@ -239,7 +236,6 @@ Response:
 {}
 """
 
-
 @subscription_router.get('/subscriptions/{user_id}',
     description="Get user's subscriptions",
     response_model=ResponseModel,
@@ -291,7 +287,6 @@ Request:
 Response:
 {}
 """
-
 
 @subscription_router.get('/available-apis/{username}',
     description='List available APIs for subscription based on permissions and groups',

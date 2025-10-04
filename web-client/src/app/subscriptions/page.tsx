@@ -13,7 +13,6 @@ export default function SubscriptionsPage() {
     if (user?.username) {
       router.replace(`/authorizations/${encodeURIComponent(user.username)}`)
     } else {
-      // If user not yet loaded, try again shortly
       const t = setTimeout(() => {
         if (user?.username) router.replace(`/authorizations/${encodeURIComponent(user.username)}`)
       }, 300)

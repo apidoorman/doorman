@@ -159,7 +159,6 @@ export default function LogsPage() {
         throw new Error('Failed to fetch logs')
       }
 
-      // Capture the request ID from response headers to filter it out
       const responseRequestId = response.headers.get('request_id')
       if (responseRequestId) {
         setCurrentRequestId(responseRequestId)
@@ -171,7 +170,6 @@ export default function LogsPage() {
       setLogs(logList)
       setLogsHasNext(!!hasMore)
 
-      // Get unique request IDs from the filtered results
       const uniqueRequestIds: string[] = Array.from(
         new Set<string>(
           logList
@@ -180,7 +178,6 @@ export default function LogsPage() {
         )
       )
 
-      // Fetch complete data for each request ID to get user and response time info
       const completeLogs: Log[] = []
       for (const requestId of uniqueRequestIds) {
         if (requestId && requestId !== responseRequestId) {
@@ -203,7 +200,6 @@ export default function LogsPage() {
         }
       }
 
-      // Group logs by request_id using the complete data
       const grouped = groupLogsByRequestId(completeLogs)
       setGroupedLogs(grouped)
     } catch (error) {
@@ -244,7 +240,6 @@ export default function LogsPage() {
     try {
       setLoadingExpanded(prev => new Set(prev).add(requestId))
 
-      // Fetch all logs for this specific request ID, ignoring all filters
       const queryParams = new URLSearchParams()
       queryParams.append('request_id', requestId)
       queryParams.append('limit', '1000')
@@ -259,20 +254,17 @@ export default function LogsPage() {
       const data = await response.json()
       const allLogsForRequest = data.response?.logs || data.logs || []
 
-      // Update the grouped logs with the expanded logs and recalculate summary data
       setGroupedLogs(prev => prev.map(group => {
         if (group.request_id === requestId) {
           const sortedExpandedLogs = allLogsForRequest.sort((a: Log, b: Log) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
           const firstLog = sortedExpandedLogs[0]
           const lastLog = sortedExpandedLogs[sortedExpandedLogs.length - 1]
 
-          // Find the response time log from expanded logs
           const responseTimeLog = sortedExpandedLogs.find((log: Log) => log.response_time)
           const userLog = sortedExpandedLogs.find((log: Log) => log.user)
           const endpointLog = sortedExpandedLogs.find((log: Log) => log.endpoint && log.method)
           const hasError = sortedExpandedLogs.some((log: Log) => log.level.toLowerCase() === 'error')
 
-          // Debug logging
           console.log(`Expanding request ${requestId}:`, {
             totalLogs: allLogsForRequest.length,
             userLog: userLog?.user,
@@ -321,7 +313,6 @@ export default function LogsPage() {
 
     return Object.entries(groups)
       .filter(([requestId, logs]) => {
-        // Filter out the current request ID that was used to fetch logs
         if (currentRequestId && requestId === currentRequestId) {
           return false
         }
@@ -332,13 +323,11 @@ export default function LogsPage() {
         const firstLog = sortedLogs[0]
         const lastLog = sortedLogs[sortedLogs.length - 1]
 
-        // Find the response time log
         const responseTimeLog = sortedLogs.find(log => log.response_time)
         const userLog = sortedLogs.find(log => log.user)
         const endpointLog = sortedLogs.find(log => log.endpoint && log.method)
         const apiHintLog = sortedLogs.find(log => log.api)?.api
         if (apiHintLog) {
-          // Best effort: load endpoint override info for this API path
           ensureEndpointOverridesLoaded(apiHintLog as string)
         }
         const hasError = sortedLogs.some(log => log.level.toLowerCase() === 'error')
@@ -358,7 +347,6 @@ export default function LogsPage() {
   }
 
   useEffect(() => {
-    // Only fetch logs if a search has been performed
     if (hasSearched) {
       fetchLogs()
     }
@@ -404,15 +392,12 @@ export default function LogsPage() {
   const toggleRequestExpansion = async (requestId: string) => {
     const newExpanded = new Set(expandedRequests)
     if (newExpanded.has(requestId)) {
-      // Collapse
       newExpanded.delete(requestId)
       setExpandedRequests(newExpanded)
     } else {
-      // Expand - fetch all logs for this request ID
       newExpanded.add(requestId)
       setExpandedRequests(newExpanded)
 
-      // Check if we already have expanded logs for this request
       const group = groupedLogs.find(g => g.request_id === requestId)
       if (!group?.expanded_logs) {
         await fetchLogsForRequestId(requestId)
@@ -425,7 +410,6 @@ export default function LogsPage() {
       setExporting(true)
       const queryParams = toQueryParams(filters)
       queryParams.append('format', format)
-      // Use streaming download endpoint
       const csrf = getCookie('csrf_token')
       const response = await fetch(`${SERVER_URL}/platform/logging/logs/download?${queryParams}`, {
         credentials: 'include',

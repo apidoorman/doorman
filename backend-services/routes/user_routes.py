@@ -5,9 +5,8 @@ See https://github.com/apidoorman/doorman for more information
 """
 
 # External imports
-from http.client import HTTPException
 from typing import List
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 import uuid
 import time
 import logging
@@ -49,7 +48,6 @@ Request:
 Response:
 {}
 """
-
 
 @user_router.post('',
     description='Add user',
@@ -114,7 +112,6 @@ Request:
 Response:
 {}
 """
-
 
 @user_router.put('/{username}',
     description='Update user',
@@ -190,7 +187,6 @@ Response:
 {}
 """
 
-
 @user_router.delete('/{username}',
     description='Delete user',
     response_model=ResponseModel,
@@ -254,7 +250,6 @@ Response:
 {}
 """
 
-
 @user_router.put('/{username}/update-password',
     description='Update user password',
     response_model=ResponseModel,
@@ -313,7 +308,6 @@ Response:
 {}
 """
 
-
 @user_router.get('/me',
     description='Get user by username',
     response_model=UserModelResponse
@@ -328,6 +322,15 @@ async def get_user_by_username(request: Request):
         logger.info(f'{request_id} | Username: {auth_username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await UserService.get_user_by_username(auth_username, request_id))
+    except HTTPException as e:
+        return respond_rest(ResponseModel(
+            status_code=e.status_code,
+            response_headers={
+                Headers.REQUEST_ID: request_id
+            },
+            error_code=ErrorCodes.HTTP_EXCEPTION,
+            error_message=e.detail
+            ))
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(ResponseModel(
@@ -350,7 +353,6 @@ Request:
 Response:
 {}
 """
-
 
 @user_router.get('/all',
     description='Get all users',
@@ -408,7 +410,6 @@ Response:
 {}
 """
 
-
 @user_router.get('/{username}',
     description='Get user by username',
     response_model=UserModelResponse
@@ -458,7 +459,6 @@ Request:
 Response:
 {}
 """
-
 
 @user_router.get('/email/{email}',
     description='Get user by email',

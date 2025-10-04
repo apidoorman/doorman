@@ -23,6 +23,10 @@ class UserModelResponse(BaseModel):
     throttle_wait_duration_type: Optional[str] = Field(None, min_length=1, max_length=7, description='Wait duration for the throttle limit', example='seconds')
     throttle_queue_limit: Optional[int] = Field(None, ge=0, description='Throttle queue limit for the user', example=10)
     custom_attributes: Optional[dict] = Field(None, description='Custom attributes for the user', example={'custom_key': 'custom_value'})
+    bandwidth_limit_bytes: Optional[int] = Field(None, ge=0, description='Maximum bandwidth allowed within the window (bytes)', example=1073741824)
+    bandwidth_limit_window: Optional[str] = Field(None, min_length=1, max_length=10, description='Bandwidth window unit (second/minute/hour/day/month)', example='day')
+    bandwidth_usage_bytes: Optional[int] = Field(None, ge=0, description='Current bandwidth usage in the active window (bytes)', example=123456)
+    bandwidth_resets_at: Optional[int] = Field(None, description='UTC epoch seconds when the current bandwidth window resets', example=1727481600)
     active: Optional[bool] = Field(None, description='Active status of the user', example=True)
     ui_access: Optional[bool] = Field(None, description='UI access for the user', example=False)
 
