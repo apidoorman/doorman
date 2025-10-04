@@ -40,7 +40,7 @@ jobs:
           ALLOW_METHODS: '*'
           ALLOWED_ORIGINS: http://localhost:3000
         working-directory: backend-services
-        run: pytest -q
+        run: pytest -q tests
 
   frontend-build:
     runs-on: ubuntu-latest
