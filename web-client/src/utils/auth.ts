@@ -54,7 +54,6 @@ export function decodeJWT(token: string): JWTPayload | null {
 }
 
 export function getTokenFromCookie(): string | null {
-  // HttpOnly cookie cannot be read from client; return null to avoid misuse
   return null
 }
 

@@ -1,9 +1,7 @@
 import time
 from servers import start_rest_echo_server
 
-
 def test_client_routing_overrides_api_servers(client):
-    # Two upstreams: api points to A, routing sends to B
     srv_a = start_rest_echo_server()
     srv_b = start_rest_echo_server()
     try:
@@ -11,7 +9,6 @@ def test_client_routing_overrides_api_servers(client):
         api_version = 'v1'
         client_key = f'ck-{int(time.time())}'
 
-        # Create routing for client_key -> srv_b
         r = client.post('/platform/routing', json={
             'routing_name': 'test-routing',
             'routing_servers': [srv_b.url],
@@ -21,7 +18,6 @@ def test_client_routing_overrides_api_servers(client):
         })
         assert r.status_code in (200, 201), r.text
 
-        # Create API pointing to srv_a
         r = client.post('/platform/api', json={
             'api_name': api_name,
             'api_version': api_version,
@@ -42,10 +38,8 @@ def test_client_routing_overrides_api_servers(client):
         })
         assert r.status_code in (200, 201)
 
-        # Subscribe admin
         client.post('/platform/subscription/subscribe', json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'})
 
-        # Call with client-key header; should hit srv_b (Host header check)
         r = client.get(f'/api/rest/{api_name}/{api_version}/where', headers={'client-key': client_key})
         assert r.status_code == 200
         data = r.json().get('response', r.json())
@@ -65,7 +59,6 @@ def test_client_routing_overrides_api_servers(client):
         except Exception:
             pass
         srv_a.stop(); srv_b.stop()
-
 
 def test_authorization_field_swap_sets_auth_header(client):
     srv = start_rest_echo_server()

@@ -53,7 +53,6 @@ const AddUserPage = () => {
   const handleInputChange = (field: keyof CreateUserData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
 
-    // Check password strength when password changes
     if (field === 'password') {
       checkPasswordStrength(value)
     }
@@ -113,7 +112,6 @@ const AddUserPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate required fields
     if (!formData.username || !formData.email || !formData.password || !formData.role) {
       setError('Please fill in all required fields')
       return
@@ -130,7 +128,6 @@ const AddUserPage = () => {
 
       await postJson(`${SERVER_URL}/platform/user/`, formData)
 
-      // Redirect to users list after successful creation
       router.push('/users')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user')

@@ -8,7 +8,6 @@ import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
 import { getJson, postJson, putJson, delJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
-// ConfirmModal no longer used on this page
 
 interface CreditTier {
   tier_name: string
@@ -62,7 +61,6 @@ export default function CreditsPage() {
   const [userError, setUserError] = useState<string | null>(null)
   const [userSuccess, setUserSuccess] = useState<string | null>(null)
 
-  // Credit definitions cache for computing totals/used per group
   type TierMeta = { credits: number; reset_frequency?: string }
   const [defs, setDefs] = useState<Record<string, { [tier: string]: TierMeta }>>({})
 
@@ -79,7 +77,6 @@ export default function CreditsPage() {
       }
       setDefs(map)
     } catch (e) {
-      // Non-fatal; UI will just omit totals/used if defs missing
     }
   }
 
@@ -115,8 +112,6 @@ export default function CreditsPage() {
     }
   }
 
-  // Delete modal and handlers removed; definitions managed on /credit-defs
-
   const loadAllUserTokens = async () => {
     try {
       setUsersLoading(true); setUserError(null)
@@ -135,10 +130,6 @@ export default function CreditsPage() {
       setUsersLoading(false)
     }
   }
-
-  // User detail moved to /credits/[username]
-
-  // Saving handled on detail page
 
   useEffect(() => {
     loadAllUserTokens()

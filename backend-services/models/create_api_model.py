@@ -38,7 +38,6 @@ class CreateApiModel(BaseModel):
     api_id: Optional[str] = Field(None, description='Unique identifier for the API, auto-generated', example=None)
     api_path: Optional[str] = Field(None, description='Unique path for the API, auto-generated', example=None)
 
-    # Per-API IP policy
     api_ip_mode: Optional[str] = Field('allow_all', description="IP policy mode: 'allow_all' or 'whitelist'")
     api_ip_whitelist: Optional[List[str]] = Field(None, description='Allowed IPs/CIDRs when api_ip_mode=whitelist')
     api_ip_blacklist: Optional[List[str]] = Field(None, description='IPs/CIDRs denied regardless of mode')

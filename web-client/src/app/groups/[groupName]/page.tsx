@@ -42,7 +42,6 @@ const GroupDetailPage = () => {
       setLoading(true)
       setError(null)
 
-      // Try to get from sessionStorage first
       const savedGroup = sessionStorage.getItem('selectedGroup')
       if (savedGroup) {
         const parsedGroup = JSON.parse(savedGroup)
@@ -54,7 +53,6 @@ const GroupDetailPage = () => {
         }
       }
 
-      // Fetch from API if not in sessionStorage
       const data = await fetchJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
       setGroup(data)
       setEditData(data)
@@ -105,7 +103,6 @@ const GroupDetailPage = () => {
 
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`, editData)
 
-      // Refresh from server to get the latest canonical data (retry once on transient failure)
       let refreshedGroup: any
       try {
         refreshedGroup = await fetchJson(`${SERVER_URL}/platform/group/${encodeURIComponent(groupName)}`)
@@ -115,7 +112,6 @@ const GroupDetailPage = () => {
       }
       setGroup(refreshedGroup)
       setEditData(refreshedGroup)
-      // Keep sessionStorage in sync for back-navigation
       sessionStorage.setItem('selectedGroup', JSON.stringify(refreshedGroup))
       setIsEditing(false)
       setSuccess('Group updated successfully!')

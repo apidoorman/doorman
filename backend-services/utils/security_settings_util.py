@@ -26,12 +26,7 @@ DEFAULTS = {
     'ip_whitelist': [],
     'ip_blacklist': [],
     'trust_x_forwarded_for': False,
-    # Optional: when set, only requests coming from these proxies (IPs/CIDRs)
-    # will have their X-Forwarded-For / X-Real-IP / CF-Connecting-IP trusted.
-    # Empty list preserves legacy behavior (trust all proxies when enabled).
     'xff_trusted_proxies': [],
-    # Never lock out localhost (direct requests only; ignored if forwarded headers present)
-    # Defaults from env LOCAL_HOST_IP_BYPASS (true/false), falling back to False.
     'allow_localhost_bypass': (os.getenv('LOCAL_HOST_IP_BYPASS', 'false').lower() == 'true'),
 }
 

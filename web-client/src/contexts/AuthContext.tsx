@@ -43,10 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = async () => {
     if (DEBUG) console.log('=== AUTH CONTEXT DEBUG ===')
     try {
-      // Validate via backend using HttpOnly cookie (no client-side token reads)
       await fetchJson(`${SERVER_URL}/platform/authorization/status`)
 
-      // If we reach here, token is valid
       let user = null as any
       let permissions: any = null
       try {
@@ -54,7 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (user?.role) {
           try {
             const role = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(user.role)}`)
-            // Role object is expected to contain permission booleans
             permissions = role || null
           } catch {}
         }
@@ -79,12 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshAuth = async () => {
     try {
-      // Attempt to extend the current session if still valid
       await postJson(`${SERVER_URL}/platform/authorization/refresh`, {})
-      // Refresh user + permissions after extending
       await checkAuth()
     } catch (e) {
-      // Silently ignore; refresh requires a valid token and may fail if session already expired
       if (DEBUG) console.warn('AuthContext - Token refresh failed or not applicable:', e)
     }
   }
@@ -109,19 +103,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // Initial auth check with a small delay to ensure cookies are set after login
     const timer = setTimeout(() => {
       if (DEBUG) console.log('AuthContext - Initial auth check')
       checkAuth()
     }, 200)
 
-    // Check auth every minute
     const interval = setInterval(() => {
       if (DEBUG) console.log('AuthContext - Periodic auth check')
       checkAuth()
     }, 60000)
 
-    // Proactively refresh token every 10 minutes while logged in
     const refreshInterval = setInterval(() => {
       if (authState.isAuthenticated) {
         if (DEBUG) console.log('AuthContext - Proactive token refresh')

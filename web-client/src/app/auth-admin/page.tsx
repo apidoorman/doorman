@@ -68,7 +68,6 @@ export default function AuthAdminPage() {
 
   useEffect(() => {
     if (username.trim()) loadStatus(username)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

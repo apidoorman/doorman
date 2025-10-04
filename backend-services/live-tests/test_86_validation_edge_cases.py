@@ -4,7 +4,6 @@ import pytest
 
 pytestmark = [pytest.mark.validation]
 
-
 def test_nested_array_and_format_validations(client):
     srv = start_rest_echo_server()
     try:
@@ -21,7 +20,6 @@ def test_nested_array_and_format_validations(client):
         })
         client.post('/platform/subscription/subscribe', json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'})
 
-        # Attach schema: items array with nested object id:uuid, quantity:number>=1; user.email format
         r = client.get(f'/platform/endpoint/POST/{api_name}/{api_version}/submit')
         ep = r.json().get('response', r.json()); endpoint_id = ep.get('endpoint_id'); assert endpoint_id
         schema = {

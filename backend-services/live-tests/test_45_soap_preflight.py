@@ -3,7 +3,6 @@ import pytest
 
 pytestmark = [pytest.mark.soap]
 
-
 def test_soap_cors_preflight(client):
     api_name = f'soap-pre-{int(time.time())}'
     api_version = 'v1'
@@ -21,4 +20,3 @@ def test_soap_cors_preflight(client):
         'Origin': 'http://example.com', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'Content-Type'
     })
     assert r.status_code in (200, 204)
-

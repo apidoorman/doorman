@@ -94,7 +94,6 @@ const UserDetailPage = () => {
           ui_access: parsedUser.ui_access
         })
         setLoading(false)
-        // Background refresh from server for live fields (e.g., bandwidth usage)
         ;(async () => {
           try {
             const refreshed = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(parsedUser.username)}`)
@@ -168,7 +167,6 @@ const UserDetailPage = () => {
       }
       await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`, editData)
 
-      // Refresh from server to get the latest canonical data (retry once on transient failure)
       let refreshedUser: any
       try {
         refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
@@ -177,7 +175,6 @@ const UserDetailPage = () => {
         refreshedUser = await fetchJson(`${SERVER_URL}/platform/user/${encodeURIComponent(username)}`)
       }
       setUser(refreshedUser)
-      // Keep sessionStorage in sync for back-navigation
       sessionStorage.setItem('selectedUser', JSON.stringify(refreshedUser))
       setIsEditing(false)
       setSuccess('User updated successfully!')

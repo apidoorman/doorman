@@ -38,7 +38,6 @@ Response:
 {}
 """
 
-
 @endpoint_router.post('',
     description='Add endpoint',
     response_model=ResponseModel,
@@ -98,7 +97,6 @@ Request:
 Response:
 {}
 """
-
 
 @endpoint_router.put('/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}',
     description='Update endpoint',
@@ -160,7 +158,6 @@ Response:
 {}
 """
 
-
 @endpoint_router.delete('/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}',
     description='Delete endpoint',
     response_model=ResponseModel,
@@ -221,7 +218,6 @@ Response:
 {}
 """
 
-
 @endpoint_router.get('/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}',
     description='Get endpoint by API name, API version and endpoint uri',
     response_model=EndpointModelResponse
@@ -261,7 +257,6 @@ Response:
 {}
 """
 
-
 @endpoint_router.get('/{api_name}/{api_version}',
     description='Get all endpoints for an API',
     response_model=List[EndpointModelResponse]
@@ -300,7 +295,6 @@ Request:
 Response:
 {}
 """
-
 
 @endpoint_router.post('/endpoint/validation',
     description='Create a new endpoint validation',
@@ -362,7 +356,6 @@ Response:
 {}
 """
 
-
 @endpoint_router.put('/endpoint/validation/{endpoint_id}',
     description='Update an endpoint validation by endpoint ID',
     response_model=ResponseModel
@@ -410,7 +403,6 @@ Request:
 Response:
 {}
 """
-
 
 @endpoint_router.delete('/endpoint/validation/{endpoint_id}',
     description='Delete an endpoint validation by endpoint ID',
@@ -460,7 +452,6 @@ Response:
 {}
 """
 
-
 @endpoint_router.get('/endpoint/validation/{endpoint_id}',
     description='Get an endpoint validation by endpoint ID',
     response_model=EndpointValidationModelResponse
@@ -500,7 +491,6 @@ Response:
 {}
 """
 
-
 @endpoint_router.post('/validation',
     description='Create a new endpoint validation (alias)',
     response_model=ResponseModel)
@@ -516,7 +506,6 @@ Request:
 Response:
 {}
 """
-
 
 @endpoint_router.put('/validation/{endpoint_id}',
     description='Update endpoint validation by endpoint ID (alias)',
@@ -534,7 +523,6 @@ Response:
 {}
 """
 
-
 @endpoint_router.delete('/validation/{endpoint_id}',
     description='Delete endpoint validation by endpoint ID (alias)',
     response_model=ResponseModel)
@@ -550,7 +538,6 @@ Request:
 Response:
 {}
 """
-
 
 @endpoint_router.get('/validation/{endpoint_id}',
     description='Get endpoint validation by endpoint ID (alias)',

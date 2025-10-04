@@ -35,7 +35,6 @@ Response:
 {}
 """
 
-
 @authorization_router.post('/authorization',
     description='Create authorization token',
     response_model=ResponseModel,
@@ -193,7 +192,6 @@ Response:
 {}
 """
 
-
 @authorization_router.post('/authorization/admin/revoke/{username}',
     description='Revoke all active tokens for a user (admin)',
     response_model=ResponseModel)
@@ -250,7 +248,6 @@ Response:
 {}
 """
 
-
 @authorization_router.post('/authorization/admin/unrevoke/{username}',
     description='Clear token revocation for a user (admin)',
     response_model=ResponseModel)
@@ -306,7 +303,6 @@ Request:
 Response:
 {}
 """
-
 
 @authorization_router.post('/authorization/admin/disable/{username}',
     description='Disable a user (admin)',
@@ -367,7 +363,6 @@ Response:
 {}
 """
 
-
 @authorization_router.post('/authorization/admin/enable/{username}',
     description='Enable a user (admin)',
     response_model=ResponseModel)
@@ -424,7 +419,6 @@ Request:
 Response:
 {}
 """
-
 
 @authorization_router.get('/authorization/admin/status/{username}',
     description='Get auth status for a user (admin)',
@@ -485,7 +479,6 @@ Request:
 Response:
 {}
 """
-
 
 @authorization_router.post('/authorization/refresh',
     description='Create authorization refresh token',
@@ -606,7 +599,6 @@ Response:
 {}
 """
 
-
 @authorization_router.get('/authorization/status',
     description='Get authorization token status',
     response_model=ResponseModel,
@@ -670,7 +662,6 @@ Request:
 Response:
 {}
 """
-
 
 @authorization_router.post('/authorization/invalidate',
     description='Invalidate authorization token',

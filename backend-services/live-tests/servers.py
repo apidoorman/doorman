@@ -4,14 +4,12 @@ import socket
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-
 def _find_free_port() -> int:
     s = socket.socket()
     s.bind(('127.0.0.1', 0))
     port = s.getsockname()[1]
     s.close()
     return port
-
 
 class _ThreadedHTTPServer:
     def __init__(self, handler_cls, host='127.0.0.1', port=None):
@@ -33,7 +31,6 @@ class _ThreadedHTTPServer:
     @property
     def url(self):
         return f'http://{self.host}:{self.port}'
-
 
 def start_rest_echo_server():
     class Handler(BaseHTTPRequestHandler):
@@ -71,7 +68,6 @@ def start_rest_echo_server():
 
     return _ThreadedHTTPServer(Handler).start()
 
-
 def start_soap_echo_server():
     class Handler(BaseHTTPRequestHandler):
         def _xml(self, status=200, content=''):
@@ -83,7 +79,6 @@ def start_soap_echo_server():
             self.wfile.write(body)
 
         def do_POST(self):
-            # Simple SOAP echo with fixed envelope
             content_length = int(self.headers.get('Content-Length', '0') or '0')
             _ = self.rfile.read(content_length) if content_length else b''
             resp = (
@@ -96,6 +91,4 @@ def start_soap_echo_server():
 
     return _ThreadedHTTPServer(Handler).start()
 
-
 # Optional servers (GraphQL, gRPC) are set up inside tests conditionally to avoid hard deps here.
-

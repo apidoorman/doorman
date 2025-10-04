@@ -59,7 +59,6 @@ export default function UserCreditsDetailPage() {
       await Promise.all([loadDefs(), loadUser()])
       setLoading(false)
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uname])
 
   const save = async () => {
@@ -78,7 +77,6 @@ export default function UserCreditsDetailPage() {
     return Object.keys(defs || {}).filter(g => !current.has(g))
   }, [defs, userCredits])
 
-  // Inline validation: available must be within [0, total]
   const invalidGroups = useMemo(() => {
     const bad: string[] = []
     for (const [group, info] of Object.entries(userCredits || {})) {

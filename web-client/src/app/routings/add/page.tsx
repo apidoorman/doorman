@@ -47,7 +47,6 @@ const AddRoutingPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate required fields
     if (!formData.routing_name || formData.routing_servers.length === 0) {
       setError('Please fill in routing name and add at least one server')
       return

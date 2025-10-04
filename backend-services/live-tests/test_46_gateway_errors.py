@@ -3,7 +3,6 @@ import pytest
 
 pytestmark = [pytest.mark.rest]
 
-
 def test_nonexistent_endpoint_returns_gw_error(client):
     api_name = f'gwerr-{int(time.time())}'
     api_version = 'v1'
@@ -18,4 +17,3 @@ def test_nonexistent_endpoint_returns_gw_error(client):
     code = data.get('error_code') or (data.get('response') or {}).get('error_code')
     assert code in ('GTW003', 'GTW001', 'GTW002', 'GTW006')
     client.delete(f'/platform/api/{api_name}/{api_version}')
-

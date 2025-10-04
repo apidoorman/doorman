@@ -49,7 +49,6 @@ def get_current_usage(username: str, window: Optional[str]) -> int:
             return int(val) if val is not None else 0
         except Exception:
             return 0
-    # Memory cache path (raw access)
     val = doorman_cache.cache.get(key)
     try:
         return int(val) if isinstance(val, int) else int(val or 0)
@@ -64,18 +63,14 @@ def add_usage(username: str, delta_bytes: int, window: Optional[str]) -> None:
     client = _get_client()
     if client is not None:
         try:
-            # atomic increment
             new_val = client.incrby(key, int(delta_bytes))
-            # ensure TTL at least for the window
             client.expire(key, ttl)
             return
         except Exception:
             pass
-    # Memory fallback: not strictly atomic across processes
     cur = get_current_usage(username, win)
     new_val = cur + int(delta_bytes)
     try:
-        # Directly use underlying MemoryCache for TTL control
         doorman_cache.cache.setex(key, ttl, str(new_val))
     except Exception:
         pass
@@ -91,7 +86,6 @@ async def enforce_pre_request_limit(request: Request, username: Optional[str]) -
         return
     window = user.get('bandwidth_limit_window') or 'day'
     used = get_current_usage(username, window)
-    # Check incoming content-length
     clen = 0
     try:
         clen = int(request.headers.get('content-length') or 0)

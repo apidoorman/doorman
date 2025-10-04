@@ -13,13 +13,10 @@ import logging
 import re
 import time
 import httpx
-import aiohttp
 from typing import Dict
 import grpc
 from google.protobuf.json_format import MessageToDict
 import importlib
-from gql import Client, gql
-from gql.transport.aiohttp import AIOHTTPTransport
 
 # Internal imports
 from models.response_model import ResponseModel
@@ -45,12 +42,10 @@ class GatewayService:
 
     @classmethod
     def get_http_client(cls) -> httpx.AsyncClient:
-        # Use a shared client only when explicitly enabled to preserve testability
         if (os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() == 'true'):
             if cls._http_client is None:
                 cls._http_client = httpx.AsyncClient(timeout=cls.timeout)
             return cls._http_client
-        # Otherwise, return a fresh client instance to allow monkeypatching per call
         return httpx.AsyncClient(timeout=cls.timeout)
 
     def error_response(request_id, code, message, status=404):
@@ -225,7 +220,6 @@ class GatewayService:
                 else:
                     return GatewayService.error_response(request_id, 'GTW004', 'Method not supported', status=405)
             finally:
-                # Close per-call client when not using cache
                 if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
                     try:
                         await client.aclose()
@@ -254,7 +248,6 @@ class GatewayService:
                 response_headers.update(cors_headers)
             except Exception:
                 pass
-            # Attach timing headers when available
             try:
                 if current_time and start_time:
                     response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
@@ -477,42 +470,38 @@ class GatewayService:
                     await validation_util.validate_graphql_request(endpoint_id, query, variables)
             except Exception as e:
                 return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
-            transport = AIOHTTPTransport(url=url, headers=headers)
-            async with Client(transport=transport, fetch_schema_from_transport=False) as session:
-                try:
-                    result = await session.execute(gql(query), variable_values=variables)
-                    backend_end_time = time.time() * 1000
-                    logger.info(f'{request_id} | GraphQL gateway status code: 200')
-                    response_headers = {'request_id': request_id}
-                    allowed_lower = {h.lower() for h in (allowed_headers or [])}
-                    for key, value in headers.items():
-                        if key.lower() in allowed_lower:
-                            response_headers[key] = value
+            try:
+                client = GatewayService.get_http_client()
+                http_resp = await client.post(url, json={'query': query, 'variables': variables}, headers=headers)
+                result = http_resp.json()
+                backend_end_time = time.time() * 1000
+                logger.info(f'{request_id} | GraphQL gateway status code: 200')
+                response_headers = {'request_id': request_id}
+                allowed_lower = {h.lower() for h in (allowed_headers or [])}
+                for key, value in headers.items():
+                    if key.lower() in allowed_lower:
+                        response_headers[key] = value
 
-                    try:
-                        origin = request.headers.get('origin') or request.headers.get('Origin')
-                        _, cors_headers = GatewayService._compute_api_cors_headers(api, origin, None, None)
-                        response_headers.update(cors_headers)
-                    except Exception:
-                        pass
-                    try:
-                        if current_time and start_time:
-                            response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
-                        if backend_end_time and current_time:
-                            response_headers['X-Backend-Time'] = str(int(backend_end_time - current_time))
-                    except Exception:
-                        pass
-                    return ResponseModel(
-                        status_code=200,
-                        response_headers=response_headers,
-                        response=result
-                    ).dict()
-                except Exception as e:
-                    if retry > 0:
-                        logger.error(f'{request_id} | GraphQL gateway failed retrying')
-                        return await GatewayService.graphql_gateway(username, request, request_id, start_time, path, url, retry - 1)
-                    error_msg = str(e)[:255] if len(str(e)) > 255 else str(e)
-                    return GatewayService.error_response(request_id, 'GTW006', error_msg, status=500)
+                try:
+                    origin = request.headers.get('origin') or request.headers.get('Origin')
+                    _, cors_headers = GatewayService._compute_api_cors_headers(api, origin, None, None)
+                    response_headers.update(cors_headers)
+                except Exception:
+                    pass
+                try:
+                    if current_time and start_time:
+                        response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                    if backend_end_time and current_time:
+                        response_headers['X-Backend-Time'] = str(int(backend_end_time - current_time))
+                except Exception:
+                    pass
+                return ResponseModel(status_code=200, response_headers=response_headers, response=result).dict()
+            except Exception as e:
+                if retry > 0:
+                    logger.error(f'{request_id} | GraphQL gateway failed retrying')
+                    return await GatewayService.graphql_gateway(username, request, request_id, start_time, path, url, retry - 1)
+                error_msg = str(e)[:255] if len(str(e)) > 255 else str(e)
+                return GatewayService.error_response(request_id, 'GTW006', error_msg, status=500)
         except Exception as e:
             logger.error(f'{request_id} | GraphQL gateway failed with code GTW006: {str(e)}')
             error_msg = str(e)[:255] if len(str(e)) > 255 else str(e)
@@ -710,21 +699,15 @@ class GatewayService:
         try:
             if headers is None:
                 headers = {}
-            if 'Content-Type' not in headers:
-                headers['Content-Type'] = 'application/json'
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json={'query': query}, headers=headers) as response:
-                    response_data = await response.json()
-                    if 'errors' in response_data:
-                        return response_data
-                    if response.status != 200:
-                        return {
-                            'errors': [{
-                                'message': f'HTTP {response.status}: {response_data.get("message", "Unknown error")}',
-                                'extensions': {'code': 'HTTP_ERROR'}
-                            }]
-                        }
-                    return response_data
+            headers.setdefault('Content-Type', 'application/json')
+            client = GatewayService.get_http_client()
+            r = await client.post(url, json={'query': query}, headers=headers)
+            data = r.json()
+            if 'errors' in data:
+                return data
+            if r.status_code != 200:
+                return {'errors': [{'message': f'HTTP {r.status_code}: {data.get("message", "Unknown error")}', 'extensions': {'code': 'HTTP_ERROR'}}]}
+            return data
         except Exception as e:
             logger.error(f'Error making GraphQL request: {str(e)}')
             return {

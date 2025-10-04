@@ -57,7 +57,6 @@ const SecurityPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  // Tabs removed; render sections directly
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
   const [rateLimits, setRateLimits] = useState<RateLimit[]>([])
   const [ipWhitelist, setIpWhitelist] = useState<IpWhitelist[]>([])
@@ -97,7 +96,6 @@ const SecurityPage = () => {
       setLoading(true)
       setError(null)
 
-      // Mock data for demonstration
       setApiKeys([
         { id: '1', name: 'Production API Key', key: 'sk_prod_123456789', created: '2024-01-15', lastUsed: '2024-01-20', status: 'active' },
         { id: '2', name: 'Development API Key', key: 'sk_dev_987654321', created: '2024-01-10', lastUsed: '2024-01-19', status: 'active' }
@@ -266,8 +264,6 @@ const SecurityPage = () => {
     }
   }
 
-  // No tabs for this page; show all sections inline
-
   const addMyIpToWhitelist = () => {
     const effectiveIp = (settings.trust_x_forwarded_for && clientIpXff) ? clientIpXff : clientIp
     if (!effectiveIp) return
@@ -420,7 +416,6 @@ const SecurityPage = () => {
                       <div className="md:col-span-2 border-t border-gray-200 dark:border-gray-700 pt-4">
                     <h4 className="text-md font-medium text-gray-900 dark:text-white mb-2">IP Access Control <InfoTooltip text="Effective IP: if 'Trust X-Forwarded-For' is enabled and the request includes X-Forwarded-For, the first IP in that header is used. Otherwise the direct client IP is used. Warnings and enforcement follow this rule." /></h4>
                     {(() => {
-                      // compute effective IP and risk inline to avoid stale values
                       const effectiveIp = (settings.trust_x_forwarded_for && clientIpXff) ? clientIpXff : clientIp
                       const listFromText = (t: string) => t.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
                       const wl = listFromText(ipWhitelistText)

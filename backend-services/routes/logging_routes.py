@@ -34,7 +34,6 @@ Response:
 {}
 """
 
-
 @logging_router.get('/logs',
     description='Get logs with filtering',
     response_model=ResponseModel,
@@ -158,7 +157,6 @@ Response:
 {}
 """
 
-
 @logging_router.get('/logs/files',
     description='Get list of available log files',
     response_model=ResponseModel
@@ -221,7 +219,6 @@ Request:
 Response:
 {}
 """
-
 
 @logging_router.get('/logs/statistics',
     description='Get log statistics for dashboard',
@@ -311,7 +308,6 @@ Request:
 Response:
 {}
 """
-
 
 @logging_router.get('/logs/export',
     description='Export logs in various formats',
@@ -410,7 +406,6 @@ Request:
 Response:
 {}
 """
-
 
 @logging_router.get('/logs/download',
     description='Download logs as file',

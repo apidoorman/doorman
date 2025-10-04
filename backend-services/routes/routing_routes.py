@@ -34,7 +34,6 @@ Response:
 {}
 """
 
-
 @routing_router.post('',
     description='Add routing',
     response_model=ResponseModel,
@@ -92,7 +91,6 @@ Request:
 Response:
 {}
 """
-
 
 @routing_router.put('/{client_key}',
     description='Update routing',
@@ -152,7 +150,6 @@ Response:
 {}
 """
 
-
 @routing_router.delete('/{client_key}',
     description='Delete routing',
     response_model=ResponseModel,
@@ -211,7 +208,6 @@ Response:
 {}
 """
 
-
 @routing_router.get('/all',
     description='Get all routings',
     response_model=List[RoutingModelResponse]
@@ -257,7 +253,6 @@ Request:
 Response:
 {}
 """
-
 
 @routing_router.get('/{client_key}',
     description='Get routing',

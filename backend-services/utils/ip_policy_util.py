@@ -21,17 +21,14 @@ def _get_client_ip(request: Request, trust_xff: bool) -> Optional[str]:
         src_ip = request.client.host if request.client else None
 
         def _from_trusted_proxy() -> bool:
-            # Secure-by-default: only trust when list is configured and source matches
             if not trusted:
                 return False
             return _ip_in_list(src_ip, trusted) if src_ip else False
 
         if trust_xff and _from_trusted_proxy():
-            # Prefer standard X-Forwarded-For; fall back to common vendor headers
             for header in ('x-forwarded-for', 'X-Forwarded-For', 'x-real-ip', 'X-Real-IP', 'cf-connecting-ip', 'CF-Connecting-IP'):
                 val = request.headers.get(header)
                 if val:
-                    # XFF may contain a list; others are single
                     ip = val.split(',')[0].strip()
                     if ip:
                         return ip
@@ -84,7 +81,6 @@ def enforce_api_ip_policy(request: Request, api: dict):
         client_ip = _get_client_ip(request, trust_xff)
         if not client_ip:
             return
-        # Optional localhost bypass: only when direct source is loopback and no forwarding headers present
         try:
             settings = get_cached_settings()
             env_flag = os.getenv('LOCAL_HOST_IP_BYPASS')
@@ -98,7 +94,6 @@ def enforce_api_ip_policy(request: Request, api: dict):
         mode = (api.get('api_ip_mode') or 'allow_all').strip().lower()
         wl = api.get('api_ip_whitelist') or []
         bl = api.get('api_ip_blacklist') or []
-        # Blacklist always applies
         if bl and _ip_in_list(client_ip, bl):
             try:
                 audit(request, actor=None, action='ip.api_deny', target=str(api.get('api_id') or api.get('api_name') or 'unknown_api'), status='blocked', details={'reason': 'blacklisted', 'effective_ip': client_ip})
@@ -115,5 +110,4 @@ def enforce_api_ip_policy(request: Request, api: dict):
     except HTTPException:
         raise
     except Exception:
-        # Fail open on errors
         return

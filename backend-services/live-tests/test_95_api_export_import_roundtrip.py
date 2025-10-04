@@ -1,10 +1,8 @@
 import time
 
-
 def test_single_api_export_import_roundtrip(client):
     api_name = f'cfg-{int(time.time())}'
     api_version = 'v1'
-    # Create API + endpoint
     client.post('/platform/api', json={
         'api_name': api_name,
         'api_version': api_version,
@@ -23,7 +21,6 @@ def test_single_api_export_import_roundtrip(client):
         'endpoint_description': 'x'
     })
 
-    # Export single API
     r = client.get(f'/platform/config/export/apis?api_name={api_name}&api_version={api_version}')
     assert r.status_code == 200
     payload = r.json().get('response', r.json())
@@ -31,16 +28,13 @@ def test_single_api_export_import_roundtrip(client):
     assert exported_api and exported_api.get('api_name') == api_name
     assert any(ep.get('endpoint_uri') == '/x' for ep in (exported_eps or []))
 
-    # Delete API
     client.delete(f'/platform/endpoint/GET/{api_name}/{api_version}/x')
     client.delete(f'/platform/api/{api_name}/{api_version}')
 
-    # Import back
     body = {'apis': [exported_api], 'endpoints': exported_eps}
     r = client.post('/platform/config/import', json=body)
     assert r.status_code == 200
 
-    # Verify restored
     r = client.get(f'/platform/api/{api_name}/{api_version}')
     assert r.status_code == 200
     r = client.get(f'/platform/endpoint/GET/{api_name}/{api_version}/x')

@@ -45,7 +45,6 @@ Response:
 {}
 """
 
-
 @monitor_router.get('/monitor/metrics',
     description='Get aggregated gateway metrics',
     response_model=ResponseModel,
@@ -99,7 +98,6 @@ Response:
 {}
 """
 
-
 @monitor_router.get('/monitor/liveness',
     description='Kubernetes liveness probe endpoint (no auth)',
     response_model=LivenessResponse)
@@ -114,7 +112,6 @@ Request:
 Response:
 {}
 """
-
 
 @monitor_router.get('/monitor/readiness',
     description='Kubernetes readiness probe endpoint (no auth)',
@@ -143,7 +140,6 @@ Request:
 Response:
 {}
 """
-
 
 @monitor_router.get('/monitor/report',
     description='Generate a CSV report for a date range (requires manage_gateway)',
@@ -273,12 +269,10 @@ async def generate_report(request: Request, start: str, end: str):
                     api_errors[k] = api_errors.get(k, 0) + v
                 for k, v in (b.user_counts or {}).items():
                     user_totals[k] = user_totals.get(k, 0) + v
-        # Bandwidth aggregation from metrics buckets (available window)
         buckets = list(metrics_store._buckets)
         sel = [b for b in buckets if b.start_ts >= start_ts and b.start_ts <= end_ts]
         total_bytes_in = sum(getattr(b, 'bytes_in', 0) for b in sel)
         total_bytes_out = sum(getattr(b, 'bytes_out', 0) for b in sel)
-        # Daily breakdown (UTC)
         from collections import defaultdict
         daily_bw = defaultdict(lambda: {'in': 0, 'out': 0})
         for b in sel:

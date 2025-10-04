@@ -40,7 +40,6 @@ const UserSubscriptionsPage = () => {
   const fetchSubscriptions = async () => {
     try {
       const data = await fetchJson(`${SERVER_URL}/platform/subscription/subscriptions/${username}`)
-      // Support both { apis: string[] } and { subscriptions: { apis: string[] } }
       const apis: string[] = (data?.apis)
         || (data?.subscriptions?.apis)
         || []
@@ -89,7 +88,6 @@ const UserSubscriptionsPage = () => {
     try {
       const [api_name, api_version] = selectedApi.split('/')
       const body = { username, api_name, api_version }
-      // Optimistic update
       const prev = subscriptions
       const optimisticSub = { api_name, api_version }
       setSubscriptions(curr => curr.some(s => s.api_name === api_name && s.api_version === api_version)
@@ -101,10 +99,8 @@ const UserSubscriptionsPage = () => {
 
       setSuccess(`Successfully subscribed ${username} to ${selectedApi}.`)
       setSelectedApi('')
-      // Reconcile with server state (in case of backend normalization)
       await fetchSubscriptions()
     } catch (err) {
-      // Rollback optimistic update on failure
       await fetchSubscriptions()
       setError(err instanceof Error ? err.message : 'An unknown error occurred.')
     } finally {
@@ -133,7 +129,6 @@ const UserSubscriptionsPage = () => {
     try {
       const { api_name, api_version } = subscriptionToRevoke
       const body = { username, api_name, api_version }
-      // Optimistic removal
       const prev = subscriptions
       setSubscriptions(curr => curr.filter(s => !(s.api_name === api_name && s.api_version === api_version)))
 
@@ -142,7 +137,6 @@ const UserSubscriptionsPage = () => {
       setSuccess(`Successfully revoked access to ${api_name}/${api_version} for ${username}.`)
       await fetchSubscriptions()
     } catch (err) {
-      // Rollback optimistic change
       await fetchSubscriptions()
       setError(err instanceof Error ? err.message : 'An unknown error occurred.')
     } finally {

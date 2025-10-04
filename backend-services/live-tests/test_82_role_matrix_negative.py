@@ -3,7 +3,6 @@ import pytest
 
 pytestmark = [pytest.mark.security, pytest.mark.roles]
 
-
 def _mk_user(client, role_name: str):
     ts = int(time.time())
     uname = f"perm_{ts}"
@@ -20,16 +19,13 @@ def _mk_user(client, role_name: str):
     assert r.status_code in (200, 201), r.text
     return uname, email, pwd
 
-
 def _login(base_client, email, pwd):
     from client import LiveClient
     c = LiveClient(base_client.base_url)
     c.login(email, pwd)
     return c
 
-
 def test_permission_matrix_block_then_allow(client):
-    # Prepare an API for endpoint creation testing
     api_name = f'permapi-{int(time.time())}'
     api_version = 'v1'
     client.post('/platform/api', json={
@@ -38,7 +34,6 @@ def test_permission_matrix_block_then_allow(client):
         'api_servers': ['http://127.0.0.1:9'], 'api_type': 'REST', 'active': True
     })
 
-    # Define permissions to test: (perm_field, attempt_fn, expected_error_code)
     def try_manage_apis(c):
         return c.post('/platform/api', json={
             'api_name': f'pa-{int(time.time())}', 'api_version': 'v1', 'api_description': 'x',
@@ -73,26 +68,20 @@ def test_permission_matrix_block_then_allow(client):
 
     for perm_field, attempt, expected_code in matrix:
         role_name = f"role_{perm_field}_{int(time.time())}"
-        # Create role with ALL perms False
         r = client.post('/platform/role', json={'role_name': role_name, 'role_description': 'matrix', perm_field: False})
         assert r.status_code in (200, 201), r.text
         uname, email, pwd = _mk_user(client, role_name)
         uc = _login(client, email, pwd)
-        # Expect 403 with specific code when permission is False
         resp = attempt(uc)
         assert resp.status_code == 403, f"{perm_field} should be blocked: {resp.text}"
         data = resp.json(); code = data.get('error_code') or (data.get('response') or {}).get('error_code')
         assert code == expected_code
 
-        # Allow: update role to True and attempt again, expect non-403
         client.put(f'/platform/role/{role_name}', json={perm_field: True})
         resp2 = attempt(uc)
         assert resp2.status_code != 403, f"{perm_field} still blocked after enable: {resp2.text}"
 
-        # Cleanup user and role (ignore failures for resources created by user)
         client.delete(f'/platform/user/{uname}')
         client.delete(f'/platform/role/{role_name}')
 
-    # Cleanup API
     client.delete(f'/platform/api/{api_name}/{api_version}')
-
