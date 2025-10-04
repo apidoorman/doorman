@@ -9,7 +9,6 @@ export default function Home() {
   const { isAuthenticated, hasUIAccess } = useAuth()
 
   useEffect(() => {
-    // Check if user is authenticated and has UI access
     if (isAuthenticated && hasUIAccess) {
       router.push('/dashboard')
     } else {

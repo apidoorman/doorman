@@ -1,15 +1,12 @@
 import time
 from servers import start_rest_echo_server
 
-
 def test_rest_gateway_basic_flow(client):
-    # Start upstream REST echo server
     srv = start_rest_echo_server()
     try:
         api_name = f'rest-demo-{int(time.time())}'
         api_version = 'v1'
 
-        # Create API
         api_payload = {
             'api_name': api_name,
             'api_version': api_version,
@@ -25,7 +22,6 @@ def test_rest_gateway_basic_flow(client):
         r = client.post('/platform/api', json=api_payload)
         assert r.status_code in (200, 201), r.text
 
-        # Add endpoint (GET /status)
         ep_payload = {
             'api_name': api_name,
             'api_version': api_version,
@@ -36,19 +32,16 @@ def test_rest_gateway_basic_flow(client):
         r = client.post('/platform/endpoint', json=ep_payload)
         assert r.status_code in (200, 201), r.text
 
-        # Subscribe admin to API
         sub_payload = {'api_name': api_name, 'api_version': api_version, 'username': 'admin'}
         r = client.post('/platform/subscription/subscribe', json=sub_payload)
         assert r.status_code in (200, 201), r.text
 
-        # Call gateway
         r = client.get(f'/api/rest/{api_name}/{api_version}/status')
         assert r.status_code == 200, r.text
         data = r.json().get('response', r.json())
         assert data.get('method') == 'GET'
         assert data.get('path', '').endswith('/status')
 
-        # Clean up
         r = client.delete(f'/platform/endpoint/GET/{api_name}/{api_version}/status')
         assert r.status_code in (200, 204)
         r = client.delete(f'/platform/api/{api_name}/{api_version}')
@@ -56,9 +49,7 @@ def test_rest_gateway_basic_flow(client):
     finally:
         srv.stop()
 
-
 def test_rest_gateway_with_credits_and_header_injection(client):
-    # Start upstream REST echo server
     srv = start_rest_echo_server()
     try:
         ts = int(time.time())
@@ -67,7 +58,6 @@ def test_rest_gateway_with_credits_and_header_injection(client):
         credit_group = f'cg-{ts}'
         api_key_val = 'DUMMY_API_KEY_ABC'
 
-        # Create credit def
         r = client.post('/platform/credit', json={
             'api_credit_group': credit_group,
             'api_key': api_key_val,
@@ -76,14 +66,12 @@ def test_rest_gateway_with_credits_and_header_injection(client):
         })
         assert r.status_code in (200, 201), r.text
 
-        # Give admin credits
         r = client.post('/platform/credit/admin', json={
             'username': 'admin',
             'users_credits': { credit_group: { 'tier_name': 'default', 'available_credits': 2 } }
         })
         assert r.status_code in (200, 201), r.text
 
-        # API that requires credits
         r = client.post('/platform/api', json={
             'api_name': api_name,
             'api_version': api_version,
@@ -99,7 +87,6 @@ def test_rest_gateway_with_credits_and_header_injection(client):
         })
         assert r.status_code in (200, 201), r.text
 
-        # Endpoint definition for POST /echo
         r = client.post('/platform/endpoint', json={
             'api_name': api_name,
             'api_version': api_version,
@@ -109,18 +96,15 @@ def test_rest_gateway_with_credits_and_header_injection(client):
         })
         assert r.status_code in (200, 201), r.text
 
-        # Subscribe admin
         r = client.post('/platform/subscription/subscribe', json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'})
         assert r.status_code in (200, 201), r.text
 
-        # Call gateway and verify upstream saw x-api-key header
         r = client.post(f'/api/rest/{api_name}/{api_version}/echo', json={'ping': 'pong'})
         assert r.status_code == 200, r.text
         data = r.json().get('response', r.json())
         headers = {k.lower(): v for k, v in (data.get('headers') or {}).items()}
         assert headers.get('x-api-key') == api_key_val
 
-        # Credits should have decremented from 2 to 1 for admin
         r = client.get('/platform/credit/admin')
         assert r.status_code == 200
         credits = r.json().get('response', r.json()).get('users_credits', {})

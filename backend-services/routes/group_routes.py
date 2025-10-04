@@ -35,7 +35,6 @@ Response:
 {}
 """
 
-
 @group_router.post('',
     description='Add group',
     response_model=ResponseModel,
@@ -93,7 +92,6 @@ Request:
 Response:
 {}
 """
-
 
 @group_router.put('/{group_name}',
     description='Update group',
@@ -153,7 +151,6 @@ Response:
 {}
 """
 
-
 @group_router.delete('/{group_name}',
     description='Delete group',
     response_model=ResponseModel,
@@ -212,7 +209,6 @@ Response:
 {}
 """
 
-
 @group_router.get('/all',
     description='Get all groups',
     response_model=List[GroupModelResponse]
@@ -249,7 +245,6 @@ Request:
 Response:
 {}
 """
-
 
 @group_router.get('/{group_name}',
     description='Get group',

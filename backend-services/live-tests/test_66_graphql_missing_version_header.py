@@ -4,7 +4,6 @@ from config import ENABLE_GRAPHQL
 
 pytestmark = [pytest.mark.graphql]
 
-
 def test_graphql_missing_version_header_returns_400(client):
     if not ENABLE_GRAPHQL:
         pytest.skip('GraphQL disabled')
@@ -40,4 +39,3 @@ def test_graphql_missing_version_header_returns_400(client):
 
     r = client.post(f'/api/graphql/{api_name}', json={'query': '{ ok }'})
     assert r.status_code == 400
-

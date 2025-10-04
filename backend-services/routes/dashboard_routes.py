@@ -31,7 +31,6 @@ Response:
 {}
 """
 
-
 @dashboard_router.get('',
     description='Get dashboard data',
     response_model=ResponseModel

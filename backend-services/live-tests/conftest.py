@@ -10,24 +10,20 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from config import BASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD, require_env, STRICT_HEALTH
 from client import LiveClient
 
-
 @pytest.fixture(scope='session')
 def base_url() -> str:
     require_env()
     return BASE_URL
 
-
 @pytest.fixture(scope='session')
 def client(base_url) -> LiveClient:
     c = LiveClient(base_url)
-    # Wait for backend health
     deadline = time.time() + 30
     last_err = None
     while time.time() < deadline:
         try:
             r = c.get('/api/status')
             if r.status_code == 200:
-                # Optional strict health gate: require status online/healthy
                 if STRICT_HEALTH:
                     try:
                         j = r.json()
@@ -49,11 +45,9 @@ def client(base_url) -> LiveClient:
     else:
         pytest.fail(f'Doorman backend not healthy at {base_url}/api/status: {last_err}')
 
-    # Login as admin
     auth = c.login(ADMIN_EMAIL, ADMIN_PASSWORD)
     assert 'access_token' in auth.get('response', auth), 'login did not return access_token'
     return c
-
 
 @pytest.fixture(autouse=True)
 def ensure_session_and_relaxed_limits(client: LiveClient):
@@ -70,7 +64,6 @@ def ensure_session_and_relaxed_limits(client: LiveClient):
     except Exception:
         from config import ADMIN_EMAIL, ADMIN_PASSWORD
         client.login(ADMIN_EMAIL, ADMIN_PASSWORD)
-    # Relax rate limits to avoid interference between tests
     try:
         client.put('/platform/user/admin', json={
             'rate_limit_duration': 1000000,
@@ -83,7 +76,6 @@ def ensure_session_and_relaxed_limits(client: LiveClient):
         })
     except Exception:
         pass
-
 
 def pytest_addoption(parser):
     parser.addoption('--graph', action='store_true', default=False, help='Force GraphQL tests')

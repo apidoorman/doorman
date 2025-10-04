@@ -2,12 +2,10 @@ import time
 import random
 import string
 
-
 def _rand_user() -> tuple[str, str, str]:
     ts = int(time.time())
     uname = f"usr_{ts}_{random.randint(1000,9999)}"
     email = f"{uname}@example.com"
-    # Strong password per platform rules
     upp = random.choice(string.ascii_uppercase)
     low = ''.join(random.choices(string.ascii_lowercase, k=8))
     dig = ''.join(random.choices(string.digits, k=4))
@@ -16,9 +14,7 @@ def _rand_user() -> tuple[str, str, str]:
     pwd = ''.join(random.sample(upp + low + dig + spc + tail, len(upp + low + dig + spc + tail)))
     return uname, email, pwd
 
-
 def test_role_permission_blocks_api_management(client):
-    # Create a viewer role (no manage_apis)
     role_name = f"viewer_{int(time.time())}"
     r = client.post('/platform/role', json={
         'role_name': role_name,
@@ -27,7 +23,6 @@ def test_role_permission_blocks_api_management(client):
     })
     assert r.status_code in (200, 201), r.text
 
-    # Create a user with that role
     uname, email, pwd = _rand_user()
     r = client.post('/platform/user', json={
         'username': uname,
@@ -39,12 +34,10 @@ def test_role_permission_blocks_api_management(client):
     })
     assert r.status_code in (200, 201), r.text
 
-    # Login as that user
     from client import LiveClient
     user_client = LiveClient(client.base_url)
     user_client.login(email, pwd)
 
-    # Attempt to create an API should be forbidden with API007
     api_name = f"nope-{int(time.time())}"
     r = user_client.post('/platform/api', json={
         'api_name': api_name,
@@ -60,7 +53,6 @@ def test_role_permission_blocks_api_management(client):
     data = body.get('response', body)
     assert (data.get('error_code') or body.get('error_code')) in ('API007', 'API008')
 
-    # Cleanup (as admin)
     client.delete(f'/platform/user/{uname}')
     client.delete(f'/platform/role/{role_name}')
 import pytest

@@ -1,7 +1,6 @@
 import time
 from servers import start_rest_echo_server
 
-
 def test_user_specific_credit_api_key_overrides_group_key(client):
     srv = start_rest_echo_server()
     try:
@@ -12,7 +11,6 @@ def test_user_specific_credit_api_key_overrides_group_key(client):
         group_key = 'GROUP_KEY_ABC'
         user_key = 'USER_KEY_DEF'
 
-        # Create credit def with group key
         r = client.post('/platform/credit', json={
             'api_credit_group': group,
             'api_key': group_key,
@@ -21,14 +19,12 @@ def test_user_specific_credit_api_key_overrides_group_key(client):
         })
         assert r.status_code in (200, 201), r.text
 
-        # Assign to admin with a user-specific API key
         r = client.post('/platform/credit/admin', json={
             'username': 'admin',
             'users_credits': { group: { 'tier_name': 'default', 'available_credits': 3, 'user_api_key': user_key } }
         })
         assert r.status_code in (200, 201), r.text
 
-        # Create API that uses credits
         r = client.post('/platform/api', json={
             'api_name': api_name,
             'api_version': api_version,
@@ -52,7 +48,6 @@ def test_user_specific_credit_api_key_overrides_group_key(client):
         assert r.status_code in (200, 201), r.text
         client.post('/platform/subscription/subscribe', json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'})
 
-        # Call gateway and confirm upstream saw user-specific key (not group key)
         r = client.get(f'/api/rest/{api_name}/{api_version}/whoami')
         assert r.status_code == 200
         data = r.json().get('response', r.json())
@@ -68,4 +63,3 @@ def test_user_specific_credit_api_key_overrides_group_key(client):
         except Exception:
             pass
         srv.stop()
-

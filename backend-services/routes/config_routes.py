@@ -57,7 +57,6 @@ Response:
 {}
 """
 
-
 @config_router.get('/config/export/all',
     description='Export all platform configuration (APIs, Endpoints, Roles, Groups, Routings)',
     response_model=ResponseModel,
@@ -88,7 +87,6 @@ Request:
 Response:
 {}
 """
-
 
 @config_router.get('/config/export/apis',
     description='Export APIs (optionally a single API with its endpoints)',
@@ -131,7 +129,6 @@ Response:
 {}
 """
 
-
 @config_router.get('/config/export/roles', description='Export Roles', response_model=ResponseModel)
 
 async def export_roles(request: Request, role_name: Optional[str] = None):
@@ -162,7 +159,6 @@ Request:
 Response:
 {}
 """
-
 
 @config_router.get('/config/export/groups', description='Export Groups', response_model=ResponseModel)
 
@@ -195,7 +191,6 @@ Response:
 {}
 """
 
-
 @config_router.get('/config/export/routings', description='Export Routings', response_model=ResponseModel)
 
 async def export_routings(request: Request, client_key: Optional[str] = None):
@@ -226,7 +221,6 @@ Request:
 Response:
 {}
 """
-
 
 @config_router.get('/config/export/endpoints',
     description='Export endpoints (optionally filter by api_name/api_version)',
@@ -340,7 +334,6 @@ Request:
 Response:
 {}
 """
-
 
 @config_router.post('/config/import',
     description='Import platform configuration (any subset of apis, endpoints, roles, groups, routings)',

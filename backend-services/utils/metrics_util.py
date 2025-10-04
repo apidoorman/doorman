@@ -112,7 +112,6 @@ class MetricsStore:
         series = []
 
         if group == 'day':
-            # Aggregate per UTC day
             from collections import defaultdict
             day_map: Dict[int, Dict[str, float]] = defaultdict(lambda: {
                 'count': 0,
@@ -129,7 +128,6 @@ class MetricsStore:
                 d['total_ms'] += b.total_ms
                 d['bytes_in'] += b.bytes_in
                 d['bytes_out'] += b.bytes_out
-            # Build series
             for day_ts, d in day_map.items():
                 avg_ms = (d['total_ms'] / d['count']) if d['count'] else 0.0
                 series.append({
@@ -141,7 +139,6 @@ class MetricsStore:
                     'bytes_out': int(d['bytes_out']),
                 })
         else:
-            # Default per-minute series
             for b in buckets:
                 avg_ms = (b.total_ms / b.count) if b.count else 0.0
                 series.append({
@@ -153,7 +150,6 @@ class MetricsStore:
                     'bytes_out': b.bytes_out,
                 })
 
-        # Sort series by timestamp
         reverse = (str(sort).lower() == 'desc')
         try:
             series.sort(key=lambda x: x.get('timestamp', 0), reverse=reverse)

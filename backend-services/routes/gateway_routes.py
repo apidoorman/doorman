@@ -43,7 +43,6 @@ Response:
 {}
 """
 
-
 @gateway_router.api_route('/status', methods=['GET'],
     description='Check if the gateway is online and healthy',
     response_model=ResponseModel)
@@ -55,7 +54,6 @@ async def status():
     try:
         mongodb_status = await check_mongodb()
         redis_status = await check_redis()
-        # The following utilities are synchronous; do not await
         memory_usage = get_memory_usage()
         active_connections = get_active_connections()
         uptime = get_uptime()
@@ -183,14 +181,11 @@ async def gateway(request: Request, path: str):
         if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
             api_key = doorman_cache.get_cache('api_id_cache', f'/{parts[0]}/{parts[1]}')
             resolved_api = await api_util.get_api(api_key, f'/{parts[0]}/{parts[1]}')
-            # Early endpoint existence check to return 404 before auth when missing
             if resolved_api:
                 try:
-                    # Enforce per-API IP policy first
                     enforce_api_ip_policy(request, resolved_api)
                 except HTTPException as e:
                     return process_response(ResponseModel(status_code=e.status_code, error_code=e.detail, error_message='IP restricted').dict(), 'rest')
-                # Build endpoint URI and verify it exists for this API/method
                 endpoint_uri = '/' + '/'.join(parts[2:]) if len(parts) > 2 else '/'
                 try:
                     endpoints = await api_util.get_api_endpoints(resolved_api.get('api_id'))
@@ -205,7 +200,6 @@ async def gateway(request: Request, path: str):
                             error_message='Endpoint does not exist for the requested API'
                         ).dict(), 'rest')
                 except Exception:
-                    # If endpoint introspection fails, fall through to service handler
                     pass
             api_public = bool(resolved_api.get('api_public')) if resolved_api else False
             api_auth_required = bool(resolved_api.get('api_auth_required')) if resolved_api and resolved_api.get('api_auth_required') is not None else True

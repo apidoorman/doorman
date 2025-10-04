@@ -5,7 +5,6 @@ import pytest
 
 pytestmark = [pytest.mark.security]
 
-
 def _mk_user_payload(role_name: str) -> tuple[str, str, str, dict]:
     ts = int(time.time())
     uname = f"min_{ts}_{random.randint(1000,9999)}"
@@ -21,9 +20,7 @@ def _mk_user_payload(role_name: str) -> tuple[str, str, str, dict]:
     }
     return uname, email, pwd, payload
 
-
 def test_negative_permissions_for_logs_and_config(client):
-    # Create minimal role with no view_logs/export/manage
     role_name = f"minrole_{int(time.time())}"
     r = client.post('/platform/role', json={
         'role_name': role_name,
@@ -39,17 +36,12 @@ def test_negative_permissions_for_logs_and_config(client):
     u = LiveClient(client.base_url)
     u.login(email, pwd)
 
-    # Logs should be 403
     r = u.get('/platform/logging/logs')
     assert r.status_code == 403
-    # Config export should be 403
     r = u.get('/platform/config/export/all')
     assert r.status_code == 403
-    # Routing list should be 403
     r = u.get('/platform/routing/all')
     assert r.status_code == 403
 
-    # Cleanup
     client.delete(f'/platform/user/{uname}')
     client.delete(f'/platform/role/{role_name}')
-

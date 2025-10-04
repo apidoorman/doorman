@@ -83,13 +83,11 @@ class UserService:
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
-        # Augment with bandwidth usage info
         try:
             limit = user.get('bandwidth_limit_bytes')
             if limit and int(limit) > 0:
                 window = user.get('bandwidth_limit_window') or 'day'
                 used = int(get_current_usage(username, window))
-                # compute reset epoch (UTC)
                 mapping = {
                     'second': 1,
                     'minute': 60,
@@ -152,7 +150,6 @@ class UserService:
         Create a new user.
         """
         logger.info(f'{request_id} | Creating user: {data.username}')
-        # Enforce maximum custom attributes
         try:
             if data.custom_attributes is not None and len(data.custom_attributes.keys()) > 10:
                 logger.error(f"{request_id} | User creation failed with code USR016: Too many custom attributes")
@@ -165,7 +162,6 @@ class UserService:
                     error_message='Maximum 10 custom attributes allowed. Please replace an existing one.'
                 ).dict()
         except Exception:
-            # If custom_attributes isn't a dict of keys
             logger.error(f"{request_id} | User creation failed with code USR016: Invalid custom attributes payload")
             return ResponseModel(
                 status_code=400,
@@ -262,7 +258,6 @@ class UserService:
         else:
             doorman_cache.delete_cache('user_cache', username)
         non_null_update_data = {k: v for k, v in update_data.dict().items() if v is not None}
-        # Enforce maximum custom attributes when updating
         if 'custom_attributes' in non_null_update_data:
             try:
                 if non_null_update_data['custom_attributes'] is not None and len(non_null_update_data['custom_attributes'].keys()) > 10:

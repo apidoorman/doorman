@@ -2,13 +2,11 @@ from __future__ import annotations
 import requests
 from urllib.parse import urljoin
 
-
 class LiveClient:
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip('/') + '/'
         self.sess = requests.Session()
 
-    # Cookie helpers
     def _get_csrf(self) -> str | None:
         for c in self.sess.cookies:
             if c.name == 'csrf_token':
@@ -24,7 +22,6 @@ class LiveClient:
             out['X-CSRF-Token'] = csrf
         return out
 
-    # HTTP methods
     def get(self, path: str, **kwargs):
         url = urljoin(self.base_url, path.lstrip('/'))
         headers = self._headers_with_csrf(kwargs.pop('headers', None))
@@ -50,14 +47,11 @@ class LiveClient:
         hdrs = self._headers_with_csrf(headers)
         return self.sess.options(url, headers=hdrs, allow_redirects=False, **kwargs)
 
-    # Auth helpers
     def login(self, email: str, password: str):
         r = self.post('/platform/authorization', json={'email': email, 'password': password})
         r.raise_for_status()
-        # CSRF and access_token_cookie are set via Set-Cookie
         return r.json()
 
     def logout(self):
         r = self.post('/platform/authorization/invalidate', json={})
-        # 200/204 expected; ignore errors
         return r

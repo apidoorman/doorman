@@ -14,7 +14,6 @@ export function AccessDeniedNotification({ requiredPermission }: AccessDeniedNot
   useEffect(() => {
     if (requiredPermission && !canAccessPage(requiredPermission)) {
       setShowNotification(true)
-      // Auto-hide after 5 seconds
       const timer = setTimeout(() => setShowNotification(false), 5000)
       return () => clearTimeout(timer)
     }

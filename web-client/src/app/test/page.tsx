@@ -9,7 +9,6 @@ export default function TestPage() {
   const [cookies, setCookies] = useState<string>('')
 
   useEffect(() => {
-    // Set cookies in useEffect to avoid SSR issues
     setCookies(document.cookie)
 
     const token = getTokenFromCookie()

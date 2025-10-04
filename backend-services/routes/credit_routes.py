@@ -34,7 +34,6 @@ Response:
 {}
 """
 
-
 @credit_router.get('/defs',
     description='List credit definitions',
     response_model=ResponseModel,
@@ -79,7 +78,6 @@ Response:
 {}
 """
 
-
 @credit_router.get('/defs/{api_credit_group}',
     description='Get a credit definition',
     response_model=ResponseModel,
@@ -120,7 +118,6 @@ Request:
 Response:
 {}
 """
-
 
 @credit_router.post('',
     description='Create a credit definition',
@@ -180,7 +177,6 @@ Response:
 {}
 """
 
-
 @credit_router.put('/{api_credit_group}',
     description='Update a credit definition',
     response_model=ResponseModel,
@@ -238,7 +234,6 @@ Request:
 Response:
 {}
 """
-
 
 @credit_router.delete('/{api_credit_group}',
     description='Delete a credit definition',
@@ -298,7 +293,6 @@ Response:
 {}
 """
 
-
 @credit_router.post('/{username}',
     description='Add credits for a user',
     response_model=ResponseModel,
@@ -357,7 +351,6 @@ Response:
 {}
 """
 
-
 @credit_router.get('/all',
     description='Get all user credits',
     response_model=List[UserCreditModel]
@@ -401,7 +394,6 @@ Request:
 Response:
 {}
 """
-
 
 @credit_router.get('/{username}',
     description='Get credits for a user',

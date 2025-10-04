@@ -2,7 +2,6 @@ import time
 from servers import start_rest_echo_server
 import requests
 
-
 def test_public_api_no_auth_required(client):
     srv = start_rest_echo_server()
     try:
@@ -28,7 +27,6 @@ def test_public_api_no_auth_required(client):
             'endpoint_description': 'status'
         })
         assert r.status_code in (200, 201)
-        # Unauthenticated session
         s = requests.Session()
         url = client.base_url.rstrip('/') + f'/api/rest/{api_name}/{api_version}/status'
         r = s.get(url)
@@ -43,7 +41,6 @@ def test_public_api_no_auth_required(client):
         except Exception:
             pass
         srv.stop()
-
 
 def test_auth_not_required_but_not_public_allows_unauthenticated(client):
     srv = start_rest_echo_server()
@@ -71,7 +68,6 @@ def test_auth_not_required_but_not_public_allows_unauthenticated(client):
             'endpoint_description': 'ping'
         })
         assert r.status_code in (200, 201)
-        # Unauthenticated allowed
         import requests
         s = requests.Session()
         url = client.base_url.rstrip('/') + f'/api/rest/{api_name}/{api_version}/ping'

@@ -51,7 +51,6 @@ async def authed_client():
                 )
     except Exception:
         pass
-    # Ensure admin cannot hit bandwidth/rate/throttle limits in unit tests
     try:
         await client.put('/platform/user/admin', json={
             'bandwidth_limit_bytes': 0,

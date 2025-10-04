@@ -35,7 +35,6 @@ Response:
 {}
 """
 
-
 @role_router.post('',
     description='Add role',
     response_model=ResponseModel,
@@ -106,7 +105,6 @@ Request:
 Response:
 {}
 """
-
 
 @role_router.put('/{role_name}',
     description='Update role',
@@ -184,7 +182,6 @@ Response:
 {}
 """
 
-
 @role_router.delete('/{role_name}',
     description='Delete role',
     response_model=ResponseModel,
@@ -251,7 +248,6 @@ Response:
 {}
 """
 
-
 @role_router.get('/all',
     description='Get all roles',
     response_model=List[RoleModelResponse]
@@ -306,7 +302,6 @@ Request:
 Response:
 {}
 """
-
 
 @role_router.get('/{role_name}',
     description='Get role',

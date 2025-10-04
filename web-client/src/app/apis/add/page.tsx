@@ -32,9 +32,7 @@ const AddApiPage = () => {
     api_auth_required: true,
     api_ip_mode: 'allow_all' as 'allow_all' | 'whitelist',
     api_trust_x_forwarded_for: false,
-    // Frontend-only preference; stored in localStorage per API
     use_protobuf: false,
-    // kept for future use; backend ignores unknown fields
     validation_enabled: false
   })
   const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
@@ -74,7 +72,6 @@ const AddApiPage = () => {
     setError(null)
 
     try {
-      // Trim empty optional fields to keep payload clean
       const payload: any = { ...formData }
       payload.api_ip_whitelist = ipWhitelistText.split(/\r?\n|,/).map((s:string) => s.trim()).filter(Boolean)
       payload.api_ip_blacklist = ipBlacklistText.split(/\r?\n|,/).map((s:string) => s.trim()).filter(Boolean)
@@ -86,7 +83,6 @@ const AddApiPage = () => {
         payload.api_allowed_groups = ['ALL']
       }
       await postJson(`${SERVER_URL}/platform/api`, payload)
-      // Persist frontend-only preference for this API
       try {
         const { setUseProtobuf } = await import('@/utils/proto')
         setUseProtobuf(formData.api_name, formData.api_version, !!formData.use_protobuf)
@@ -109,7 +105,6 @@ const AddApiPage = () => {
         return
       }
     }
-    // Guard: Public + Credits enabled risk confirmation
     if (name === 'api_public' && (e.target as HTMLInputElement).checked && (formData as any).api_credits_enabled) {
       setPendingPubCredsField({ field: 'api_public', value: true })
       setPubCredsConfirmOpen(true)

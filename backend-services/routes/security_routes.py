@@ -32,7 +32,6 @@ Response:
 {}
 """
 
-
 @security_router.get('/security/settings',
     description='Get security settings',
     response_model=ResponseModel,
@@ -54,7 +53,6 @@ async def get_security_settings(request: Request):
                 error_message='You do not have permission to view security settings'
             ).dict(), 'rest')
         settings = await load_settings()
-        # Augment with client IP info for UI safety checks
         try:
             client_ip = request.client.host if request.client else None
             xff = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
@@ -69,7 +67,6 @@ async def get_security_settings(request: Request):
             settings_with_mode['memory_only'] = bool(database.memory_only)
         except Exception:
             settings_with_mode['memory_only'] = False
-        # Indicate if localhost bypass is controlled by env
         try:
             import os
             env_val = os.getenv('LOCAL_HOST_IP_BYPASS')
@@ -79,7 +76,6 @@ async def get_security_settings(request: Request):
             settings_with_mode['allow_localhost_bypass_locked'] = locked
         except Exception:
             settings_with_mode['allow_localhost_bypass_locked'] = False
-        # Security warnings: XFF enabled but no trusted proxies
         try:
             warnings = []
             if settings_with_mode.get('trust_x_forwarded_for') and not (settings_with_mode.get('xff_trusted_proxies') or []):
@@ -114,7 +110,6 @@ Request:
 Response:
 {}
 """
-
 
 @security_router.put('/security/settings',
     description='Update security settings',
@@ -171,7 +166,6 @@ Request:
 Response:
 {}
 """
-
 
 @security_router.post('/security/restart',
     description='Schedule a safe gateway restart (PID-based)',

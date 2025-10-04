@@ -44,7 +44,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { isAuthenticated, hasUIAccess, user, permissions, logout } = useAuth()
   const router = useRouter()
 
-  // Redirect to login if not authenticated (except for login page)
   useEffect(() => {
     if (pathname !== '/login' && (!isAuthenticated || !hasUIAccess)) {
       console.log('Layout - Redirecting to login:', { pathname, isAuthenticated, hasUIAccess })
@@ -52,10 +51,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     }
   }, [pathname, isAuthenticated, hasUIAccess, router])
 
-  // Filter menu items based on user permissions
   const filteredMenuItems = menuItems.filter(item => {
     if (!item.permission) return true
-    // Hide Demo Seed unless user is admin
     if (item.href === '/demo' && user?.role !== 'admin') return false
     return permissions?.[item.permission] || false
   })
@@ -76,7 +73,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const handleLogout = () => {
     localStorage.clear()
     sessionStorage.clear()
-    // HttpOnly cookie; server-side invalidate via endpoint if needed
     document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
     window.location.href = '/login'
   }

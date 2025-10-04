@@ -21,7 +21,6 @@ const LoginPage = () => {
     document.documentElement.classList.toggle('dark', savedTheme === 'dark')
   }, [])
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
       router.push('/dashboard')
@@ -41,7 +40,6 @@ const LoginPage = () => {
         setIsLoading(false)
         return
       }
-      // Verify UI access; if missing, show an error and invalidate session
       try {
         const me = await fetch(`${SERVER_URL}/platform/user/me`, { credentials: 'include' })
         const meJson = await me.json().catch(() => ({}))

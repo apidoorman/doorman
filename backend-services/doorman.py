@@ -29,6 +29,34 @@ import time
 import asyncio
 import uuid
 
+# Compatibility guard: ensure aiohttp is a Python 3.13–compatible version before
+# downstream modules import it (e.g., gateway_service). This avoids a cryptic
+# regex error inside older aiohttp builds on 3.13.
+try:
+    if sys.version_info >= (3, 13):
+        try:
+            from importlib.metadata import version, PackageNotFoundError  # type: ignore
+        except Exception:  # pragma: no cover
+            version = None  # type: ignore
+            PackageNotFoundError = Exception  # type: ignore
+        if version is not None:
+            try:
+                v = version('aiohttp')
+                parts = [int(p) for p in (v.split('.')[:3] + ['0', '0'])[:3] if p.isdigit() or p.isnumeric()]
+                while len(parts) < 3:
+                    parts.append(0)
+                if tuple(parts) < (3, 10, 10):
+                    raise SystemExit(
+                        f"Incompatible aiohttp {v} detected on Python {sys.version.split()[0]}. "
+                        "Please upgrade to aiohttp>=3.10.10 (pip install -U aiohttp) or run with Python 3.11."
+                    )
+            except PackageNotFoundError:
+                pass
+            except Exception:
+                pass
+except Exception:
+    pass
+
 # Internal imports
 from models.response_model import ResponseModel
 from utils.cache_manager_util import cache_manager
@@ -95,7 +123,6 @@ async def app_lifespan(app: FastAPI):
     except Exception as e:
         gateway_logger.error(f'Failed to initialize security settings auto-save: {e}')
 
-    # Post-settings startup checks and warnings
     try:
         settings = get_cached_settings()
         if bool(settings.get('trust_x_forwarded_for')) and not (settings.get('xff_trusted_proxies') or []):
@@ -110,7 +137,6 @@ async def app_lifespan(app: FastAPI):
             path = getattr(route, 'path', '')
             if not path.startswith(('/platform', '/api')):
                 continue
-            # Skip non-documented and preflight-only routes
             include = getattr(route, 'include_in_schema', True)
             methods = set(getattr(route, 'methods', set()) or [])
             if not include or 'OPTIONS' in methods:
@@ -311,7 +337,6 @@ async def request_id_middleware(request: Request, call_next):
             request.state.request_id = rid
         except Exception:
             pass
-        # Log entry with IP and request ID
         try:
             settings = get_cached_settings()
             trust_xff = bool(settings.get('trust_x_forwarded_for'))
@@ -497,7 +522,6 @@ async def ip_filter_middleware(request: Request, call_next):
         client_ip = _policy_get_client_ip(request, trust_xff)
         xff_hdr = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
 
-        # Optional: Never lock out localhost for direct requests without forwarding headers
         try:
             import os, ipaddress
             settings = get_cached_settings()
@@ -533,7 +557,6 @@ async def ip_filter_middleware(request: Request, call_next):
 @doorman.middleware('http')
 async def metrics_middleware(request: Request, call_next):
     start = asyncio.get_event_loop().time()
-    # Capture request bytes in via Content-Length header if available
     def _parse_len(val: str | None) -> int:
         try:
             return int(val) if val is not None else 0
@@ -576,7 +599,6 @@ async def metrics_middleware(request: Request, call_next):
                 elif p.startswith('/api/soap/'):
                     seg = p.rsplit('/', 1)[-1] or 'unknown'
                     api_key = f'soap:{seg}'
-                # Try to compute response bytes out
                 clen = 0
                 try:
                     clen = _parse_len(getattr(response, 'headers', {}).get('content-length'))
@@ -591,7 +613,6 @@ async def metrics_middleware(request: Request, call_next):
                 try:
                     if username:
                         from utils.bandwidth_util import add_usage, _get_user
-                        # Only track if user has a limit configured to avoid extra writes
                         u = _get_user(username)
                         if u and u.get('bandwidth_limit_bytes'):
                             add_usage(username, int(bytes_in) + int(clen), u.get('bandwidth_limit_window') or 'day')

@@ -1,14 +1,12 @@
 import time
 from servers import start_soap_echo_server
 
-
 def test_soap_gateway_basic_flow(client):
     srv = start_soap_echo_server()
     try:
         api_name = f'soap-demo-{int(time.time())}'
         api_version = 'v1'
 
-        # Create API (SOAP routed via /soap/{path}) but API type still REST in config
         r = client.post('/platform/api', json={
             'api_name': api_name,
             'api_version': api_version,
@@ -22,7 +20,6 @@ def test_soap_gateway_basic_flow(client):
         })
         assert r.status_code in (200, 201), r.text
 
-        # Endpoint for SOAP path (POST /soap)
         r = client.post('/platform/endpoint', json={
             'api_name': api_name,
             'api_version': api_version,
@@ -32,11 +29,9 @@ def test_soap_gateway_basic_flow(client):
         })
         assert r.status_code in (200, 201)
 
-        # Subscribe admin
         r = client.post('/platform/subscription/subscribe', json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'})
         assert r.status_code in (200, 201)
 
-        # Call gateway SOAP
         body = """
         <?xml version="1.0" encoding="UTF-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">

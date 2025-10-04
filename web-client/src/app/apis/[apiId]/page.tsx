@@ -97,7 +97,6 @@ const ApiDetailPage = () => {
   const toast = useToast()
   const [useProtobuf, setUseProtobufState] = useState<boolean>(false)
 
-  // Proto management state and helpers
   type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean }
   const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false })
 
@@ -203,7 +202,6 @@ const ApiDetailPage = () => {
         setLoading(false)
       }
     } else {
-      // Fallback: resolve API by id from server list
       (async () => {
         try {
           const data = await fetchJson(`${SERVER_URL}/platform/api/all?page=1&page_size=1000`)
@@ -252,7 +250,6 @@ const ApiDetailPage = () => {
     }
   }, [apiId])
 
-  // Fetch client IP info for warning checks
   useEffect(() => {
     (async () => {
       try {
@@ -287,7 +284,6 @@ const ApiDetailPage = () => {
         if (!response.ok) throw new Error(data.error_message || 'Failed to load endpoints')
         setEndpoints(data.endpoints || [])
       } catch (e) {
-        // endpoints optional; do not hard fail page
         console.warn('Failed to load endpoints for API', e)
       }
     }
@@ -353,7 +349,6 @@ const ApiDetailPage = () => {
       if (typeof ipBlacklistText === 'string') payload.api_ip_blacklist = ipBlacklistText.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
       await putJson(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, payload)
 
-      // Refresh from server to get the latest canonical data
       try {
         if (!api) throw new Error('API context missing for refresh')
         const name = (api as any).api_name as string
@@ -362,12 +357,10 @@ const ApiDetailPage = () => {
         setApi(refreshedApi)
         sessionStorage.setItem('selectedApi', JSON.stringify(refreshedApi))
       } catch (e) {
-        // Fallback: optimistically merge editData into current API to avoid a confusing error on first save
         const merged = { ...(api as any), ...(editData as any) }
         setApi(merged as any)
         sessionStorage.setItem('selectedApi', JSON.stringify(merged))
       }
-      // Persist current protobuf preference (use target name/version)
       try {
         const { setUseProtobuf } = await import('@/utils/proto')
         setUseProtobuf(targetName, targetVersion, useProtobuf)
@@ -490,7 +483,6 @@ const ApiDetailPage = () => {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error_message || 'Failed to save endpoint servers')
-      // refresh endpoints
       const refreshed = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
         credentials: 'include',
         headers: {
@@ -544,7 +536,6 @@ const ApiDetailPage = () => {
       let name = (api as any)?.api_name as string | undefined
       let version = (api as any)?.api_version as string | undefined
       if (!name || !version) {
-        // Fallback: resolve by id
         try {
           const data = await fetchJson(`${SERVER_URL}/platform/api/all?page=1&page_size=1000`)
           const list = Array.isArray(data) ? data : (data as any).apis || (data as any).response?.apis || []

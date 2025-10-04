@@ -41,7 +41,6 @@ const AuthorizationsPage = () => {
       let userList: User[] = Array.isArray(data)
         ? (data as User[])
         : (((data as any).users || (data as any).response?.users || []) as User[])
-      // Ensure the active user is first in the list
       if (currentUser?.username) {
         userList = [...userList]
         const idx = userList.findIndex((u: User) => u.username === currentUser.username)

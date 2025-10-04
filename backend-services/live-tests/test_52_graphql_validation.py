@@ -5,10 +5,9 @@ from config import ENABLE_GRAPHQL
 
 pytestmark = pytest.mark.skipif(not ENABLE_GRAPHQL, reason='GraphQL validation test disabled (set DOORMAN_TEST_GRAPHQL=1)')
 
-
 def test_graphql_validation_blocks_invalid_variables(client):
     try:
-        import uvicorn  # noqa: F401
+        import uvicorn
         from ariadne import gql, make_executable_schema, QueryType
         from ariadne.asgi import GraphQL
     except Exception as e:
@@ -34,7 +33,6 @@ def test_graphql_validation_blocks_invalid_variables(client):
 
     api_name = f'gqlval-{int(time.time())}'
     api_version = 'v1'
-    # Create API + endpoint
     client.post('/platform/api', json={
         'api_name': api_name, 'api_version': api_version,
         'api_description': 'gql val', 'api_allowed_roles': ['admin'], 'api_allowed_groups': ['ALL'],
@@ -46,11 +44,9 @@ def test_graphql_validation_blocks_invalid_variables(client):
     })
     client.post('/platform/subscription/subscribe', json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'})
 
-    # Retrieve endpoint_id to attach validation
     r = client.get(f'/platform/endpoint/POST/{api_name}/{api_version}/graphql')
     ep = r.json().get('response', r.json()); endpoint_id = ep.get('endpoint_id'); assert endpoint_id
 
-    # Validation: operation name must be HelloOp; variables x must be string min length 2
     schema = {
         'validation_schema': {
             'HelloOp.x': { 'required': True, 'type': 'string', 'min': 2 }
@@ -61,13 +57,10 @@ def test_graphql_validation_blocks_invalid_variables(client):
     })
     assert r.status_code in (200, 201)
 
-    # Invalid: too short
     q = {'query': 'query HelloOp($x: String!) { hello(name: $x) }', 'variables': {'x': 'A'}}
     r = client.post(f'/api/graphql/{api_name}', json=q, headers={'X-API-Version': api_version})
     assert r.status_code == 400
 
-    # Valid
     q['variables'] = {'x': 'Alan'}
     r = client.post(f'/api/graphql/{api_name}', json=q, headers={'X-API-Version': api_version})
     assert r.status_code == 200
-

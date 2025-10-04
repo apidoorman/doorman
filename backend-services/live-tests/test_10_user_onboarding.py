@@ -3,7 +3,6 @@ import time
 import random
 import string
 
-
 def _strong_password() -> str:
     upp = random.choice(string.ascii_uppercase)
     low = ''.join(random.choices(string.ascii_lowercase, k=8))
@@ -13,13 +12,11 @@ def _strong_password() -> str:
     raw = upp + low + dig + spc + tail
     return ''.join(random.sample(raw, len(raw)))
 
-
 def test_user_onboarding_lifecycle(client):
     username = f"user_{int(time.time())}_{random.randint(1000,9999)}"
     email = f"{username}@example.com"
     pwd = _strong_password()
 
-    # Create user (as admin)
     payload = {
         'username': username,
         'email': email,
@@ -31,27 +28,22 @@ def test_user_onboarding_lifecycle(client):
     r = client.post('/platform/user', json=payload)
     assert r.status_code in (200, 201), r.text
 
-    # Verify fetch by username
     r = client.get(f'/platform/user/{username}')
     assert r.status_code == 200
     data = r.json().get('response', r.json())
     assert data.get('email') == email
     assert data.get('ui_access') is False
 
-    # Grant UI access
     r = client.put(f'/platform/user/{username}', json={'ui_access': True})
     assert r.status_code in (200, 204), r.text
 
-    # Change password
     new_pwd = _strong_password()
     r = client.put(f'/platform/user/{username}/update-password', json={
         'old_password': pwd,
         'new_password': new_pwd
     })
-    # In many setups admins can change without old_password; allow both
     assert r.status_code in (200, 204, 400), r.text
 
-    # Login as the new user
     from client import LiveClient
     user_client = LiveClient(client.base_url)
     auth = user_client.login(email, new_pwd if r.status_code in (200, 204) else pwd)
@@ -62,7 +54,6 @@ def test_user_onboarding_lifecycle(client):
     assert me.get('username') == username
     assert me.get('ui_access') is True
 
-    # Cleanup: delete the user
     r = client.delete(f'/platform/user/{username}')
     assert r.status_code in (200, 204), r.text
 import pytest

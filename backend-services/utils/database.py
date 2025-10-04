@@ -102,7 +102,6 @@ class Database:
                     'active': True
                 })
 
-            # Ensure startup admin has UI access enabled
             try:
                 adm = users.find_one({'username': 'admin'})
                 if adm and adm.get('ui_access') is not True:
@@ -165,7 +164,6 @@ class Database:
                     'throttle_queue_limit': 1,
                     'ui_access': True
                 })
-        # Ensure startup admin has UI access even on existing DBs
         try:
             adm = self.db.users.find_one({'username': 'admin'})
             if adm and adm.get('ui_access') is not True:

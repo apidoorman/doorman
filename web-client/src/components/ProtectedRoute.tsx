@@ -22,7 +22,6 @@ export function ProtectedRoute({
   useEffect(() => {
     if (redirecting) return;
 
-    // Check if user is not authenticated or doesn't have UI access
     if (!isAuthenticated || !hasUIAccess) {
       setRedirecting(true);
       console.log('ProtectedRoute - Redirecting to login:', { isAuthenticated, hasUIAccess })
@@ -31,7 +30,6 @@ export function ProtectedRoute({
     }
   }, [isAuthenticated, hasUIAccess, router, redirecting])
 
-  // If redirecting, show loading state immediately
   if (redirecting) {
     return fallback || (
       <div className="min-h-screen bg-gray-50 dark:bg-dark-bg flex items-center justify-center">

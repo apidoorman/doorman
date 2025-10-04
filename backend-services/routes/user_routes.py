@@ -49,7 +49,6 @@ Response:
 {}
 """
 
-
 @user_router.post('',
     description='Add user',
     response_model=ResponseModel,
@@ -113,7 +112,6 @@ Request:
 Response:
 {}
 """
-
 
 @user_router.put('/{username}',
     description='Update user',
@@ -189,7 +187,6 @@ Response:
 {}
 """
 
-
 @user_router.delete('/{username}',
     description='Delete user',
     response_model=ResponseModel,
@@ -253,7 +250,6 @@ Response:
 {}
 """
 
-
 @user_router.put('/{username}/update-password',
     description='Update user password',
     response_model=ResponseModel,
@@ -312,7 +308,6 @@ Response:
 {}
 """
 
-
 @user_router.get('/me',
     description='Get user by username',
     response_model=UserModelResponse
@@ -328,7 +323,6 @@ async def get_user_by_username(request: Request):
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await UserService.get_user_by_username(auth_username, request_id))
     except HTTPException as e:
-        # Preserve HTTPException status (e.g., 401 after token invalidation)
         return respond_rest(ResponseModel(
             status_code=e.status_code,
             response_headers={
@@ -359,7 +353,6 @@ Request:
 Response:
 {}
 """
-
 
 @user_router.get('/all',
     description='Get all users',
@@ -417,7 +410,6 @@ Response:
 {}
 """
 
-
 @user_router.get('/{username}',
     description='Get user by username',
     response_model=UserModelResponse
@@ -467,7 +459,6 @@ Request:
 Response:
 {}
 """
-
 
 @user_router.get('/email/{email}',
     description='Get user by email',
