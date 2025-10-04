@@ -323,9 +323,23 @@ class LoggingService:
         if username_match:
             data['user'] = username_match.group(1)
 
-        ip_match = re.search(r'From: ([\d\.]+):(\d+)', message)
-        if ip_match:
-            data['ip_address'] = ip_match.group(1)
+        # Prefer explicit entry logs: client_ip=..., effective_ip=...
+        ip_kv_match = re.search(r'(?:effective_ip|client_ip)=([A-Fa-f0-9:\.]+)', message)
+        if ip_kv_match:
+            data['ip_address'] = ip_kv_match.group(1)
+        else:
+            # Fallback to legacy 'From: host:port' (IPv4) and attempt IPv6
+            ip_from_match = re.search(r'From:\s+(.+?)$', message)
+            if ip_from_match:
+                hostport = ip_from_match.group(1)
+                # If contains multiple colons, assume IPv6 and split on last colon for port
+                if hostport.count(':') > 1:
+                    hp = hostport.rsplit(':', 1)
+                    data['ip_address'] = hp[0]
+                else:
+                    hp = hostport.split(':')
+                    if hp:
+                        data['ip_address'] = hp[0]
 
         endpoint_match = re.search(r'Endpoint: (\w+) (.+)', message)
         if endpoint_match:

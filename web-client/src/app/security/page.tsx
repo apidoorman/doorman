@@ -49,6 +49,8 @@ interface SecuritySettings {
   ip_whitelist?: string[]
   ip_blacklist?: string[]
   trust_x_forwarded_for?: boolean
+  xff_trusted_proxies?: string[]
+  allow_localhost_bypass?: boolean
 }
 
 const SecurityPage = () => {
@@ -71,13 +73,18 @@ const SecurityPage = () => {
     ip_whitelist: [],
     ip_blacklist: [],
     trust_x_forwarded_for: false,
+    xff_trusted_proxies: [],
+    allow_localhost_bypass: false,
   })
   const [ipWhitelistText, setIpWhitelistText] = useState('')
   const [ipBlacklistText, setIpBlacklistText] = useState('')
+  const [trustedProxyText, setTrustedProxyText] = useState('')
   const [memoryOnly, setMemoryOnly] = useState(false)
+  const [warnings, setWarnings] = useState<string[]>([])
   const [clientIp, setClientIp] = useState('')
   const [clientIpXff, setClientIpXff] = useState('')
   const [restorePath, setRestorePath] = useState('')
+  const [bypassLocked, setBypassLocked] = useState(false)
   const { permissions } = useAuth()
 
   useEffect(() => {
@@ -129,12 +136,17 @@ const SecurityPage = () => {
         ip_whitelist: Array.isArray(data.ip_whitelist) ? data.ip_whitelist : [],
         ip_blacklist: Array.isArray(data.ip_blacklist) ? data.ip_blacklist : [],
         trust_x_forwarded_for: !!data.trust_x_forwarded_for,
+        xff_trusted_proxies: Array.isArray((data as any).xff_trusted_proxies) ? (data as any).xff_trusted_proxies : [],
+        allow_localhost_bypass: !!(data as any).allow_localhost_bypass,
       })
       setMemoryOnly(!!data.memory_only)
+      setWarnings(Array.isArray((data as any).security_warnings) ? (data as any).security_warnings : [])
+      setBypassLocked(!!(data as any).allow_localhost_bypass_locked)
       setClientIp(String(data.client_ip || ''))
       setClientIpXff(String(data.client_ip_xff || ''))
       setIpWhitelistText((Array.isArray(data.ip_whitelist) ? data.ip_whitelist : []).join('\n'))
       setIpBlacklistText((Array.isArray(data.ip_blacklist) ? data.ip_blacklist : []).join('\n'))
+      setTrustedProxyText((Array.isArray((data as any).xff_trusted_proxies) ? (data as any).xff_trusted_proxies : []).join('\n'))
     } catch (err) {
       setError('Failed to load security settings. Please try again later.')
     } finally {
@@ -150,6 +162,7 @@ const SecurityPage = () => {
         ...settings,
         ip_whitelist: ipWhitelistText.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean),
         ip_blacklist: ipBlacklistText.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean),
+        xff_trusted_proxies: trustedProxyText.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean),
       }
       await putJson(`${SERVER_URL}/platform/security/settings`, payload)
       setSuccess('Security settings saved')
@@ -318,6 +331,16 @@ const SecurityPage = () => {
           </div>
         ) : (
           <>
+            {warnings.length > 0 && (
+              <div className="rounded-lg bg-warning-50 border border-warning-200 p-4 dark:bg-warning-900/20 dark:border-warning-800 mb-4">
+                <div className="text-sm text-warning-800 dark:text-warning-200">
+                  <div className="font-medium mb-1">Security Warnings</div>
+                  <ul className="list-disc ml-5">
+                    {warnings.map((w, i) => (<li key={i}>{w}</li>))}
+                  </ul>
+                </div>
+              </div>
+            )}
             <div className="card">
               <div className="p-6 space-y-6">
                 <div className="flex items-center justify-between">
@@ -402,19 +425,39 @@ const SecurityPage = () => {
                       const listFromText = (t: string) => t.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
                       const wl = listFromText(ipWhitelistText)
                       const bl = listFromText(ipBlacklistText)
-                      const toLong = (s: string) => { const parts = s.split('.'); if (parts.length !== 4) return NaN; return parts.reduce((a,p)=> (a<<8)+(parseInt(p,10)&255),0) }
+                      const isIPv6 = (s: string) => s.includes(':')
+                      const toIPv4 = (s: string) => { const parts = s.split('.'); if (parts.length !== 4) return null as any; return parts.reduce((a,p)=> (a<<8n)+(BigInt(parseInt(p,10)&255)),0n) }
+                      const expandIPv6 = (ip: string) => {
+                        if (ip.indexOf('::') !== -1) {
+                          const [head, tail] = ip.split('::')
+                          const headParts = head ? head.split(':') : []
+                          const tailParts = tail ? tail.split(':') : []
+                          const missing = 8 - (headParts.length + tailParts.length)
+                          const zeros = Array(Math.max(0, missing)).fill('0')
+                          return [...headParts, ...zeros, ...tailParts].map(h=>h || '0')
+                        }
+                        return ip.split(':')
+                      }
+                      const toIPv6 = (s: string) => { const parts = expandIPv6(s); if (parts.length !== 8) return null as any; try { return parts.reduce((acc, h) => (acc<<16n) + BigInt(parseInt(h || '0', 16)), 0n) } catch { return null as any } }
                       const matches = (ip: string, patterns: string[]) => {
                         if (!ip) return false
-                        const ipL = toLong(ip)
+                        const v6 = isIPv6(ip)
+                        const ipVal = v6 ? toIPv6(ip) : toIPv4(ip)
                         return patterns.some(raw => {
                           const p = raw.trim(); if (!p) return false
                           if (p.includes('/')) {
-                            const [net, maskStr] = p.split('/'); const mask = parseInt(maskStr,10)
-                            const netL = toLong(net); if (isNaN(ipL) || isNaN(netL)) return false
-                            const maskBits = mask <= 0 ? 0 : (0xFFFFFFFF << (32 - Math.min(mask, 32))) >>> 0
-                            return (((ipL>>>0) & maskBits) === (netL & maskBits))
+                            const [net, maskStr] = p.split('/')
+                            const m = parseInt(maskStr, 10)
+                            const n6 = isIPv6(net)
+                            if (n6 !== v6) return false
+                            const netVal = n6 ? toIPv6(net) : toIPv4(net)
+                            if (netVal === null || ipVal === null || isNaN(m as any)) return false
+                            const bits = n6 ? 128 : 32
+                            const shift = BigInt(bits - Math.min(Math.max(m,0), bits))
+                            const mask = ((1n << BigInt(bits)) - 1n) ^ ((1n << shift) - 1n)
+                            return ((ipVal & mask) === (netVal & mask))
                           }
-                          return p === ip
+                          return p.toLowerCase() === ip.toLowerCase()
                         })
                       }
                       const warnWL = wl.length > 0 && !matches(effectiveIp, wl)
@@ -441,10 +484,34 @@ const SecurityPage = () => {
                         <textarea className="input min-h-[120px]" value={ipBlacklistText} onChange={(e)=>setIpBlacklistText(e.target.value)} placeholder="203.0.113.0/24" />
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Denied IPs/CIDRs. Checked after whitelist.</p>
                       </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Trusted Proxies (IPs/CIDRs)</label>
+                        <textarea className="input min-h-[120px]" value={trustedProxyText} onChange={(e)=>setTrustedProxyText(e.target.value)} placeholder="10.0.0.0/8\n192.168.0.0/16\nfd00::/8" />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">When set, X-Forwarded-For/X-Real-IP are only trusted from these addresses.</p>
+                      </div>
                       <div className="md:col-span-2 flex items-center gap-2">
                         <input type="checkbox" className="h-4 w-4" checked={!!settings.trust_x_forwarded_for} onChange={(e)=>setSettings(s => ({...s, trust_x_forwarded_for: e.target.checked}))} />
                         <label className="text-sm text-gray-700 dark:text-gray-300">Trust X-Forwarded-For (when behind a proxy)</label>
                         <InfoTooltip text="When enabled, the first IP in X-Forwarded-For is treated as the client IP. Otherwise, the direct source IP is used." />
+                      </div>
+                      <div className="md:col-span-2 flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 mt-1"
+                          checked={!!settings.allow_localhost_bypass}
+                          onChange={(e)=>setSettings(s => ({...s, allow_localhost_bypass: e.target.checked}))}
+                          disabled={bypassLocked}
+                        />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm text-gray-700 dark:text-gray-300">Never lock out localhost (direct requests only)</label>
+                            <InfoTooltip text="If enabled, direct requests from 127.0.0.1/::1 (without any forwarding headers) bypass IP allow/deny checks. Controlled by env LOCAL_HOST_IP_BYPASS when set." />
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Do not enable if your reverse proxy runs on localhost and strips forwarding headers.</p>
+                          {bypassLocked && (
+                            <p className="text-xs text-warning-700 dark:text-warning-300 mt-1">This setting is controlled by environment variable LOCAL_HOST_IP_BYPASS.</p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -58,6 +58,8 @@ from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file
 from utils.metrics_util import metrics_store
 from utils.database import database
 from utils.response_util import process_response
+from utils.audit_util import audit
+from utils.ip_policy_util import _get_client_ip as _policy_get_client_ip, _ip_in_list as _policy_ip_in_list
 
 load_dotenv()
 
@@ -92,6 +94,14 @@ async def app_lifespan(app: FastAPI):
         await start_auto_save_task()
     except Exception as e:
         gateway_logger.error(f'Failed to initialize security settings auto-save: {e}')
+
+    # Post-settings startup checks and warnings
+    try:
+        settings = get_cached_settings()
+        if bool(settings.get('trust_x_forwarded_for')) and not (settings.get('xff_trusted_proxies') or []):
+            gateway_logger.warning('Security: trust_x_forwarded_for enabled but xff_trusted_proxies is empty; header spoofing risk. Configure trusted proxy IPs/CIDRs.')
+    except Exception as e:
+        gateway_logger.debug(f'Startup security checks skipped: {e}')
 
     try:
         spec = app.openapi()
@@ -288,6 +298,15 @@ async def request_id_middleware(request: Request, call_next):
             request.state.request_id = rid
         except Exception:
             pass
+        # Log entry with IP and request ID
+        try:
+            settings = get_cached_settings()
+            trust_xff = bool(settings.get('trust_x_forwarded_for'))
+            direct_ip = getattr(getattr(request, 'client', None), 'host', None)
+            effective_ip = _policy_get_client_ip(request, trust_xff)
+            gateway_logger.info(f"{rid} | Entry: client_ip={direct_ip} effective_ip={effective_ip} method={request.method} path={str(request.url.path)}")
+        except Exception:
+            pass
         response = await call_next(request)
 
         try:
@@ -462,41 +481,36 @@ async def ip_filter_middleware(request: Request, call_next):
         wl = settings.get('ip_whitelist') or []
         bl = settings.get('ip_blacklist') or []
         trust_xff = bool(settings.get('trust_x_forwarded_for'))
-        client_ip = None
-        if trust_xff:
-            xff = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
-            if xff:
-                client_ip = xff.split(',')[0].strip()
-        if not client_ip:
-            client_ip = request.client.host if request.client else None
+        client_ip = _policy_get_client_ip(request, trust_xff)
+        xff_hdr = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
 
-        def _ip_in_list(ip: str, patterns: list) -> bool:
-            try:
-                import ipaddress
-                ip_obj = ipaddress.ip_address(ip)
-                for pat in patterns:
-                    p = (pat or '').strip()
-                    if not p:
-                        continue
-                    try:
-                        if '/' in p:
-                            net = ipaddress.ip_network(p, strict=False)
-                            if ip_obj in net:
-                                return True
-                        else:
-                            if ip_obj == ipaddress.ip_address(p):
-                                return True
-                    except Exception:
-                        continue
-                return False
-            except Exception:
-                return False
+        # Optional: Never lock out localhost for direct requests without forwarding headers
+        try:
+            import os, ipaddress
+            settings = get_cached_settings()
+            env_flag = os.getenv('LOCAL_HOST_IP_BYPASS')
+            allow_local = (env_flag.lower() == 'true') if isinstance(env_flag, str) and env_flag.strip() != '' else bool(settings.get('allow_localhost_bypass'))
+            if allow_local:
+                direct_ip = getattr(getattr(request, 'client', None), 'host', None)
+                has_forward = any(request.headers.get(h) for h in ('x-forwarded-for','X-Forwarded-For','x-real-ip','X-Real-IP','cf-connecting-ip','CF-Connecting-IP','forwarded','Forwarded'))
+                if direct_ip and ipaddress.ip_address(direct_ip).is_loopback and not has_forward:
+                    return await call_next(request)
+        except Exception:
+            pass
 
         if client_ip:
-            if wl and not _ip_in_list(client_ip, wl):
+            if wl and not _policy_ip_in_list(client_ip, wl):
+                try:
+                    audit(request, actor=None, action='ip.global_deny', target=client_ip, status='blocked', details={'reason': 'not_in_whitelist', 'xff': xff_hdr, 'source_ip': getattr(getattr(request, 'client', None), 'host', None)})
+                except Exception:
+                    pass
                 from fastapi.responses import JSONResponse
                 return JSONResponse(status_code=403, content={'status_code': 403, 'error_code': 'SEC010', 'error_message': 'IP not allowed'})
-            if bl and _ip_in_list(client_ip, bl):
+            if bl and _policy_ip_in_list(client_ip, bl):
+                try:
+                    audit(request, actor=None, action='ip.global_deny', target=client_ip, status='blocked', details={'reason': 'blacklisted', 'xff': xff_hdr, 'source_ip': getattr(getattr(request, 'client', None), 'host', None)})
+                except Exception:
+                    pass
                 from fastapi.responses import JSONResponse
                 return JSONResponse(status_code=403, content={'status_code': 403, 'error_code': 'SEC011', 'error_message': 'IP blocked'})
     except Exception:
