@@ -165,7 +165,9 @@ class GatewayService:
                 if not endpoints:
                     return GatewayService.error_response(request_id, 'GTW002', 'No endpoints found for the requested API')
                 regex_pattern = re.compile(r'\{[^/]+\}')
-                composite = request.method + '/' + endpoint_uri
+                # Treat HEAD like GET for endpoint registration matching
+                match_method = 'GET' if str(request.method).upper() == 'HEAD' else request.method
+                composite = match_method + '/' + endpoint_uri
                 if not any(re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), composite) for ep in endpoints):
                     logger.error(f'{endpoints} | REST gateway failed with code GTW003')
                     return GatewayService.error_response(request_id, 'GTW003', 'Endpoint does not exist for the requested API')
@@ -181,11 +183,27 @@ class GatewayService:
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
+            else:
+                # Recursive retry path: url/method provided, but we still need API context
+                try:
+                    parts = [p for p in (path or '').split('/') if p]
+                    api_name_version = ''
+                    endpoint_uri = ''
+                    if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+                        api_name_version = f'/{parts[0]}/{parts[1]}'
+                        endpoint_uri = '/'.join(parts[2:])
+                    api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
+                    api = await api_util.get_api(api_key, api_name_version)
+                    # Do not mutate url/method or retry here; caller passed those
+                except Exception:
+                    api = None
+                    endpoint_uri = ''
+
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
-            allowed_headers = api.get('api_allowed_headers') or []
+            allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
-            if api.get('api_credits_enabled'):
+            if api and api.get('api_credits_enabled'):
                 ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
@@ -196,7 +214,7 @@ class GatewayService:
                         headers[ai_token_headers[0]] = user_specific_api_key
             content_type = request.headers.get('Content-Type', '').upper()
             logger.info(f'{request_id} | REST gateway to: {url}')
-            if api.get('api_authorization_field_swap'):
+            if api and api.get('api_authorization_field_swap'):
                 try:
                     swap_from = api.get('api_authorization_field_swap')
                     if swap_from:
@@ -207,7 +225,8 @@ class GatewayService:
                     pass
 
             try:
-                endpoint_doc = await api_util.get_endpoint(api, method, '/' + endpoint_uri.lstrip('/'))
+                lookup_method = 'GET' if str(method).upper() == 'HEAD' else method
+                endpoint_doc = await api_util.get_endpoint(api, lookup_method, '/' + endpoint_uri.lstrip('/')) if api else None
                 endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
                 if endpoint_id:
                     if 'JSON' in content_type:
@@ -223,6 +242,8 @@ class GatewayService:
             try:
                 if method == 'GET':
                     http_response = await client.get(url, params=query_params, headers=headers)
+                elif method == 'HEAD':
+                    http_response = await client.head(url, params=query_params, headers=headers)
                 elif method in ('POST', 'PUT', 'DELETE', 'PATCH'):
                     cl_header = request.headers.get('content-length') or request.headers.get('Content-Length')
                     try:
@@ -253,10 +274,13 @@ class GatewayService:
                         await client.aclose()
                     except Exception:
                         pass
-            if 'application/json' in http_response.headers.get('Content-Type', '').lower():
-                response_content = http_response.json()
+            if str(method).upper() == 'HEAD':
+                response_content = ''
             else:
-                response_content = http_response.text
+                if 'application/json' in http_response.headers.get('Content-Type', '').lower():
+                    response_content = http_response.json()
+                else:
+                    response_content = http_response.text
             backend_end_time = time.time() * 1000
             if http_response.status_code in [500, 502, 503, 504] and retry > 0:
                 logger.error(f'{request_id} | REST gateway failed retrying')
@@ -344,6 +368,20 @@ class GatewayService:
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
+            else:
+                # Recursive call with url present; re-derive API context for headers/validation
+                try:
+                    parts = [p for p in (path or '').split('/') if p]
+                    api_name_version = ''
+                    endpoint_uri = ''
+                    if len(parts) >= 3:
+                        api_name_version = f'/{parts[0]}/{parts[1]}'
+                        endpoint_uri = '/' + '/'.join(parts[2:])
+                    api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
+                    api = await api_util.get_api(api_key, api_name_version)
+                except Exception:
+                    api = None
+                    endpoint_uri = ''
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
             incoming_content_type = request.headers.get('Content-Type') or 'application/xml'
@@ -353,24 +391,31 @@ class GatewayService:
                 content_type = incoming_content_type
             else:
                 content_type = 'text/xml; charset=utf-8'
-            allowed_headers = api.get('api_allowed_headers') or []
+            allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
             headers['Content-Type'] = content_type
             if 'SOAPAction' not in headers:
                 headers['SOAPAction'] = '""'
             envelope = (await request.body()).decode('utf-8')
-            if api.get('api_authorization_field_swap'):
+            if api and api.get('api_authorization_field_swap'):
                 try:
                     swap_from = api.get('api_authorization_field_swap')
                     if swap_from:
-                        val = headers.get(swap_from)
-                        if val is not None:
+                        val = None
+                        for key_variant in (swap_from, str(swap_from).lower(), str(swap_from).title()):
+                            if key_variant in headers:
+                                val = headers.get(key_variant)
+                                break
+                        # Only override when a non-empty value is provided
+                        if val is not None and str(val).strip() != '':
+                            # Preserve header for downstream clients regardless of case normalization
                             headers['Authorization'] = val
+                            headers['authorization'] = val
                 except Exception:
                     pass
 
             try:
-                endpoint_doc = await api_util.get_endpoint(api, 'POST', '/' + endpoint_uri.lstrip('/'))
+                endpoint_doc = await api_util.get_endpoint(api, 'POST', '/' + endpoint_uri.lstrip('/')) if api else None
                 endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
                 if endpoint_id:
                     await validation_util.validate_soap_request(endpoint_id, envelope)
