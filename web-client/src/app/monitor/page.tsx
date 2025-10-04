@@ -29,20 +29,30 @@ const MonitorPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [metrics, setMetrics] = useState<any | null>(null)
   const [timeRange, setTimeRange] = useState('24h')
+  const [groupBy, setGroupBy] = useState<'minute' | 'day'>('minute')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [liveness, setLiveness] = useState<string | null>(null)
   const [readiness, setReadiness] = useState<{ status: string; mongodb?: boolean; redis?: boolean; mode?: string; cache_backend?: string } | null>(null)
+  const fmtBytes = (n: number | undefined | null) => {
+    const v = typeof n === 'number' ? n : 0
+    const units = ['B','KB','MB','GB','TB']
+    let u = 0; let val = v
+    while (val >= 1024 && u < units.length - 1) { val /= 1024; u++ }
+    return `${val.toFixed(val >= 10 || u === 0 ? 0 : 1)} ${units[u]}`
+  }
 
   useEffect(() => {
     fetchMetrics()
     fetchProbes()
-  }, [timeRange])
+  }, [timeRange, groupBy, sortOrder])
 
   const fetchMetrics = async (rangeOverride?: string) => {
     try {
       setLoading(true)
       setError(null)
       const range = rangeOverride ?? timeRange
-      const payload = await getJson<any>(`${SERVER_URL}/platform/monitor/metrics?range=${encodeURIComponent(range)}`)
+      const url = `${SERVER_URL}/platform/monitor/metrics?range=${encodeURIComponent(range)}&group=${encodeURIComponent(groupBy)}&sort=${encodeURIComponent(sortOrder)}`
+      const payload = await getJson<any>(url)
       setMetrics(payload)
     } catch (err) {
       if (err instanceof Error) {
@@ -109,6 +119,22 @@ const MonitorPage: React.FC = () => {
               <option value="24h">Last 24 Hours</option>
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
+            </select>
+            <select
+              value={groupBy}
+              onChange={(e) => setGroupBy((e.target.value as 'minute' | 'day'))}
+              className="input"
+            >
+              <option value="minute">Group: Minute</option>
+              <option value="day">Group: Day</option>
+            </select>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder((e.target.value as 'asc' | 'desc'))}
+              className="input"
+            >
+              <option value="desc">Newest First</option>
+              <option value="asc">Oldest First</option>
             </select>
             <button onClick={() => { void fetchMetrics(); }} className="btn btn-secondary">
               <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -189,6 +215,51 @@ const MonitorPage: React.FC = () => {
             <div className="stats-card">
               <div className="flex items-center justify-between">
                 <div>
+                  <p className="stats-label">Data In</p>
+                  <p className="stats-value">{fmtBytes(metrics?.total_bytes_in)}</p>
+                  <p className="stats-change">&nbsp;</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-indigo-100 dark:bg-indigo-900/20 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="stats-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="stats-label">Data Out</p>
+                  <p className="stats-value">{fmtBytes(metrics?.total_bytes_out)}</p>
+                  <p className="stats-change">&nbsp;</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2m13 4l-5-5-5 5m5-5v12" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="stats-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="stats-label">Total Data</p>
+                  <p className="stats-value">{fmtBytes(((metrics?.total_bytes_in ?? 0) + (metrics?.total_bytes_out ?? 0)))}</p>
+                  <p className="stats-change">&nbsp;</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-cyan-100 dark:bg-cyan-900/20 flex items-center justify-center">
+                  <svg className="h-6 w-6 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h10a4 4 0 100-8h-1M7 15a4 4 0 010-8h8a4 4 0 010 8" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="stats-card">
+              <div className="flex items-center justify-between">
+                <div>
                   <p className="stats-label">Error Rate</p>
                   <p className="stats-value">
                     {(() => {
@@ -256,26 +327,46 @@ const MonitorPage: React.FC = () => {
             </div>
           </div>
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Request Volume (per minute)</h3></div>
+            <div className="card-header"><h3 className="card-title">Request Volume ({groupBy === 'day' ? 'per day' : 'per minute'})</h3></div>
             <div className="p-6">
               <div className="h-48 overflow-y-auto">
                 <ul className="text-sm space-y-1">
-                  {((metrics?.series || []) as any[])
-                    .slice()
-                    .reverse()
-                    .map((pt: any, idx: number) => (
-                      <li key={`${pt.timestamp}-${idx}`} className="flex justify-between">
-                        <span>{new Date(pt.timestamp * 1000).toLocaleTimeString()}</span>
-                        <span>
-                          {pt.count} req • avg {Math.round(pt.avg_ms)}ms • {pt.error_count} errs
-                        </span>
-                      </li>
-                    ))}
+                  {((metrics?.series || []) as any[]).map((pt: any, idx: number) => (
+                    <li key={`${pt.timestamp}-${idx}`} className="flex justify-between">
+                      <span>{groupBy === 'day' ? new Date(pt.timestamp * 1000).toLocaleDateString() : new Date(pt.timestamp * 1000).toLocaleTimeString()}</span>
+                      <span>
+                        {pt.count} req • avg {Math.round(pt.avg_ms)}ms • {pt.error_count} errs
+                      </span>
+                    </li>
+                  ))}
                 </ul>
                 {(!metrics || !metrics.series || metrics.series.length === 0) && (
                   <p className="text-gray-500 dark:text-gray-400">No data</p>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Bandwidth ({groupBy === 'day' ? 'per day' : 'per minute'})</h3>
+          </div>
+          <div className="p-6">
+            <div className="h-48 overflow-y-auto">
+              <ul className="text-sm space-y-1">
+                {((metrics?.series || []) as any[]).map((pt: any, idx: number) => (
+                  <li key={`bw-${pt.timestamp}-${idx}`} className="flex justify-between">
+                    <span>{groupBy === 'day' ? new Date(pt.timestamp * 1000).toLocaleDateString() : new Date(pt.timestamp * 1000).toLocaleTimeString()}</span>
+                    <span>
+                      In {fmtBytes(pt.bytes_in)} • Out {fmtBytes(pt.bytes_out)} • Total {fmtBytes((pt.bytes_in || 0) + (pt.bytes_out || 0))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {(!metrics || !metrics.series || metrics.series.length === 0) && (
+                <p className="text-gray-500 dark:text-gray-400">No data</p>
+              )}
             </div>
           </div>
         </div>

@@ -188,6 +188,12 @@ class EndpointService:
                 error_message='Unable to delete endpoint'
             ).dict()
         doorman_cache.delete_cache('endpoint_cache', cache_key)
+        try:
+            api_id = endpoint.get('api_id') if isinstance(endpoint, dict) else None
+            if api_id:
+                doorman_cache.delete_cache('api_endpoint_cache', api_id)
+        except Exception:
+            pass
         logger.info(request_id + ' | Endpoint deletion successful')
         return ResponseModel(
             status_code=200,

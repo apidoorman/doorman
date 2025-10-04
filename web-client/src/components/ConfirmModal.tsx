@@ -11,7 +11,6 @@ interface ConfirmModalProps {
   onConfirm: () => void
   onCancel: () => void
   loading?: boolean
-  // When provided, require the user to type this text to enable confirm
   requireTextMatch?: string
   inputPlaceholder?: string
 }
@@ -63,4 +62,3 @@ export default function ConfirmModal({
     </div>
   )
 }
-

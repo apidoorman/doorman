@@ -103,6 +103,13 @@ class Database:
                 })
 
             try:
+                adm = users.find_one({'username': 'admin'})
+                if adm and adm.get('ui_access') is not True:
+                    users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
+            except Exception:
+                pass
+
+            try:
                 from datetime import datetime
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -157,6 +164,12 @@ class Database:
                     'throttle_queue_limit': 1,
                     'ui_access': True
                 })
+        try:
+            adm = self.db.users.find_one({'username': 'admin'})
+            if adm and adm.get('ui_access') is not True:
+                self.db.users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
+        except Exception:
+            pass
             if not self.db.roles.find_one({'role_name': 'admin'}):
                 self.db.roles.insert_one({
                     'role_name': 'admin',

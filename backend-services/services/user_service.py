@@ -16,6 +16,8 @@ from utils.database import user_collection, subscriptions_collection, api_collec
 from utils.doorman_cache_util import doorman_cache
 from models.create_user_model import CreateUserModel
 from utils.role_util import platform_role_required_bool
+from utils.bandwidth_util import get_current_usage
+import time
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -81,6 +83,27 @@ class UserService:
                 error_code='USR002',
                 error_message='User not found'
             ).dict()
+        try:
+            limit = user.get('bandwidth_limit_bytes')
+            if limit and int(limit) > 0:
+                window = user.get('bandwidth_limit_window') or 'day'
+                used = int(get_current_usage(username, window))
+                mapping = {
+                    'second': 1,
+                    'minute': 60,
+                    'hour': 3600,
+                    'day': 86400,
+                    'week': 604800,
+                    'month': 2592000,
+                }
+                sec = mapping.get(str(window).lower().rstrip('s'), 86400)
+                now = int(time.time())
+                bucket_start = (now // sec) * sec
+                resets_at = bucket_start + sec
+                user['bandwidth_usage_bytes'] = used
+                user['bandwidth_resets_at'] = resets_at
+        except Exception:
+            pass
         logger.info(f'{request_id} | User retrieval successful')
         return ResponseModel(
             status_code=200,
@@ -127,6 +150,27 @@ class UserService:
         Create a new user.
         """
         logger.info(f'{request_id} | Creating user: {data.username}')
+        try:
+            if data.custom_attributes is not None and len(data.custom_attributes.keys()) > 10:
+                logger.error(f"{request_id} | User creation failed with code USR016: Too many custom attributes")
+                return ResponseModel(
+                    status_code=400,
+                    response_headers={
+                        'request_id': request_id
+                    },
+                    error_code='USR016',
+                    error_message='Maximum 10 custom attributes allowed. Please replace an existing one.'
+                ).dict()
+        except Exception:
+            logger.error(f"{request_id} | User creation failed with code USR016: Invalid custom attributes payload")
+            return ResponseModel(
+                status_code=400,
+                response_headers={
+                    'request_id': request_id
+                },
+                error_code='USR016',
+                error_message='Maximum 10 custom attributes allowed. Please replace an existing one.'
+            ).dict()
         if user_collection.find_one({'username': data.username}):
             logger.error(f'{request_id} | User creation failed with code USR001')
             return ResponseModel(
@@ -214,6 +258,22 @@ class UserService:
         else:
             doorman_cache.delete_cache('user_cache', username)
         non_null_update_data = {k: v for k, v in update_data.dict().items() if v is not None}
+        if 'custom_attributes' in non_null_update_data:
+            try:
+                if non_null_update_data['custom_attributes'] is not None and len(non_null_update_data['custom_attributes'].keys()) > 10:
+                    logger.error(f"{request_id} | User update failed with code USR016: Too many custom attributes")
+                    return ResponseModel(
+                        status_code=400,
+                        error_code='USR016',
+                        error_message='Maximum 10 custom attributes allowed. Please replace an existing one.'
+                    ).dict()
+            except Exception:
+                logger.error(f"{request_id} | User update failed with code USR016: Invalid custom attributes payload")
+                return ResponseModel(
+                    status_code=400,
+                    error_code='USR016',
+                    error_message='Maximum 10 custom attributes allowed. Please replace an existing one.'
+                ).dict()
         if non_null_update_data:
             update_result = user_collection.update_one({'username': username}, {'$set': non_null_update_data})
             if not update_result.acknowledged or update_result.modified_count == 0:

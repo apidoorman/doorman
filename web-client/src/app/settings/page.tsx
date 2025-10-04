@@ -76,10 +76,8 @@ const SettingsPage = () => {
     }
 
     try {
-      // Track whether we made any change requests
       let didChange = false
 
-      // 1) Profile updates (username/email) via PUT /platform/user/{username}
       const profileUpdates: any = {}
       if (settings.username && settings.username !== settings.originalUsername) {
         profileUpdates.username = settings.username
@@ -92,7 +90,6 @@ const SettingsPage = () => {
         didChange = true
       }
 
-      // 2) Password update via PUT /platform/user/{username}/update-password
       if (settings.newPassword) {
         await putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(settings.originalUsername)}/update-password`, { new_password: settings.newPassword })
         didChange = true
@@ -121,8 +118,6 @@ const SettingsPage = () => {
       }
     }
   }
-
-  // no-op leftover cleanup (import UI moved to its own page)
 
   return (
     <Layout>

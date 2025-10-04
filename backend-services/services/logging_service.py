@@ -18,15 +18,17 @@ logger = logging.getLogger('doorman.logging')
 
 class LoggingService:
     def __init__(self):
-
         env_dir = os.getenv('LOGS_DIR')
-        if env_dir:
-            self.log_directory = env_dir
+        if env_dir and str(env_dir).strip():
+            self.log_directory = os.path.abspath(env_dir)
         else:
+            # Match doorman.py default: <backend-services>/platform-logs
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            candidate = os.path.normpath(os.path.join(base_dir, '..', 'logs'))
-            self.log_directory = candidate if os.path.isdir(candidate) else 'logs'
-        self.log_file_pattern = 'doorman.log*'
+            backend_root = os.path.normpath(os.path.join(base_dir, '..'))
+            candidate = os.path.join(backend_root, 'platform-logs')
+            self.log_directory = candidate if os.path.isdir(candidate) else os.path.join(backend_root, 'logs')
+        # Include both gateway logs and audit trail
+        self.log_file_patterns = ['doorman.log*', 'doorman-trail.log*']
         self.max_logs_per_request = 1000
 
     async def get_logs(
@@ -52,7 +54,9 @@ class LoggingService:
         """
         try:
 
-            log_files = glob.glob(os.path.join(self.log_directory, self.log_file_pattern))
+            log_files: list[str] = []
+            for pat in self.log_file_patterns:
+                log_files.extend(glob.glob(os.path.join(self.log_directory, pat)))
 
             if not log_files:
                 return {
@@ -116,7 +120,9 @@ class LoggingService:
         """
         Get list of available log files for debugging
         """
-        log_files = glob.glob(os.path.join(self.log_directory, self.log_file_pattern))
+        log_files: list[str] = []
+        for pat in self.log_file_patterns:
+            log_files.extend(glob.glob(os.path.join(self.log_directory, pat)))
         log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
         return log_files
 
@@ -126,7 +132,9 @@ class LoggingService:
         """
         try:
 
-            log_files = glob.glob(os.path.join(self.log_directory, self.log_file_pattern))
+            log_files: list[str] = []
+            for pat in self.log_file_patterns:
+                log_files.extend(glob.glob(os.path.join(self.log_directory, pat)))
 
             if not log_files:
                 return {
@@ -273,36 +281,55 @@ class LoggingService:
         Format: timestamp - logger_name - level - request_id | message
         """
         try:
+            s = line.strip()
+            # JSON format from doorman JSONFormatter
+            if s.startswith('{') and s.endswith('}'):
+                try:
+                    rec = json.loads(s)
+                    timestamp_str = rec.get('time') or rec.get('timestamp')
+                    try:
+                        # time is already an ISO-like string per formatter
+                        timestamp = timestamp_str or datetime.utcnow().isoformat()
+                    except Exception:
+                        timestamp = datetime.utcnow().isoformat()
+                    message = rec.get('message', '')
+                    name = rec.get('name', '')
+                    level = rec.get('level', '')
+                    structured = self._extract_structured_data(message)
+                    return {
+                        'timestamp': timestamp if isinstance(timestamp, str) else timestamp.isoformat(),
+                        'level': level,
+                        'message': message,
+                        'source': name,
+                        **structured,
+                    }
+                except Exception:
+                    pass
 
-            parts = line.strip().split(' - ', 3)
+            # Plain text format: "ts - logger - level - message"
+            parts = s.split(' - ', 3)
             if len(parts) < 4:
                 return None
-
             timestamp_str, name, level, full_message = parts
-
             try:
                 timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S,%f')
             except ValueError:
                 try:
                     timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
                 except ValueError:
-                    timestamp = datetime.now()
-
+                    timestamp = datetime.utcnow()
             message_parts = full_message.split(' | ', 1)
             request_id = message_parts[0] if len(message_parts) > 1 else None
             message = message_parts[1] if len(message_parts) > 1 else full_message
-
             structured_data = self._extract_structured_data(message)
-
             if request_id:
                 structured_data['request_id'] = request_id
-
             return {
                 'timestamp': timestamp.isoformat(),
                 'level': level,
                 'message': message,
                 'source': name,
-                **structured_data
+                **structured_data,
             }
 
         except Exception as e:
@@ -323,9 +350,20 @@ class LoggingService:
         if username_match:
             data['user'] = username_match.group(1)
 
-        ip_match = re.search(r'From: ([\d\.]+):(\d+)', message)
-        if ip_match:
-            data['ip_address'] = ip_match.group(1)
+        ip_kv_match = re.search(r'(?:effective_ip|client_ip)=([A-Fa-f0-9:\.]+)', message)
+        if ip_kv_match:
+            data['ip_address'] = ip_kv_match.group(1)
+        else:
+            ip_from_match = re.search(r'From:\s+(.+?)$', message)
+            if ip_from_match:
+                hostport = ip_from_match.group(1)
+                if hostport.count(':') > 1:
+                    hp = hostport.rsplit(':', 1)
+                    data['ip_address'] = hp[0]
+                else:
+                    hp = hostport.split(':')
+                    if hp:
+                        data['ip_address'] = hp[0]
 
         endpoint_match = re.search(r'Endpoint: (\w+) (.+)', message)
         if endpoint_match:

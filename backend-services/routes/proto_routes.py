@@ -81,7 +81,6 @@ Response:
 {}
 """
 
-
 @proto_router.post('/{api_name}/{api_version}',
     description='Upload proto file',
     response_model=ResponseModel,
@@ -207,7 +206,6 @@ Response:
 {}
 """
 
-
 @proto_router.get('/{api_name}/{api_version}',
     description='Get proto file',
     response_model=ResponseModel,
@@ -282,7 +280,6 @@ Request:
 Response:
 {}
 """
-
 
 @proto_router.put('/{api_name}/{api_version}',
     description='Update proto file',
@@ -375,7 +372,6 @@ Request:
 Response:
 {}
 """
-
 
 @proto_router.delete('/{api_name}/{api_version}',
     description='Delete proto file',

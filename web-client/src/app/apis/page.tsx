@@ -47,7 +47,6 @@ const APIsPage = () => {
     try {
       setLoading(true)
       setError(null)
-      // Request using backend pagination
       let fetched: any[] = []
       try {
         const data = await getJson<any>(`${SERVER_URL}/platform/api/all?page=${page}&page_size=${pageSize}`)
@@ -59,7 +58,6 @@ const APIsPage = () => {
       let display: any[] = fetched
       let next = false
       let ignores = false
-      // If backend ignored pagination and returned a larger list, paginate client-side
       if (Array.isArray(fetched) && fetched.length > pageSize) {
         ignores = true
         const total = fetched.length
@@ -72,7 +70,6 @@ const APIsPage = () => {
         next = fetched.length === pageSize
         setIgnorePagingAllCache(null)
       }
-      // De-duplicate by api_id if necessary
       const seen = new Set<string>()
       const unique = display.filter((a: any) => {
         const id = String(a.api_id || `${a.api_name}/${a.api_version}`)
@@ -80,7 +77,6 @@ const APIsPage = () => {
         seen.add(id)
         return true
       })
-      // Sort by api_name then version for a stable display
       unique.sort((a: any, b: any) => String(a.api_name).localeCompare(String(b.api_name)) || String(a.api_version).localeCompare(String(b.api_version)))
       setAllApis(unique)
       setApis(unique)
@@ -269,6 +265,12 @@ const APIsPage = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <p className="font-medium text-gray-900 dark:text-white">{api.api_name}</p>
+                            {(((api as any).api_ip_mode || 'allow_all') === 'whitelist') && (
+                              <span className="badge badge-secondary">IP Whitelist</span>
+                            )}
+                            {Array.isArray((api as any).api_ip_blacklist) && (api as any).api_ip_blacklist.length > 0 && (
+                              <span className="badge badge-error">Blacklist</span>
+                            )}
                             {((api as any).api_public ?? false) && (
                               <span className="badge badge-warning flex items-center gap-1" title="This API is public">
                                 Public

@@ -34,7 +34,6 @@ Response:
 {}
 """
 
-
 @memory_router.post('/memory/dump',
     description='Dump in-memory database to an encrypted file',
     response_model=ResponseModel,
@@ -81,7 +80,7 @@ async def memory_dump(request: Request, body: Optional[DumpRequest] = None):
             status_code=200,
             response_headers={'request_id': request_id},
             message='Memory dump created successfully',
-            response={'path': dump_path}
+            response={'response': {'path': dump_path}}
         ).dict(), 'rest')
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
@@ -106,7 +105,6 @@ Request:
 Response:
 {}
 """
-
 
 @memory_router.post('/memory/restore',
     description='Restore in-memory database from an encrypted file',
@@ -154,7 +152,7 @@ async def memory_restore(request: Request, body: Optional[RestoreRequest] = None
             status_code=200,
             response_headers={'request_id': request_id},
             message='Memory restore completed',
-            response=info
+            response={'response': info}
         ).dict(), 'rest')
     except FileNotFoundError as e:
         return process_response(ResponseModel(

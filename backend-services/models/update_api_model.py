@@ -36,5 +36,10 @@ class UpdateApiModel(BaseModel):
 
     api_auth_required: Optional[bool] = Field(None, description='If true (default), JWT auth is required for this API when not public. If false, requests may be unauthenticated but must meet other checks as configured.')
 
+    api_ip_mode: Optional[str] = Field(None, description="IP policy mode: 'allow_all' or 'whitelist'")
+    api_ip_whitelist: Optional[List[str]] = Field(None, description='Allowed IPs/CIDRs when api_ip_mode=whitelist')
+    api_ip_blacklist: Optional[List[str]] = Field(None, description='IPs/CIDRs denied regardless of mode')
+    api_trust_x_forwarded_for: Optional[bool] = Field(None, description='Override: trust X-Forwarded-For for this API')
+
     class Config:
         arbitrary_types_allowed = True

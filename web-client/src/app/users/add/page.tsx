@@ -23,6 +23,8 @@ interface CreateUserData {
   throttle_wait_duration_type?: string
   throttle_queue_limit?: number | null
   custom_attributes: Record<string, string>
+  bandwidth_limit_bytes?: number
+  bandwidth_limit_window?: string
   active: boolean
   ui_access: boolean
 }
@@ -36,6 +38,8 @@ const AddUserPage = () => {
     role: '',
     groups: [],
     custom_attributes: {},
+    bandwidth_limit_bytes: undefined,
+    bandwidth_limit_window: 'day',
     active: true,
     ui_access: false
   })
@@ -44,11 +48,11 @@ const AddUserPage = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, message: '' })
+  const customAttrCount = Object.keys(formData.custom_attributes || {}).length
 
   const handleInputChange = (field: keyof CreateUserData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
 
-    // Check password strength when password changes
     if (field === 'password') {
       checkPasswordStrength(value)
     }
@@ -83,6 +87,10 @@ const AddUserPage = () => {
   }
 
   const addCustomAttribute = () => {
+    if (customAttrCount >= 10) {
+      setError('Maximum 10 custom attributes allowed. Please replace an existing one.')
+      return
+    }
     if (newCustomAttribute.key && newCustomAttribute.value) {
       setFormData(prev => ({
         ...prev,
@@ -104,7 +112,6 @@ const AddUserPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate required fields
     if (!formData.username || !formData.email || !formData.password || !formData.role) {
       setError('Please fill in all required fields')
       return
@@ -121,7 +128,6 @@ const AddUserPage = () => {
 
       await postJson(`${SERVER_URL}/platform/user/`, formData)
 
-      // Redirect to users list after successful creation
       router.push('/users')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user')
@@ -457,6 +463,34 @@ const AddUserPage = () => {
             </div>
 
             <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Bandwidth Limit</h3>
+                <FormHelp docHref="/docs/using-fields.html#bandwidth">Limit total bytes per user over a time window.</FormHelp>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bytes (limit)</label>
+                  <input type="number" className="input" min={0}
+                    value={formData.bandwidth_limit_bytes ?? ''}
+                    onChange={(e) => handleInputChange('bandwidth_limit_bytes', e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="e.g., 1073741824 for 1 GB" disabled={loading} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Window</label>
+                  <select className="input" value={formData.bandwidth_limit_window || 'day'}
+                    onChange={(e) => handleInputChange('bandwidth_limit_window', e.target.value)} disabled={loading}>
+                    <option value="second">Second</option>
+                    <option value="minute">Minute</option>
+                    <option value="hour">Hour</option>
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Custom Attributes</h3>
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
@@ -483,7 +517,7 @@ const AddUserPage = () => {
                     placeholder="Key"
                     value={newCustomAttribute.key}
                     onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, key: e.target.value }))}
-                    disabled={loading}
+                    disabled={loading || customAttrCount >= 10}
                   />
                   <input
                     type="text"
@@ -491,12 +525,15 @@ const AddUserPage = () => {
                     placeholder="Value"
                     value={newCustomAttribute.value}
                     onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, value: e.target.value }))}
-                    disabled={loading}
+                    disabled={loading || customAttrCount >= 10}
                   />
-                  <button type="button" className="btn btn-primary" onClick={addCustomAttribute} disabled={loading}>
+                  <button type="button" className="btn btn-primary" onClick={addCustomAttribute} disabled={loading || customAttrCount >= 10}>
                     Add
                   </button>
                 </div>
+                {customAttrCount >= 10 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Maximum of 10 custom attributes reached. Remove one to add another.</p>
+                )}
               </div>
             </div>
 
@@ -520,6 +557,10 @@ const AddUserPage = () => {
       </div>
     </Layout>
   )
+    if (Object.keys(formData.custom_attributes || {}).length > 10) {
+      setError('Maximum 10 custom attributes allowed. Please replace an existing one.')
+      return
+    }
 }
 
 export default AddUserPage

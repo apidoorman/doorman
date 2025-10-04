@@ -23,7 +23,5 @@ export function setUseProtobuf(apiName?: string, apiVersion?: string, enabled?: 
     if (enabled) window.localStorage.setItem(`use_protobuf:${key}`, 'true')
     else window.localStorage.removeItem(`use_protobuf:${key}`)
   } catch {
-    // ignore storage errors
   }
 }
-

@@ -34,7 +34,6 @@ export default function ApiEndpointsPage() {
   const [working, setWorking] = useState<Record<string, boolean>>({})
   const [epNewServer, setEpNewServer] = useState<Record<string, string>>({})
 
-  // Endpoint validation state per endpoint_id
   type EpValidation = {
     loading: boolean
     exists: boolean
@@ -175,7 +174,6 @@ export default function ApiEndpointsPage() {
   }
 
   useEffect(() => {
-    // Try to read API selection from session storage to display name/version for breadcrumbs
     try {
       const apiData = sessionStorage.getItem('selectedApi')
       if (apiData) {
@@ -191,7 +189,6 @@ export default function ApiEndpointsPage() {
     setError(null)
     const attempt = async () => {
       if (!apiName || !apiVersion) {
-        // Fallback: find API by id via listing
         const data = await getJson<any>(`${SERVER_URL}/platform/api/all`)
         const list = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
         const found = (list || []).find((a:any) => String(a.api_id) === String(apiId))
@@ -212,7 +209,6 @@ export default function ApiEndpointsPage() {
       if (response.ok) {
         list = data.endpoints || data.response?.endpoints || []
       } else if (response.status === 400 && (data.error_code === 'END005' || data.error_message?.toLowerCase().includes('no endpoints'))) {
-        // No endpoints yet for this API; treat as empty without surfacing an error
         list = []
       } else {
         throw new Error(data.error_message || 'Failed to load endpoints')
@@ -223,7 +219,6 @@ export default function ApiEndpointsPage() {
     try {
       await attempt()
     } catch (e:any) {
-      // Retry once on transient failures
       try {
         await new Promise(r => setTimeout(r, 200))
         await attempt()

@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Safe, no-op middleware template with helper guards for future use.
-// This does not alter responses by default. It provides utilities to validate
-// any redirect targets or proxy URLs if you introduce them later.
-
 const PRIVATE_NET_CIDRS = [
   /^localhost$/i,
   /^127(?:\.\d{1,3}){3}$/,
@@ -27,23 +23,9 @@ function isAllowedHost(hostname: string): boolean {
 }
 
 export function middleware(req: NextRequest) {
-  // Intentionally do nothing; acts as a safe scaffold.
-  // Example usage if adding redirect support:
-  // const to = req.nextUrl.searchParams.get('to')
-  // if (to) {
-  //   try {
-  //     const url = new URL(to)
-  //     if (url.protocol !== 'https:' || isPrivateHost(url.hostname) || (!isAllowedHost(url.hostname) && url.hostname !== req.nextUrl.hostname)) {
-  //       return NextResponse.next()
-  //     }
-  //     return NextResponse.redirect(url)
-  //   } catch {}
-  // }
   return NextResponse.next()
 }
 
 export const config = {
-  // Run on all routes; Next automatically excludes static assets under .next/static
   matcher: ['/((?!_next/static).*)'],
 }
-
