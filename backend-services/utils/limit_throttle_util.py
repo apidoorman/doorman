@@ -58,46 +58,53 @@ async def limit_and_throttle(request: Request):
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
         user = user_collection.find_one({'username': username})
-    rate = int(user.get('rate_limit_duration') or 1)
-    duration = user.get('rate_limit_duration_type', 'minute')
-    window = duration_to_seconds(duration)
     now_ms = int(time.time() * 1000)
-    key = f'rate_limit:{username}:{now_ms // (window * 1000)}'
-    try:
-        client = redis_client or _fallback_counter
-        count = await client.incr(key)
-        if count == 1:
-            await client.expire(key, window)
-    except Exception:
+    # Rate limiting (enabled if explicitly set true, or legacy values exist)
+    rate_enabled = (user.get('rate_limit_enabled') is True) or bool(user.get('rate_limit_duration'))
+    if rate_enabled:
+        # Use user-set values; if explicitly enabled but missing values, fall back to sensible defaults
+        rate = int(user.get('rate_limit_duration') or 60)
+        duration = user.get('rate_limit_duration_type') or 'minute'
+        window = duration_to_seconds(duration)
+        key = f'rate_limit:{username}:{now_ms // (window * 1000)}'
+        try:
+            client = redis_client or _fallback_counter
+            count = await client.incr(key)
+            if count == 1:
+                await client.expire(key, window)
+        except Exception:
+            count = await _fallback_counter.incr(key)
+            if count == 1:
+                await _fallback_counter.expire(key, window)
+        if count > rate:
+            raise HTTPException(status_code=429, detail='Rate limit exceeded')
 
-        count = await _fallback_counter.incr(key)
-        if count == 1:
-            await _fallback_counter.expire(key, window)
-    if count > rate:
-        raise HTTPException(status_code=429, detail='Rate limit exceeded')
-    throttle_limit = int(user.get('throttle_duration') or 5)
-    throttle_duration = user.get('throttle_duration_type', 'second')
-    throttle_window = duration_to_seconds(throttle_duration)
-    throttle_key = f'throttle_limit:{username}:{now_ms // (throttle_window * 1000)}'
-    try:
-        client = redis_client or _fallback_counter
-        throttle_count = await client.incr(throttle_key)
-        if throttle_count == 1:
-            await client.expire(throttle_key, throttle_window)
-    except Exception:
-        throttle_count = await _fallback_counter.incr(throttle_key)
-        if throttle_count == 1:
-            await _fallback_counter.expire(throttle_key, throttle_window)
-    throttle_queue_limit = int(user.get('throttle_queue_limit') or 10)
-    if throttle_count > throttle_queue_limit:
-        raise HTTPException(status_code=429, detail='Throttle queue limit exceeded')
-    if throttle_count > throttle_limit:
-        throttle_wait = float(user.get('throttle_wait_duration', 0.5) or 0.5)
-        throttle_wait_duration = user.get('throttle_wait_duration_type', 'second')
-        if throttle_wait_duration != 'second':
-            throttle_wait *= duration_to_seconds(throttle_wait_duration)
-        dynamic_wait = throttle_wait * (throttle_count - throttle_limit)
-        await asyncio.sleep(dynamic_wait)
+    # Throttling (enabled if explicitly set true, or legacy values exist)
+    throttle_enabled = (user.get('throttle_enabled') is True) or bool(user.get('throttle_duration'))
+    if throttle_enabled:
+        throttle_limit = int(user.get('throttle_duration') or 10)
+        throttle_duration = user.get('throttle_duration_type') or 'second'
+        throttle_window = duration_to_seconds(throttle_duration)
+        throttle_key = f'throttle_limit:{username}:{now_ms // (throttle_window * 1000)}'
+        try:
+            client = redis_client or _fallback_counter
+            throttle_count = await client.incr(throttle_key)
+            if throttle_count == 1:
+                await client.expire(throttle_key, throttle_window)
+        except Exception:
+            throttle_count = await _fallback_counter.incr(throttle_key)
+            if throttle_count == 1:
+                await _fallback_counter.expire(throttle_key, throttle_window)
+        throttle_queue_limit = int(user.get('throttle_queue_limit') or 10)
+        if throttle_count > throttle_queue_limit:
+            raise HTTPException(status_code=429, detail='Throttle queue limit exceeded')
+        if throttle_count > throttle_limit:
+            throttle_wait = float(user.get('throttle_wait_duration', 0.5) or 0.5)
+            throttle_wait_duration = user.get('throttle_wait_duration_type', 'second')
+            if throttle_wait_duration != 'second':
+                throttle_wait *= duration_to_seconds(throttle_wait_duration)
+            dynamic_wait = throttle_wait * (throttle_count - throttle_limit)
+            await asyncio.sleep(dynamic_wait)
 
 def reset_counters():
     """Reset in-memory rate/throttle counters (used by tests and cache clears).

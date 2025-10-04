@@ -17,14 +17,17 @@ interface User {
   groups: string[]
   rate_limit_duration: number
   rate_limit_duration_type: string
+  rate_limit_enabled?: boolean
   throttle_duration: number
   throttle_duration_type: string
   throttle_wait_duration: number
   throttle_wait_duration_type: string
   throttle_queue_limit: number | null
+  throttle_enabled?: boolean
   custom_attributes: Record<string, string>
   bandwidth_limit_bytes?: number
   bandwidth_limit_window?: string
+  bandwidth_limit_enabled?: boolean
   active: boolean
   ui_access?: boolean
 }
@@ -37,14 +40,17 @@ interface UpdateUserData {
   groups?: string[]
   rate_limit_duration?: number
   rate_limit_duration_type?: string
+  rate_limit_enabled?: boolean
   throttle_duration?: number
   throttle_duration_type?: string
   throttle_wait_duration?: number
   throttle_wait_duration_type?: string
   throttle_queue_limit?: number | null
+  throttle_enabled?: boolean
   custom_attributes?: Record<string, string>
   bandwidth_limit_bytes?: number
   bandwidth_limit_window?: string
+  bandwidth_limit_enabled?: boolean
   active?: boolean
   ui_access?: boolean
 }
@@ -82,14 +88,17 @@ const UserDetailPage = () => {
           groups: [...parsedUser.groups],
           rate_limit_duration: parsedUser.rate_limit_duration,
           rate_limit_duration_type: parsedUser.rate_limit_duration_type,
+          rate_limit_enabled: Boolean((parsedUser as any).rate_limit_enabled),
           throttle_duration: parsedUser.throttle_duration,
           throttle_duration_type: parsedUser.throttle_duration_type,
           throttle_wait_duration: parsedUser.throttle_wait_duration,
           throttle_wait_duration_type: parsedUser.throttle_wait_duration_type,
           throttle_queue_limit: parsedUser.throttle_queue_limit,
+          throttle_enabled: Boolean((parsedUser as any).throttle_enabled),
           custom_attributes: { ...parsedUser.custom_attributes },
           bandwidth_limit_bytes: parsedUser.bandwidth_limit_bytes,
           bandwidth_limit_window: parsedUser.bandwidth_limit_window,
+          bandwidth_limit_enabled: (parsedUser as any).bandwidth_limit_enabled,
           active: parsedUser.active,
           ui_access: parsedUser.ui_access
         })
@@ -103,6 +112,9 @@ const UserDetailPage = () => {
               ...prev,
               bandwidth_limit_bytes: refreshed.bandwidth_limit_bytes,
               bandwidth_limit_window: refreshed.bandwidth_limit_window,
+              bandwidth_limit_enabled: Boolean((refreshed as any).bandwidth_limit_enabled),
+              rate_limit_enabled: Boolean((refreshed as any).rate_limit_enabled),
+              throttle_enabled: Boolean((refreshed as any).throttle_enabled),
             }))
           } catch {}
         })()
@@ -138,14 +150,17 @@ const UserDetailPage = () => {
         groups: [...user.groups],
         rate_limit_duration: user.rate_limit_duration,
         rate_limit_duration_type: user.rate_limit_duration_type,
+        rate_limit_enabled: Boolean((user as any).rate_limit_enabled),
         throttle_duration: user.throttle_duration,
         throttle_duration_type: user.throttle_duration_type,
         throttle_wait_duration: user.throttle_wait_duration,
         throttle_wait_duration_type: user.throttle_wait_duration_type,
         throttle_queue_limit: user.throttle_queue_limit,
+        throttle_enabled: Boolean((user as any).throttle_enabled),
         custom_attributes: { ...user.custom_attributes },
         bandwidth_limit_bytes: user.bandwidth_limit_bytes,
         bandwidth_limit_window: user.bandwidth_limit_window,
+        bandwidth_limit_enabled: Boolean((user as any).bandwidth_limit_enabled),
         active: user.active,
         ui_access: user.ui_access
       })
@@ -553,6 +568,31 @@ const UserDetailPage = () => {
                 )}
               </div>
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enforcement</label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!editData.bandwidth_limit_enabled}
+                        onChange={(e) => handleInputChange('bandwidth_limit_enabled', e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        Enforce bandwidth limit for this user
+                      </label>
+                    </div>
+                  ) : (
+                    (() => {
+                      const bwEnabled = Boolean((user as any).bandwidth_limit_enabled) && (Number(user.bandwidth_limit_bytes || 0) > 0)
+                      return (
+                        <span className={`badge ${bwEnabled ? 'badge-success' : 'badge-gray'}`}>
+                          {bwEnabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      )
+                    })()
+                  )}
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bytes (limit)</label>
                   {isEditing ? (
@@ -649,6 +689,29 @@ const UserDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enforcement</label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!editData.rate_limit_enabled}
+                        onChange={(e) => handleInputChange('rate_limit_enabled', e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce rate limiting for this user</label>
+                    </div>
+                  ) : (
+                    (() => {
+                      const enabled = Boolean((user as any).rate_limit_enabled)
+                      return (
+                        <span className={`badge ${enabled ? 'badge-success' : 'badge-gray'}`}>
+                          {enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      )
+                    })()
+                  )}
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Rate Limit Duration
                   </label>
@@ -688,6 +751,29 @@ const UserDetailPage = () => {
                 <FormHelp docHref="/docs/using-fields.html#throttle">Control bursts with duration, wait, and queue size.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enforcement</label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!editData.throttle_enabled}
+                        onChange={(e) => handleInputChange('throttle_enabled', e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce throttling for this user</label>
+                    </div>
+                  ) : (
+                    (() => {
+                      const enabled = Boolean((user as any).throttle_enabled)
+                      return (
+                        <span className={`badge ${enabled ? 'badge-success' : 'badge-gray'}`}>
+                          {enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      )
+                    })()
+                  )}
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Throttle Duration
@@ -804,7 +890,7 @@ const UserDetailPage = () => {
                 )}
 
                 <div className="space-y-2">
-                  {Object.entries(isEditing ? editData.custom_attributes || {} : user.custom_attributes).map(([key, value]) => (
+                  {Object.entries(((isEditing ? editData.custom_attributes : user.custom_attributes) || {})).map(([key, value]) => (
                     <div key={key} className="flex items-center gap-2">
                       <span className="text-sm bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200 px-3 py-1 rounded flex-1">
                         <strong>{key}:</strong> {value}
@@ -823,7 +909,7 @@ const UserDetailPage = () => {
                   ))}
                 </div>
 
-                {Object.keys(isEditing ? editData.custom_attributes || {} : user.custom_attributes).length === 0 && (
+                {Object.keys(((isEditing ? editData.custom_attributes : user.custom_attributes) || {})).length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No custom attributes</p>
                 )}
               </div>
