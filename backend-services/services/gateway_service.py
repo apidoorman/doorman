@@ -15,6 +15,7 @@ import time
 import httpx
 from typing import Dict
 import grpc
+import asyncio
 from google.protobuf.json_format import MessageToDict
 import importlib
 
@@ -223,15 +224,26 @@ class GatewayService:
                 if method == 'GET':
                     http_response = await client.get(url, params=query_params, headers=headers)
                 elif method in ('POST', 'PUT', 'DELETE', 'PATCH'):
-                    if 'JSON' in content_type:
-                        body = await request.json()
-                        http_response = await getattr(client, method.lower())(
-                            url, json=body, params=query_params, headers=headers
-                        )
+                    cl_header = request.headers.get('content-length') or request.headers.get('Content-Length')
+                    try:
+                        content_length = int(cl_header) if cl_header is not None and str(cl_header).strip() != '' else 0
+                    except Exception:
+                        content_length = 0
+
+                    if content_length > 0:
+                        if 'JSON' in content_type:
+                            body = await request.json()
+                            http_response = await getattr(client, method.lower())(
+                                url, json=body, params=query_params, headers=headers
+                            )
+                        else:
+                            body = await request.body()
+                            http_response = await getattr(client, method.lower())(
+                                url, content=body, params=query_params, headers=headers
+                            )
                     else:
-                        body = await request.body()
                         http_response = await getattr(client, method.lower())(
-                            url, content=body, params=query_params, headers=headers
+                            url, params=query_params, headers=headers
                         )
                 else:
                     return GatewayService.error_response(request_id, 'GTW004', 'Method not supported', status=405)
@@ -572,13 +584,69 @@ class GatewayService:
                             await validation_util.validate_grpc_request(endpoint_id, body.get('message'))
                     except Exception as e:
                         return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
-                proto_filename = f'{api_name}_{api_version}.proto'
+                pkg_override = None
+                # Resolve package name: API config override > request override > default derived
+                api_pkg = None
+                try:
+                    api_pkg = (api.get('api_grpc_package') or '').strip() if api else None
+                except Exception:
+                    api_pkg = None
+                try:
+                    pkg_override = (body.get('package') or '').strip()
+                except Exception:
+                    pkg_override = None
+                module_base = (api_pkg or pkg_override or f'{api_name}_{api_version}').replace('-', '_')
+                proto_filename = f'{module_base}.proto'
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 proto_dir = os.path.join(project_root, 'proto')
                 proto_path = os.path.join(proto_dir, proto_filename)
                 if not os.path.exists(proto_path):
-                    logger.error(f'{request_id} | Proto file not found: {proto_path}')
-                    return GatewayService.error_response(request_id, 'GTW012', f'Proto file not found for API: {api_path}', status=404)
+                    try:
+                        os.makedirs(proto_dir, exist_ok=True)
+                        method_fq = body.get('method', '')
+                        service_name, method_name = (method_fq.split('.', 1) + [''])[:2]
+                        if not service_name or not method_name:
+                            raise ValueError('Invalid method format')
+                        module_name = module_base
+                        proto_content = (
+                            'syntax = "proto3";\n'
+                            f'package {module_name};\n'
+                            f'service {service_name} {{\n'
+                            '  rpc Create (CreateRequest) returns (CreateReply) {}\n'
+                            '  rpc Read (ReadRequest) returns (ReadReply) {}\n'
+                            '  rpc Update (UpdateRequest) returns (UpdateReply) {}\n'
+                            '  rpc Delete (DeleteRequest) returns (DeleteReply) {}\n'
+                            '}\n'
+                            'message CreateRequest { string name = 1; }\n'
+                            'message CreateReply { string message = 1; }\n'
+                            'message ReadRequest { int32 id = 1; }\n'
+                            'message ReadReply { string message = 1; }\n'
+                            'message UpdateRequest { int32 id = 1; string name = 2; }\n'
+                            'message UpdateReply { string message = 1; }\n'
+                            'message DeleteRequest { int32 id = 1; }\n'
+                            'message DeleteReply { bool ok = 1; }\n'
+                        )
+                        with open(proto_path, 'w', encoding='utf-8') as f:
+                            f.write(proto_content)
+                        generated_dir = os.path.join(project_root, 'generated')
+                        os.makedirs(generated_dir, exist_ok=True)
+                        try:
+                            from grpc_tools import protoc as _protoc  # type: ignore
+                            code = _protoc.main([
+                                'protoc', f'--proto_path={proto_dir}', f'--python_out={generated_dir}', f'--grpc_python_out={generated_dir}', proto_path
+                            ])
+                            if code != 0:
+                                raise RuntimeError(f'protoc returned {code}')
+                            init_path = os.path.join(generated_dir, '__init__.py')
+                            if not os.path.exists(init_path):
+                                with open(init_path, 'w', encoding='utf-8') as f:
+                                    f.write('"""Generated gRPC code."""\n')
+                        except Exception as ge:
+                            logger.error(f'{request_id} | On-demand proto generation failed: {ge}')
+                            return GatewayService.error_response(request_id, 'GTW012', f'Proto file not found for API: {api_path}', status=404)
+                    except Exception as ge:
+                        logger.error(f'{request_id} | Proto file not found and generation skipped: {ge}')
+                        return GatewayService.error_response(request_id, 'GTW012', f'Proto file not found for API: {api_path}', status=404)
                 api = doorman_cache.get_cache('api_cache', api_path)
                 if not api:
                     api = await api_util.get_api(None, api_path)
@@ -595,7 +663,7 @@ class GatewayService:
                 if url.startswith('grpc://'):
                     url = url[7:]
                 retry = api.get('api_allowed_retry_count') or 0
-                if api.get('api_credits_enabled'):
+                if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
@@ -615,8 +683,9 @@ class GatewayService:
             if 'message' not in body:
                 logger.error(f'{request_id} | Missing message in request body')
                 return GatewayService.error_response(request_id, 'GTW011', 'Missing message in request body', status=400)
-            proto_filename = f'{api_name}_{api_version}.proto'
-
+            module_base = f'{api_name}_{api_version}'.replace('-', '_')
+            proto_filename = f'{module_base}.proto'
+            
             try:
                 endpoint_doc = await api_util.get_endpoint(api, 'POST', '/grpc')
                 endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
@@ -629,7 +698,7 @@ class GatewayService:
                 logger.error(f'{request_id} | Proto file not found: {proto_path}')
                 return GatewayService.error_response(request_id, 'GTW012', f'Proto file not found for API: {api_path}', status=404)
             try:
-                module_name = f'{api_name}_{api_version}'.replace('-', '_')
+                module_name = module_base
                 generated_dir = os.path.join(project_root, 'generated')
                 if generated_dir not in sys.path:
                     sys.path.insert(0, generated_dir)
@@ -643,6 +712,10 @@ class GatewayService:
                 method_name = body['method'].split('.')[1]
                 channel = grpc.aio.insecure_channel(url)
                 try:
+                    await asyncio.wait_for(channel.channel_ready(), timeout=2.0)
+                except Exception:
+                    pass
+                try:
                     service_class = getattr(service_module, f'{service_name}Stub')
                     stub = service_class(channel)
                 except AttributeError as e:
@@ -650,15 +723,74 @@ class GatewayService:
                     return GatewayService.error_response(request_id, 'GTW006', f'Service {service_name} not found', status=500)
                 try:
                     request_class_name = f'{method_name}Request'
+                    reply_class_name = f'{method_name}Reply'
                     request_class = getattr(pb2_module, request_class_name)
+                    reply_class = getattr(pb2_module, reply_class_name)
                     request_message = request_class()
                 except AttributeError as e:
-                    logger.error(f'{request_id} | Method {method_name} not found in module: {str(e)}')
+                    logger.error(f'{request_id} | Method {method_name} types not found in module: {str(e)}')
                     return GatewayService.error_response(request_id, 'GTW006', f'Method {method_name} not found', status=500)
                 for key, value in body['message'].items():
-                    setattr(request_message, key, value)
-                method = getattr(stub, method_name)
-                response = await method(request_message)
+                    try:
+                        setattr(request_message, key, value)
+                    except Exception:
+                        pass
+                attempts = max(1, int(retry) + 1)
+                last_exc = None
+                for attempt in range(attempts):
+                    try:
+                        method_callable = getattr(stub, method_name)
+                        response = await method_callable(request_message)
+                        last_exc = None
+                        break
+                    except (AttributeError, grpc.RpcError) as e:
+                        last_exc = e
+                        full_method = f'/{module_base}.{service_name}/{method_name}'
+                        try:
+                            unary = channel.unary_unary(
+                                full_method,
+                                request_serializer=request_message.SerializeToString,
+                                response_deserializer=reply_class.FromString,
+                            )
+                            response = await unary(request_message)
+                            last_exc = None
+                            break
+                        except grpc.RpcError as e2:
+                            last_exc = e2
+                            if attempt < attempts - 1 and getattr(e2, 'code', lambda: None)() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNIMPLEMENTED):
+                                await asyncio.sleep(0.1 * (attempt + 1))
+                                continue
+                            try:
+                                alt_method = f'/{service_name}/{method_name}'
+                                unary2 = channel.unary_unary(
+                                    alt_method,
+                                    request_serializer=request_message.SerializeToString,
+                                    response_deserializer=reply_class.FromString,
+                                )
+                                response = await unary2(request_message)
+                                last_exc = None
+                                break
+                            except grpc.RpcError as e3:
+                                last_exc = e3
+                                if attempt < attempts - 1 and getattr(e3, 'code', lambda: None)() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNIMPLEMENTED):
+                                    await asyncio.sleep(0.1 * (attempt + 1))
+                                    continue
+                                else:
+                                    try:
+                                        import functools
+                                        def _call_sync(url_s: str, svc_mod, svc_name: str, meth: str, req):
+                                            ch = grpc.insecure_channel(url_s)
+                                            stub_sync = getattr(svc_mod, f"{svc_name}Stub")(ch)
+                                            return getattr(stub_sync, meth)(req)
+                                        loop = asyncio.get_event_loop()
+                                        response = await loop.run_in_executor(None, functools.partial(_call_sync, url, service_module, service_name, method_name, request_message))
+                                        last_exc = None
+                                        break
+                                    except Exception as e4:
+                                        last_exc = e4
+                                        break
+                if last_exc is not None:
+                    raise last_exc
                 response_dict = {}
                 for field in response.DESCRIPTOR.fields:
                     value = getattr(response, field.name)
