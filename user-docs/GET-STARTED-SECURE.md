@@ -140,6 +140,23 @@ openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
 - Run containers as non-root (Dockerfiles already do).
 - Place the backend on a private network; only expose your reverse proxy.
 
+### 6) IP Access Control and Proxies
+
+Doorman supports platform-wide IP controls and per-API IP policies. Configure these carefully in production to prevent header spoofing.
+
+- Platform IP controls: Settings are available in the UI under Security → IP Access Control and via `PUT /platform/security/settings`.
+  - `ip_whitelist`: If non-empty, only listed IPs/CIDRs can access the platform and gateway.
+  - `ip_blacklist`: Always denies listed IPs/CIDRs (evaluated after whitelist).
+  - `trust_x_forwarded_for`: When true, Doorman will consider client IP headers such as `X-Forwarded-For` (first IP), `X-Real-IP`, and `CF-Connecting-IP`. These headers are trusted only if the direct source matches `xff_trusted_proxies`.
+  - `xff_trusted_proxies`: Required when `trust_x_forwarded_for=true`. List the IPs/CIDRs of your reverse proxy/load balancer. If empty, client IP headers are ignored to prevent spoofing.
+  - `LOCAL_HOST_IP_BYPASS` (env): When set to `true`, direct requests from `127.0.0.1`/`::1` without forwarding headers bypass IP allow/deny lists. Defaults to `false`. This is useful for local admin work but should be disabled in production, especially if a reverse proxy runs on localhost.
+
+- Per-API policy: Each API may set `api_ip_mode` (`allow_all` or `whitelist`), `api_ip_whitelist`, `api_ip_blacklist`, and `api_trust_x_forwarded_for` (inherits platform rules for trusted proxies).
+
+- Logs and monitoring: Entry logs include `request_id`, `client_ip` (direct), and `effective_ip` (after proxy evaluation) so you can search by IP from the Logs page.
+
+Security tip: If `trust_x_forwarded_for=true` and no `xff_trusted_proxies` are configured, Doorman emits a startup warning and the Security page shows a banner. Address this immediately to avoid spoofing risk.
+
 ## Real-World Example: Bring a REST API Online Securely
 
 Assume you have an internal upstream at `http://orders-api.internal:8080` and you want to publish it at `/api/rest/orders/v1/*` with API-key injection and validation.

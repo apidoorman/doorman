@@ -993,19 +993,26 @@ const ApiDetailPage = () => {
                 const listFromText = (t: string) => t.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
                 const wl = isEditing ? listFromText(ipWhitelistText) : (((api as any).api_ip_whitelist || []) as string[])
                 const bl = isEditing ? listFromText(ipBlacklistText) : (((api as any).api_ip_blacklist || []) as string[])
-                const toLong = (s: string) => { const parts = s.split('.'); if (parts.length !== 4) return NaN; return parts.reduce((a,p)=> (a<<8)+(parseInt(p,10)&255),0) }
+                const isIPv6 = (s: string) => s.includes(':')
+                const toIPv4 = (s: string) => { const parts = s.split('.'); if (parts.length !== 4) return null as any; return parts.reduce((a,p)=> (a<<8n)+(BigInt(parseInt(p,10)&255)),0n) }
+                const expandIPv6 = (ip: string) => { if (ip.indexOf('::') !== -1) { const [head, tail] = ip.split('::'); const headParts = head ? head.split(':') : []; const tailParts = tail ? tail.split(':') : []; const missing = 8 - (headParts.length + tailParts.length); const zeros = Array(Math.max(0, missing)).fill('0'); return [...headParts, ...zeros, ...tailParts].map(h=>h || '0') } return ip.split(':') }
+                const toIPv6 = (s: string) => { const parts = expandIPv6(s); if (parts.length !== 8) return null as any; try { return parts.reduce((acc, h) => (acc<<16n) + BigInt(parseInt(h || '0', 16)), 0n) } catch { return null as any } }
                 const matches = (ip: string, patterns: string[]) => {
                   if (!ip) return false
-                  const ipL = toLong(ip)
+                  const v6 = isIPv6(ip)
+                  const ipVal = v6 ? toIPv6(ip) : toIPv4(ip)
                   return (patterns || []).some(raw => {
                     const p = (raw || '').trim(); if (!p) return false
                     if (p.includes('/')) {
-                      const [net, maskStr] = p.split('/'); const mask = parseInt(maskStr,10)
-                      const netL = toLong(net); if (isNaN(ipL) || isNaN(netL)) return false
-                      const maskBits = mask <= 0 ? 0 : (0xFFFFFFFF << (32 - Math.min(mask, 32))) >>> 0
-                      return (((ipL>>>0) & maskBits) === (netL & maskBits))
+                      const [net, maskStr] = p.split('/'); const m = parseInt(maskStr,10)
+                      const n6 = isIPv6(net); if (n6 !== v6) return false
+                      const netVal = n6 ? toIPv6(net) : toIPv4(net); if (netVal === null || ipVal === null || isNaN(m as any)) return false
+                      const bits = n6 ? 128 : 32
+                      const shift = BigInt(bits - Math.min(Math.max(m,0), bits))
+                      const mask = ((1n << BigInt(bits)) - 1n) ^ ((1n << shift) - 1n)
+                      return ((ipVal & mask) === (netVal & mask))
                     }
-                    return p === ip
+                    return p.toLowerCase() === ip.toLowerCase()
                   })
                 }
                 const mode = (isEditing ? editData.api_ip_mode : (api as any).api_ip_mode) || 'allow_all'
@@ -1036,12 +1043,12 @@ const ApiDetailPage = () => {
                       <>
                         <input type="checkbox" className="h-4 w-4" checked={!!editData.api_trust_x_forwarded_for} onChange={(e)=>handleInputChange('api_trust_x_forwarded_for', e.target.checked)} />
                         <label className="text-sm text-gray-700 dark:text-gray-300">Trust X-Forwarded-For (behind proxy)</label>
-                        <InfoTooltip text="Effective IP for this API: if enabled and X-Forwarded-For is present, use its first IP; otherwise use the direct client IP." />
+                        <InfoTooltip text="If enabled, the effective IP for this API is taken from X-Forwarded-For (first hop) or X-Real-IP when present. Platform 'Trusted Proxies' must include the direct source; otherwise headers are ignored to prevent spoofing." />
                       </>
                     ) : (
                       <>
                         <p className="text-gray-900 dark:text-white">Trust XFF: {((api as any).api_trust_x_forwarded_for ? 'Yes' : 'No')}</p>
-                        <InfoTooltip text="Effective IP for this API: if X-Forwarded-For is trusted and present, the first IP is used; otherwise the direct client IP is used." />
+                        <InfoTooltip text="If enabled, the effective IP for this API is taken from X-Forwarded-For (first hop) or X-Real-IP when present. Platform 'Trusted Proxies' must include the direct source; otherwise headers are ignored to prevent spoofing." />
                       </>
                     )}
                   </div>

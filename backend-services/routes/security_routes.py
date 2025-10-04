@@ -69,6 +69,24 @@ async def get_security_settings(request: Request):
             settings_with_mode['memory_only'] = bool(database.memory_only)
         except Exception:
             settings_with_mode['memory_only'] = False
+        # Indicate if localhost bypass is controlled by env
+        try:
+            import os
+            env_val = os.getenv('LOCAL_HOST_IP_BYPASS')
+            locked = isinstance(env_val, str) and env_val.strip() != ''
+            if locked:
+                settings_with_mode['allow_localhost_bypass'] = (env_val.lower() == 'true')
+            settings_with_mode['allow_localhost_bypass_locked'] = locked
+        except Exception:
+            settings_with_mode['allow_localhost_bypass_locked'] = False
+        # Security warnings: XFF enabled but no trusted proxies
+        try:
+            warnings = []
+            if settings_with_mode.get('trust_x_forwarded_for') and not (settings_with_mode.get('xff_trusted_proxies') or []):
+                warnings.append('Trust X-Forwarded-For is enabled, but no trusted proxies are configured. Set xff_trusted_proxies to avoid header spoofing.')
+            settings_with_mode['security_warnings'] = warnings
+        except Exception:
+            pass
         settings_with_mode['client_ip'] = client_ip
         settings_with_mode['client_ip_xff'] = client_ip_xff
         return process_response(ResponseModel(
