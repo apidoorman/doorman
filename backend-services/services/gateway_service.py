@@ -165,7 +165,9 @@ class GatewayService:
                 if not endpoints:
                     return GatewayService.error_response(request_id, 'GTW002', 'No endpoints found for the requested API')
                 regex_pattern = re.compile(r'\{[^/]+\}')
-                composite = request.method + '/' + endpoint_uri
+                # Treat HEAD like GET for endpoint registration matching
+                match_method = 'GET' if str(request.method).upper() == 'HEAD' else request.method
+                composite = match_method + '/' + endpoint_uri
                 if not any(re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), composite) for ep in endpoints):
                     logger.error(f'{endpoints} | REST gateway failed with code GTW003')
                     return GatewayService.error_response(request_id, 'GTW003', 'Endpoint does not exist for the requested API')
@@ -223,7 +225,8 @@ class GatewayService:
                     pass
 
             try:
-                endpoint_doc = await api_util.get_endpoint(api, method, '/' + endpoint_uri.lstrip('/')) if api else None
+                lookup_method = 'GET' if str(method).upper() == 'HEAD' else method
+                endpoint_doc = await api_util.get_endpoint(api, lookup_method, '/' + endpoint_uri.lstrip('/')) if api else None
                 endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
                 if endpoint_id:
                     if 'JSON' in content_type:
@@ -239,6 +242,8 @@ class GatewayService:
             try:
                 if method == 'GET':
                     http_response = await client.get(url, params=query_params, headers=headers)
+                elif method == 'HEAD':
+                    http_response = await client.head(url, params=query_params, headers=headers)
                 elif method in ('POST', 'PUT', 'DELETE', 'PATCH'):
                     cl_header = request.headers.get('content-length') or request.headers.get('Content-Length')
                     try:
@@ -269,10 +274,13 @@ class GatewayService:
                         await client.aclose()
                     except Exception:
                         pass
-            if 'application/json' in http_response.headers.get('Content-Type', '').lower():
-                response_content = http_response.json()
+            if str(method).upper() == 'HEAD':
+                response_content = ''
             else:
-                response_content = http_response.text
+                if 'application/json' in http_response.headers.get('Content-Type', '').lower():
+                    response_content = http_response.json()
+                else:
+                    response_content = http_response.text
             backend_end_time = time.time() * 1000
             if http_response.status_code in [500, 502, 503, 504] and retry > 0:
                 logger.error(f'{request_id} | REST gateway failed retrying')
