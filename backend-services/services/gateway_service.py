@@ -181,11 +181,27 @@ class GatewayService:
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
+            else:
+                # Recursive retry path: url/method provided, but we still need API context
+                try:
+                    parts = [p for p in (path or '').split('/') if p]
+                    api_name_version = ''
+                    endpoint_uri = ''
+                    if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+                        api_name_version = f'/{parts[0]}/{parts[1]}'
+                        endpoint_uri = '/'.join(parts[2:])
+                    api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
+                    api = await api_util.get_api(api_key, api_name_version)
+                    # Do not mutate url/method or retry here; caller passed those
+                except Exception:
+                    api = None
+                    endpoint_uri = ''
+
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
-            allowed_headers = api.get('api_allowed_headers') or []
+            allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
-            if api.get('api_credits_enabled'):
+            if api and api.get('api_credits_enabled'):
                 ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
@@ -196,7 +212,7 @@ class GatewayService:
                         headers[ai_token_headers[0]] = user_specific_api_key
             content_type = request.headers.get('Content-Type', '').upper()
             logger.info(f'{request_id} | REST gateway to: {url}')
-            if api.get('api_authorization_field_swap'):
+            if api and api.get('api_authorization_field_swap'):
                 try:
                     swap_from = api.get('api_authorization_field_swap')
                     if swap_from:
@@ -207,7 +223,7 @@ class GatewayService:
                     pass
 
             try:
-                endpoint_doc = await api_util.get_endpoint(api, method, '/' + endpoint_uri.lstrip('/'))
+                endpoint_doc = await api_util.get_endpoint(api, method, '/' + endpoint_uri.lstrip('/')) if api else None
                 endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
                 if endpoint_id:
                     if 'JSON' in content_type:
