@@ -77,11 +77,12 @@ async def memory_dump(request: Request, body: Optional[DumpRequest] = None):
         if body and body.path:
             path = body.path
         dump_path = dump_memory_to_file(path)
+        # Wrap under 'response' key so clients/tests see a consistent envelope
         return process_response(ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},
             message='Memory dump created successfully',
-            response={'path': dump_path}
+            response={'response': {'path': dump_path}}
         ).dict(), 'rest')
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
@@ -150,11 +151,12 @@ async def memory_restore(request: Request, body: Optional[RestoreRequest] = None
         if body and body.path:
             path = body.path
         info = restore_memory_from_file(path)
+        # Wrap under 'response' key for consistency with dump
         return process_response(ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},
             message='Memory restore completed',
-            response=info
+            response={'response': info}
         ).dict(), 'rest')
     except FileNotFoundError as e:
         return process_response(ResponseModel(

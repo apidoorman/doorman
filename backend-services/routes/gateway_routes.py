@@ -173,16 +173,36 @@ async def gateway(request: Request, path: str):
         parts = [p for p in (path or '').split('/') if p]
         api_public = False
         api_auth_required = True
+        resolved_api = None
         if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
             api_key = doorman_cache.get_cache('api_id_cache', f'/{parts[0]}/{parts[1]}')
-            api = await api_util.get_api(api_key, f'/{parts[0]}/{parts[1]}')
-            api_public = bool(api.get('api_public')) if api else False
-            api_auth_required = bool(api.get('api_auth_required')) if api and api.get('api_auth_required') is not None else True
-            if api:
+            resolved_api = await api_util.get_api(api_key, f'/{parts[0]}/{parts[1]}')
+            # Early endpoint existence check to return 404 before auth when missing
+            if resolved_api:
                 try:
-                    enforce_api_ip_policy(request, api)
+                    # Enforce per-API IP policy first
+                    enforce_api_ip_policy(request, resolved_api)
                 except HTTPException as e:
                     return process_response(ResponseModel(status_code=e.status_code, error_code=e.detail, error_message='IP restricted').dict(), 'rest')
+                # Build endpoint URI and verify it exists for this API/method
+                endpoint_uri = '/' + '/'.join(parts[2:]) if len(parts) > 2 else '/'
+                try:
+                    endpoints = await api_util.get_api_endpoints(resolved_api.get('api_id'))
+                    import re as _re
+                    regex_pattern = _re.compile(r'\{[^/]+\}')
+                    composite = request.method + endpoint_uri
+                    if not any(_re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), composite) for ep in (endpoints or [])):
+                        return process_response(ResponseModel(
+                            status_code=404,
+                            response_headers={'request_id': request_id},
+                            error_code='GTW003',
+                            error_message='Endpoint does not exist for the requested API'
+                        ).dict(), 'rest')
+                except Exception:
+                    # If endpoint introspection fails, fall through to service handler
+                    pass
+            api_public = bool(resolved_api.get('api_public')) if resolved_api else False
+            api_auth_required = bool(resolved_api.get('api_auth_required')) if resolved_api and resolved_api.get('api_auth_required') is not None else True
         username = None
         if not api_public:
             if api_auth_required:
