@@ -375,13 +375,20 @@ class GatewayService:
             if 'SOAPAction' not in headers:
                 headers['SOAPAction'] = '""'
             envelope = (await request.body()).decode('utf-8')
-            if api.get('api_authorization_field_swap'):
+            if api and api.get('api_authorization_field_swap'):
                 try:
                     swap_from = api.get('api_authorization_field_swap')
                     if swap_from:
-                        val = headers.get(swap_from)
-                        if val is not None:
+                        val = None
+                        for key_variant in (swap_from, str(swap_from).lower(), str(swap_from).title()):
+                            if key_variant in headers:
+                                val = headers.get(key_variant)
+                                break
+                        # Only override when a non-empty value is provided
+                        if val is not None and str(val).strip() != '':
+                            # Preserve header for downstream clients regardless of case normalization
                             headers['Authorization'] = val
+                            headers['authorization'] = val
                 except Exception:
                     pass
 
