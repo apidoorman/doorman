@@ -88,13 +88,13 @@ const UserDetailPage = () => {
           groups: [...parsedUser.groups],
           rate_limit_duration: parsedUser.rate_limit_duration,
           rate_limit_duration_type: parsedUser.rate_limit_duration_type,
-          rate_limit_enabled: (parsedUser as any).rate_limit_enabled,
+          rate_limit_enabled: Boolean((parsedUser as any).rate_limit_enabled),
           throttle_duration: parsedUser.throttle_duration,
           throttle_duration_type: parsedUser.throttle_duration_type,
           throttle_wait_duration: (parsedUser as any).throttle_wait_duration,
           throttle_wait_duration_type: (parsedUser as any).throttle_wait_duration_type,
           throttle_queue_limit: (parsedUser as any).throttle_queue_limit,
-          throttle_enabled: (parsedUser as any).throttle_enabled,
+          throttle_enabled: Boolean((parsedUser as any).throttle_enabled),
           throttle_wait_duration: parsedUser.throttle_wait_duration,
           throttle_wait_duration_type: parsedUser.throttle_wait_duration_type,
           throttle_queue_limit: parsedUser.throttle_queue_limit,
@@ -115,9 +115,9 @@ const UserDetailPage = () => {
               ...prev,
               bandwidth_limit_bytes: refreshed.bandwidth_limit_bytes,
               bandwidth_limit_window: refreshed.bandwidth_limit_window,
-              bandwidth_limit_enabled: (refreshed as any).bandwidth_limit_enabled,
-              rate_limit_enabled: (refreshed as any).rate_limit_enabled,
-              throttle_enabled: (refreshed as any).throttle_enabled,
+              bandwidth_limit_enabled: Boolean((refreshed as any).bandwidth_limit_enabled),
+              rate_limit_enabled: Boolean((refreshed as any).rate_limit_enabled),
+              throttle_enabled: Boolean((refreshed as any).throttle_enabled),
             }))
           } catch {}
         })()
@@ -153,17 +153,17 @@ const UserDetailPage = () => {
         groups: [...user.groups],
         rate_limit_duration: user.rate_limit_duration,
         rate_limit_duration_type: user.rate_limit_duration_type,
-        rate_limit_enabled: (user as any).rate_limit_enabled,
+        rate_limit_enabled: Boolean((user as any).rate_limit_enabled),
         throttle_duration: user.throttle_duration,
         throttle_duration_type: user.throttle_duration_type,
         throttle_wait_duration: user.throttle_wait_duration,
         throttle_wait_duration_type: user.throttle_wait_duration_type,
         throttle_queue_limit: user.throttle_queue_limit,
-        throttle_enabled: (user as any).throttle_enabled,
+        throttle_enabled: Boolean((user as any).throttle_enabled),
         custom_attributes: { ...user.custom_attributes },
         bandwidth_limit_bytes: user.bandwidth_limit_bytes,
         bandwidth_limit_window: user.bandwidth_limit_window,
-        bandwidth_limit_enabled: (user as any).bandwidth_limit_enabled,
+        bandwidth_limit_enabled: Boolean((user as any).bandwidth_limit_enabled),
         active: user.active,
         ui_access: user.ui_access
       })
@@ -586,9 +586,14 @@ const UserDetailPage = () => {
                       </label>
                     </div>
                   ) : (
-                    <span className={`badge ${(user as any).bandwidth_limit_enabled === false ? 'badge-gray' : 'badge-success'}`}>
-                      {(user as any).bandwidth_limit_enabled === false ? 'Disabled' : 'Enabled'}
-                    </span>
+                    (() => {
+                      const bwEnabled = Boolean((user as any).bandwidth_limit_enabled) && (Number(user.bandwidth_limit_bytes || 0) > 0)
+                      return (
+                        <span className={`badge ${bwEnabled ? 'badge-success' : 'badge-gray'}`}>
+                          {bwEnabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      )
+                    })()
                   )}
                 </div>
                 <div>
@@ -699,9 +704,14 @@ const UserDetailPage = () => {
                       <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce rate limiting for this user</label>
                     </div>
                   ) : (
-                    <span className={`badge ${(user as any).rate_limit_enabled === false ? 'badge-gray' : 'badge-success'}`}>
-                      {(user as any).rate_limit_enabled === false ? 'Disabled' : 'Enabled'}
-                    </span>
+                    (() => {
+                      const enabled = Boolean((user as any).rate_limit_enabled)
+                      return (
+                        <span className={`badge ${enabled ? 'badge-success' : 'badge-gray'}`}>
+                          {enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      )
+                    })()
                   )}
                 </div>
                 <div>
@@ -757,9 +767,14 @@ const UserDetailPage = () => {
                       <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce throttling for this user</label>
                     </div>
                   ) : (
-                    <span className={`badge ${(user as any).throttle_enabled === false ? 'badge-gray' : 'badge-success'}`}>
-                      {(user as any).throttle_enabled === false ? 'Disabled' : 'Enabled'}
-                    </span>
+                    (() => {
+                      const enabled = Boolean((user as any).throttle_enabled)
+                      return (
+                        <span className={`badge ${enabled ? 'badge-success' : 'badge-gray'}`}>
+                          {enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      )
+                    })()
                   )}
                 </div>
                 <div>
@@ -878,7 +893,7 @@ const UserDetailPage = () => {
                 )}
 
                 <div className="space-y-2">
-                  {Object.entries(isEditing ? editData.custom_attributes || {} : user.custom_attributes).map(([key, value]) => (
+                  {Object.entries(((isEditing ? editData.custom_attributes : user.custom_attributes) || {})).map(([key, value]) => (
                     <div key={key} className="flex items-center gap-2">
                       <span className="text-sm bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200 px-3 py-1 rounded flex-1">
                         <strong>{key}:</strong> {value}
@@ -897,7 +912,7 @@ const UserDetailPage = () => {
                   ))}
                 </div>
 
-                {Object.keys(isEditing ? editData.custom_attributes || {} : user.custom_attributes).length === 0 && (
+                {Object.keys(((isEditing ? editData.custom_attributes : user.custom_attributes) || {})).length === 0 && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">No custom attributes</p>
                 )}
               </div>

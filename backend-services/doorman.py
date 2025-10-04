@@ -117,6 +117,28 @@ async def app_lifespan(app: FastAPI):
 
     app.state._purger_task = asyncio.create_task(automatic_purger(1800))
 
+    # Restore persisted metrics (if available)
+    METRICS_FILE = os.path.join(LOGS_DIR, 'metrics.json')
+    try:
+        metrics_store.load_from_file(METRICS_FILE)
+    except Exception as e:
+        gateway_logger.debug(f'Metrics restore skipped: {e}')
+
+    # Start periodic metrics saver
+    async def _metrics_autosave(interval_s: int = 60):
+        while True:
+            try:
+                await asyncio.sleep(interval_s)
+                metrics_store.save_to_file(METRICS_FILE)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+    try:
+        app.state._metrics_save_task = asyncio.create_task(_metrics_autosave(60))
+    except Exception:
+        app.state._metrics_save_task = None
+
     try:
         await load_settings()
         await start_auto_save_task()
@@ -210,6 +232,20 @@ async def app_lifespan(app: FastAPI):
             task = getattr(app.state, '_purger_task', None)
             if task:
                 task.cancel()
+        except Exception:
+            pass
+
+        # Persist metrics on shutdown
+        try:
+            METRICS_FILE = os.path.join(LOGS_DIR, 'metrics.json')
+            metrics_store.save_to_file(METRICS_FILE)
+        except Exception:
+            pass
+        # Stop autosave task
+        try:
+            t = getattr(app.state, '_metrics_save_task', None)
+            if t:
+                t.cancel()
         except Exception:
             pass
 
@@ -614,7 +650,7 @@ async def metrics_middleware(request: Request, call_next):
                     if username:
                         from utils.bandwidth_util import add_usage, _get_user
                         u = _get_user(username)
-                        # Track usage only if not explicitly disabled and a limit is configured
+                        # Track usage when limit is set unless explicitly disabled
                         if u and u.get('bandwidth_limit_bytes') and u.get('bandwidth_limit_enabled') is not False:
                             add_usage(username, int(bytes_in) + int(clen), u.get('bandwidth_limit_window') or 'day')
                 except Exception:
