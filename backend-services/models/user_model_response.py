@@ -27,6 +27,7 @@ class UserModelResponse(BaseModel):
     bandwidth_limit_window: Optional[str] = Field(None, min_length=1, max_length=10, description='Bandwidth window unit (second/minute/hour/day/month)', example='day')
     bandwidth_usage_bytes: Optional[int] = Field(None, ge=0, description='Current bandwidth usage in the active window (bytes)', example=123456)
     bandwidth_resets_at: Optional[int] = Field(None, description='UTC epoch seconds when the current bandwidth window resets', example=1727481600)
+    bandwidth_limit_enabled: Optional[bool] = Field(None, description='Whether bandwidth limit enforcement is enabled for this user', example=True)
     active: Optional[bool] = Field(None, description='Active status of the user', example=True)
     ui_access: Optional[bool] = Field(None, description='UI access for the user', example=False)
 

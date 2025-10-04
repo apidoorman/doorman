@@ -25,6 +25,7 @@ interface CreateUserData {
   custom_attributes: Record<string, string>
   bandwidth_limit_bytes?: number
   bandwidth_limit_window?: string
+  bandwidth_limit_enabled?: boolean
   active: boolean
   ui_access: boolean
 }
@@ -40,6 +41,7 @@ const AddUserPage = () => {
     custom_attributes: {},
     bandwidth_limit_bytes: undefined,
     bandwidth_limit_window: 'day',
+    bandwidth_limit_enabled: false,
     active: true,
     ui_access: false
   })
@@ -468,6 +470,19 @@ const AddUserPage = () => {
                 <FormHelp docHref="/docs/using-fields.html#bandwidth">Limit total bytes per user over a time window.</FormHelp>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enforcement</label>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      checked={!!formData.bandwidth_limit_enabled}
+                      onChange={(e) => handleInputChange('bandwidth_limit_enabled', e.target.checked)}
+                      disabled={loading}
+                    />
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce bandwidth limit for this user</span>
+                  </div>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bytes (limit)</label>
                   <input type="number" className="input" min={0}
