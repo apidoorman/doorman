@@ -87,7 +87,9 @@ async def test_rest_patch_supported_when_registered(monkeypatch, authed_client):
 
 
 @pytest.mark.asyncio
-async def test_rest_options_unregistered_endpoint_returns_405(authed_client):
+async def test_rest_options_unregistered_endpoint_returns_405(monkeypatch, authed_client):
+    # Enable strict OPTIONS behavior via env flag
+    monkeypatch.setenv('STRICT_OPTIONS_405', 'true')
     # Create API without registering the specific endpoint
     name, ver = 'optunreg', 'v1'
     r = await authed_client.post('/platform/api', json={
@@ -101,7 +103,6 @@ async def test_rest_options_unregistered_endpoint_returns_405(authed_client):
         'api_allowed_retry_count': 0,
     })
     assert r.status_code in (200, 201)
-    # OPTIONS for unregistered endpoint currently yields 204 due to preflight handler
     resp = await authed_client.options(f'/api/rest/{name}/{ver}/not-made')
     assert resp.status_code == 405
 
