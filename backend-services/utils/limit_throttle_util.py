@@ -59,10 +59,12 @@ async def limit_and_throttle(request: Request):
     if not user:
         user = user_collection.find_one({'username': username})
     now_ms = int(time.time() * 1000)
-    # Rate limiting (skip if explicitly disabled)
-    if user.get('rate_limit_enabled') is not False:
-        rate = int(user.get('rate_limit_duration') or 1)
-        duration = user.get('rate_limit_duration_type', 'minute')
+    # Rate limiting (enabled if explicitly set true, or legacy values exist)
+    rate_enabled = (user.get('rate_limit_enabled') is True) or bool(user.get('rate_limit_duration'))
+    if rate_enabled:
+        # Use user-set values; if explicitly enabled but missing values, fall back to sensible defaults
+        rate = int(user.get('rate_limit_duration') or 60)
+        duration = user.get('rate_limit_duration_type') or 'minute'
         window = duration_to_seconds(duration)
         key = f'rate_limit:{username}:{now_ms // (window * 1000)}'
         try:
@@ -77,10 +79,11 @@ async def limit_and_throttle(request: Request):
         if count > rate:
             raise HTTPException(status_code=429, detail='Rate limit exceeded')
 
-    # Throttling (skip if explicitly disabled)
-    if user.get('throttle_enabled') is not False:
-        throttle_limit = int(user.get('throttle_duration') or 5)
-        throttle_duration = user.get('throttle_duration_type', 'second')
+    # Throttling (enabled if explicitly set true, or legacy values exist)
+    throttle_enabled = (user.get('throttle_enabled') is True) or bool(user.get('throttle_duration'))
+    if throttle_enabled:
+        throttle_limit = int(user.get('throttle_duration') or 10)
+        throttle_duration = user.get('throttle_duration_type') or 'second'
         throttle_window = duration_to_seconds(throttle_duration)
         throttle_key = f'throttle_limit:{username}:{now_ms // (throttle_window * 1000)}'
         try:
