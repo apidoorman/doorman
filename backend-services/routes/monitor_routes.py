@@ -4,6 +4,7 @@ Routes to expose gateway metrics to the web client.
 
 # External imports
 from fastapi import APIRouter, Request
+from pydantic import BaseModel
 import uuid
 import time
 import logging
@@ -21,6 +22,16 @@ from utils.role_util import platform_role_required_bool
 from utils.health_check_util import check_mongodb, check_redis
 from utils.doorman_cache_util import doorman_cache
 from utils.database import database
+
+class LivenessResponse(BaseModel):
+    status: str
+
+class ReadinessResponse(BaseModel):
+    status: str
+    mongodb: bool | None = None
+    redis: bool | None = None
+    mode: str | None = None
+    cache_backend: str | None = None
 
 monitor_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
@@ -90,8 +101,8 @@ Response:
 
 
 @monitor_router.get('/monitor/liveness',
-    description='Kubernetes liveness probe endpoint (no auth)')
-
+    description='Kubernetes liveness probe endpoint (no auth)',
+    response_model=LivenessResponse)
 async def liveness():
     return {'status': 'alive'}
 
@@ -106,8 +117,8 @@ Response:
 
 
 @monitor_router.get('/monitor/readiness',
-    description='Kubernetes readiness probe endpoint (no auth)')
-
+    description='Kubernetes readiness probe endpoint (no auth)',
+    response_model=ReadinessResponse)
 async def readiness():
     try:
         mongo_ok = await check_mongodb()
@@ -135,7 +146,8 @@ Response:
 
 
 @monitor_router.get('/monitor/report',
-    description='Generate a CSV report for a date range (requires manage_gateway)')
+    description='Generate a CSV report for a date range (requires manage_gateway)',
+    include_in_schema=False)
 
 async def generate_report(request: Request, start: str, end: str):
     request_id = str(uuid.uuid4())
