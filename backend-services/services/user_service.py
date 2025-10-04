@@ -85,7 +85,8 @@ class UserService:
             ).dict()
         try:
             limit = user.get('bandwidth_limit_bytes')
-            if limit and int(limit) > 0:
+            enabled = user.get('bandwidth_limit_enabled')
+            if (enabled is not False) and limit and int(limit) > 0:
                 window = user.get('bandwidth_limit_window') or 'day'
                 used = int(get_current_usage(username, window))
                 mapping = {

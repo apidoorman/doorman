@@ -707,6 +707,31 @@ class GatewayService:
                     service_module = importlib.import_module(f'{module_name}_pb2_grpc')
                 except ImportError as e:
                     logger.error(f'{request_id} | Failed to import gRPC module: {str(e)}')
+                    # If upstream is HTTP-based, fall back to HTTP call
+                    if isinstance(url, str) and url.startswith(('http://', 'https://')):
+                        try:
+                            client = GatewayService.get_http_client()
+                            http_url = url.rstrip('/') + '/grpc'
+                            http_response = await client.post(http_url, json=body, headers=headers)
+                        finally:
+                            if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
+                                try:
+                                    await client.aclose()
+                                except Exception:
+                                    pass
+                        if http_response.status_code == 404:
+                            return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
+                        response_headers = {'request_id': request_id}
+                        try:
+                            if current_time and start_time:
+                                response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                        except Exception:
+                            pass
+                        return ResponseModel(
+                            status_code=http_response.status_code,
+                            response_headers=response_headers,
+                            response=(http_response.json() if http_response.headers.get('Content-Type','').startswith('application/json') else http_response.text)
+                        ).dict()
                     return GatewayService.error_response(request_id, 'GTW012', f'Failed to import gRPC module: {str(e)}', status=404)
                 service_name = body['method'].split('.')[0]
                 method_name = body['method'].split('.')[1]
@@ -720,6 +745,31 @@ class GatewayService:
                     stub = service_class(channel)
                 except AttributeError as e:
                     logger.error(f'{request_id} | Service {service_name} not found in module')
+                    # HTTP fallback if upstream is HTTP
+                    if isinstance(url, str) and url.startswith(('http://', 'https://')):
+                        try:
+                            client = GatewayService.get_http_client()
+                            http_url = url.rstrip('/') + '/grpc'
+                            http_response = await client.post(http_url, json=body, headers=headers)
+                        finally:
+                            if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
+                                try:
+                                    await client.aclose()
+                                except Exception:
+                                    pass
+                        if http_response.status_code == 404:
+                            return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
+                        response_headers = {'request_id': request_id}
+                        try:
+                            if current_time and start_time:
+                                response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                        except Exception:
+                            pass
+                        return ResponseModel(
+                            status_code=http_response.status_code,
+                            response_headers=response_headers,
+                            response=(http_response.json() if http_response.headers.get('Content-Type','').startswith('application/json') else http_response.text)
+                        ).dict()
                     return GatewayService.error_response(request_id, 'GTW006', f'Service {service_name} not found', status=500)
                 try:
                     request_class_name = f'{method_name}Request'
@@ -729,6 +779,31 @@ class GatewayService:
                     request_message = request_class()
                 except AttributeError as e:
                     logger.error(f'{request_id} | Method {method_name} types not found in module: {str(e)}')
+                    # Attempt HTTP fallback if upstream is HTTP-based
+                    if isinstance(url, str) and url.startswith(('http://', 'https://')):
+                        try:
+                            client = GatewayService.get_http_client()
+                            http_url = url.rstrip('/') + '/grpc'
+                            http_response = await client.post(http_url, json=body, headers=headers)
+                        finally:
+                            if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
+                                try:
+                                    await client.aclose()
+                                except Exception:
+                                    pass
+                        if http_response.status_code == 404:
+                            return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
+                        response_headers = {'request_id': request_id}
+                        try:
+                            if current_time and start_time:
+                                response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                        except Exception:
+                            pass
+                        return ResponseModel(
+                            status_code=http_response.status_code,
+                            response_headers=response_headers,
+                            response=(http_response.json() if http_response.headers.get('Content-Type','').startswith('application/json') else http_response.text)
+                        ).dict()
                     return GatewayService.error_response(request_id, 'GTW006', f'Method {method_name} not found', status=500)
                 for key, value in body['message'].items():
                     try:
@@ -825,8 +900,10 @@ class GatewayService:
                     return await GatewayService.grpc_gateway(username, request, request_id, start_time, api_name, url, retry - 1)
                 error_message = e.details()
                 logger.error(f'{request_id} | gRPC error: {error_message}')
+                # Map NOT_FOUND to 404; otherwise 500
+                http_status = 404 if status_code == grpc.StatusCode.NOT_FOUND else 500
                 return ResponseModel(
-                    status_code=500,
+                    status_code=http_status,
                     response_headers={'request_id': request_id},
                     error_code='GTW006',
                     error_message=error_message

@@ -17,14 +17,17 @@ interface CreateUserData {
   groups: string[]
   rate_limit_duration?: number
   rate_limit_duration_type?: string
+  rate_limit_enabled?: boolean
   throttle_duration?: number
   throttle_duration_type?: string
   throttle_wait_duration?: number
   throttle_wait_duration_type?: string
   throttle_queue_limit?: number | null
+  throttle_enabled?: boolean
   custom_attributes: Record<string, string>
   bandwidth_limit_bytes?: number
   bandwidth_limit_window?: string
+  bandwidth_limit_enabled?: boolean
   active: boolean
   ui_access: boolean
 }
@@ -38,8 +41,19 @@ const AddUserPage = () => {
     role: '',
     groups: [],
     custom_attributes: {},
+    // Defaults: enforce rate/throttle by default with reasonable values
+    rate_limit_duration: 60,
+    rate_limit_duration_type: 'minute',
+    rate_limit_enabled: true,
+    throttle_duration: 10,
+    throttle_duration_type: 'second',
+    throttle_wait_duration: 0.5,
+    throttle_wait_duration_type: 'second',
+    throttle_queue_limit: 10,
+    throttle_enabled: true,
     bandwidth_limit_bytes: undefined,
     bandwidth_limit_window: 'day',
+    bandwidth_limit_enabled: false,
     active: true,
     ui_access: false
   })
@@ -329,6 +343,19 @@ const AddUserPage = () => {
                 <FormHelp docHref="/docs/using-fields.html#rate-limit">Limits requests per user over a time window.</FormHelp>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enforcement</label>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      checked={!!formData.rate_limit_enabled}
+                      onChange={(e) => handleInputChange('rate_limit_enabled', e.target.checked)}
+                      disabled={loading}
+                    />
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce rate limiting for this user</span>
+                  </div>
+                </div>
                 <div>
                   <label htmlFor="rate_limit_duration" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Rate Limit Duration
@@ -373,6 +400,19 @@ const AddUserPage = () => {
                 <FormHelp docHref="/docs/using-fields.html#throttle">Control burst behavior with wait, duration, and queue size.</FormHelp>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enforcement</label>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      checked={!!formData.throttle_enabled}
+                      onChange={(e) => handleInputChange('throttle_enabled', e.target.checked)}
+                      disabled={loading}
+                    />
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce throttling for this user</span>
+                  </div>
+                </div>
                 <div>
                   <label htmlFor="throttle_duration" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Throttle Duration
@@ -468,6 +508,19 @@ const AddUserPage = () => {
                 <FormHelp docHref="/docs/using-fields.html#bandwidth">Limit total bytes per user over a time window.</FormHelp>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enforcement</label>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      checked={!!formData.bandwidth_limit_enabled}
+                      onChange={(e) => handleInputChange('bandwidth_limit_enabled', e.target.checked)}
+                      disabled={loading}
+                    />
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce bandwidth limit for this user</span>
+                  </div>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bytes (limit)</label>
                   <input type="number" className="input" min={0}

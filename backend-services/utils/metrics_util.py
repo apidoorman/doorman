@@ -9,6 +9,8 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional
+import json
+import os
 
 @dataclass
 class MinuteBucket:
@@ -47,6 +49,39 @@ class MinuteBucket:
                     self.api_error_counts[api_key] = self.api_error_counts.get(api_key, 0) + 1
             except Exception:
                 pass
+
+    def to_dict(self) -> Dict:
+        return {
+            'start_ts': self.start_ts,
+            'count': self.count,
+            'error_count': self.error_count,
+            'total_ms': self.total_ms,
+            'bytes_in': self.bytes_in,
+            'bytes_out': self.bytes_out,
+            'status_counts': dict(self.status_counts or {}),
+            'api_counts': dict(self.api_counts or {}),
+            'api_error_counts': dict(self.api_error_counts or {}),
+            'user_counts': dict(self.user_counts or {}),
+        }
+
+    @staticmethod
+    def from_dict(d: Dict) -> 'MinuteBucket':
+        mb = MinuteBucket(
+            start_ts=int(d.get('start_ts', 0)),
+            count=int(d.get('count', 0)),
+            error_count=int(d.get('error_count', 0)),
+            total_ms=float(d.get('total_ms', 0.0)),
+            bytes_in=int(d.get('bytes_in', 0)),
+            bytes_out=int(d.get('bytes_out', 0)),
+        )
+        try:
+            mb.status_counts = dict(d.get('status_counts') or {})
+            mb.api_counts = dict(d.get('api_counts') or {})
+            mb.api_error_counts = dict(d.get('api_error_counts') or {})
+            mb.user_counts = dict(d.get('user_counts') or {})
+        except Exception:
+            pass
+        return mb
 
         if username:
             try:
@@ -169,6 +204,61 @@ class MetricsStore:
             'top_users': sorted(self.username_counts.items(), key=lambda kv: kv[1], reverse=True)[:10],
             'top_apis': sorted(self.api_counts.items(), key=lambda kv: kv[1], reverse=True)[:10],
         }
+
+    def to_dict(self) -> Dict:
+        return {
+            'total_requests': int(self.total_requests),
+            'total_ms': float(self.total_ms),
+            'total_bytes_in': int(self.total_bytes_in),
+            'total_bytes_out': int(self.total_bytes_out),
+            'status_counts': dict(self.status_counts),
+            'username_counts': dict(self.username_counts),
+            'api_counts': dict(self.api_counts),
+            'buckets': [b.to_dict() for b in list(self._buckets)],
+        }
+
+    def load_dict(self, data: Dict) -> None:
+        try:
+            self.total_requests = int(data.get('total_requests', 0))
+            self.total_ms = float(data.get('total_ms', 0.0))
+            self.total_bytes_in = int(data.get('total_bytes_in', 0))
+            self.total_bytes_out = int(data.get('total_bytes_out', 0))
+            self.status_counts = defaultdict(int, data.get('status_counts') or {})
+            self.username_counts = defaultdict(int, data.get('username_counts') or {})
+            self.api_counts = defaultdict(int, data.get('api_counts') or {})
+            self._buckets.clear()
+            for bd in data.get('buckets', []):
+                try:
+                    self._buckets.append(MinuteBucket.from_dict(bd))
+                except Exception:
+                    continue
+        except Exception:
+            # If anything goes wrong, keep current in-memory metrics
+            pass
+
+    def save_to_file(self, path: str) -> None:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        except Exception:
+            pass
+        try:
+            tmp = path + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(self.to_dict(), f)
+            os.replace(tmp, path)
+        except Exception:
+            pass
+
+    def load_from_file(self, path: str) -> None:
+        try:
+            if not os.path.exists(path):
+                return
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                self.load_dict(data)
+        except Exception:
+            pass
 
 # Global metrics store
 metrics_store = MetricsStore()
