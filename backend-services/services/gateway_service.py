@@ -368,6 +368,20 @@ class GatewayService:
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
+            else:
+                # Recursive call with url present; re-derive API context for headers/validation
+                try:
+                    parts = [p for p in (path or '').split('/') if p]
+                    api_name_version = ''
+                    endpoint_uri = ''
+                    if len(parts) >= 3:
+                        api_name_version = f'/{parts[0]}/{parts[1]}'
+                        endpoint_uri = '/' + '/'.join(parts[2:])
+                    api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
+                    api = await api_util.get_api(api_key, api_name_version)
+                except Exception:
+                    api = None
+                    endpoint_uri = ''
             current_time = time.time() * 1000
             query_params = getattr(request, 'query_params', {})
             incoming_content_type = request.headers.get('Content-Type') or 'application/xml'
@@ -377,7 +391,7 @@ class GatewayService:
                 content_type = incoming_content_type
             else:
                 content_type = 'text/xml; charset=utf-8'
-            allowed_headers = api.get('api_allowed_headers') or []
+            allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
             headers['Content-Type'] = content_type
             if 'SOAPAction' not in headers:
@@ -401,7 +415,7 @@ class GatewayService:
                     pass
 
             try:
-                endpoint_doc = await api_util.get_endpoint(api, 'POST', '/' + endpoint_uri.lstrip('/'))
+                endpoint_doc = await api_util.get_endpoint(api, 'POST', '/' + endpoint_uri.lstrip('/')) if api else None
                 endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
                 if endpoint_id:
                     await validation_util.validate_soap_request(endpoint_id, envelope)
