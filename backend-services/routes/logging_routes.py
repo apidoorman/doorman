@@ -315,6 +315,7 @@ Response:
 
 @logging_router.get('/logs/export',
     description='Export logs in various formats',
+    response_model=ResponseModel,
     responses={
         200: {
             'description': 'Successful Response',
@@ -413,6 +414,7 @@ Response:
 
 @logging_router.get('/logs/download',
     description='Download logs as file',
+    include_in_schema=False,
     responses={
         200: {
             'description': 'File download',

@@ -110,11 +110,14 @@ async def app_lifespan(app: FastAPI):
             path = getattr(route, 'path', '')
             if not path.startswith(('/platform', '/api')):
                 continue
+            # Skip non-documented and preflight-only routes
+            include = getattr(route, 'include_in_schema', True)
+            methods = set(getattr(route, 'methods', set()) or [])
+            if not include or 'OPTIONS' in methods:
+                continue
             if not getattr(route, 'description', None):
                 problems.append(f'Route {path} missing description')
-
             if not getattr(route, 'response_model', None):
-
                 problems.append(f'Route {path} missing response_model')
         if problems:
             gateway_logger.info('OpenAPI lint: \n' + '\n'.join(problems[:50]))
@@ -184,11 +187,21 @@ async def app_lifespan(app: FastAPI):
         except Exception:
             pass
 
+def _generate_unique_id(route):
+    try:
+        name = getattr(route, 'name', 'op') or 'op'
+        path = getattr(route, 'path', '').replace('/', '_').replace('{', '').replace('}', '')
+        methods = '_'.join(sorted(list(getattr(route, 'methods', []) or [])))
+        return f"{name}_{methods}_{path}".lower()
+    except Exception:
+        return (getattr(route, 'name', 'op') or 'op').lower()
+
 doorman = FastAPI(
     title='doorman',
     description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application's gateway to the world.",
     version='1.0.0',
     lifespan=app_lifespan,
+    generate_unique_id_function=_generate_unique_id,
 )
 
 https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'

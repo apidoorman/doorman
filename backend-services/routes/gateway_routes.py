@@ -103,6 +103,7 @@ Response:
 
 @gateway_router.api_route('/caches', methods=['DELETE'],
     description='Clear all caches',
+    response_model=ResponseModel,
     dependencies=[
         Depends(auth_required)
     ],
@@ -131,6 +132,11 @@ async def clear_all_caches(request: Request):
                 error_message='You do not have permission to clear caches'
             ).dict(), 'rest')
         doorman_cache.clear_all_caches()
+        try:
+            from utils.limit_throttle_util import reset_counters as _reset_rate
+            _reset_rate()
+        except Exception:
+            pass
         audit(request, actor=username, action='gateway.clear_caches', target='all', status='success', details=None)
         return process_response(ResponseModel(
             status_code=200,
@@ -163,8 +169,8 @@ Response:
 
 @gateway_router.api_route('/rest/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     description='REST gateway endpoint',
-    response_model=ResponseModel)
-
+    response_model=ResponseModel,
+    include_in_schema=False)
 async def gateway(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -242,6 +248,27 @@ async def gateway(request: Request, path: str):
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
+# Per-method wrappers with unique operation IDs for OpenAPI
+@gateway_router.get('/rest/{path:path}', description='REST gateway endpoint (GET)', response_model=ResponseModel, operation_id='rest_get')
+async def rest_get(request: Request, path: str):
+    return await gateway(request, path)
+
+@gateway_router.post('/rest/{path:path}', description='REST gateway endpoint (POST)', response_model=ResponseModel, operation_id='rest_post')
+async def rest_post(request: Request, path: str):
+    return await gateway(request, path)
+
+@gateway_router.put('/rest/{path:path}', description='REST gateway endpoint (PUT)', response_model=ResponseModel, operation_id='rest_put')
+async def rest_put(request: Request, path: str):
+    return await gateway(request, path)
+
+@gateway_router.patch('/rest/{path:path}', description='REST gateway endpoint (PATCH)', response_model=ResponseModel, operation_id='rest_patch')
+async def rest_patch(request: Request, path: str):
+    return await gateway(request, path)
+
+@gateway_router.delete('/rest/{path:path}', description='REST gateway endpoint (DELETE)', response_model=ResponseModel, operation_id='rest_delete')
+async def rest_delete(request: Request, path: str):
+    return await gateway(request, path)
+
 """
 Endpoint
 
@@ -261,7 +288,7 @@ Response:
 """
 
 @gateway_router.api_route('/rest/{path:path}', methods=['OPTIONS'],
-    description='REST gateway CORS preflight')
+    description='REST gateway CORS preflight', include_in_schema=False)
 
 async def rest_preflight(request: Request, path: str):
     request_id = str(uuid.uuid4())
@@ -389,7 +416,7 @@ Response:
 """
 
 @gateway_router.api_route('/soap/{path:path}', methods=['OPTIONS'],
-    description='SOAP gateway CORS preflight')
+    description='SOAP gateway CORS preflight', include_in_schema=False)
 
 async def soap_preflight(request: Request, path: str):
     request_id = str(uuid.uuid4())
@@ -532,7 +559,7 @@ Response:
 """
 
 @gateway_router.api_route('/graphql/{path:path}', methods=['OPTIONS'],
-    description='GraphQL gateway CORS preflight')
+    description='GraphQL gateway CORS preflight', include_in_schema=False)
 
 async def graphql_preflight(request: Request, path: str):
     request_id = str(uuid.uuid4())

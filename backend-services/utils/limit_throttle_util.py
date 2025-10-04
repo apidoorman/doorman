@@ -98,3 +98,12 @@ async def limit_and_throttle(request: Request):
             throttle_wait *= duration_to_seconds(throttle_wait_duration)
         dynamic_wait = throttle_wait * (throttle_count - throttle_limit)
         await asyncio.sleep(dynamic_wait)
+
+def reset_counters():
+    """Reset in-memory rate/throttle counters (used by tests and cache clears).
+    Has no effect when a real Redis client is configured.
+    """
+    try:
+        _fallback_counter._store.clear()
+    except Exception:
+        pass
