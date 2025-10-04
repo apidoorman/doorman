@@ -614,7 +614,8 @@ async def metrics_middleware(request: Request, call_next):
                     if username:
                         from utils.bandwidth_util import add_usage, _get_user
                         u = _get_user(username)
-                        if u and u.get('bandwidth_limit_bytes'):
+                        # Track usage only if not explicitly disabled and a limit is configured
+                        if u and u.get('bandwidth_limit_bytes') and u.get('bandwidth_limit_enabled') is not False:
                             add_usage(username, int(bytes_in) + int(clen), u.get('bandwidth_limit_window') or 'day')
                 except Exception:
                     pass

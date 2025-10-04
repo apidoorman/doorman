@@ -25,6 +25,7 @@ interface User {
   custom_attributes: Record<string, string>
   bandwidth_limit_bytes?: number
   bandwidth_limit_window?: string
+  bandwidth_limit_enabled?: boolean
   active: boolean
   ui_access?: boolean
 }
@@ -45,6 +46,7 @@ interface UpdateUserData {
   custom_attributes?: Record<string, string>
   bandwidth_limit_bytes?: number
   bandwidth_limit_window?: string
+  bandwidth_limit_enabled?: boolean
   active?: boolean
   ui_access?: boolean
 }
@@ -90,6 +92,7 @@ const UserDetailPage = () => {
           custom_attributes: { ...parsedUser.custom_attributes },
           bandwidth_limit_bytes: parsedUser.bandwidth_limit_bytes,
           bandwidth_limit_window: parsedUser.bandwidth_limit_window,
+          bandwidth_limit_enabled: (parsedUser as any).bandwidth_limit_enabled,
           active: parsedUser.active,
           ui_access: parsedUser.ui_access
         })
@@ -103,6 +106,7 @@ const UserDetailPage = () => {
               ...prev,
               bandwidth_limit_bytes: refreshed.bandwidth_limit_bytes,
               bandwidth_limit_window: refreshed.bandwidth_limit_window,
+              bandwidth_limit_enabled: (refreshed as any).bandwidth_limit_enabled,
             }))
           } catch {}
         })()
@@ -553,6 +557,26 @@ const UserDetailPage = () => {
                 )}
               </div>
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enforcement</label>
+                  {isEditing ? (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={!!editData.bandwidth_limit_enabled}
+                        onChange={(e) => handleInputChange('bandwidth_limit_enabled', e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        Enforce bandwidth limit for this user
+                      </label>
+                    </div>
+                  ) : (
+                    <span className={`badge ${(user as any).bandwidth_limit_enabled === false ? 'badge-gray' : 'badge-success'}`}>
+                      {(user as any).bandwidth_limit_enabled === false ? 'Disabled' : 'Enabled'}
+                    </span>
+                  )}
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bytes (limit)</label>
                   {isEditing ? (

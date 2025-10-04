@@ -26,6 +26,7 @@ class CreateUserModel(BaseModel):
     custom_attributes: Optional[dict] = Field(None, description='Custom attributes for the user', example={'custom_key': 'custom_value'})
     bandwidth_limit_bytes: Optional[int] = Field(None, ge=0, description='Maximum bandwidth allowed within the window (bytes)', example=1073741824)
     bandwidth_limit_window: Optional[str] = Field('day', min_length=1, max_length=10, description='Bandwidth window unit (second/minute/hour/day/month)', example='day')
+    bandwidth_limit_enabled: Optional[bool] = Field(None, description='Whether bandwidth limit enforcement is enabled for this user', example=True)
     active: Optional[bool] = Field(True, description='Active status of the user', example=True)
     ui_access: Optional[bool] = Field(False, description='UI access for the user', example=False)
 

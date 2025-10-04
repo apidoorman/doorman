@@ -81,6 +81,10 @@ async def enforce_pre_request_limit(request: Request, username: Optional[str]) -
     user = _get_user(username)
     if not user:
         return
+    # Only enforce if explicitly enabled or not disabled.
+    # Backwards compatibility: if field is absent (None), treat as enabled when limit > 0
+    if user.get('bandwidth_limit_enabled') is False:
+        return
     limit = user.get('bandwidth_limit_bytes')
     if not limit or int(limit) <= 0:
         return
