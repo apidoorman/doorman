@@ -40,9 +40,16 @@ async def subscription_required(request: Request):
             api_version = request.headers.get('X-API-Version', 'v1')
             api_and_version = f'{api_name}/{api_version}'
         else:
-            prefix = ''
-            path = full_path[len(prefix):] if full_path.startswith(prefix) else full_path
-            api_and_version = '/'.join(path.split('/')[:2])
+            # Fallback: take first two segments after leading '/'
+            # e.g., '/api/other/svc/v1/...' -> 'svc/v1'
+            p = full_path.lstrip('/')
+            segs = p.split('/')
+            if segs and segs[0] == 'api' and len(segs) >= 4:
+                # Assume shape: /api/<unknown>/<api>/<version>/...
+                api_and_version = '/'.join(segs[2:4])
+            else:
+                # Generic: first two segments after leading '/'
+                api_and_version = '/'.join(segs[:2])
         user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or subscriptions_collection.find_one({'username': username})
         subscriptions = user_subscriptions.get('apis') if user_subscriptions and 'apis' in user_subscriptions else None
         if not subscriptions or api_and_version not in subscriptions:
