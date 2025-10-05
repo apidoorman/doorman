@@ -20,6 +20,7 @@ class UpdateApiModel(BaseModel):
     api_authorization_field_swap: Optional[str]  = Field(None, description='Header to swap for backend authorization header', example='backend-auth-header')
     api_allowed_headers: Optional[List[str]] = Field(None, description='Allowed headers for the API', example=['Content-Type', 'Authorization'])
     api_allowed_retry_count: Optional[int] = Field(None, description='Number of allowed retries for the API', example=0)
+    api_grpc_package: Optional[str] = Field(None, description='Optional gRPC Python package to use for this API (e.g., "my.pkg"). When set, overrides request package and default.', example='my.pkg')
     api_credits_enabled: Optional[bool] = Field(False, description='Enable credit-based authentication for the API', example=True)
     api_credit_group: Optional[str] = Field(None, description='API credit group for the API credits', example='ai-group-1')
     active: Optional[bool] = Field(None, description='Whether the API is active (enabled)')
