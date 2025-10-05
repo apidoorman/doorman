@@ -191,7 +191,8 @@ async def gateway(request: Request, path: str):
                     endpoints = await api_util.get_api_endpoints(resolved_api.get('api_id'))
                     import re as _re
                     regex_pattern = _re.compile(r'\{[^/]+\}')
-                    composite = request.method + endpoint_uri
+                    method_to_match = 'GET' if str(request.method).upper() == 'HEAD' else request.method
+                    composite = method_to_match + endpoint_uri
                     if not any(_re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), composite) for ep in (endpoints or [])):
                         return process_response(ResponseModel(
                             status_code=404,
@@ -263,6 +264,10 @@ async def rest_patch(request: Request, path: str):
 async def rest_delete(request: Request, path: str):
     return await gateway(request, path)
 
+@gateway_router.head('/rest/{path:path}', description='REST gateway endpoint (HEAD)', response_model=ResponseModel, operation_id='rest_head')
+async def rest_head(request: Request, path: str):
+    return await gateway(request, path)
+
 """
 Endpoint
 
@@ -300,6 +305,26 @@ async def rest_preflight(request: Request, path: str):
         if not api:
             from fastapi.responses import Response as StarletteResponse
             return StarletteResponse(status_code=204, headers={'request_id': request_id})
+
+        # Optional strict mode: return 405 for OPTIONS when endpoint is unregistered
+        try:
+            import os as _os, re as _re
+            if _os.getenv('STRICT_OPTIONS_405', 'false').lower() == 'true':
+                endpoints = await _api_util.get_api_endpoints(api.get('api_id'))
+                endpoint_uri = '/' + '/'.join(parts[2:]) if len(parts) > 2 else '/'
+                regex_pattern = _re.compile(r'\{[^/]+\}')
+                methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD']
+                exists = False
+                for ep in endpoints or []:
+                    pat = regex_pattern.sub(r'([^/]+)', ep)
+                    if any(_re.fullmatch(pat, m + endpoint_uri) for m in methods):
+                        exists = True
+                        break
+                if not exists:
+                    from fastapi.responses import Response as StarletteResponse
+                    return StarletteResponse(status_code=405, headers={'request_id': request_id})
+        except Exception:
+            pass
         origin = request.headers.get('origin') or request.headers.get('Origin')
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
