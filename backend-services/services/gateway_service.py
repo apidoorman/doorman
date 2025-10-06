@@ -712,7 +712,34 @@ class GatewayService:
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
-            allowed_headers = api.get('api_allowed_headers') or []
+            # Ensure api is available even in retry recursion
+            try:
+                if not url:
+                    # already resolved above
+                    pass
+                else:
+                    # When called recursively with url present, rebuild api_path
+                    api_version = request.headers.get('X-API-Version', 'v1')
+                    if not api_name:
+                        # Derive from request path
+                        path_parts = (path or '').strip('/').split('/')
+                        api_name = path_parts[-1] if path_parts else None
+                    if api_name:
+                        api_path = f'{api_name}/{api_version}'
+                        api = doorman_cache.get_cache('api_cache', api_path) or await api_util.get_api(None, api_path)
+                        # Recompute module_base in recursive path
+                        try:
+                            api_pkg = (api.get('api_grpc_package') or '').strip() if api else None
+                        except Exception:
+                            api_pkg = None
+                        try:
+                            pkg_override = (body.get('package') or '').strip()
+                        except Exception:
+                            pkg_override = None
+                        module_base = (api_pkg or pkg_override or f'{api_name}_{api_version}').replace('-', '_')
+            except Exception:
+                pass
+            allowed_headers = (api or {}).get('api_allowed_headers') or []
             headers = await get_headers(request, allowed_headers)
             try:
                 body = await request.json()
@@ -864,12 +891,142 @@ class GatewayService:
                         req_ser = getattr(request_message, 'SerializeToString', None)
                         if not callable(req_ser):
                             req_ser = (lambda _m: b'')
-                        unary = channel.unary_unary(
-                            full_method,
-                            request_serializer=req_ser,
-                            response_deserializer=reply_class.FromString,
-                        )
-                        response = await unary(request_message)
+                        # Choose streaming or unary based on request body hint
+                        stream_mode = str((body.get('stream') or body.get('streaming') or '')).lower()
+                        metadata_list = []
+                        try:
+                            metadata_list = [(str(k), str(v)) for k, v in (headers or {}).items()]
+                        except Exception:
+                            metadata_list = []
+                        if stream_mode.startswith('server'):
+                            call = channel.unary_stream(
+                                full_method,
+                                request_serializer=req_ser,
+                                response_deserializer=reply_class.FromString,
+                            )
+                            items = []
+                            max_items = int(body.get('max_items') or 50)
+                            async for msg in call(request_message, metadata=metadata_list):
+                                d = {}
+                                try:
+                                    for field in msg.DESCRIPTOR.fields:
+                                        d[field.name] = getattr(msg, field.name)
+                                except Exception:
+                                    pass
+                                items.append(d)
+                                if len(items) >= max_items:
+                                    break
+                            response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                        elif stream_mode.startswith('client'):
+                            # Client-streaming: send a stream of request messages, get single reply
+                            try:
+                                stream = channel.stream_unary(
+                                    full_method,
+                                    request_serializer=req_ser,
+                                    response_deserializer=reply_class.FromString,
+                                )
+                            except AttributeError:
+                                stream = None
+                            async def _gen_client():
+                                msgs = body.get('messages') or []
+                                if not msgs:
+                                    yield request_message
+                                    return
+                                for itm in msgs:
+                                    try:
+                                        msg = request_class()
+                                        if isinstance(itm, dict):
+                                            for k, v in itm.items():
+                                                try:
+                                                    setattr(msg, k, v)
+                                                except Exception:
+                                                    pass
+                                        else:
+                                            # Fallback to base request_message
+                                            msg = request_message
+                                        yield msg
+                                    except Exception:
+                                        yield request_message
+                            if stream is not None:
+                                try:
+                                    response = await stream(_gen_client(), metadata=metadata_list)
+                                except TypeError:
+                                    response = await stream(_gen_client())
+                            else:
+                                unary = channel.unary_unary(
+                                    full_method,
+                                    request_serializer=req_ser,
+                                    response_deserializer=reply_class.FromString,
+                                )
+                                try:
+                                    response = await unary(request_message, metadata=metadata_list)
+                                except TypeError:
+                                    response = await unary(request_message)
+                        elif stream_mode.startswith('bidi') or stream_mode.startswith('bi'):
+                            # Bi-directional streaming: send stream, collect responses up to max_items
+                            try:
+                                bidi = channel.stream_stream(
+                                    full_method,
+                                    request_serializer=req_ser,
+                                    response_deserializer=reply_class.FromString,
+                                )
+                            except AttributeError:
+                                bidi = None
+                            async def _gen_bidi():
+                                msgs = body.get('messages') or []
+                                if not msgs:
+                                    yield request_message
+                                    return
+                                for itm in msgs:
+                                    try:
+                                        msg = request_class()
+                                        if isinstance(itm, dict):
+                                            for k, v in itm.items():
+                                                try:
+                                                    setattr(msg, k, v)
+                                                except Exception:
+                                                    pass
+                                        else:
+                                            msg = request_message
+                                        yield msg
+                                    except Exception:
+                                        yield request_message
+                            items = []
+                            max_items = int(body.get('max_items') or 50)
+                            if bidi is not None:
+                                try:
+                                    async for msg in bidi(_gen_bidi(), metadata=metadata_list):
+                                        d = {}
+                                        try:
+                                            for field in msg.DESCRIPTOR.fields:
+                                                d[field.name] = getattr(msg, field.name)
+                                        except Exception:
+                                            pass
+                                        items.append(d)
+                                        if len(items) >= max_items:
+                                            break
+                                except TypeError:
+                                    async for msg in bidi(_gen_bidi()):
+                                        d = {}
+                                        try:
+                                            for field in msg.DESCRIPTOR.fields:
+                                                d[field.name] = getattr(msg, field.name)
+                                        except Exception:
+                                            pass
+                                        items.append(d)
+                                        if len(items) >= max_items:
+                                            break
+                            response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                        else:
+                            unary = channel.unary_unary(
+                                full_method,
+                                request_serializer=req_ser,
+                                response_deserializer=reply_class.FromString,
+                            )
+                            try:
+                                response = await unary(request_message, metadata=metadata_list)
+                            except TypeError:
+                                response = await unary(request_message)
                         last_exc = None
                         break
                     except grpc.RpcError as e2:
@@ -883,12 +1040,133 @@ class GatewayService:
                             req_ser = getattr(request_message, 'SerializeToString', None)
                             if not callable(req_ser):
                                 req_ser = (lambda _m: b'')
-                            unary2 = channel.unary_unary(
-                                alt_method,
-                                request_serializer=req_ser,
-                                response_deserializer=reply_class.FromString,
-                            )
-                            response = await unary2(request_message)
+                            stream_mode = str((body.get('stream') or body.get('streaming') or '')).lower()
+                            if stream_mode.startswith('server'):
+                                call2 = channel.unary_stream(
+                                    alt_method,
+                                    request_serializer=req_ser,
+                                    response_deserializer=reply_class.FromString,
+                                )
+                                items = []
+                                max_items = int(body.get('max_items') or 50)
+                                async for msg in call2(request_message, metadata=metadata_list):
+                                    d = {}
+                                    try:
+                                        for field in msg.DESCRIPTOR.fields:
+                                            d[field.name] = getattr(msg, field.name)
+                                    except Exception:
+                                        pass
+                                    items.append(d)
+                                    if len(items) >= max_items:
+                                        break
+                                response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                            elif stream_mode.startswith('client'):
+                                try:
+                                    stream2 = channel.stream_unary(
+                                        alt_method,
+                                        request_serializer=req_ser,
+                                        response_deserializer=reply_class.FromString,
+                                    )
+                                except AttributeError:
+                                    stream2 = None
+                                async def _gen_client_alt():
+                                    msgs = body.get('messages') or []
+                                    if not msgs:
+                                        yield request_message
+                                        return
+                                    for itm in msgs:
+                                        try:
+                                            msg = request_class()
+                                            if isinstance(itm, dict):
+                                                for k, v in itm.items():
+                                                    try:
+                                                        setattr(msg, k, v)
+                                                    except Exception:
+                                                        pass
+                                            else:
+                                                msg = request_message
+                                            yield msg
+                                        except Exception:
+                                            yield request_message
+                                if stream2 is not None:
+                                    try:
+                                        response = await stream2(_gen_client_alt(), metadata=metadata_list)
+                                    except TypeError:
+                                        response = await stream2(_gen_client_alt())
+                                else:
+                                    unary2 = channel.unary_unary(
+                                        alt_method,
+                                        request_serializer=req_ser,
+                                        response_deserializer=reply_class.FromString,
+                                    )
+                                    try:
+                                        response = await unary2(request_message, metadata=metadata_list)
+                                    except TypeError:
+                                        response = await unary2(request_message)
+                            elif stream_mode.startswith('bidi') or stream_mode.startswith('bi'):
+                                try:
+                                    bidi2 = channel.stream_stream(
+                                        alt_method,
+                                        request_serializer=req_ser,
+                                        response_deserializer=reply_class.FromString,
+                                    )
+                                except AttributeError:
+                                    bidi2 = None
+                                async def _gen_bidi_alt():
+                                    msgs = body.get('messages') or []
+                                    if not msgs:
+                                        yield request_message
+                                        return
+                                    for itm in msgs:
+                                        try:
+                                            msg = request_class()
+                                            if isinstance(itm, dict):
+                                                for k, v in itm.items():
+                                                    try:
+                                                        setattr(msg, k, v)
+                                                    except Exception:
+                                                        pass
+                                            else:
+                                                msg = request_message
+                                            yield msg
+                                        except Exception:
+                                            yield request_message
+                                items = []
+                                max_items = int(body.get('max_items') or 50)
+                                if bidi2 is not None:
+                                    try:
+                                        async for msg in bidi2(_gen_bidi_alt(), metadata=metadata_list):
+                                            d = {}
+                                            try:
+                                                for field in msg.DESCRIPTOR.fields:
+                                                    d[field.name] = getattr(msg, field.name)
+                                            except Exception:
+                                                pass
+                                            items.append(d)
+                                            if len(items) >= max_items:
+                                                break
+                                    except TypeError:
+                                        async for msg in bidi2(_gen_bidi_alt()):
+                                            d = {}
+                                            try:
+                                                for field in msg.DESCRIPTOR.fields:
+                                                    d[field.name] = getattr(msg, field.name)
+                                            except Exception:
+                                                pass
+                                            items.append(d)
+                                            if len(items) >= max_items:
+                                                break
+                                response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                            else:
+                                unary2 = channel.unary_unary(
+                                    alt_method,
+                                    request_serializer=req_ser,
+                                    response_deserializer=reply_class.FromString,
+                                )
+                                try:
+                                    response = await unary2(request_message, metadata=metadata_list)
+                                except TypeError:
+                                    response = await unary2(request_message)
                             last_exc = None
                             break
                         except grpc.RpcError as e3:
@@ -902,12 +1180,15 @@ class GatewayService:
                 if last_exc is not None:
                     raise last_exc
                 response_dict = {}
-                for field in response.DESCRIPTOR.fields:
-                    value = getattr(response, field.name)
-                    if hasattr(value, 'DESCRIPTOR'):
-                        response_dict[field.name] = MessageToDict(value)
-                    else:
-                        response_dict[field.name] = value
+                if hasattr(response, '_items'):
+                    response_dict['items'] = list(response._items)
+                else:
+                    for field in response.DESCRIPTOR.fields:
+                        value = getattr(response, field.name)
+                        if hasattr(value, 'DESCRIPTOR'):
+                            response_dict[field.name] = MessageToDict(value)
+                        else:
+                            response_dict[field.name] = value
                 backend_end_time = time.time() * 1000
                 response_headers = {'request_id': request_id}
                 try:
@@ -929,14 +1210,25 @@ class GatewayService:
                 logger.error(f'{request_id} | Invalid service or method: {str(e)}')
                 return GatewayService.error_response(request_id, 'GTW006', f'Invalid service or method: {str(e)}', status=500)
             except grpc.RpcError as e:
+                # Final mapping for gRPC errors after exhausting in-loop retries
                 status_code = e.code()
-                if status_code == grpc.StatusCode.UNAVAILABLE and retry > 0:
-                    logger.error(f'{request_id} | gRPC gateway failed retrying')
-                    return await GatewayService.grpc_gateway(username, request, request_id, start_time, api_name, url, retry - 1)
                 error_message = e.details()
                 logger.error(f'{request_id} | gRPC error: {error_message}')
-                # Map NOT_FOUND to 404; otherwise 500
-                http_status = 404 if status_code == grpc.StatusCode.NOT_FOUND else 500
+                # Map common gRPC codes to HTTP status
+                try:
+                    mapping = {
+                        grpc.StatusCode.INVALID_ARGUMENT: 400,
+                        grpc.StatusCode.UNAUTHENTICATED: 401,
+                        grpc.StatusCode.PERMISSION_DENIED: 403,
+                        grpc.StatusCode.NOT_FOUND: 404,
+                        grpc.StatusCode.RESOURCE_EXHAUSTED: 429,
+                        grpc.StatusCode.DEADLINE_EXCEEDED: 504,
+                        grpc.StatusCode.UNAVAILABLE: 503,
+                        grpc.StatusCode.UNIMPLEMENTED: 501,
+                    }
+                    http_status = mapping.get(status_code, 500)
+                except Exception:
+                    http_status = 500
                 return ResponseModel(
                     status_code=http_status,
                     response_headers={'request_id': request_id},
