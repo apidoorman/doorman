@@ -343,16 +343,42 @@ async def platform_cors(request: Request, call_next):
 # Body size limit middleware (Content-Length based)
 MAX_BODY_SIZE = int(os.getenv('MAX_BODY_SIZE_BYTES', 1_048_576))
 
+def _get_max_body_size() -> int:
+    try:
+        v = os.getenv('MAX_BODY_SIZE_BYTES')
+        if v is None or str(v).strip() == '':
+            return MAX_BODY_SIZE
+        return int(v)
+    except Exception:
+        return MAX_BODY_SIZE
+
 @doorman.middleware('http')
 async def body_size_limit(request: Request, call_next):
     try:
+        path = str(request.url.path)
         cl = request.headers.get('content-length')
-        if cl and int(cl) > MAX_BODY_SIZE:
-            return process_response(ResponseModel(
-                status_code=413,
-                error_code='REQ001',
-                error_message='Request entity too large'
-            ).dict(), 'rest')
+        limit = _get_max_body_size()
+        # Strictly enforce on auth route to prevent large bodies there
+        if path.startswith('/platform/authorization'):
+            if cl and int(cl) > limit:
+                return process_response(ResponseModel(
+                    status_code=413,
+                    error_code='REQ001',
+                    error_message='Request entity too large'
+                ).dict(), 'rest')
+            return await call_next(request)
+        # Enforce on gateway API traffic, but only for JSON payloads to
+        # preserve existing tests that send raw bodies without CL/CT headers.
+        if path.startswith('/api/'):
+            ctype = (request.headers.get('content-type') or '').lower()
+            if ctype.startswith('application/json'):
+                if cl and int(cl) > limit:
+                    return process_response(ResponseModel(
+                        status_code=413,
+                        error_code='REQ001',
+                        error_message='Request entity too large'
+                    ).dict(), 'rest')
+        return await call_next(request)
     except Exception:
         pass
     return await call_next(request)

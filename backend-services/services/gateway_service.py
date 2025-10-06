@@ -728,7 +728,7 @@ class GatewayService:
             if 'message' not in body:
                 logger.error(f'{request_id} | Missing message in request body')
                 return GatewayService.error_response(request_id, 'GTW011', 'Missing message in request body', status=400)
-            module_base = f'{api_name}_{api_version}'.replace('-', '_')
+            # Preserve previously resolved module_base (api_grpc_package > request package > default)
             proto_filename = f'{module_base}.proto'
             
             try:
@@ -859,56 +859,46 @@ class GatewayService:
                 last_exc = None
                 for attempt in range(attempts):
                     try:
-                        method_callable = getattr(stub, method_name)
-                        response = await method_callable(request_message)
+                        # Prefer direct unary call via channel for better error mapping
+                        full_method = f'/{module_base}.{service_name}/{method_name}'
+                        req_ser = getattr(request_message, 'SerializeToString', None)
+                        if not callable(req_ser):
+                            req_ser = (lambda _m: b'')
+                        unary = channel.unary_unary(
+                            full_method,
+                            request_serializer=req_ser,
+                            response_deserializer=reply_class.FromString,
+                        )
+                        response = await unary(request_message)
                         last_exc = None
                         break
-                    except (AttributeError, grpc.RpcError) as e:
-                        last_exc = e
-                        full_method = f'/{module_base}.{service_name}/{method_name}'
+                    except grpc.RpcError as e2:
+                        last_exc = e2
+                        if attempt < attempts - 1 and getattr(e2, 'code', lambda: None)() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNIMPLEMENTED):
+                            await asyncio.sleep(0.1 * (attempt + 1))
+                            continue
+                        # Try alternative method path without package prefix
                         try:
-                            unary = channel.unary_unary(
-                                full_method,
-                                request_serializer=request_message.SerializeToString,
+                            alt_method = f'/{service_name}/{method_name}'
+                            req_ser = getattr(request_message, 'SerializeToString', None)
+                            if not callable(req_ser):
+                                req_ser = (lambda _m: b'')
+                            unary2 = channel.unary_unary(
+                                alt_method,
+                                request_serializer=req_ser,
                                 response_deserializer=reply_class.FromString,
                             )
-                            response = await unary(request_message)
+                            response = await unary2(request_message)
                             last_exc = None
                             break
-                        except grpc.RpcError as e2:
-                            last_exc = e2
-                            if attempt < attempts - 1 and getattr(e2, 'code', lambda: None)() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNIMPLEMENTED):
+                        except grpc.RpcError as e3:
+                            last_exc = e3
+                            if attempt < attempts - 1 and getattr(e3, 'code', lambda: None)() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNIMPLEMENTED):
                                 await asyncio.sleep(0.1 * (attempt + 1))
                                 continue
-                            try:
-                                alt_method = f'/{service_name}/{method_name}'
-                                unary2 = channel.unary_unary(
-                                    alt_method,
-                                    request_serializer=request_message.SerializeToString,
-                                    response_deserializer=reply_class.FromString,
-                                )
-                                response = await unary2(request_message)
-                                last_exc = None
+                            else:
+                                # Do not mask channel errors with stub fallback; propagate
                                 break
-                            except grpc.RpcError as e3:
-                                last_exc = e3
-                                if attempt < attempts - 1 and getattr(e3, 'code', lambda: None)() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNIMPLEMENTED):
-                                    await asyncio.sleep(0.1 * (attempt + 1))
-                                    continue
-                                else:
-                                    try:
-                                        import functools
-                                        def _call_sync(url_s: str, svc_mod, svc_name: str, meth: str, req):
-                                            ch = grpc.insecure_channel(url_s)
-                                            stub_sync = getattr(svc_mod, f"{svc_name}Stub")(ch)
-                                            return getattr(stub_sync, meth)(req)
-                                        loop = asyncio.get_event_loop()
-                                        response = await loop.run_in_executor(None, functools.partial(_call_sync, url, service_module, service_name, method_name, request_message))
-                                        last_exc = None
-                                        break
-                                    except Exception as e4:
-                                        last_exc = e4
-                                        break
                 if last_exc is not None:
                     raise last_exc
                 response_dict = {}
