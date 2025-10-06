@@ -1,6 +1,9 @@
+import os
 import pytest
 
-pytestmark = pytest.mark.skip(reason='Requires live backend service; skipping in unit environment')
+_RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
+if not _RUN_LIVE:
+    pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 
 
 def _fake_pb2_module(method_name='M'):

@@ -197,7 +197,9 @@ def test_bulk_public_graphql_crud(client):
                 pass
 
 
-@pytest.mark.skip(reason='Disabled by request: replace with proto-backed gRPC test')
+import os as _os
+_RUN_LIVE = _os.getenv('DOORMAN_RUN_LIVE', '0') in ('1','true','True')
+@pytest.mark.skipif(not _RUN_LIVE, reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 def test_bulk_public_grpc_crud(client):
     try:
         import grpc

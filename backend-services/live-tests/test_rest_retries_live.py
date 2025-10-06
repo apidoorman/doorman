@@ -1,6 +1,9 @@
+import os
 import pytest
 
-pytestmark = pytest.mark.skip(reason='Requires live backend service; skipping in unit environment')
+_RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
+if not _RUN_LIVE:
+    pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 
 from tests.test_gateway_routing_limits import _FakeAsyncClient
 

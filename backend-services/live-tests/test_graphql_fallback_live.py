@@ -1,6 +1,10 @@
+import os
 import pytest
 
-pytestmark = pytest.mark.skip(reason='Requires live backend service; skipping in unit environment')
+# Enable by running with DOORMAN_RUN_LIVE=1
+_RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
+if not _RUN_LIVE:
+    pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 
 
 async def _setup(client, name='gllive', ver='v1'):
