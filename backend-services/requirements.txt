@@ -30,8 +30,9 @@ pytest-asyncio>=0.23.5
 pytest>=7.4.4
 pytest-cov>=4.1.0
 
-# GraphQL
-gql>=3.4.0
+# GraphQL (server-side for live-tests)
+# Use Ariadne ASGI app as required by live-tests; keep gql client if needed elsewhere.
+ariadne>=0.23.0
 graphql-core>=3.2.3
 
 # Additional dependencies
@@ -45,7 +46,8 @@ passlib>=1.7.4  # For password hashing
 python-dateutil>=2.8.2  # For date handling
 pytz>=2024.1  # For timezone handling
 
-# gRPC dependencies - install these separately
+# gRPC dependencies
 grpcio==1.75.0
 grpcio-tools==1.75.0
 protobuf==6.32.1
+googleapis-common-protos>=1.63.0
