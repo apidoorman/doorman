@@ -2,7 +2,6 @@ import pytest
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason='Framework may process routing before size middleware in this harness; accept xfail in unit mode')
 async def test_request_exceeding_max_body_size_returns_413(monkeypatch, authed_client):
     monkeypatch.setenv('MAX_BODY_SIZE_BYTES', '10')
     # Public REST endpoint to avoid auth/subscription guards
