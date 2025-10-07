@@ -60,8 +60,8 @@ async def test_metrics_bytes_in_uses_content_length(monkeypatch, authed_client):
 @pytest.mark.asyncio
 async def test_response_envelope_for_non_json_error(monkeypatch, client):
     # Force small MAX_BODY_SIZE and send text/plain to platform auth -> 413 envelope
-    import doorman as appmod
-    monkeypatch.setattr(appmod, 'MAX_BODY_SIZE', 10, raising=False)
+    # Set environment variable to override body size limit
+    monkeypatch.setenv('MAX_BODY_SIZE_BYTES', '10')
 
     payload = 'x' * 100
     r = await client.post('/platform/authorization', content=payload, headers={'Content-Type': 'text/plain'})

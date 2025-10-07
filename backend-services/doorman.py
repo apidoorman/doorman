@@ -99,16 +99,67 @@ async def app_lifespan(app: FastAPI):
     if not os.getenv('JWT_SECRET_KEY'):
         raise RuntimeError('JWT_SECRET_KEY is not configured. Set it before starting the server.')
 
+    # Production environment validation
     try:
         if os.getenv('ENV', '').lower() == 'production':
+            # Validate HTTPS
             https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
             https_enabled = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true'
             if not (https_only or https_enabled):
                 raise RuntimeError(
                     'In production (ENV=production), you must enable HTTPS_ONLY or HTTPS_ENABLED to enforce Secure cookies.'
                 )
-    except Exception as e:
 
+            # Validate JWT secret is not default
+            jwt_secret = os.getenv('JWT_SECRET_KEY', '')
+            if jwt_secret in ('please-change-me', 'test-secret-key', 'test-secret-key-please-change', ''):
+                raise RuntimeError(
+                    'In production (ENV=production), JWT_SECRET_KEY must be changed from default value. '
+                    'Generate a strong random secret (32+ characters).'
+                )
+
+            # Validate Redis for HA deployments (shared token revocation and rate limiting)
+            mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM').upper()
+            if mem_or_external == 'MEM':
+                gateway_logger.warning(
+                    'Production deployment with MEM_OR_EXTERNAL=MEM detected. '
+                    'Token revocation and rate limiting will NOT be shared across nodes. '
+                    'For HA deployments, set MEM_OR_EXTERNAL=REDIS or EXTERNAL with valid REDIS_HOST. '
+                    'Current setup is only suitable for single-node deployments.'
+                )
+            else:
+                # Verify Redis is actually configured
+                redis_host = os.getenv('REDIS_HOST')
+                if not redis_host:
+                    raise RuntimeError(
+                        'In production with MEM_OR_EXTERNAL=REDIS/EXTERNAL, REDIS_HOST is required. '
+                        'Redis is essential for shared token revocation and rate limiting in HA deployments.'
+                    )
+
+            # Validate CORS security
+            if os.getenv('CORS_STRICT', 'false').lower() != 'true':
+                gateway_logger.warning(
+                    'Production deployment without CORS_STRICT=true. '
+                    'This allows wildcard origins with credentials, which is a security risk.'
+                )
+
+            allowed_origins = os.getenv('ALLOWED_ORIGINS', '')
+            if '*' in allowed_origins:
+                raise RuntimeError(
+                    'In production (ENV=production), wildcard CORS origins (*) are not allowed. '
+                    'Set ALLOWED_ORIGINS to specific domain(s): https://yourdomain.com'
+                )
+
+            # Validate encryption keys if memory dumps are used
+            if mem_or_external == 'MEM':
+                mem_encryption_key = os.getenv('MEM_ENCRYPTION_KEY', '')
+                if not mem_encryption_key or len(mem_encryption_key) < 32:
+                    gateway_logger.error(
+                        'Production memory-only mode requires MEM_ENCRYPTION_KEY (32+ characters) for secure dumps. '
+                        'Without this, memory dumps will be unencrypted on disk.'
+                    )
+    except Exception as e:
+        # Re-raise all RuntimeErrors (validation failures should stop startup)
         raise
     app.state.redis = Redis.from_url(
         f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
