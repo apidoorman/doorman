@@ -41,15 +41,20 @@ async def test_request_at_limit_is_allowed(monkeypatch, authed_client):
 
 @pytest.mark.asyncio
 async def test_request_without_content_length_is_allowed(monkeypatch, authed_client):
+    """Test that GET requests (no body, no Content-Length) are allowed regardless of limit.
+
+    Note: httpx automatically adds Content-Length when content/json is provided,
+    so we test with a GET request instead which naturally has no Content-Length.
+    """
     from conftest import create_api, create_endpoint, subscribe_self
     import services.gateway_service as gs
     from tests.test_gateway_routing_limits import _FakeAsyncClient
     monkeypatch.setenv('MAX_BODY_SIZE_BYTES', '10')
     name, ver = 'bsz2', 'v1'
     await create_api(authed_client, name, ver)
-    await create_endpoint(authed_client, name, ver, 'POST', '/p')
+    await create_endpoint(authed_client, name, ver, 'GET', '/p')
     await subscribe_self(authed_client, name, ver)
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
-    # No Content-Length header
-    r = await authed_client.post(f'/api/rest/{name}/{ver}/p', content='12345678901')
+    # GET request has no Content-Length header
+    r = await authed_client.get(f'/api/rest/{name}/{ver}/p')
     assert r.status_code == 200
