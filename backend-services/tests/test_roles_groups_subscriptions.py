@@ -176,7 +176,7 @@ async def test_token_defs_and_deduction_on_gateway(monkeypatch, authed_client):
             return self._json_body
 
     class _FakeAsyncClient:
-        def __init__(self, timeout=None):
+        def __init__(self, timeout=None, limits=None, http2=False):
             self._timeout = timeout
         async def __aenter__(self):
             return self

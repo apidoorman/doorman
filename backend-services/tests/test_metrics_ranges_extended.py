@@ -18,7 +18,7 @@ async def test_metrics_range_parameters(monkeypatch, authed_client):
             self.content = b'{}'
         def json(self): return {'ok': True}
     class _FakeAsyncClient:
-        def __init__(self, timeout=None): pass
+        def __init__(self, timeout=None, limits=None, http2=False): pass
         async def __aenter__(self): return self
         async def __aexit__(self, exc_type, exc, tb): return False
         async def get(self, url, params=None, headers=None): return _FakeHTTPResponse()

@@ -249,6 +249,19 @@ async def app_lifespan(app: FastAPI):
         except Exception:
             pass
 
+        # Close shared HTTP client pool if enabled
+        try:
+            from services.gateway_service import GatewayService as _GS
+            if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'true').lower() != 'false':
+                try:
+                    import asyncio as _asyncio
+                    if _asyncio.iscoroutinefunction(_GS.aclose_http_client):
+                        await _GS.aclose_http_client()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 def _generate_unique_id(route):
     try:
         name = getattr(route, 'name', 'op') or 'op'
@@ -354,30 +367,87 @@ def _get_max_body_size() -> int:
 
 @doorman.middleware('http')
 async def body_size_limit(request: Request, call_next):
+    """Enforce request body size limits to prevent DoS attacks.
+
+    Default limit: 1MB (configurable via MAX_BODY_SIZE_BYTES)
+    Per-API overrides: MAX_BODY_SIZE_BYTES_<API_TYPE> (e.g., MAX_BODY_SIZE_BYTES_SOAP)
+
+    Protected paths:
+    - /platform/authorization: Strict enforcement (prevent auth DoS)
+    - /api/rest/*: Enforce on all requests with Content-Length
+    - /api/soap/*: Enforce on XML/SOAP bodies
+    - /api/graphql/*: Enforce on GraphQL queries
+    - /api/grpc/*: Enforce on gRPC JSON payloads
+    """
     try:
         path = str(request.url.path)
         cl = request.headers.get('content-length')
-        limit = _get_max_body_size()
-        # Strictly enforce on auth route to prevent large bodies there
-        if path.startswith('/platform/authorization'):
-            if cl and int(cl) > limit:
-                return process_response(ResponseModel(
-                    status_code=413,
-                    error_code='REQ001',
-                    error_message='Request entity too large'
-                ).dict(), 'rest')
+
+        # Skip requests without Content-Length header (GET, HEAD, etc.)
+        if not cl or str(cl).strip() == '':
             return await call_next(request)
-        # Enforce on gateway API traffic, but only for JSON payloads to
-        # preserve existing tests that send raw bodies without CL/CT headers.
-        if path.startswith('/api/'):
-            ctype = (request.headers.get('content-type') or '').lower()
-            if ctype.startswith('application/json'):
-                if cl and int(cl) > limit:
-                    return process_response(ResponseModel(
-                        status_code=413,
-                        error_code='REQ001',
-                        error_message='Request entity too large'
-                    ).dict(), 'rest')
+
+        try:
+            content_length = int(cl)
+        except (ValueError, TypeError):
+            # Invalid Content-Length header - let it through and fail later
+            return await call_next(request)
+
+        # Determine if this path should be protected
+        should_enforce = False
+        default_limit = _get_max_body_size()
+        limit = default_limit
+
+        # Strictly enforce on auth route (prevent auth DoS)
+        if path.startswith('/platform/authorization'):
+            should_enforce = True
+        # Enforce on all /api/* routes with per-type overrides
+        elif path.startswith('/api/soap/'):
+            should_enforce = True
+            limit = int(os.getenv('MAX_BODY_SIZE_BYTES_SOAP', default_limit))
+        elif path.startswith('/api/graphql/'):
+            should_enforce = True
+            limit = int(os.getenv('MAX_BODY_SIZE_BYTES_GRAPHQL', default_limit))
+        elif path.startswith('/api/grpc/'):
+            should_enforce = True
+            limit = int(os.getenv('MAX_BODY_SIZE_BYTES_GRPC', default_limit))
+        elif path.startswith('/api/rest/'):
+            should_enforce = True
+            limit = int(os.getenv('MAX_BODY_SIZE_BYTES_REST', default_limit))
+        elif path.startswith('/api/'):
+            # Catch-all for other /api/* routes
+            should_enforce = True
+
+        # Skip if this path is not protected
+        if not should_enforce:
+            return await call_next(request)
+
+        # Enforce limit
+        if content_length > limit:
+            # Log for security monitoring
+            try:
+                from utils.audit_util import audit
+                audit(
+                    request,
+                    actor=None,
+                    action='request.body_size_exceeded',
+                    target=path,
+                    status='blocked',
+                    details={
+                        'content_length': content_length,
+                        'limit': limit,
+                        'content_type': request.headers.get('content-type')
+                    }
+                )
+            except Exception:
+                pass
+
+            return process_response(ResponseModel(
+                status_code=413,
+                error_code='REQ001',
+                error_message=f'Request entity too large (max: {limit} bytes)'
+            ).dict(), 'rest')
+
         return await call_next(request)
     except Exception:
         pass

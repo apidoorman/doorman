@@ -18,7 +18,7 @@ import uuid
 from fastapi import HTTPException, Request
 from jose import jwt, JWTError
 
-from utils.auth_blacklist import jwt_blacklist, is_user_revoked
+from utils.auth_blacklist import is_user_revoked, is_jti_revoked
 from utils.database import user_collection, role_collection
 from utils.doorman_cache_util import doorman_cache
 
@@ -96,13 +96,8 @@ async def auth_required(request: Request):
         jti = payload.get('jti')
         if not username or not jti:
             raise HTTPException(status_code=401, detail='Invalid token')
-        if is_user_revoked(username):
+        if is_user_revoked(username) or is_jti_revoked(username, jti):
             raise HTTPException(status_code=401, detail='Token has been revoked')
-        if username in jwt_blacklist:
-            timed_heap = jwt_blacklist[username]
-            for _, token_jti in timed_heap.heap:
-                if token_jti == jti:
-                    raise HTTPException(status_code=401, detail='Token has been revoked')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = user_collection.find_one({'username': username})
