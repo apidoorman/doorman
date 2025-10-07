@@ -17,7 +17,7 @@ from models.response_model import ResponseModel
 from services.user_service import UserService
 from utils.response_util import respond_rest
 from utils.auth_util import auth_required, create_access_token
-from utils.auth_blacklist import TimedHeap, jwt_blacklist, revoke_all_for_user, unrevoke_all_for_user, is_user_revoked
+from utils.auth_blacklist import TimedHeap, jwt_blacklist, revoke_all_for_user, unrevoke_all_for_user, is_user_revoked, add_revoked_jti
 from utils.role_util import platform_role_required_bool
 from utils.role_util import is_admin_user
 from models.update_user_model import UpdateUserModel
@@ -688,9 +688,19 @@ async def authorization_invalidate(response: Response, request: Request):
         username = payload.get('sub')
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        if username not in jwt_blacklist:
-            jwt_blacklist[username] = TimedHeap()
-        jwt_blacklist[username].push(payload.get('jti'))
+        # Add this token's JTI to durable revocation with TTL until expiry
+        try:
+            import time as _t
+            exp = payload.get('exp')
+            ttl = None
+            if isinstance(exp, (int, float)):
+                ttl = max(1, int(exp - _t.time()))
+            add_revoked_jti(username, payload.get('jti'), ttl)
+        except Exception:
+            # Fallback to in-memory TimedHeap (back-compat)
+            if username not in jwt_blacklist:
+                jwt_blacklist[username] = TimedHeap()
+            jwt_blacklist[username].push(payload.get('jti'))
         response = respond_rest(ResponseModel(
             status_code=200,
             response_headers={

@@ -135,7 +135,7 @@ class Database:
                 pass
             print('Memory-only mode: Core data initialized (admin user/role/groups)')
             return
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings']
+        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings', 'revocations']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
@@ -399,12 +399,14 @@ class InMemoryDB:
         self.user_credits = InMemoryCollection('user_credits')
         self.endpoint_validations = InMemoryCollection('endpoint_validations')
         self.settings = InMemoryCollection('settings')
+        # New durable in-memory store for token revocations
+        self.revocations = InMemoryCollection('revocations')
 
     def list_collection_names(self):
         return [
             'users', 'apis', 'endpoints', 'groups', 'roles',
             'subscriptions', 'routings', 'credit_defs', 'user_credits',
-            'endpoint_validations', 'settings'
+            'endpoint_validations', 'settings', 'revocations'
         ]
 
     def create_collection(self, name):
@@ -431,6 +433,7 @@ class InMemoryDB:
             'user_credits': coll_docs(self.user_credits),
             'endpoint_validations': coll_docs(self.endpoint_validations),
             'settings': coll_docs(self.settings),
+            'revocations': coll_docs(self.revocations),
         }
 
     def load_data(self, data: dict):
@@ -448,6 +451,7 @@ class InMemoryDB:
         load_coll(self.user_credits, data.get('user_credits', []))
         load_coll(self.endpoint_validations, data.get('endpoint_validations', []))
         load_coll(self.settings, data.get('settings', []))
+        load_coll(self.revocations, data.get('revocations', []))
 
 database = Database()
 database.initialize_collections()
@@ -466,6 +470,7 @@ if database.memory_only:
     credit_def_collection = db.credit_defs
     user_credit_collection = db.user_credits
     endpoint_validation_collection = db.endpoint_validations
+    revocations_collection = db.revocations
 else:
     db = database.db
     mongodb_client = database.client
@@ -479,3 +484,7 @@ else:
     credit_def_collection = db.credit_defs
     user_credit_collection = db.user_credits
     endpoint_validation_collection = db.endpoint_validations
+    try:
+        revocations_collection = db.revocations
+    except Exception:
+        revocations_collection = None

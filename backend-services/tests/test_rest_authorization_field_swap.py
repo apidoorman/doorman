@@ -16,7 +16,7 @@ class _Resp:
 
 def _mk_client_capture(seen):
     class _Client:
-        def __init__(self, timeout=None):
+        def __init__(self, timeout=None, limits=None, http2=False):
             pass
         async def __aenter__(self):
             return self
