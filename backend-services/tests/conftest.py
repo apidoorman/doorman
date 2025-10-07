@@ -78,6 +78,23 @@ def event_loop():
     yield loop
     loop.close()
 
+@pytest_asyncio.fixture(autouse=True)
+async def reset_http_client():
+    """Reset the pooled httpx client between tests to prevent connection pool exhaustion."""
+    # Reset before the test (important for tests that monkeypatch httpx.AsyncClient)
+    try:
+        from services.gateway_service import GatewayService
+        await GatewayService.aclose_http_client()
+    except Exception:
+        pass
+    yield
+    # After each test, close and reset the pooled client
+    try:
+        from services.gateway_service import GatewayService
+        await GatewayService.aclose_http_client()
+    except Exception:
+        pass
+
 # Test helpers expected by some suites
 async def create_api(client: AsyncClient, api_name: str, api_version: str):
     payload = {

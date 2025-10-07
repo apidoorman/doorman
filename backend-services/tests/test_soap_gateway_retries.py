@@ -16,7 +16,7 @@ def _mk_retry_xml_client(sequence, seen):
     counter = {'i': 0}
 
     class _Client:
-        def __init__(self, timeout=None):
+        def __init__(self, timeout=None, limits=None, http2=False):
             pass
         async def __aenter__(self):
             return self

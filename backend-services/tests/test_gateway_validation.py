@@ -170,6 +170,9 @@ async def test_rest_payload_validation_allows_good_request(monkeypatch, authed_c
             return self._json
 
     class FakeClient:
+        def __init__(self, timeout=None, limits=None, http2=False):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -180,7 +183,7 @@ async def test_rest_payload_validation_allows_good_request(monkeypatch, authed_c
             return FakeResp()
 
     import services.gateway_service as gw
-    monkeypatch.setattr(gw.httpx, 'AsyncClient', lambda timeout: FakeClient())
+    monkeypatch.setattr(gw.httpx, 'AsyncClient', FakeClient)
 
     r = await authed_client.post(f'/api/rest/{api_name}/{version}/do', json={'user': {'name': 'Ab'}})
     assert r.status_code == 200
@@ -209,6 +212,9 @@ async def test_soap_payload_validation_allows_good_request(monkeypatch, authed_c
             self.text = '<ok/>'
 
     class FakeClient:
+        def __init__(self, timeout=None, limits=None, http2=False):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -219,7 +225,7 @@ async def test_soap_payload_validation_allows_good_request(monkeypatch, authed_c
             return FakeResp()
 
     import services.gateway_service as gw
-    monkeypatch.setattr(gw.httpx, 'AsyncClient', lambda timeout: FakeClient())
+    monkeypatch.setattr(gw.httpx, 'AsyncClient', FakeClient)
 
     envelope = (
         '<?xml version=\"1.0\" encoding=\"UTF-8\"?>'
