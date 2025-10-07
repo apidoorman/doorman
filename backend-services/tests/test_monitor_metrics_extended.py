@@ -24,7 +24,7 @@ async def test_metrics_increment_on_gateway_requests(monkeypatch, authed_client)
             return {'ok': True}
 
     class _FakeAsyncClient:
-        def __init__(self, timeout=None):
+        def __init__(self, timeout=None, limits=None, http2=False):
             pass
         async def __aenter__(self):
             return self
@@ -67,7 +67,7 @@ async def test_metrics_top_apis_aggregate(monkeypatch, authed_client):
         def json(self): return {'ok': True}
 
     class _FakeAsyncClient:
-        def __init__(self, timeout=None): pass
+        def __init__(self, timeout=None, limits=None, http2=False): pass
         async def __aenter__(self): return self
         async def __aexit__(self, exc_type, exc, tb): return False
         async def get(self, url, params=None, headers=None): return _FakeHTTPResponse(200)
@@ -114,7 +114,7 @@ async def test_monitor_report_csv(monkeypatch, authed_client):
         def json(self): return {'ok': True}
 
     class _FakeAsyncClient:
-        def __init__(self, timeout=None): pass
+        def __init__(self, timeout=None, limits=None, http2=False): pass
         async def __aenter__(self): return self
         async def __aexit__(self, exc_type, exc, tb): return False
         async def get(self, url, params=None, headers=None): return _FakeHTTPResponse()

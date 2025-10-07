@@ -57,13 +57,59 @@ class GatewayService:
             )
     _http_client: httpx.AsyncClient | None = None
 
+    @staticmethod
+    def _build_limits() -> httpx.Limits:
+        """Pool limits tuned for small/medium projects with env overrides.
+
+        Defaults:
+        - max_connections: 100 (total across hosts)
+        - max_keepalive_connections: 50 (pooled, idle)
+        - keepalive_expiry: 30s
+        """
+        try:
+            max_conns = int(os.getenv('HTTP_MAX_CONNECTIONS', 100))
+        except Exception:
+            max_conns = 100
+        try:
+            max_keep = int(os.getenv('HTTP_MAX_KEEPALIVE', 50))
+        except Exception:
+            max_keep = 50
+        try:
+            expiry = float(os.getenv('HTTP_KEEPALIVE_EXPIRY', 30.0))
+        except Exception:
+            expiry = 30.0
+        return httpx.Limits(max_connections=max_conns, max_keepalive_connections=max_keep, keepalive_expiry=expiry)
+
     @classmethod
     def get_http_client(cls) -> httpx.AsyncClient:
-        if (os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() == 'true'):
+        """Return a pooled AsyncClient by default for connection reuse.
+
+        Set ENABLE_HTTPX_CLIENT_CACHE=false to disable pooling and create a
+        fresh client per request.
+        """
+        if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'true').lower() != 'false':
             if cls._http_client is None:
-                cls._http_client = httpx.AsyncClient(timeout=cls.timeout)
+                cls._http_client = httpx.AsyncClient(
+                    timeout=cls.timeout,
+                    limits=cls._build_limits(),
+                    http2=(os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true')
+                )
             return cls._http_client
-        return httpx.AsyncClient(timeout=cls.timeout)
+        return httpx.AsyncClient(
+            timeout=cls.timeout,
+            limits=cls._build_limits(),
+            http2=(os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true')
+        )
+
+    @classmethod
+    async def aclose_http_client(cls) -> None:
+        try:
+            if cls._http_client is not None:
+                await cls._http_client.aclose()
+        except Exception:
+            pass
+        finally:
+            cls._http_client = None
 
     def error_response(request_id, code, message, status=404):
             logger.error(f'{request_id} | REST gateway failed with code {code}')
@@ -269,7 +315,7 @@ class GatewayService:
                 else:
                     return GatewayService.error_response(request_id, 'GTW004', 'Method not supported', status=405)
             finally:
-                if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
+                if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'true').lower() == 'false':
                     try:
                         await client.aclose()
                     except Exception:
@@ -426,7 +472,7 @@ class GatewayService:
             try:
                 http_response = await client.post(url, content=envelope, params=query_params, headers=headers)
             finally:
-                if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
+                if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'true').lower() == 'false':
                     try:
                         await client.aclose()
                     except Exception:

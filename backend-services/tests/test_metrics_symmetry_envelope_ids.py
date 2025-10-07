@@ -26,7 +26,7 @@ async def test_metrics_bytes_in_uses_content_length(monkeypatch, authed_client):
             return json.loads(self.text)
 
     class _FakeAsyncClient:
-        def __init__(self, timeout=None): pass
+        def __init__(self, timeout=None, limits=None, http2=False): pass
         async def __aenter__(self): return self
         async def __aexit__(self, exc_type, exc, tb): return False
         async def post(self, url, data=None, json=None, headers=None, params=None): return _FakeHTTPResponse(200)
