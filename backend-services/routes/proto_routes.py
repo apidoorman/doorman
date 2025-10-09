@@ -29,11 +29,36 @@ logger = logging.getLogger('doorman.gateway')
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 def sanitize_filename(filename: str):
+    """Sanitize and validate filename with comprehensive security checks"""
     if not filename:
         raise ValueError('Empty filename provided')
+
+    # Check for path traversal attempts
+    if '..' in filename:
+        raise ValueError('Path traversal detected: .. not allowed in filename')
+
+    # Check for absolute paths
+    if filename.startswith('/') or filename.startswith('\\'):
+        raise ValueError('Absolute paths not allowed in filename')
+
+    # Check for drive letters (Windows)
+    if len(filename) >= 2 and filename[1] == ':':
+        raise ValueError('Drive letters not allowed in filename')
+
+    # Check length
+    if len(filename) > 255:
+        raise ValueError('Filename too long (max 255 characters)')
+
+    # Use werkzeug's secure_filename for additional sanitization
     sanitized = secure_filename(filename)
     if not sanitized:
         raise ValueError('Invalid filename after sanitization')
+
+    # Validate pattern (allow only alphanumeric, underscore, dash, dot)
+    safe_pattern = re.compile(r'^[a-zA-Z0-9_\-\.]+$')
+    if not safe_pattern.match(sanitized):
+        raise ValueError('Filename contains invalid characters (use only letters, numbers, underscore, dash, dot)')
+
     return sanitized
 
 def validate_path(base_path: Path, target_path: Path):
@@ -47,6 +72,38 @@ def validate_path(base_path: Path, target_path: Path):
     except Exception as e:
         logger.error(f'Path validation error: {str(e)}')
         return False
+
+def validate_proto_content(content: bytes, max_size: int = 1024 * 1024) -> str:
+    """Validate proto file content for security and correctness"""
+    # Check file size
+    if len(content) > max_size:
+        raise ValueError(f'File too large (max {max_size} bytes)')
+
+    # Check for null bytes (binary content)
+    if b'\x00' in content:
+        raise ValueError('Invalid proto file: binary content detected')
+
+    # Check if valid UTF-8
+    try:
+        content_str = content.decode('utf-8')
+    except UnicodeDecodeError:
+        raise ValueError('Invalid proto file: not valid UTF-8')
+
+    # Check for basic proto syntax (must contain syntax or message declaration)
+    if 'syntax' not in content_str and 'message' not in content_str and 'service' not in content_str:
+        raise ValueError('Invalid proto file: missing proto syntax (syntax/message/service)')
+
+    # Check for suspicious patterns (shell injection attempts)
+    suspicious_patterns = [
+        r'`',  # Backticks
+        r'\$\(',  # Command substitution
+        r';\s*(?:rm|mv|cp|chmod|cat|wget|curl)',  # Shell commands
+    ]
+    for pattern in suspicious_patterns:
+        if re.search(pattern, content_str):
+            raise ValueError('Invalid proto file: suspicious content detected')
+
+    return content_str
 
 def get_safe_proto_path(api_name: str, api_version: str):
     try:
@@ -134,7 +191,18 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
             ).dict(), 'rest')
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
         content = await file.read()
-        proto_content = content.decode('utf-8')
+
+        # Validate content for security and correctness
+        try:
+            max_proto_size = int(os.getenv('MAX_PROTO_SIZE_BYTES', 1024 * 1024))  # 1MB default
+            proto_content = validate_proto_content(content, max_size=max_proto_size)
+        except ValueError as e:
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.REQUEST_FILE_TYPE,
+                error_message=f'Invalid proto file: {str(e)}'
+            ).dict(), 'rest')
         safe_api_name = sanitize_filename(api_name)
         safe_api_version = sanitize_filename(api_version)
         if 'package' in proto_content:
@@ -322,7 +390,22 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
                 error_message=Messages.ONLY_PROTO_ALLOWED
             ).dict(), 'rest')
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
-        proto_path.write_bytes(await proto_file.read())
+
+        # Read and validate content
+        content = await proto_file.read()
+        try:
+            max_proto_size = int(os.getenv('MAX_PROTO_SIZE_BYTES', 1024 * 1024))  # 1MB default
+            proto_content = validate_proto_content(content, max_size=max_proto_size)
+        except ValueError as e:
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.REQUEST_FILE_TYPE,
+                error_message=f'Invalid proto file: {str(e)}'
+            ).dict(), 'rest')
+
+        # Write validated content
+        proto_path.write_text(proto_content)
         try:
             subprocess.run([
                 'python', '-m', 'grpc_tools.protoc',

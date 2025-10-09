@@ -125,17 +125,28 @@ class ApiService:
         except Exception:
             pass
         if not_null_data:
-            update_result = api_collection.update_one(
-                {'api_name': api_name, 'api_version': api_version},
-                {'$set': not_null_data}
-            )
-            if not update_result.acknowledged or update_result.modified_count == 0:
-                logger.error(request_id + ' | API update failed with code API002')
-                return ResponseModel(
-                    status_code=400,
-                    error_code='API002',
-                    error_message='Unable to update api'
-                    ).dict()
+            try:
+                update_result = api_collection.update_one(
+                    {'api_name': api_name, 'api_version': api_version},
+                    {'$set': not_null_data}
+                )
+                if update_result.modified_count > 0:
+                    cache_key = f'{api_name}/{api_version}'
+                    doorman_cache.delete_cache('api_cache', cache_key)
+                    doorman_cache.delete_cache('api_id_cache', f'/{api_name}/{api_version}')
+                if not update_result.acknowledged or update_result.modified_count == 0:
+                    logger.error(request_id + ' | API update failed with code API002')
+                    return ResponseModel(
+                        status_code=400,
+                        error_code='API002',
+                        error_message='Unable to update api'
+                        ).dict()
+            except Exception as e:
+                cache_key = f'{api_name}/{api_version}'
+                doorman_cache.delete_cache('api_cache', cache_key)
+                doorman_cache.delete_cache('api_id_cache', f'/{api_name}/{api_version}')
+                logger.error(request_id + ' | API update failed with exception: ' + str(e), exc_info=True)
+                raise
             logger.info(request_id + ' | API updated successful')
             return ResponseModel(
                 status_code=200,

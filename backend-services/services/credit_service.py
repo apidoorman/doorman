@@ -57,6 +57,8 @@ class CreditService:
             credit_data = data.dict()
             if credit_data.get('api_key') is not None:
                 credit_data['api_key'] = encrypt_value(credit_data['api_key'])
+            if credit_data.get('api_key_new') is not None:
+                credit_data['api_key_new'] = encrypt_value(credit_data['api_key_new'])
             insert_result = credit_def_collection.insert_one(credit_data)
             if not insert_result.acknowledged:
                 logger.error(request_id + ' | Credit creation failed with code CRD002')
@@ -112,6 +114,8 @@ class CreditService:
             not_null = {k: v for k, v in data.dict().items() if v is not None}
             if 'api_key' in not_null:
                 not_null['api_key'] = encrypt_value(not_null['api_key'])
+            if 'api_key_new' in not_null:
+                not_null['api_key_new'] = encrypt_value(not_null['api_key_new'])
             if not_null:
                 update_result = credit_def_collection.update_one({'api_credit_group': api_credit_group}, {'$set': not_null})
                 if not update_result.acknowledged or update_result.modified_count == 0:
