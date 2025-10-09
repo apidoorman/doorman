@@ -147,14 +147,7 @@ def _from_jsonable(obj: Any) -> Any:
 def _sanitize_for_dump(data: Any) -> Any:
     """
     Remove sensitive data before dumping to prevent secret exposure.
-
-    Redacts fields that may contain:
-    - Passwords, secrets, tokens
-    - JWT secrets, API keys
-    - Session cookies, CSRF tokens
-    - Any credentials or auth data
     """
-    # Sensitive field names (case-insensitive)
     SENSITIVE_KEYS = {
         'password', 'secret', 'token', 'key', 'api_key',
         'access_token', 'refresh_token', 'jwt', 'jwt_secret',
@@ -163,16 +156,12 @@ def _sanitize_for_dump(data: Any) -> Any:
         'ssn', 'credit_card', 'cvv', 'private_key',
         'encryption_key', 'signing_key'
     }
-
     def should_redact(key: str) -> bool:
-        """Check if a key name indicates sensitive data"""
         if not isinstance(key, str):
             return False
         key_lower = key.lower()
         return any(s in key_lower for s in SENSITIVE_KEYS)
-
     def redact_value(obj: Any) -> Any:
-        """Recursively redact sensitive values"""
         if isinstance(obj, dict):
             return {
                 k: '[REDACTED]' if should_redact(str(k)) else redact_value(v)
@@ -181,14 +170,11 @@ def _sanitize_for_dump(data: Any) -> Any:
         elif isinstance(obj, list):
             return [redact_value(item) for item in obj]
         elif isinstance(obj, str):
-            # Redact long token-like strings (likely JWTs, API keys)
-            # Token characteristics: long, alphanumeric with possible dashes/underscores
             if len(obj) > 32:
                 cleaned = obj.replace('-', '').replace('_', '').replace('.', '')
                 if cleaned.isalnum():
                     return '[REDACTED-TOKEN]'
         return obj
-
     return redact_value(data)
 
 def dump_memory_to_file(path: Optional[str] = None) -> str:
@@ -198,17 +184,12 @@ def dump_memory_to_file(path: Optional[str] = None) -> str:
     os.makedirs(dump_dir, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     dump_path = os.path.join(dump_dir, f'{stem}-{ts}.bin')
-
-    # Get raw data from database
     raw_data = database.db.dump_data()
-
-    # SANITIZE before encryption to prevent secret exposure
     sanitized_data = _sanitize_for_dump(_to_jsonable(raw_data))
-
     payload = {
         'version': 1,
         'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-        'sanitized': True,  # Flag indicating sensitive data was redacted
+        'sanitized': True,
         'note': 'Sensitive fields (passwords, tokens, secrets) have been redacted',
         'data': sanitized_data,
     }

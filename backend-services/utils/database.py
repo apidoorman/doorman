@@ -511,7 +511,9 @@ else:
         revocations_collection = None
 
 def close_database_connections():
-    """Close all database connections for graceful shutdown"""
+    """
+    Close all database connections for graceful shutdown.
+    """
     global mongodb_client
     try:
         if mongodb_client:
