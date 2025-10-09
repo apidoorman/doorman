@@ -62,6 +62,7 @@ from models.response_model import ResponseModel
 from utils.cache_manager_util import cache_manager
 from utils.auth_blacklist import purge_expired_tokens
 from utils.doorman_cache_util import doorman_cache
+from utils.hot_reload_config import hot_config
 from routes.authorization_routes import authorization_router
 from routes.group_routes import group_router
 from routes.role_routes import role_router
@@ -81,6 +82,7 @@ from routes.demo_routes import demo_router
 from routes.monitor_routes import monitor_router
 from routes.config_routes import config_router
 from routes.tools_routes import tools_router
+from routes.config_hot_reload_routes import config_hot_reload_router
 from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
 from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
 from utils.metrics_util import metrics_store
@@ -93,8 +95,105 @@ load_dotenv()
 
 PID_FILE = 'doorman.pid'
 
+async def validate_database_connections():
+    """Validate database connections on startup with retry logic"""
+    gateway_logger.info("Validating database connections...")
+
+    # Test MongoDB
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            from utils.database import user_collection
+            # Simple query to verify connection
+            await user_collection.find_one({})
+            gateway_logger.info("✓ MongoDB connection verified")
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                gateway_logger.warning(
+                    f"MongoDB connection attempt {attempt + 1}/{max_retries} failed: {e}"
+                )
+                gateway_logger.info(f"Retrying in {wait} seconds...")
+                await asyncio.sleep(wait)
+            else:
+                gateway_logger.error(f"MongoDB connection failed after {max_retries} attempts")
+                raise RuntimeError(
+                    f"Cannot connect to MongoDB: {e}"
+                ) from e
+
+    # Test Redis (if configured)
+    redis_host = os.getenv('REDIS_HOST')
+    mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM')
+
+    if redis_host and mem_or_external == 'REDIS':
+        for attempt in range(max_retries):
+            try:
+                import redis.asyncio as redis
+                redis_url = f"redis://{redis_host}:{os.getenv('REDIS_PORT', '6379')}"
+                if os.getenv('REDIS_PASSWORD'):
+                    redis_url = f"redis://:{os.getenv('REDIS_PASSWORD')}@{redis_host}:{os.getenv('REDIS_PORT', '6379')}"
+
+                r = redis.from_url(redis_url)
+                await r.ping()
+                await r.close()
+                gateway_logger.info("✓ Redis connection verified")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt
+                    gateway_logger.warning(
+                        f"Redis connection attempt {attempt + 1}/{max_retries} failed: {e}"
+                    )
+                    gateway_logger.info(f"Retrying in {wait} seconds...")
+                    await asyncio.sleep(wait)
+                else:
+                    gateway_logger.error(f"Redis connection failed after {max_retries} attempts")
+                    raise RuntimeError(
+                        f"Cannot connect to Redis: {e}"
+                    ) from e
+
+    gateway_logger.info("All database connections validated successfully")
+
+def validate_token_revocation_config():
+    """Validate token revocation is safe for multi-worker deployments"""
+    threads = int(os.getenv('THREADS', '1'))
+    mem_mode = os.getenv('MEM_OR_EXTERNAL', 'MEM')
+
+    if threads > 1 and mem_mode == 'MEM':
+        gateway_logger.error(
+            "CRITICAL: Multi-worker mode (THREADS > 1) with in-memory storage "
+            "does not provide consistent token revocation across workers. "
+            f"Current config: THREADS={threads}, MEM_OR_EXTERNAL={mem_mode}"
+        )
+        gateway_logger.error(
+            "Token revocation requires Redis in multi-worker mode. "
+            "Either set MEM_OR_EXTERNAL=REDIS or set THREADS=1"
+        )
+        raise RuntimeError(
+            "Token revocation requires Redis in multi-worker mode (THREADS > 1). "
+            "Set MEM_OR_EXTERNAL=REDIS or THREADS=1"
+        )
+
+    gateway_logger.info(
+        f"Token revocation mode: {mem_mode} with {threads} worker(s)"
+    )
+
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
+    # Validate database connections before starting
+    await validate_database_connections()
+
+    # Validate token revocation configuration
+    validate_token_revocation_config()
+
+    # Validate admin password strength (always enforced, not just production)
+    admin_password = os.getenv('STARTUP_ADMIN_PASSWORD', '')
+    if len(admin_password) < 12:
+        raise RuntimeError(
+            'STARTUP_ADMIN_PASSWORD must be at least 12 characters. '
+            'Generate strong password: openssl rand -base64 16'
+        )
 
     if not os.getenv('JWT_SECRET_KEY'):
         raise RuntimeError('JWT_SECRET_KEY is not configured. Set it before starting the server.')
@@ -110,6 +209,19 @@ async def app_lifespan(app: FastAPI):
                     'In production (ENV=production), you must enable HTTPS_ONLY or HTTPS_ENABLED to enforce Secure cookies.'
                 )
 
+            # Validate SSL certificates exist before starting
+            if https_only or https_enabled:
+                cert = os.getenv('SSL_CERTFILE')
+                key = os.getenv('SSL_KEYFILE')
+                if https_only and (not cert or not key):
+                    raise RuntimeError(
+                        'SSL_CERTFILE and SSL_KEYFILE required when HTTPS_ONLY=true'
+                    )
+                if cert and not os.path.exists(cert):
+                    raise RuntimeError(f'SSL certificate not found: {cert}')
+                if key and not os.path.exists(key):
+                    raise RuntimeError(f'SSL private key not found: {key}')
+
             # Validate JWT secret is not default
             jwt_secret = os.getenv('JWT_SECRET_KEY', '')
             if jwt_secret in ('please-change-me', 'test-secret-key', 'test-secret-key-please-change', ''):
@@ -121,11 +233,16 @@ async def app_lifespan(app: FastAPI):
             # Validate Redis for HA deployments (shared token revocation and rate limiting)
             mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM').upper()
             if mem_or_external == 'MEM':
+                num_threads = int(os.getenv('THREADS', 1))
+                if num_threads > 1:
+                    raise RuntimeError(
+                        'In production with THREADS > 1, MEM_OR_EXTERNAL=MEM is unsafe. '
+                        'Rate limiting and token revocation are not shared across workers. '
+                        'Set MEM_OR_EXTERNAL=REDIS with REDIS_HOST configured.'
+                    )
                 gateway_logger.warning(
                     'Production deployment with MEM_OR_EXTERNAL=MEM detected. '
-                    'Token revocation and rate limiting will NOT be shared across nodes. '
-                    'For HA deployments, set MEM_OR_EXTERNAL=REDIS or EXTERNAL with valid REDIS_HOST. '
-                    'Current setup is only suitable for single-node deployments.'
+                    'Single-node only. For multi-node HA, use REDIS or EXTERNAL mode.'
                 )
             else:
                 # Verify Redis is actually configured
@@ -138,9 +255,9 @@ async def app_lifespan(app: FastAPI):
 
             # Validate CORS security
             if os.getenv('CORS_STRICT', 'false').lower() != 'true':
-                gateway_logger.warning(
-                    'Production deployment without CORS_STRICT=true. '
-                    'This allows wildcard origins with credentials, which is a security risk.'
+                raise RuntimeError(
+                    'In production (ENV=production), CORS_STRICT must be true. '
+                    'This prevents wildcard origins with credentials, which is a critical security risk.'
                 )
 
             allowed_origins = os.getenv('ALLOWED_ORIGINS', '')
@@ -150,21 +267,48 @@ async def app_lifespan(app: FastAPI):
                     'Set ALLOWED_ORIGINS to specific domain(s): https://yourdomain.com'
                 )
 
+            # Validate TOKEN_ENCRYPTION_KEY for API key encryption
+            token_encryption_key = os.getenv('TOKEN_ENCRYPTION_KEY', '')
+            if not token_encryption_key or len(token_encryption_key) < 32:
+                gateway_logger.warning(
+                    'Production deployment without TOKEN_ENCRYPTION_KEY (32+ characters). '
+                    'API keys will not be encrypted at rest. Highly recommended for production security.'
+                )
+
             # Validate encryption keys if memory dumps are used
             if mem_or_external == 'MEM':
                 mem_encryption_key = os.getenv('MEM_ENCRYPTION_KEY', '')
                 if not mem_encryption_key or len(mem_encryption_key) < 32:
-                    gateway_logger.error(
-                        'Production memory-only mode requires MEM_ENCRYPTION_KEY (32+ characters) for secure dumps. '
-                        'Without this, memory dumps will be unencrypted on disk.'
+                    raise RuntimeError(
+                        'In production (ENV=production) with MEM_OR_EXTERNAL=MEM, MEM_ENCRYPTION_KEY is required (32+ characters). '
+                        'Memory dumps contain sensitive data and must be encrypted. '
+                        'Generate a strong random key: openssl rand -hex 32'
                     )
     except Exception as e:
         # Re-raise all RuntimeErrors (validation failures should stop startup)
         raise
-    app.state.redis = Redis.from_url(
-        f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
-        decode_responses=True
-    )
+
+    # Configure Redis connection with authentication
+    redis_host = os.getenv('REDIS_HOST')
+    redis_port = os.getenv('REDIS_PORT')
+    redis_db = os.getenv('REDIS_DB')
+    redis_password = os.getenv('REDIS_PASSWORD', '')
+
+    # Warn if Redis is used without authentication in production/HA modes
+    mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM').upper()
+    if mem_or_external in ('REDIS', 'EXTERNAL') and not redis_password:
+        gateway_logger.warning(
+            'Redis password not set; connection may be unauthenticated. '
+            'Set REDIS_PASSWORD environment variable to secure Redis access.'
+        )
+
+    # Build Redis URL with authentication if password is provided
+    if redis_password:
+        redis_url = f'redis://:{redis_password}@{redis_host}:{redis_port}/{redis_db}'
+    else:
+        redis_url = f'redis://{redis_host}:{redis_port}/{redis_db}'
+
+    app.state.redis = Redis.from_url(redis_url, decode_responses=True)
 
     app.state._purger_task = asyncio.create_task(automatic_purger(1800))
 
@@ -200,7 +344,17 @@ async def app_lifespan(app: FastAPI):
         settings = get_cached_settings()
         if bool(settings.get('trust_x_forwarded_for')) and not (settings.get('xff_trusted_proxies') or []):
             gateway_logger.warning('Security: trust_x_forwarded_for enabled but xff_trusted_proxies is empty; header spoofing risk. Configure trusted proxy IPs/CIDRs.')
+
+            # Production validation: enforce trusted proxy configuration
+            if os.getenv('ENV', '').lower() == 'production':
+                raise RuntimeError(
+                    'Production deployment with trust_x_forwarded_for requires xff_trusted_proxies '
+                    'to prevent IP spoofing. Configure trusted proxy IPs/CIDRs via /platform/security endpoint.'
+                )
     except Exception as e:
+        # Re-raise RuntimeErrors (production validation failures should stop startup)
+        if isinstance(e, RuntimeError):
+            raise
         gateway_logger.debug(f'Startup security checks skipped: {e}')
 
     try:
@@ -261,9 +415,49 @@ async def app_lifespan(app: FastAPI):
 
         pass
 
+    # SIGHUP handler for configuration hot reload
+    try:
+        if hasattr(signal, 'SIGHUP'):
+            loop = asyncio.get_event_loop()
+
+            async def _sighup_reload():
+                try:
+                    gateway_logger.info('SIGHUP received: reloading configuration...')
+
+                    # Reload hot config
+                    hot_config.reload()
+
+                    # Update log level if changed
+                    log_level = hot_config.get('LOG_LEVEL', 'INFO')
+                    try:
+                        numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+                        logging.getLogger('doorman.gateway').setLevel(numeric_level)
+                        gateway_logger.info(f'Log level updated to {log_level}')
+                    except Exception as e:
+                        gateway_logger.error(f'Failed to update log level: {e}')
+
+                    gateway_logger.info('Configuration reload complete')
+                except Exception as e:
+                    gateway_logger.error(f'SIGHUP reload failed: {e}', exc_info=True)
+
+            loop.add_signal_handler(signal.SIGHUP, lambda: asyncio.create_task(_sighup_reload()))
+            gateway_logger.info('SIGHUP handler registered for configuration hot reload')
+    except (NotImplementedError, AttributeError):
+        # Windows doesn't support SIGHUP
+        gateway_logger.debug('SIGHUP not supported on this platform')
+
     try:
         yield
     finally:
+        # Graceful shutdown sequence
+        gateway_logger.info("Starting graceful shutdown...")
+
+        # Set shutting_down flag so health checks fail
+        app.state.shutting_down = True
+
+        # Wait for in-flight requests to complete (grace period)
+        gateway_logger.info("Waiting for in-flight requests to complete (5s grace period)...")
+        await asyncio.sleep(5)
 
         try:
             await stop_auto_save_task()
@@ -286,12 +480,32 @@ async def app_lifespan(app: FastAPI):
         except Exception:
             pass
 
+        # Close database connections
+        try:
+            gateway_logger.info("Closing database connections...")
+            from utils.database import close_database_connections
+            close_database_connections()
+        except Exception as e:
+            gateway_logger.error(f"Error closing database connections: {e}")
+
+        # Close HTTP clients
+        try:
+            gateway_logger.info("Closing HTTP clients...")
+            from services.gateway_service import GatewayService
+            if hasattr(GatewayService, '_http_client') and GatewayService._http_client:
+                await GatewayService._http_client.aclose()
+                gateway_logger.info("HTTP client closed")
+        except Exception as e:
+            gateway_logger.error(f"Error closing HTTP client: {e}")
+
         # Persist metrics on shutdown
         try:
             METRICS_FILE = os.path.join(LOGS_DIR, 'metrics.json')
             metrics_store.save_to_file(METRICS_FILE)
         except Exception:
             pass
+
+        gateway_logger.info("Graceful shutdown complete")
         # Stop autosave task
         try:
             t = getattr(app.state, '_metrics_save_task', None)
@@ -500,9 +714,10 @@ async def body_size_limit(request: Request, call_next):
             ).dict(), 'rest')
 
         return await call_next(request)
-    except Exception:
-        pass
-    return await call_next(request)
+    except Exception as e:
+        # Log middleware failures but don't block requests
+        gateway_logger.error(f'Body size limit middleware error: {str(e)}', exc_info=True)
+        return await call_next(request)
 
 # Request ID middleware: accept incoming X-Request-ID or generate one.
 @doorman.middleware('http')
@@ -518,6 +733,13 @@ async def request_id_middleware(request: Request, call_next):
 
         try:
             request.state.request_id = rid
+        except Exception:
+            pass
+
+        # Set correlation ID for async task tracking
+        try:
+            from utils.correlation_util import set_correlation_id
+            set_correlation_id(rid)
         except Exception:
             pass
         try:
@@ -536,11 +758,11 @@ async def request_id_middleware(request: Request, call_next):
 
             if 'request_id' not in response.headers:
                 response.headers['request_id'] = rid
-        except Exception:
-            pass
+        except Exception as e:
+            gateway_logger.warning(f'Failed to set response headers: {str(e)}')
         return response
-    except Exception:
-
+    except Exception as e:
+        gateway_logger.error(f'Request ID middleware error: {str(e)}', exc_info=True)
         return await call_next(request)
 
 # Security headers (including HSTS when HTTPS is used)
@@ -860,6 +1082,7 @@ doorman.include_router(credit_router, prefix='/platform/credit', tags=['Credit']
 doorman.include_router(demo_router, prefix='/platform/demo', tags=['Demo'])
 doorman.include_router(config_router, prefix='/platform', tags=['Config'])
 doorman.include_router(tools_router, prefix='/platform/tools', tags=['Tools'])
+doorman.include_router(config_hot_reload_router, prefix='/platform', tags=['Config Hot Reload'])
 
 def start():
     if os.path.exists(PID_FILE):

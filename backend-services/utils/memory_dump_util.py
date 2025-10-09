@@ -144,6 +144,53 @@ def _from_jsonable(obj: Any) -> Any:
         return [_from_jsonable(v) for v in obj]
     return obj
 
+def _sanitize_for_dump(data: Any) -> Any:
+    """
+    Remove sensitive data before dumping to prevent secret exposure.
+
+    Redacts fields that may contain:
+    - Passwords, secrets, tokens
+    - JWT secrets, API keys
+    - Session cookies, CSRF tokens
+    - Any credentials or auth data
+    """
+    # Sensitive field names (case-insensitive)
+    SENSITIVE_KEYS = {
+        'password', 'secret', 'token', 'key', 'api_key',
+        'access_token', 'refresh_token', 'jwt', 'jwt_secret',
+        'csrf_token', 'session', 'cookie',
+        'credential', 'auth', 'authorization',
+        'ssn', 'credit_card', 'cvv', 'private_key',
+        'encryption_key', 'signing_key'
+    }
+
+    def should_redact(key: str) -> bool:
+        """Check if a key name indicates sensitive data"""
+        if not isinstance(key, str):
+            return False
+        key_lower = key.lower()
+        return any(s in key_lower for s in SENSITIVE_KEYS)
+
+    def redact_value(obj: Any) -> Any:
+        """Recursively redact sensitive values"""
+        if isinstance(obj, dict):
+            return {
+                k: '[REDACTED]' if should_redact(str(k)) else redact_value(v)
+                for k, v in obj.items()
+            }
+        elif isinstance(obj, list):
+            return [redact_value(item) for item in obj]
+        elif isinstance(obj, str):
+            # Redact long token-like strings (likely JWTs, API keys)
+            # Token characteristics: long, alphanumeric with possible dashes/underscores
+            if len(obj) > 32:
+                cleaned = obj.replace('-', '').replace('_', '').replace('.', '')
+                if cleaned.isalnum():
+                    return '[REDACTED-TOKEN]'
+        return obj
+
+    return redact_value(data)
+
 def dump_memory_to_file(path: Optional[str] = None) -> str:
     if not database.memory_only:
         raise RuntimeError('Memory dump is only available in memory-only mode')
@@ -151,11 +198,19 @@ def dump_memory_to_file(path: Optional[str] = None) -> str:
     os.makedirs(dump_dir, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     dump_path = os.path.join(dump_dir, f'{stem}-{ts}.bin')
+
+    # Get raw data from database
+    raw_data = database.db.dump_data()
+
+    # SANITIZE before encryption to prevent secret exposure
+    sanitized_data = _sanitize_for_dump(_to_jsonable(raw_data))
+
     payload = {
         'version': 1,
         'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-
-        'data': _to_jsonable(database.db.dump_data()),
+        'sanitized': True,  # Flag indicating sensitive data was redacted
+        'note': 'Sensitive fields (passwords, tokens, secrets) have been redacted',
+        'data': sanitized_data,
     }
     plaintext = json.dumps(payload, separators=(',', ':'), default=_json_default).encode('utf-8')
     key = os.getenv('MEM_ENCRYPTION_KEY', '')

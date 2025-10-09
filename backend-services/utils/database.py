@@ -11,6 +11,7 @@ import os
 import uuid
 import copy
 import json
+import threading
 
 # Internal imports
 from utils import password_util
@@ -32,12 +33,25 @@ class Database:
             return
         mongo_hosts = os.getenv('MONGO_DB_HOSTS')
         replica_set_name = os.getenv('MONGO_REPLICA_SET_NAME')
+        mongo_user = os.getenv('MONGO_DB_USER')
+        mongo_pass = os.getenv('MONGO_DB_PASSWORD')
+
+        # Validate MongoDB credentials when not in memory-only mode
+        if not mongo_user or not mongo_pass:
+            raise RuntimeError(
+                'MONGO_DB_USER and MONGO_DB_PASSWORD are required when MEM_OR_EXTERNAL != MEM. '
+                'Set these environment variables to secure your MongoDB connection.'
+            )
+
         host_list = [host.strip() for host in mongo_hosts.split(',') if host.strip()]
         self.db_existed = True
+
+        # Build connection URI with authentication
         if len(host_list) > 1 and replica_set_name:
-            connection_uri = f"mongodb://{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
+            connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
         else:
-            connection_uri = f"mongodb://{','.join(host_list)}/doorman"
+            connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman"
+
         self.client = MongoClient(
             connection_uri,
             serverSelectionTimeoutMS=5000,
@@ -299,6 +313,7 @@ class InMemoryCollection:
     def __init__(self, name):
         self.name = name
         self._docs = []
+        self._lock = threading.RLock()  # Thread-safe lock for concurrent access
 
     def _match(self, doc, query):
         if not query:
@@ -318,68 +333,74 @@ class InMemoryCollection:
         return True
 
     def find_one(self, query=None):
-        query = query or {}
-        for d in self._docs:
-            if self._match(d, query):
-                return copy.deepcopy(d)
-        return None
+        with self._lock:
+            query = query or {}
+            for d in self._docs:
+                if self._match(d, query):
+                    return copy.deepcopy(d)
+            return None
 
     def find(self, query=None):
-        query = query or {}
-        matches = [d for d in self._docs if self._match(d, query)]
-        return InMemoryCursor(matches)
+        with self._lock:
+            query = query or {}
+            matches = [d for d in self._docs if self._match(d, query)]
+            return InMemoryCursor(matches)
 
     def insert_one(self, doc):
-        new_doc = copy.deepcopy(doc)
-        if '_id' not in new_doc:
-            new_doc['_id'] = str(uuid.uuid4())
-        self._docs.append(new_doc)
-        return InMemoryInsertResult(new_doc['_id'])
+        with self._lock:
+            new_doc = copy.deepcopy(doc)
+            if '_id' not in new_doc:
+                new_doc['_id'] = str(uuid.uuid4())
+            self._docs.append(new_doc)
+            return InMemoryInsertResult(new_doc['_id'])
 
     def update_one(self, query, update):
-        set_data = update.get('$set', {}) if isinstance(update, dict) else {}
-        push_data = update.get('$push', {}) if isinstance(update, dict) else {}
-        for i, d in enumerate(self._docs):
-            if self._match(d, query):
-                updated = copy.deepcopy(d)
+        with self._lock:
+            set_data = update.get('$set', {}) if isinstance(update, dict) else {}
+            push_data = update.get('$push', {}) if isinstance(update, dict) else {}
+            for i, d in enumerate(self._docs):
+                if self._match(d, query):
+                    updated = copy.deepcopy(d)
 
-                if set_data:
-                    for k, v in set_data.items():
+                    if set_data:
+                        for k, v in set_data.items():
 
-                        if isinstance(k, str) and '.' in k:
-                            parts = k.split('.')
-                            cur = updated
-                            for part in parts[:-1]:
-                                nxt = cur.get(part)
-                                if not isinstance(nxt, dict):
-                                    nxt = {}
-                                    cur[part] = nxt
-                                cur = nxt
-                            cur[parts[-1]] = v
-                        else:
-                            updated[k] = v
+                            if isinstance(k, str) and '.' in k:
+                                parts = k.split('.')
+                                cur = updated
+                                for part in parts[:-1]:
+                                    nxt = cur.get(part)
+                                    if not isinstance(nxt, dict):
+                                        nxt = {}
+                                        cur[part] = nxt
+                                    cur = nxt
+                                cur[parts[-1]] = v
+                            else:
+                                updated[k] = v
 
-                if push_data:
-                    for k, v in push_data.items():
-                        cur = updated.get(k)
-                        if cur is None or not isinstance(cur, list):
-                            updated[k] = [v]
-                        else:
-                            updated[k].append(v)
-                self._docs[i] = updated
-                return InMemoryUpdateResult(1)
-        return InMemoryUpdateResult(0)
+                    if push_data:
+                        for k, v in push_data.items():
+                            cur = updated.get(k)
+                            if cur is None or not isinstance(cur, list):
+                                updated[k] = [v]
+                            else:
+                                updated[k].append(v)
+                    self._docs[i] = updated
+                    return InMemoryUpdateResult(1)
+            return InMemoryUpdateResult(0)
 
     def delete_one(self, query):
-        for i, d in enumerate(self._docs):
-            if self._match(d, query):
-                del self._docs[i]
-                return InMemoryDeleteResult(1)
-        return InMemoryDeleteResult(0)
+        with self._lock:
+            for i, d in enumerate(self._docs):
+                if self._match(d, query):
+                    del self._docs[i]
+                    return InMemoryDeleteResult(1)
+            return InMemoryDeleteResult(0)
 
     def count_documents(self, query=None):
-        query = query or {}
-        return len([1 for d in self._docs if self._match(d, query)])
+        with self._lock:
+            query = query or {}
+            return len([1 for d in self._docs if self._match(d, query)])
 
     def create_indexes(self, *args, **kwargs):
 
@@ -488,3 +509,13 @@ else:
         revocations_collection = db.revocations
     except Exception:
         revocations_collection = None
+
+def close_database_connections():
+    """Close all database connections for graceful shutdown"""
+    global mongodb_client
+    try:
+        if mongodb_client:
+            mongodb_client.close()
+            print("MongoDB connections closed")
+    except Exception as e:
+        print(f"Error closing MongoDB connections: {e}")

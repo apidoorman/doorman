@@ -14,6 +14,8 @@ os.environ.setdefault('JWT_SECRET_KEY', 'test-secret-key')
 os.environ.setdefault('STARTUP_ADMIN_EMAIL', 'admin@doorman.dev')
 os.environ.setdefault('STARTUP_ADMIN_PASSWORD', 'password1')
 os.environ.setdefault('COOKIE_DOMAIN', 'testserver')
+os.environ.setdefault('LOGIN_IP_RATE_LIMIT', '1000')  # High limit for tests
+os.environ.setdefault('LOGIN_IP_RATE_WINDOW', '60')  # 1000 requests per minute for tests
 
 _HERE = os.path.dirname(__file__)
 _PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
@@ -87,6 +89,14 @@ async def reset_http_client():
         await GatewayService.aclose_http_client()
     except Exception:
         pass
+
+    # Reset rate limit counters before each test
+    try:
+        from utils.limit_throttle_util import reset_counters
+        reset_counters()
+    except Exception:
+        pass
+
     yield
     # After each test, close and reset the pooled client
     try:

@@ -101,7 +101,11 @@ Response:
 @monitor_router.get('/monitor/liveness',
     description='Kubernetes liveness probe endpoint (no auth)',
     response_model=LivenessResponse)
-async def liveness():
+async def liveness(request: Request):
+    # Fail liveness check during graceful shutdown
+    if hasattr(request.app.state, 'shutting_down') and request.app.state.shutting_down:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="Service shutting down")
     return {'status': 'alive'}
 
 """
@@ -116,7 +120,12 @@ Response:
 @monitor_router.get('/monitor/readiness',
     description='Kubernetes readiness probe endpoint (no auth)',
     response_model=ReadinessResponse)
-async def readiness():
+async def readiness(request: Request):
+    # Fail readiness check during graceful shutdown
+    if hasattr(request.app.state, 'shutting_down') and request.app.state.shutting_down:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="Service shutting down")
+
     try:
         mongo_ok = await check_mongodb()
         redis_ok = await check_redis()

@@ -96,18 +96,25 @@ class RoleService:
             doorman_cache.delete_cache('role_cache', role_name)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
-            update_result = role_collection.update_one({'role_name': role_name}, {'$set': not_null_data})
-            if not update_result.acknowledged or update_result.modified_count == 0:
+            try:
+                update_result = role_collection.update_one({'role_name': role_name}, {'$set': not_null_data})
+                if update_result.modified_count > 0:
+                    doorman_cache.delete_cache('role_cache', role_name)
+                if not update_result.acknowledged or update_result.modified_count == 0:
 
-                current = role_collection.find_one({'role_name': role_name}) or {}
-                is_applied = all(current.get(k) == v for k, v in not_null_data.items())
-                if not is_applied:
-                    logger.error(request_id + ' | Role update failed with code ROLE006')
-                    return ResponseModel(
-                        status_code=400,
-                        error_code='ROLE006',
-                        error_message='Unable to update role'
-                    ).dict()
+                    current = role_collection.find_one({'role_name': role_name}) or {}
+                    is_applied = all(current.get(k) == v for k, v in not_null_data.items())
+                    if not is_applied:
+                        logger.error(request_id + ' | Role update failed with code ROLE006')
+                        return ResponseModel(
+                            status_code=400,
+                            error_code='ROLE006',
+                            error_message='Unable to update role'
+                        ).dict()
+            except Exception as e:
+                doorman_cache.delete_cache('role_cache', role_name)
+                logger.error(request_id + ' | Role update failed with exception: ' + str(e), exc_info=True)
+                raise
 
             updated_role = role_collection.find_one({'role_name': role_name}) or {}
             if updated_role.get('_id'): del updated_role['_id']
