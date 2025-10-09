@@ -181,7 +181,8 @@ def validate_token_revocation_config():
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
-    await validate_database_connections()
+    if os.getenv('MEM_OR_EXTERNAL', '') != 'MEM':
+        await validate_database_connections()
     validate_token_revocation_config()
     admin_password = os.getenv('STARTUP_ADMIN_PASSWORD', '')
     if len(admin_password) < 12:
