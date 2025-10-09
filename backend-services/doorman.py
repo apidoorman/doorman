@@ -156,10 +156,11 @@ async def validate_database_connections():
     gateway_logger.info("All database connections validated successfully")
 
 def validate_token_revocation_config():
-    """Validate token revocation is safe for multi-worker deployments"""
+    """
+    Validate token revocation is safe for multi-worker deployments.
+    """
     threads = int(os.getenv('THREADS', '1'))
     mem_mode = os.getenv('MEM_OR_EXTERNAL', 'MEM')
-
     if threads > 1 and mem_mode == 'MEM':
         gateway_logger.error(
             "CRITICAL: Multi-worker mode (THREADS > 1) with in-memory storage "
@@ -174,20 +175,14 @@ def validate_token_revocation_config():
             "Token revocation requires Redis in multi-worker mode (THREADS > 1). "
             "Set MEM_OR_EXTERNAL=REDIS or THREADS=1"
         )
-
     gateway_logger.info(
         f"Token revocation mode: {mem_mode} with {threads} worker(s)"
     )
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
-    # Validate database connections before starting
     await validate_database_connections()
-
-    # Validate token revocation configuration
     validate_token_revocation_config()
-
-    # Validate admin password strength (always enforced, not just production)
     admin_password = os.getenv('STARTUP_ADMIN_PASSWORD', '')
     if len(admin_password) < 12:
         raise RuntimeError(
@@ -449,21 +444,14 @@ async def app_lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # Graceful shutdown sequence
         gateway_logger.info("Starting graceful shutdown...")
-
-        # Set shutting_down flag so health checks fail
         app.state.shutting_down = True
-
-        # Wait for in-flight requests to complete (grace period)
         gateway_logger.info("Waiting for in-flight requests to complete (5s grace period)...")
         await asyncio.sleep(5)
-
         try:
             await stop_auto_save_task()
         except Exception as e:
             gateway_logger.error(f'Failed to stop auto-save task: {e}')
-
         try:
             if database.memory_only:
                 settings = get_cached_settings()
@@ -472,23 +460,18 @@ async def app_lifespan(app: FastAPI):
                 gateway_logger.info(f'Final memory dump written to {path}')
         except Exception as e:
             gateway_logger.error(f'Failed to write final memory dump: {e}')
-
         try:
             task = getattr(app.state, '_purger_task', None)
             if task:
                 task.cancel()
         except Exception:
             pass
-
-        # Close database connections
         try:
             gateway_logger.info("Closing database connections...")
             from utils.database import close_database_connections
             close_database_connections()
         except Exception as e:
             gateway_logger.error(f"Error closing database connections: {e}")
-
-        # Close HTTP clients
         try:
             gateway_logger.info("Closing HTTP clients...")
             from services.gateway_service import GatewayService
