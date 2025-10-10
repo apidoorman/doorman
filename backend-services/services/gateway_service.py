@@ -289,6 +289,63 @@ class GatewayService:
                 if user_specific_api_key:
                     headers[header_name] = user_specific_api_key
 
+    @staticmethod
+    def _sanitize_grpc_metadata(headers: dict) -> list:
+        """
+        Sanitize HTTP headers for gRPC metadata compatibility.
+
+        gRPC metadata keys must be:
+        - lowercase ASCII
+        - contain only alphanumeric, hyphens, underscores, and dots
+        - not contain certain control characters
+
+        Args:
+            headers: HTTP headers dict
+
+        Returns:
+            List of (key, value) tuples suitable for gRPC metadata
+        """
+        metadata_list = []
+        if not headers:
+            return metadata_list
+
+        for k, v in headers.items():
+            try:
+                # Convert key to lowercase and sanitize
+                key = str(k).lower().strip()
+
+                # Skip empty keys
+                if not key:
+                    continue
+
+                # Replace invalid characters with hyphens
+                # Keep only alphanumeric, hyphens, underscores, and dots
+                sanitized_key = ''.join(
+                    c if c.isalnum() or c in ('-', '_', '.') else '-'
+                    for c in key
+                )
+
+                # Skip if sanitization resulted in empty key
+                if not sanitized_key:
+                    continue
+
+                # Convert value to string and encode to ASCII
+                value = str(v) if v is not None else ''
+
+                # Try to encode as ASCII to ensure compatibility
+                try:
+                    value.encode('ascii')
+                except UnicodeEncodeError:
+                    # If value contains non-ASCII, skip it
+                    continue
+
+                metadata_list.append((sanitized_key, value))
+            except Exception:
+                # Skip problematic headers silently
+                continue
+
+        return metadata_list
+
     # ========================================================================
     # Gateway Methods
     # ========================================================================
@@ -1062,11 +1119,8 @@ class GatewayService:
                             req_ser = (lambda _m: b'')
                         # Choose streaming or unary based on request body hint
                         stream_mode = str((body.get('stream') or body.get('streaming') or '')).lower()
-                        metadata_list = []
-                        try:
-                            metadata_list = [(str(k), str(v)) for k, v in (headers or {}).items()]
-                        except Exception:
-                            metadata_list = []
+                        # Sanitize HTTP headers for gRPC metadata compatibility
+                        metadata_list = GatewayService._sanitize_grpc_metadata(headers or {})
                         if stream_mode.startswith('server'):
                             call = channel.unary_stream(
                                 full_method,
