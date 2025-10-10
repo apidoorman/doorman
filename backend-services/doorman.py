@@ -184,10 +184,10 @@ async def app_lifespan(app: FastAPI):
     if os.getenv('MEM_OR_EXTERNAL', '') != 'MEM':
         await validate_database_connections()
     validate_token_revocation_config()
-    admin_password = os.getenv('STARTUP_ADMIN_PASSWORD', '')
+    admin_password = os.getenv('DOORMAN_ADMIN_PASSWORD', '')
     if len(admin_password) < 12:
         raise RuntimeError(
-            'STARTUP_ADMIN_PASSWORD must be at least 12 characters. '
+            'DOORMAN_ADMIN_PASSWORD must be at least 12 characters. '
             'Generate strong password: openssl rand -base64 16'
         )
 

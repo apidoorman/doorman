@@ -193,8 +193,8 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
             raise HTTPException(
                 status_code=429,
                 detail={
-                    'error_code': 'RATE_LIMIT_EXCEEDED',
-                    'message': f'Too many requests from your IP. Limit: {limit} per {window} seconds.',
+                    'error_code': 'IP_RATE_LIMIT',
+                    'message': f'Too many requests from your IP address. Please wait {retry_after} seconds before trying again. Limit: {limit} requests per {window} seconds.',
                     'retry_after': retry_after
                 },
                 headers={

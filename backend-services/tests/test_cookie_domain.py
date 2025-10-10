@@ -9,8 +9,8 @@ async def test_cookie_domain_set_on_login(client, monkeypatch):
     resp = await client.post(
         '/platform/authorization',
         json={
-            'email': os.environ['STARTUP_ADMIN_EMAIL'],
-            'password': os.environ['STARTUP_ADMIN_PASSWORD'],
+            'email': os.environ['DOORMAN_ADMIN_EMAIL'],
+            'password': os.environ['DOORMAN_ADMIN_PASSWORD'],
         },
     )
     assert resp.status_code == 200

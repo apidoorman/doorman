@@ -101,8 +101,8 @@ class Database:
             if not users.find_one({'username': 'admin'}):
                 users.insert_one({
                     'username': 'admin',
-                    'email': os.getenv('STARTUP_ADMIN_EMAIL'),
-                    'password': password_util.hash_password(os.getenv('STARTUP_ADMIN_PASSWORD')),
+                    'email': os.getenv('DOORMAN_ADMIN_EMAIL'),
+                    'password': password_util.hash_password(os.getenv('DOORMAN_ADMIN_PASSWORD')),
                     'role': 'admin',
                     'groups': ['ALL', 'admin'],
                     'ui_access': True,

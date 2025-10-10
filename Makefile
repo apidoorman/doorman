@@ -1,9 +1,9 @@
 SHELL := /bin/bash
 
-# Configurable envs (can override on CLI)
+# Configurable envs (can override on CLI or set in backend-services/.env)
 BASE_URL ?= http://localhost:5001
-ADMIN_EMAIL ?= admin@localhost
-ADMIN_PASSWORD ?= password1
+ADMIN_EMAIL ?= $(shell grep '^DOORMAN_ADMIN_EMAIL=' backend-services/.env 2>/dev/null | cut -d'=' -f2)
+ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' backend-services/.env 2>/dev/null | cut -d'=' -f2)
 
 .PHONY: unit unitq live liveq smoke soak preflight
 
@@ -30,8 +30,8 @@ liveq:
 # Lightweight readiness + platform smoke (optionally gateway if SMOKE_UPSTREAM_URL provided)
 smoke preflight:
 	BASE_URL=$(BASE_URL) \
-	STARTUP_ADMIN_EMAIL=$(ADMIN_EMAIL) \
-	STARTUP_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
+	DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
+	DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
 	 bash scripts/preflight.sh
 
 # Placeholder: requires k6/locust. Provide your own script path via SOAK_SCRIPT.
@@ -59,5 +59,5 @@ coverage-html:
 
 # Runs server under coverage (parallel mode), executes live-tests, then combines
 coverage-all:
-	BASE_URL=$(BASE_URL) STARTUP_ADMIN_EMAIL=$(ADMIN_EMAIL) STARTUP_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
+	BASE_URL=$(BASE_URL) DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
 	 bash scripts/coverage_all.sh
