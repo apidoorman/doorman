@@ -331,9 +331,19 @@ const ApiDetailPage = () => {
         api_allowed_retry_count: api.api_allowed_retry_count,
         api_authorization_field_swap: api.api_authorization_field_swap,
         api_allowed_headers: [...(api.api_allowed_headers || [])],
+        api_ip_mode: (api as any).api_ip_mode || 'allow_all',
+        api_ip_whitelist: [...((api as any).api_ip_whitelist || [])],
+        api_ip_blacklist: [...((api as any).api_ip_blacklist || [])],
+        api_trust_x_forwarded_for: !!(api as any).api_trust_x_forwarded_for,
         api_credits_enabled: api.api_credits_enabled,
-        api_credit_group: api.api_credit_group
+        api_credit_group: api.api_credit_group,
+        api_public: (api as any).api_public,
+        api_auth_required: (api as any).api_auth_required,
+        active: (api as any).active
       })
+      // Also reset the IP whitelist/blacklist text fields
+      setIpWhitelistText(((api as any).api_ip_whitelist || []).join('\n'))
+      setIpBlacklistText(((api as any).api_ip_blacklist || []).join('\n'))
     }
   }
 

@@ -4,12 +4,22 @@ set -euo pipefail
 # One-time helper to force-clear stored allow_localhost_bypass=false via REST API.
 # Env vars:
 # - BASE_URL (default http://localhost:5001)
-# - STARTUP_ADMIN_EMAIL (default admin@localhost)
-# - STARTUP_ADMIN_PASSWORD (default password1)
+# - DOORMAN_ADMIN_EMAIL (required, no default)
+# - DOORMAN_ADMIN_PASSWORD (required, no default)
 
 BASE_URL="${BASE_URL:-http://localhost:5001}"
-EMAIL="${STARTUP_ADMIN_EMAIL:-admin@localhost}"
-PASSWORD="${STARTUP_ADMIN_PASSWORD:-password1}"
+EMAIL="${DOORMAN_ADMIN_EMAIL:-}"
+PASSWORD="${DOORMAN_ADMIN_PASSWORD:-}"
+
+if [[ -z "$EMAIL" ]]; then
+  echo "ERROR: DOORMAN_ADMIN_EMAIL must be set" >&2
+  exit 1
+fi
+
+if [[ -z "$PASSWORD" ]]; then
+  echo "ERROR: DOORMAN_ADMIN_PASSWORD must be set" >&2
+  exit 1
+fi
 
 echo "[1/3] Logging in to $BASE_URL ..."
 COOKIE_JAR="$(mktemp)"

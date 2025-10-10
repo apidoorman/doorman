@@ -2,11 +2,16 @@
 from fastapi import Request, HTTPException
 import asyncio
 import time
+import logging
+import os
 
 # Internal imports
 from utils.auth_util import auth_required
 from utils.database import user_collection
 from utils.doorman_cache_util import doorman_cache
+from utils.ip_policy_util import _get_client_ip
+
+logger = logging.getLogger('doorman.gateway')
 
 class InMemoryWindowCounter:
     """Simple in-memory counter with TTL semantics to mimic required Redis ops.
@@ -114,3 +119,104 @@ def reset_counters():
         _fallback_counter._store.clear()
     except Exception:
         pass
+
+async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
+    """
+    IP-based rate limiting for endpoints that don't require authentication.
+
+    Prevents brute force attacks by limiting requests per IP address.
+
+    Args:
+        request: FastAPI Request object
+        limit: Maximum number of requests allowed in window (default: 10)
+        window: Time window in seconds (default: 60)
+
+    Raises:
+        HTTPException: 429 if rate limit exceeded
+
+    Returns:
+        Dict with rate limit info for response headers
+
+    Example:
+        # Limit login to 5 attempts per 5 minutes per IP
+        await limit_by_ip(request, limit=5, window=300)
+    """
+    try:
+        if os.getenv('LOGIN_IP_RATE_DISABLED', 'false').lower() == 'true':
+            now = int(time.time())
+            return {
+                'limit': limit,
+                'remaining': limit,
+                'reset': now + window,
+                'window': window
+            }
+        client_ip = _get_client_ip(request, trust_xff=True)
+        if not client_ip:
+            logger.warning('Unable to determine client IP for rate limiting, allowing request')
+            return {
+                'limit': limit,
+                'remaining': limit,
+                'reset': int(time.time()) + window,
+                'window': window
+            }
+
+        now = int(time.time())
+        bucket = now // window
+        key = f'ip_rate_limit:{client_ip}:{bucket}'
+
+        redis_client = getattr(request.app.state, 'redis', None)
+        client = redis_client or _fallback_counter
+
+        try:
+            count = await client.incr(key)
+            if count == 1:
+                await client.expire(key, window)
+        except Exception as e:
+            logger.warning(f'Redis failure in IP rate limiting, using fallback: {str(e)}')
+            count = await _fallback_counter.incr(key)
+            if count == 1:
+                await _fallback_counter.expire(key, window)
+
+        remaining = max(0, limit - count)
+        reset_time = (bucket + 1) * window
+        retry_after = window - (now % window)
+
+        rate_limit_info = {
+            'limit': limit,
+            'remaining': remaining,
+            'reset': reset_time,
+            'window': window
+        }
+
+        if count > limit:
+            logger.warning(f'IP rate limit exceeded for {client_ip}: {count}/{limit} in {window}s')
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    'error_code': 'IP_RATE_LIMIT',
+                    'message': f'Too many requests from your IP address. Please wait {retry_after} seconds before trying again. Limit: {limit} requests per {window} seconds.',
+                    'retry_after': retry_after
+                },
+                headers={
+                    'Retry-After': str(retry_after),
+                    'X-RateLimit-Limit': str(limit),
+                    'X-RateLimit-Remaining': '0',
+                    'X-RateLimit-Reset': str(reset_time)
+                }
+            )
+
+        if count > (limit * 0.8):
+            logger.info(f'IP {client_ip} approaching rate limit: {count}/{limit}')
+
+        return rate_limit_info
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f'IP rate limiting error: {str(e)}', exc_info=True)
+        return {
+            'limit': limit,
+            'remaining': limit,
+            'reset': int(time.time()) + window,
+            'window': window
+        }

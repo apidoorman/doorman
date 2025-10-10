@@ -12,8 +12,9 @@ COOKIE=/tmp/doorman.cookies       # cookie jar path
 
 Login and check status:
 ```
+# Ensure DOORMAN_ADMIN_EMAIL and DOORMAN_ADMIN_PASSWORD are set in your environment
 curl -s -c "$COOKIE" -H 'Content-Type: application/json' \
-  -d '{"email":"admin@localhost","password":"password1"}' \
+  -d "{\"email\":\"$DOORMAN_ADMIN_EMAIL\",\"password\":\"$DOORMAN_ADMIN_PASSWORD\"}" \
   "$BASE/platform/authorization"
 curl -s -b "$COOKIE" "$BASE/platform/authorization/status"
 ```

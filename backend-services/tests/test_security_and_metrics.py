@@ -21,9 +21,8 @@ async def test_security_headers_and_hsts(monkeypatch, client):
 
 @pytest.mark.asyncio
 async def test_body_size_limit_returns_413(monkeypatch, client):
-
-    import doorman as appmod
-    monkeypatch.setattr(appmod, 'MAX_BODY_SIZE', 10, raising=False)
+    # Set environment variable to override body size limit
+    monkeypatch.setenv('MAX_BODY_SIZE_BYTES', '10')
     payload = 'x' * 100
     r = await client.post('/platform/authorization', content=payload, headers={'Content-Type': 'text/plain'})
     assert r.status_code == 413

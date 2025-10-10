@@ -39,8 +39,9 @@ Install requirements (backend)
 Set environment variables in a .env file (see backend-services/.env.example)
 ```bash
 # Startup admin should be used for setup only
-STARTUP_ADMIN_EMAIL=admin@localhost.com
-STARTUP_ADMIN_PASSWORD=SecPassword!12345
+# IMPORTANT: Use strong, unique credentials. Never commit real credentials to version control.
+DOORMAN_ADMIN_EMAIL=<your-admin-email>
+DOORMAN_ADMIN_PASSWORD=<strong-password-12+chars>
 
 # Cache/database mode (unified flag)
 # MEM for in-memory cache + in-memory DB; REDIS to use Redis-backed cache (DB can still be memory-only)

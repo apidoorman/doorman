@@ -185,6 +185,171 @@ class GatewayService:
                 except Exception:
                     return response.content
 
+    # ========================================================================
+    # Refactored Helper Methods (P2 #21 - Extract Duplicate Code)
+    # ========================================================================
+
+    @staticmethod
+    async def _resolve_api_from_path(path: str, request_id: str):
+        """
+        Extract common API resolution logic used across all gateway methods.
+
+        Parses path to extract API name/version and resolves API definition.
+
+        Args:
+            path: Request path (e.g., /myapi/v1/endpoint)
+            request_id: Request ID for logging
+
+        Returns:
+            tuple: (api dict, api_name_version str, endpoint_uri str) or (None, None, None)
+        """
+        try:
+            parts = [p for p in (path or '').split('/') if p]
+            api_name_version = ''
+            endpoint_uri = ''
+            if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+                api_name_version = f'/{parts[0]}/{parts[1]}'
+                endpoint_uri = '/'.join(parts[2:])
+            else:
+                return None, None, None
+
+            api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
+            api = await api_util.get_api(api_key, api_name_version)
+            return api, api_name_version, endpoint_uri
+        except Exception as e:
+            logger.error(f'{request_id} | API resolution failed: {str(e)}')
+            return None, None, None
+
+    @staticmethod
+    async def _check_and_deduct_credits(api: dict, username: str, request_id: str):
+        """
+        Extract common credit checking and deduction logic.
+
+        Checks if API requires credits and deducts one credit if applicable.
+
+        Args:
+            api: API definition dict
+            username: Username requesting the API
+            request_id: Request ID for logging
+
+        Returns:
+            dict: Error response if credit check fails, None if success
+        """
+        if not api:
+            return None
+
+        if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
+            if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                logger.warning(f'{request_id} | Credit deduction failed for user {username}')
+                return GatewayService.error_response(
+                    request_id,
+                    'GTW008',
+                    'User does not have any credits',
+                    status=401
+                )
+        return None
+
+    @staticmethod
+    async def _apply_credit_headers(api: dict, username: str, headers: dict):
+        """
+        Extract common credit header application logic.
+
+        Adds API key headers for credit-enabled APIs (both system and user-specific keys).
+
+        Args:
+            api: API definition dict
+            username: Username requesting the API
+            headers: Headers dict to modify (modified in-place)
+
+        Returns:
+            None (modifies headers dict in-place)
+        """
+        if not api or not api.get('api_credits_enabled'):
+            return
+
+        # Add system-level credit API key
+        ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
+        if ai_token_headers:
+            header_name = ai_token_headers[0]
+            header_value = ai_token_headers[1]
+
+            # Handle key rotation: ai_token_headers[1] could be a list [old_key, new_key]
+            if isinstance(header_value, list):
+                # Use new key if available during rotation
+                header_value = header_value[-1] if len(header_value) > 0 else header_value[0]
+
+            headers[header_name] = header_value
+
+            # Override with user-specific API key if available
+            if username and not bool(api.get('api_public')):
+                user_specific_api_key = await credit_util.get_user_api_key(
+                    api.get('api_credit_group'),
+                    username
+                )
+                if user_specific_api_key:
+                    headers[header_name] = user_specific_api_key
+
+    @staticmethod
+    def _sanitize_grpc_metadata(headers: dict) -> list:
+        """
+        Sanitize HTTP headers for gRPC metadata compatibility.
+
+        gRPC metadata keys must be:
+        - lowercase ASCII
+        - contain only alphanumeric, hyphens, underscores, and dots
+        - not contain certain control characters
+
+        Args:
+            headers: HTTP headers dict
+
+        Returns:
+            List of (key, value) tuples suitable for gRPC metadata
+        """
+        metadata_list = []
+        if not headers:
+            return metadata_list
+
+        for k, v in headers.items():
+            try:
+                # Convert key to lowercase and sanitize
+                key = str(k).lower().strip()
+
+                # Skip empty keys
+                if not key:
+                    continue
+
+                # Replace invalid characters with hyphens
+                # Keep only alphanumeric, hyphens, underscores, and dots
+                sanitized_key = ''.join(
+                    c if c.isalnum() or c in ('-', '_', '.') else '-'
+                    for c in key
+                )
+
+                # Skip if sanitization resulted in empty key
+                if not sanitized_key:
+                    continue
+
+                # Convert value to string and encode to ASCII
+                value = str(v) if v is not None else ''
+
+                # Try to encode as ASCII to ensure compatibility
+                try:
+                    value.encode('ascii')
+                except UnicodeEncodeError:
+                    # If value contains non-ASCII, skip it
+                    continue
+
+                metadata_list.append((sanitized_key, value))
+            except Exception:
+                # Skip problematic headers silently
+                continue
+
+        return metadata_list
+
+    # ========================================================================
+    # Gateway Methods
+    # ========================================================================
+
     @staticmethod
     async def rest_gateway(username, request, request_id, start_time, path, url=None, method=None, retry=0):
         """
@@ -249,6 +414,8 @@ class GatewayService:
             query_params = getattr(request, 'query_params', {})
             allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
+            # Propagate request ID to upstream for distributed tracing
+            headers['X-Request-ID'] = request_id
             if api and api.get('api_credits_enabled'):
                 ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:
@@ -439,6 +606,8 @@ class GatewayService:
                 content_type = 'text/xml; charset=utf-8'
             allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
+            # Propagate request ID to upstream for distributed tracing
+            headers['X-Request-ID'] = request_id
             headers['Content-Type'] = content_type
             if 'SOAPAction' not in headers:
                 headers['SOAPAction'] = '""'
@@ -553,6 +722,8 @@ class GatewayService:
             current_time = time.time() * 1000
             allowed_headers = api.get('api_allowed_headers') or []
             headers = await get_headers(request, allowed_headers)
+            # Propagate request ID to upstream for distributed tracing
+            headers['X-Request-ID'] = request_id
             headers['Content-Type'] = 'application/json'
             headers['Accept'] = 'application/json'
             if api.get('api_credits_enabled'):
@@ -628,6 +799,13 @@ class GatewayService:
             except Exception:
                 pass
             return ResponseModel(status_code=200, response_headers=response_headers, response=result).dict()
+        except httpx.TimeoutException:
+            return ResponseModel(
+                status_code=504,
+                response_headers={'request_id': request_id},
+                error_code='GTW010',
+                error_message='Gateway timeout'
+            ).dict()
         except Exception as e:
             logger.error(f'{request_id} | GraphQL gateway failed with code GTW006: {str(e)}')
             error_msg = str(e)[:255] if len(str(e)) > 255 else str(e)
@@ -787,6 +965,8 @@ class GatewayService:
                 pass
             allowed_headers = (api or {}).get('api_allowed_headers') or []
             headers = await get_headers(request, allowed_headers)
+            # Propagate request ID to upstream for distributed tracing
+            headers['X-Request-ID'] = request_id
             try:
                 body = await request.json()
                 if not isinstance(body, dict):
@@ -939,11 +1119,8 @@ class GatewayService:
                             req_ser = (lambda _m: b'')
                         # Choose streaming or unary based on request body hint
                         stream_mode = str((body.get('stream') or body.get('streaming') or '')).lower()
-                        metadata_list = []
-                        try:
-                            metadata_list = [(str(k), str(v)) for k, v in (headers or {}).items()]
-                        except Exception:
-                            metadata_list = []
+                        # Sanitize HTTP headers for gRPC metadata compatibility
+                        metadata_list = GatewayService._sanitize_grpc_metadata(headers or {})
                         if stream_mode.startswith('server'):
                             call = channel.unary_stream(
                                 full_method,

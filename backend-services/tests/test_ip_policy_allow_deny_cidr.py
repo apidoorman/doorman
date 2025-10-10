@@ -45,6 +45,8 @@ async def test_ip_policy_allows_exact_ip(monkeypatch, authed_client):
 @pytest.mark.asyncio
 async def test_ip_policy_denies_exact_ip(monkeypatch, authed_client):
     import services.gateway_service as gs
+    # Disable localhost bypass to allow IP blacklist to work
+    monkeypatch.setenv('LOCAL_HOST_IP_BYPASS', 'false')
     # blacklist exact client IP
     name, ver = await _setup_api_public(authed_client, 'ipdeny1', 'v1', mode='allow_all', bl=['127.0.0.1'])
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
@@ -66,6 +68,8 @@ async def test_ip_policy_allows_cidr(monkeypatch, authed_client):
 @pytest.mark.asyncio
 async def test_ip_policy_denies_cidr(monkeypatch, authed_client):
     import services.gateway_service as gs
+    # Disable localhost bypass to allow IP blacklist to work
+    monkeypatch.setenv('LOCAL_HOST_IP_BYPASS', 'false')
     name, ver = await _setup_api_public(authed_client, 'ipdeny2', 'v1', mode='allow_all', bl=['127.0.0.0/24'])
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.get(f'/api/rest/{name}/{ver}/res')
@@ -76,6 +80,8 @@ async def test_ip_policy_denies_cidr(monkeypatch, authed_client):
 @pytest.mark.asyncio
 async def test_ip_policy_denylist_precedence_over_allowlist(monkeypatch, authed_client):
     import services.gateway_service as gs
+    # Disable localhost bypass to allow IP blacklist to work
+    monkeypatch.setenv('LOCAL_HOST_IP_BYPASS', 'false')
     name, ver = await _setup_api_public(authed_client, 'ipdeny3', 'v1', mode='whitelist', wl=['127.0.0.1'], bl=['127.0.0.1'])
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.get(f'/api/rest/{name}/{ver}/res')
@@ -86,6 +92,8 @@ async def test_ip_policy_denylist_precedence_over_allowlist(monkeypatch, authed_
 @pytest.mark.asyncio
 async def test_ip_policy_enforced_early_returns_http_error(monkeypatch, authed_client):
     import services.gateway_service as gs
+    # Disable localhost bypass to allow IP whitelist to work
+    monkeypatch.setenv('LOCAL_HOST_IP_BYPASS', 'false')
     # mode whitelist without including client IP -> API010
     name, ver = await _setup_api_public(authed_client, 'ipdeny4', 'v1', mode='whitelist', wl=['203.0.113.5'])
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)

@@ -1,4 +1,5 @@
 # External imports
+import os
 import pytest
 
 @pytest.mark.asyncio
@@ -10,9 +11,13 @@ async def test_auth_admin_endpoints(authed_client):
     )
     assert r.status_code == 200, r.text
 
+    # Use test credentials from environment (set in conftest.py for test-only use)
     relog = await authed_client.post(
         '/platform/authorization',
-        json={'email': 'admin@doorman.dev', 'password': 'password1'},
+        json={
+            'email': os.environ.get('DOORMAN_ADMIN_EMAIL'),
+            'password': os.environ.get('DOORMAN_ADMIN_PASSWORD')
+        },
     )
     assert relog.status_code == 200, relog.text
 

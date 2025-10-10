@@ -130,6 +130,9 @@ async def test_localhost_bypass_enabled_allows_without_forwarding_headers(monkey
 
 @pytest.mark.asyncio
 async def test_localhost_bypass_disabled_blocks_without_forwarding_headers(monkeypatch, authed_client, client):
+    # Disable localhost bypass via environment variable (overrides database setting)
+    monkeypatch.setenv('LOCAL_HOST_IP_BYPASS', 'false')
+
     # Restrictive whitelist and disable localhost bypass
     await _update_security(
         authed_client,

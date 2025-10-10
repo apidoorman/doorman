@@ -26,13 +26,13 @@ Local dev defaults are convenient but not secure; do not use them in production.
    - Web UI: `http://localhost:3000`
 
 2) Login to the platform
-   - Admin user is seeded when running in memory mode: `username=admin`, `email=$STARTUP_ADMIN_EMAIL`
-   - Default compose envs (dev only):
-     - `STARTUP_ADMIN_EMAIL=admin@localhost`
-     - `STARTUP_ADMIN_PASSWORD=password1`
+   - Admin user is seeded when running in memory mode: `username=admin`, `email=$DOORMAN_ADMIN_EMAIL`
+   - Set these envs in your `.env` file (required):
+     - `DOORMAN_ADMIN_EMAIL=<your-admin-email>`
+     - `DOORMAN_ADMIN_PASSWORD=<strong-password-12+chars>`
 
    cURL login and status check:
-   - `curl -s -c /tmp/doorman.cookies -H 'Content-Type: application/json' -d '{"email":"admin@localhost","password":"password1"}' http://localhost:5001/platform/authorization`
+   - `curl -s -c /tmp/doorman.cookies -H 'Content-Type: application/json' -d "{\"email\":\"$DOORMAN_ADMIN_EMAIL\",\"password\":\"$DOORMAN_ADMIN_PASSWORD\"}" http://localhost:5001/platform/authorization`
    - `curl -s -b /tmp/doorman.cookies http://localhost:5001/platform/authorization/status`
 
 3) Web UI setup

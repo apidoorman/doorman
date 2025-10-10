@@ -276,14 +276,21 @@ class UserService:
                     error_message='Maximum 10 custom attributes allowed. Please replace an existing one.'
                 ).dict()
         if non_null_update_data:
-            update_result = user_collection.update_one({'username': username}, {'$set': non_null_update_data})
-            if not update_result.acknowledged or update_result.modified_count == 0:
-                logger.error(f'{request_id} | User update failed with code USR003')
-                return ResponseModel(
-                    status_code=400,
-                    error_code='USR004',
-                    error_message='Unable to update user'
-                ).dict()
+            try:
+                update_result = user_collection.update_one({'username': username}, {'$set': non_null_update_data})
+                if update_result.modified_count > 0:
+                    doorman_cache.delete_cache('user_cache', username)
+                if not update_result.acknowledged or update_result.modified_count == 0:
+                    logger.error(f'{request_id} | User update failed with code USR003')
+                    return ResponseModel(
+                        status_code=400,
+                        error_code='USR004',
+                        error_message='Unable to update user'
+                    ).dict()
+            except Exception as e:
+                doorman_cache.delete_cache('user_cache', username)
+                logger.error(f'{request_id} | User update failed with exception: {str(e)}', exc_info=True)
+                raise
         if non_null_update_data.get('role'):
             await UserService.purge_apis_after_role_change(username, request_id)
         logger.info(f'{request_id} | User update successful')
@@ -350,7 +357,14 @@ class UserService:
                 error_message='Password must include at least 16 characters, one uppercase letter, one lowercase letter, one digit, and one special character'
             ).dict()
         hashed_password = password_util.hash_password(update_data.new_password)
-        user_collection.update_one({'username': username}, {'$set': {'password': hashed_password}})
+        try:
+            update_result = user_collection.update_one({'username': username}, {'$set': {'password': hashed_password}})
+            if update_result.modified_count > 0:
+                doorman_cache.delete_cache('user_cache', username)
+        except Exception as e:
+            doorman_cache.delete_cache('user_cache', username)
+            logger.error(f'{request_id} | User password update failed with exception: {str(e)}', exc_info=True)
+            raise
         user = user_collection.find_one({'username': username})
         if not user:
             logger.error(f'{request_id} | User password update failed with code USR002')
@@ -390,11 +404,18 @@ class UserService:
                 api = doorman_cache.get_cache('api_cache', f'{api_name}/{api_version}') or api_collection.find_one({'api_name': api_name, 'api_version': api_version})
                 if api and api.get('role') and user.get('role') not in api.get('role'):
                     user_subscriptions['apis'].remove(subscription)
-            subscriptions_collection.update_one(
-                {'username': username},
-                {'$set': {'apis': user_subscriptions.get('apis', [])}}
-            )
-            doorman_cache.set_cache('user_subscription_cache', username, user_subscriptions)
+            try:
+                update_result = subscriptions_collection.update_one(
+                    {'username': username},
+                    {'$set': {'apis': user_subscriptions.get('apis', [])}}
+                )
+                if update_result.modified_count > 0:
+                    doorman_cache.delete_cache('user_subscription_cache', username)
+                    doorman_cache.set_cache('user_subscription_cache', username, user_subscriptions)
+            except Exception as e:
+                doorman_cache.delete_cache('user_subscription_cache', username)
+                logger.error(f'{request_id} | Subscription update failed with exception: {str(e)}', exc_info=True)
+                raise
         logger.info(f'{request_id} | Purge successful')
 
     @staticmethod
