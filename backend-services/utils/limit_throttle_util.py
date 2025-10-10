@@ -3,6 +3,7 @@ from fastapi import Request, HTTPException
 import asyncio
 import time
 import logging
+import os
 
 # Internal imports
 from utils.auth_util import auth_required
@@ -141,11 +142,17 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
         await limit_by_ip(request, limit=5, window=300)
     """
     try:
-        # Get client IP (trust X-Forwarded-For if from trusted proxy)
+        if os.getenv('LOGIN_IP_RATE_DISABLED', 'false').lower() == 'true':
+            now = int(time.time())
+            return {
+                'limit': limit,
+                'remaining': limit,
+                'reset': now + window,
+                'window': window
+            }
         client_ip = _get_client_ip(request, trust_xff=True)
         if not client_ip:
             logger.warning('Unable to determine client IP for rate limiting, allowing request')
-            # Return default headers even if IP detection fails
             return {
                 'limit': limit,
                 'remaining': limit,
@@ -153,33 +160,27 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
                 'window': window
             }
 
-        # Create time-bucketed key (changes every window seconds)
         now = int(time.time())
         bucket = now // window
         key = f'ip_rate_limit:{client_ip}:{bucket}'
 
-        # Get Redis client or fallback to in-memory
         redis_client = getattr(request.app.state, 'redis', None)
         client = redis_client or _fallback_counter
 
-        # Increment counter
         try:
             count = await client.incr(key)
             if count == 1:
                 await client.expire(key, window)
         except Exception as e:
-            # Fallback to in-memory counter if Redis fails
             logger.warning(f'Redis failure in IP rate limiting, using fallback: {str(e)}')
             count = await _fallback_counter.incr(key)
             if count == 1:
                 await _fallback_counter.expire(key, window)
 
-        # Calculate rate limit headers
         remaining = max(0, limit - count)
-        reset_time = (bucket + 1) * window  # Start of next window
+        reset_time = (bucket + 1) * window
         retry_after = window - (now % window)
 
-        # Store rate limit info in request state for middleware
         rate_limit_info = {
             'limit': limit,
             'remaining': remaining,
@@ -187,7 +188,6 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
             'window': window
         }
 
-        # Check if limit exceeded
         if count > limit:
             logger.warning(f'IP rate limit exceeded for {client_ip}: {count}/{limit} in {window}s')
             raise HTTPException(
@@ -205,7 +205,6 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
                 }
             )
 
-        # Log if approaching limit (80% threshold)
         if count > (limit * 0.8):
             logger.info(f'IP {client_ip} approaching rate limit: {count}/{limit}')
 
@@ -214,7 +213,6 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
     except HTTPException:
         raise
     except Exception as e:
-        # Don't block requests if rate limiting fails
         logger.error(f'IP rate limiting error: {str(e)}', exc_info=True)
         return {
             'limit': limit,

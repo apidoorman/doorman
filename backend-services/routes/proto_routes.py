@@ -14,6 +14,7 @@ import logging
 import uuid
 import time
 from datetime import datetime
+import sys
 import subprocess
 
 # Internal imports
@@ -212,7 +213,7 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
         proto_path.write_text(proto_content)
         try:
             subprocess.run([
-                'python', '-m', 'grpc_tools.protoc',
+                sys.executable, '-m', 'grpc_tools.protoc',
                 f'--proto_path={proto_path.parent}',
                 f'--python_out={generated_dir}',
                 f'--grpc_python_out={generated_dir}',
@@ -408,7 +409,7 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
         proto_path.write_text(proto_content)
         try:
             subprocess.run([
-                'python', '-m', 'grpc_tools.protoc',
+                sys.executable, '-m', 'grpc_tools.protoc',
                 f'--proto_path={proto_path.parent}',
                 f'--python_out={generated_dir}',
                 f'--grpc_python_out={generated_dir}',

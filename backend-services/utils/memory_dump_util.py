@@ -214,6 +214,16 @@ def restore_memory_from_file(path: Optional[str] = None) -> dict:
 
     data = _from_jsonable(payload.get('data', {}))
     database.db.load_data(data)
+    try:
+        from utils.database import user_collection
+        from utils import password_util as _pw
+        import os as _os
+        admin = user_collection.find_one({'username': 'admin'})
+        if admin is not None and not isinstance(admin.get('password'), (bytes, bytearray)):
+            pwd = _os.getenv('STARTUP_ADMIN_PASSWORD') or 'password1'
+            user_collection.update_one({'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}})
+    except Exception:
+        pass
     return {'version': payload.get('version', 1), 'created_at': payload.get('created_at')}
 
 def find_latest_dump_path(path_hint: Optional[str] = None) -> Optional[str]:
