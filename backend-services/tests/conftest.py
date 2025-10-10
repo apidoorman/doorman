@@ -14,8 +14,9 @@ os.environ.setdefault('JWT_SECRET_KEY', 'test-secret-key')
 os.environ.setdefault('STARTUP_ADMIN_EMAIL', 'admin@doorman.dev')
 os.environ.setdefault('STARTUP_ADMIN_PASSWORD', 'password1')
 os.environ.setdefault('COOKIE_DOMAIN', 'testserver')
-os.environ.setdefault('LOGIN_IP_RATE_LIMIT', '1000')  # High limit for tests
-os.environ.setdefault('LOGIN_IP_RATE_WINDOW', '60')  # 1000 requests per minute for tests
+os.environ.setdefault('LOGIN_IP_RATE_LIMIT', '1000000')
+os.environ.setdefault('LOGIN_IP_RATE_WINDOW', '60')
+os.environ.setdefault('LOGIN_IP_RATE_DISABLED', 'true')
 
 _HERE = os.path.dirname(__file__)
 _PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
@@ -26,6 +27,13 @@ import pytest_asyncio
 from httpx import AsyncClient
 import pytest
 import asyncio
+from typing import Optional
+
+try:
+    from utils.database import database as _db
+    _INITIAL_DB_SNAPSHOT: Optional[dict] = _db.db.dump_data() if getattr(_db, 'memory_only', True) else None
+except Exception:
+    _INITIAL_DB_SNAPSHOT = None
 
 @pytest_asyncio.fixture
 async def authed_client():
@@ -104,6 +112,33 @@ async def reset_http_client():
         await GatewayService.aclose_http_client()
     except Exception:
         pass
+
+@pytest_asyncio.fixture(autouse=True, scope='module')
+async def reset_in_memory_db_state():
+    """Restore in-memory DB and caches before each test to ensure isolation.
+
+    Prevents prior tests (e.g., password changes, user revocations, settings tweaks)
+    from affecting later ones.
+    """
+    try:
+        if _INITIAL_DB_SNAPSHOT is not None:
+            from utils.database import database as _db
+            _db.db.load_data(_INITIAL_DB_SNAPSHOT)
+            try:
+                from utils.database import user_collection
+                from utils import password_util as _pw
+                pwd = os.environ.get('STARTUP_ADMIN_PASSWORD') or 'password1'
+                user_collection.update_one({'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}})
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        from utils.doorman_cache_util import doorman_cache
+        doorman_cache.clear_all()
+    except Exception:
+        pass
+    yield
 
 # Test helpers expected by some suites
 async def create_api(client: AsyncClient, api_name: str, api_version: str):
