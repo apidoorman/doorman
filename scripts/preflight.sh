@@ -8,17 +8,17 @@ set -euo pipefail
 #
 # Env:
 #   BASE_URL (default http://localhost:5001)
-#   STARTUP_ADMIN_EMAIL, STARTUP_ADMIN_PASSWORD (required)
+#   DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD (required)
 #   SMOKE_REST_UPSTREAM (optional, e.g., http://httpbin.org)
 #   SMOKE_SOAP_UPSTREAM (optional)
 #   SMOKE_GQL_UPSTREAM  (optional)
 
 BASE_URL="${BASE_URL:-http://localhost:5001}"
-EMAIL="${STARTUP_ADMIN_EMAIL:-}"
-PASSWORD="${STARTUP_ADMIN_PASSWORD:-}"
+EMAIL="${DOORMAN_ADMIN_EMAIL:-}"
+PASSWORD="${DOORMAN_ADMIN_PASSWORD:-}"
 
 if [[ -z "$EMAIL" || -z "$PASSWORD" ]]; then
-  echo "[preflight] ERROR: STARTUP_ADMIN_EMAIL and STARTUP_ADMIN_PASSWORD must be set" >&2
+  echo "[preflight] ERROR: DOORMAN_ADMIN_EMAIL and DOORMAN_ADMIN_PASSWORD must be set" >&2
   exit 1
 fi
 

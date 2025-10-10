@@ -24,6 +24,7 @@ config_hot_reload_router = APIRouter(
     '/current',
     summary='Get Current Configuration',
     description='Retrieve current hot-reloadable configuration values',
+    response_model=Dict[str, Any],
 )
 async def get_current_config(
     payload: dict = Depends(auth_required)
@@ -66,6 +67,7 @@ async def get_current_config(
     '/reload',
     summary='Trigger Configuration Reload',
     description='Manually trigger configuration reload (same as SIGHUP)',
+    response_model=Dict[str, Any],
 )
 async def trigger_config_reload(
     payload: dict = Depends(auth_required)
@@ -107,6 +109,7 @@ async def trigger_config_reload(
     '/reloadable-keys',
     summary='List Reloadable Configuration Keys',
     description='Get list of configuration keys that support hot reload',
+    response_model=Dict[str, Any],
 )
 async def get_reloadable_keys(
     payload: dict = Depends(auth_required)

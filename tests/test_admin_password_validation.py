@@ -91,7 +91,7 @@ def test_admin_password_strength():
     print("4. Location: backend-services/doorman.py:99-105")
     print()
     print("5. Error message if validation fails:")
-    print("   RuntimeError: STARTUP_ADMIN_PASSWORD must be at least 12 characters.")
+    print("   RuntimeError: DOORMAN_ADMIN_PASSWORD must be at least 12 characters.")
     print("                 Generate strong password: openssl rand -base64 16")
     print()
 

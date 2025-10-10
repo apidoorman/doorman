@@ -2,8 +2,18 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:5001}"
-EMAIL="${STARTUP_ADMIN_EMAIL:-admin@localhost}"
-PASSWORD="${STARTUP_ADMIN_PASSWORD:-password1}"
+EMAIL="${DOORMAN_ADMIN_EMAIL:-}"
+PASSWORD="${DOORMAN_ADMIN_PASSWORD:-}"
+
+if [[ -z "$EMAIL" ]]; then
+  echo "ERROR: DOORMAN_ADMIN_EMAIL must be set" >&2
+  exit 1
+fi
+
+if [[ -z "$PASSWORD" ]]; then
+  echo "ERROR: DOORMAN_ADMIN_PASSWORD must be set" >&2
+  exit 1
+fi
 
 echo "[1/4] Checking liveness..."
 curl -sfS "$BASE_URL/platform/monitor/liveness" | grep -q '"alive"' && echo "OK" || { echo "Liveness failed"; exit 1; }

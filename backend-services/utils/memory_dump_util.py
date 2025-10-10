@@ -220,7 +220,9 @@ def restore_memory_from_file(path: Optional[str] = None) -> dict:
         import os as _os
         admin = user_collection.find_one({'username': 'admin'})
         if admin is not None and not isinstance(admin.get('password'), (bytes, bytearray)):
-            pwd = _os.getenv('STARTUP_ADMIN_PASSWORD') or 'password1'
+            pwd = _os.getenv('DOORMAN_ADMIN_PASSWORD')
+            if not pwd:
+                raise RuntimeError('DOORMAN_ADMIN_PASSWORD must be set in environment')
             user_collection.update_one({'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}})
     except Exception:
         pass

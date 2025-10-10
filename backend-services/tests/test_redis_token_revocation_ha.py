@@ -36,7 +36,7 @@ async def test_redis_token_revocation_shared_across_processes(monkeypatch, authe
     # Get access token by logging in
     login_response = await authed_client.post(
         '/platform/authorization',
-        json={'email': os.environ.get('STARTUP_ADMIN_EMAIL'), 'password': os.environ.get('STARTUP_ADMIN_PASSWORD')}
+        json={'email': os.environ.get('DOORMAN_ADMIN_EMAIL'), 'password': os.environ.get('DOORMAN_ADMIN_PASSWORD')}
     )
     assert login_response.status_code == 200
     token_data = login_response.json()
