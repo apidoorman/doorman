@@ -1,108 +1,98 @@
-# Operations Guide (Doorman Gateway)
+Doorman Operations Runbooks
+===========================
 
-This document summarizes production configuration, deployment runbooks, and key operational endpoints for Doorman.
+Overview
+--------
+Operational playbooks for common gateway actions with exact commands and example responses. Unless noted, endpoints require an authenticated admin session (manage_gateway or manage_auth permissions as applicable).
 
-## Environment Configuration
+Authentication (Admin Session)
+------------------------------
+- Obtain a JWT session cookie via platform login:
+  - Command:
+    - curl -i -X POST \
+      -H 'Content-Type: application/json' \
+      -d '{"email":"admin@doorman.dev","password":"<ADMIN_PASSWORD>"}' \
+      http://localhost:8000/platform/authorization
+  - Look for a `Set-Cookie: access_token_cookie=...;` header. Use this cookie in subsequent commands.
 
-Recommended production defaults (see `.env`):
+Cache Flush
+-----------
+- Purpose: Clear all in-memory/redis caches (users, roles, APIs, routing, etc.) and reset rate/throttle counters.
+- Endpoint: DELETE `http://localhost:8000/api/caches`
+- Requirements: Admin user with `manage_gateway` access; authenticated cookie `access_token_cookie`.
+- Command:
+  - curl -i -X DELETE \
+    -H 'Content-Type: application/json' \
+    --cookie 'access_token_cookie=<JWT>' \
+    http://localhost:8000/api/caches
+- Expected response:
+  - Status: 200 OK
+  - Headers: `X-Request-ID` may be absent for this endpoint
+  - Body:
+    - {"message":"All caches cleared"}
 
-- HTTPS_ONLY=true — set `Secure` flag on cookies
-- HTTPS_ENABLED=true — enforce CSRF double-submit for cookie auth
-- CORS_STRICT=true — disallow wildcard origins; whitelist your domains via `ALLOWED_ORIGINS`
-- LOG_FORMAT=json — optional JSON log output for production log pipelines
-- MAX_BODY_SIZE_BYTES=1048576 — reject requests with Content-Length above 1 MB
-- STRICT_RESPONSE_ENVELOPE=true — platform APIs return consistent envelopes
+Revoke-All Tokens (Per User)
+----------------------------
+- Purpose: Immediately revoke all active tokens for a specific user across workers/nodes (uses durable storage when configured).
+- Endpoints:
+  - Revoke: POST `http://localhost:8000/platform/authorization/admin/revoke/{username}`
+  - Unrevoke: POST `http://localhost:8000/platform/authorization/admin/unrevoke/{username}`
+- Requirements: Admin with `manage_auth` access; authenticated cookie `access_token_cookie`.
+- Revoke command:
+  - curl -i -X POST \
+    -H 'Content-Type: application/json' \
+    --cookie 'access_token_cookie=<JWT>' \
+    http://localhost:8000/platform/authorization/admin/revoke/alice
+- Expected revoke response:
+  - Status: 200 OK
+  - Headers: includes `X-Request-ID: <uuid>`
+  - Body:
+    - {"message":"All tokens revoked for alice"}
+- Unrevoke command:
+  - curl -i -X POST \
+    -H 'Content-Type: application/json' \
+    --cookie 'access_token_cookie=<JWT>' \
+    http://localhost:8000/platform/authorization/admin/unrevoke/alice
+- Expected unrevoke response:
+  - Status: 200 OK
+  - Headers: includes `X-Request-ID: <uuid>`
+  - Body:
+    - {"message":"Token revocation cleared for alice"}
 
-Unified cache/DB flags:
+Hot Reload (SIGHUP)
+-------------------
+- Purpose: Reload hot-reloadable configuration without restarting the process.
+- Signal-based reload:
+  - Prereq: Doorman started via `python backend-services/doorman.py start` to create `doorman.pid`.
+  - Command:
+    - kill -HUP $(cat doorman.pid)
+  - Expected outcome:
+    - Process stays up; logs include "SIGHUP received: reloading configuration..." and "Configuration reload complete".
+    - Log level updates if `LOG_LEVEL` changed; other reloadable keys apply immediately.
+- HTTP-triggered reload (alternative to SIGHUP):
+  - Endpoint: POST `http://localhost:8000/platform/config/reload`
+  - Command:
+    - curl -i -X POST \
+      -H 'Content-Type: application/json' \
+      --cookie 'access_token_cookie=<JWT>' \
+      http://localhost:8000/platform/config/reload
+  - Expected response:
+    - Status: 200 OK
+    - Headers: may include `X-Request-ID`
+    - Body contains `{ "data": { "message": "Configuration reloaded successfully", "config": { ... }}}`
+- Inspect current config and reload hints:
+  - Endpoint: GET `http://localhost:8000/platform/config/current`
+  - Command:
+    - curl -i \
+      --cookie 'access_token_cookie=<JWT>' \
+      http://localhost:8000/platform/config/current
+  - Expected response:
+    - Status: 200 OK
+    - Body includes `data.config` and `reload_command: "kill -HUP $(cat doorman.pid)"`
 
-- MEM_OR_EXTERNAL=MEM|REDIS — unified flag for cache/DB mode
-- MEM_OR_REDIS — deprecated alias still accepted for backward compatibility
+Notes
+-----
+- Request IDs: Many admin endpoints include an `X-Request-ID` response header for traceability; some utility endpoints (e.g., cache flush) may omit it.
+- Permissions: Cache flush requires `manage_gateway`. Revoke endpoints require `manage_auth`. Config routes require `manage_gateway`.
+- Cookies: Browser and curl examples rely on `access_token_cookie`; alternatively, platform APIs may return an `access_token` field usable in Authorization headers where supported.
 
-JWT/Token encryption:
-
-- JWT_SECRET_KEY — REQUIRED; gateway fails fast if missing at startup
-- TOKEN_ENCRYPTION_KEY — recommended; encrypts stored API keys and user API keys at rest
-
-Core variables:
-
-- ALLOWED_ORIGINS — comma-separated list of allowed origins
-- ALLOW_CREDENTIALS — set to true only with explicit origins
-- ALLOW_METHODS, ALLOW_HEADERS — scope to what you need
-- JWT_SECRET_KEY — rotate periodically; store in a secret manager
-- MEM_OR_REDIS — MEM or REDIS depending on cache backing
-- MONGO_DB_HOSTS, MONGO_REPLICA_SET_NAME — enable DB in non-memory mode
-
-## Security
-
-- Cookies: access_token_cookie is HttpOnly; set Secure via HTTPS_ONLY. CSRF cookie (`csrf_token`) issued on login/refresh.
-- CSRF: when HTTPS_ENABLED=true, clients must include `X-CSRF-Token` header matching `csrf_token` cookie on protected endpoints.
-- CORS: avoid wildcard with credentials; use explicit allowlists.
-- Logging: includes redaction filter to reduce token/password leakage. Avoid logging PII.
-- Rate limiting: Redis-based limiter; if Redis is unavailable the gateway falls back to a process-local in-memory limiter (non-distributed). Configure user limits in DB/role as needed.
-- Request limits: global Content-Length check; per-route multipart (proto upload) size limits via MAX_MULTIPART_SIZE_BYTES.
-- Response envelopes: `STRICT_RESPONSE_ENVELOPE=true` makes platform API responses consistent for client parsing.
-
-## Health and Monitoring
-
-- Liveness: `GET /platform/monitor/liveness` → `{ status: "alive" }`
-- Readiness: `GET /platform/monitor/readiness` → `{ status, mongodb, redis }`
-- Metrics: `GET /platform/monitor/metrics?range=24h` (auth required; manage_gateway)
-- Logging: `/platform/logging/*` endpoints; requires `view_logs`/`export_logs`
-
-## Deployment
-
-1. Configure `.env` with production values (see above) or environment variables.
-2. Run behind an HTTPS-capable reverse proxy (or enable HTTPS in-process with `HTTPS_ONLY=true` and valid certs).
-3. Set ALLOWED_ORIGINS to your web client domains; set ALLOW_CREDENTIALS=true only when needed.
-4. Provision Redis (recommended) and MongoDB (optional in memory-only mode). In memory mode, enable encryption key for dumps and consider TOKEN_ENCRYPTION_KEY for API keys.
-5. Rotate JWT_SECRET_KEY periodically; plan for key rotation and token invalidation.
-6. Memory-only mode requires a single worker (THREADS=1); multiple workers will have divergent in-memory state.
-
-## Runbooks
-
-- Restarting gateway:
-  - Graceful stop writes a final encrypted memory dump in memory-only mode.
-- Token leakage suspect:
-  - Invalidate tokens (`/platform/authorization/invalidate`), rotate JWT secret if necessary, audit logs (redaction is best-effort).
-- Elevated error rates:
-  - Check readiness endpoint; verify Redis/Mongo health; inspect logs via `/platform/logging/logs`.
-- CORS failures:
-  - Verify ALLOWED_ORIGINS and CORS_STRICT settings; avoid `*` with credentials.
-  - Use Tools → CORS Checker (or POST `/platform/tools/cors/check`) to simulate preflight/actual decisions and view effective headers.
-- CSRF errors:
-  - Ensure clients set `X-CSRF-Token` header to value of `csrf_token` cookie when HTTPS_ENABLED=true.
-
-## Notes
-
-- Gateway (proxy) responses can be optionally wrapped by STRICT_RESPONSE_ENVELOPE; confirm client contracts before enabling globally in front of external consumers.
-- Prefer Authorization: Bearer header for external API consumers to reduce CSRF surface.
-- User profile constraint: `custom_attributes` is limited to 10 key/value pairs per user. API returns HTTP 400 `USR016` if exceeded; UI prevents adding beyond 10.
-
-## Strict Envelope Examples
-
-When `STRICT_RESPONSE_ENVELOPE=true`, platform endpoints return a consistent structure.
-
-- Success (200):
-```
-{
-  "status_code": 200,
-  "response": { "key": "value" }
-}
-```
-
-- Created (201):
-```
-{
-  "status_code": 201,
-  "message": "Resource created successfully"
-}
-```
-
-- Error (400/403/404):
-```
-{
-  "status_code": 403,
-  "error_code": "ROLE009",
-  "error_message": "You do not have permission to create roles"
-}
-```

@@ -28,13 +28,40 @@ class _FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def post(self, url, json=None, params=None, headers=None, content=None):
-        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
+    async def request(self, method, url, **kwargs):
+        """Generic request method used by http_client.request_with_resilience"""
+        method = method.upper()
+        if method == 'GET':
+            return await self.get(url, **kwargs)
+        elif method == 'POST':
+            return await self.post(url, **kwargs)
+        elif method == 'PUT':
+            return await self.put(url, **kwargs)
+        elif method == 'DELETE':
+            return await self.delete(url, **kwargs)
+        elif method == 'HEAD':
+            return await self.get(url, **kwargs)
+        elif method == 'PATCH':
+            return await self.put(url, **kwargs)
+        else:
+            return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
 
+    async def get(self, url, params=None, headers=None, **kwargs):
+        return _FakeHTTPResponse(200, json_body={'ok': True, 'url': url}, headers={'X-Upstream': 'yes'})
+
+    async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs):
+        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
         return _FakeHTTPResponse(200, json_body={'ok': True, 'url': url, 'body': body}, headers={'X-Upstream': 'yes'})
 
+    async def put(self, url, json=None, params=None, headers=None, content=None, **kwargs):
+        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
+        return _FakeHTTPResponse(200, json_body={'ok': True, 'url': url, 'body': body}, headers={'X-Upstream': 'yes'})
+
+    async def delete(self, url, **kwargs):
+        return _FakeHTTPResponse(200, json_body={'ok': True}, headers={'X-Upstream': 'yes'})
+
 class _NotFoundAsyncClient(_FakeAsyncClient):
-    async def post(self, url, json=None, params=None, headers=None, content=None):
+    async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs):
         return _FakeHTTPResponse(404, json_body={'ok': False}, headers={'X-Upstream': 'no'})
 
 @pytest.mark.asyncio

@@ -2,8 +2,8 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_status_includes_uptime_and_memory_usage(client):
-    r = await client.get('/api/status')
+async def test_status_includes_uptime_and_memory_usage(authed_client):
+    r = await authed_client.get('/api/status')
     assert r.status_code == 200
     body = r.json().get('response', r.json())
     assert 'uptime' in body and isinstance(body['uptime'], str)
@@ -11,7 +11,7 @@ async def test_status_includes_uptime_and_memory_usage(client):
 
 
 @pytest.mark.asyncio
-async def test_status_handles_missing_dependency_gracefully(monkeypatch, client):
+async def test_status_handles_missing_dependency_gracefully(monkeypatch, authed_client):
     # Force dependency checks to return False to simulate missing services
     import routes.gateway_routes as gw
     async def _false():
@@ -19,7 +19,7 @@ async def test_status_handles_missing_dependency_gracefully(monkeypatch, client)
     monkeypatch.setattr(gw, 'check_mongodb', _false, raising=True)
     monkeypatch.setattr(gw, 'check_redis', _false, raising=True)
 
-    r = await client.get('/api/status')
+    r = await authed_client.get('/api/status')
     assert r.status_code == 200
     body = r.json().get('response', r.json())
     assert body.get('mongodb') is False

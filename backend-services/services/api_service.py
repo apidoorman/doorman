@@ -11,10 +11,13 @@ import logging
 # Internal imports
 from models.response_model import ResponseModel
 from models.update_api_model import UpdateApiModel
-from utils.database import api_collection
+from utils.database_async import api_collection
+from utils.async_db import db_find_one, db_insert_one, db_update_one, db_delete_one
 from utils.cache_manager_util import cache_manager
 from utils.doorman_cache_util import doorman_cache
 from models.create_api_model import CreateApiModel
+from utils.paging_util import validate_page_params
+from utils.constants import ErrorCodes, Messages, Defaults
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -39,7 +42,7 @@ class ApiService:
         cache_key = f'{data.api_name}/{data.api_version}'
         existing = doorman_cache.get_cache('api_cache', cache_key)
         if not existing:
-            existing = api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version})
+            existing = await db_find_one(api_collection, {'api_name': data.api_name, 'api_version': data.api_version})
         if existing:
 
             try:
@@ -65,7 +68,7 @@ class ApiService:
         data.api_path = f'/{data.api_name}/{data.api_version}'
         data.api_id = str(uuid.uuid4())
         api_dict = data.dict()
-        insert_result = api_collection.insert_one(api_dict)
+        insert_result = await db_insert_one(api_collection, api_dict)
         if not insert_result.acknowledged:
             logger.error(request_id + ' | API creation failed with code API002')
             return ResponseModel(
@@ -100,7 +103,7 @@ class ApiService:
                 ).dict()
         api = doorman_cache.get_cache('api_cache', f'{api_name}/{api_version}')
         if not api:
-            api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            api = await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
             if not api:
                 logger.error(request_id + ' | API update failed with code API003')
                 return ResponseModel(
@@ -126,7 +129,8 @@ class ApiService:
             pass
         if not_null_data:
             try:
-                update_result = api_collection.update_one(
+                update_result = await db_update_one(
+                    api_collection,
                     {'api_name': api_name, 'api_version': api_version},
                     {'$set': not_null_data}
                 )
@@ -168,7 +172,7 @@ class ApiService:
         logger.info(request_id + ' | Deleting API: ' + api_name + ' ' + api_version)
         api = doorman_cache.get_cache('api_cache', f'{api_name}/{api_version}')
         if not api:
-            api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            api = await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
             if not api:
                 logger.error(request_id + ' | API deletion failed with code API003')
                 return ResponseModel(
@@ -176,7 +180,7 @@ class ApiService:
                     error_code='API003',
                     error_message='API does not exist for the requested name and version'
                     ).dict()
-        delete_result = api_collection.delete_one({'api_name': api_name, 'api_version': api_version})
+        delete_result = await db_delete_one(api_collection, {'api_name': api_name, 'api_version': api_version})
         if not delete_result.acknowledged:
             logger.error(request_id + ' | API deletion failed with code API002')
             return ResponseModel(
@@ -227,6 +231,14 @@ class ApiService:
         Get all APIs that a user has access to with pagination.
         """
         logger.info(request_id + ' | Getting APIs: Page=' + str(page) + ' Page Size=' + str(page_size))
+        try:
+            page, page_size = validate_page_params(page, page_size)
+        except Exception as e:
+            return ResponseModel(
+                status_code=400,
+                error_code=ErrorCodes.PAGE_SIZE,
+                error_message=(Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING)
+            ).dict()
         skip = (page - 1) * page_size
         cursor = api_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
         apis = cursor.to_list(length=None)

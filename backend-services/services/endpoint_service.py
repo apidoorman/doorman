@@ -7,6 +7,9 @@ See https://github.com/apidoorman/doorman for more information
 # External imports
 import uuid
 import logging
+import os
+import string as _string
+from pathlib import Path
 
 # Internal imports
 from models.create_endpoint_validation_model import CreateEndpointValidationModel
@@ -77,18 +80,22 @@ class EndpointService:
         logger.info(request_id + ' | Endpoint creation successful')
         try:
             if data.endpoint_method.upper() == 'POST' and str(data.endpoint_uri).strip().lower() == '/grpc':
-                import os
                 from grpc_tools import protoc as _protoc
+                # Sanitize module base to safe identifier
                 api_name = data.api_name
                 api_version = data.api_version
                 module_base = f'{api_name}_{api_version}'.replace('-', '_')
-                project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                proto_dir = os.path.join(project_root, 'proto')
-                generated_dir = os.path.join(project_root, 'generated')
-                os.makedirs(proto_dir, exist_ok=True)
-                os.makedirs(generated_dir, exist_ok=True)
-                proto_path = os.path.join(proto_dir, f'{module_base}.proto')
-                if not os.path.exists(proto_path):
+                allowed = set(_string.ascii_letters + _string.digits + '_')
+                module_base = ''.join(ch if ch in allowed else '_' for ch in module_base)
+                if not module_base or (module_base[0] not in (_string.ascii_letters + '_')):
+                    module_base = f'a_{module_base}' if module_base else 'default_proto'
+                project_root = Path(__file__).resolve().parent.parent
+                proto_dir = project_root / 'proto'
+                generated_dir = project_root / 'generated'
+                proto_dir.mkdir(exist_ok=True)
+                generated_dir.mkdir(exist_ok=True)
+                proto_path = proto_dir / f'{module_base}.proto'
+                if not proto_path.exists():
                     proto_content = (
                         'syntax = "proto3";\n'
                         f'package {module_base};\n'
@@ -107,18 +114,16 @@ class EndpointService:
                         'message DeleteRequest { int32 id = 1; }\n'
                         'message DeleteReply { bool ok = 1; }\n'
                     )
-                    with open(proto_path, 'w', encoding='utf-8') as f:
-                        f.write(proto_content)
+                    proto_path.write_text(proto_content, encoding='utf-8')
                 code = _protoc.main([
-                    'protoc', f'--proto_path={proto_dir}', f'--python_out={generated_dir}', f'--grpc_python_out={generated_dir}', proto_path
+                    'protoc', f'--proto_path={str(proto_dir)}', f'--python_out={str(generated_dir)}', f'--grpc_python_out={str(generated_dir)}', str(proto_path)
                 ])
                 if code != 0:
                     logger.warning(f'{request_id} | Pre-gen gRPC stubs returned {code} for {module_base}')
                 try:
-                    init_path = os.path.join(generated_dir, '__init__.py')
-                    if not os.path.exists(init_path):
-                        with open(init_path, 'w', encoding='utf-8') as f:
-                            f.write('"""Generated gRPC code."""\n')
+                    init_path = generated_dir / '__init__.py'
+                    if not init_path.exists():
+                        init_path.write_text('"""Generated gRPC code."""\n', encoding='utf-8')
                 except Exception:
                     pass
         except Exception as _e:
@@ -296,8 +301,7 @@ class EndpointService:
         try:
             endpoints = list(cursor)
         except Exception:
-
-            endpoints = cursor.to_list(length=None)
+            endpoints = await cursor.to_list(length=None)
         for endpoint in endpoints:
             if '_id' in endpoint: del endpoint['_id']
         if not endpoints:

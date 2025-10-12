@@ -1,21 +1,47 @@
 """
 Durable token revocation utilities.
 
-Behavior:
-- If a Redis backend is available (MEM_OR_EXTERNAL != 'MEM' and Redis connection
-  succeeds), revocations are persisted in Redis so they survive restarts and are
-  shared across processes/nodes.
-- Otherwise, fall back to in-memory structures compatible with previous behavior.
+**IMPORTANT: Process-local fallback - NOT safe for multi-worker deployments**
 
-Public API kept backward-compatible for existing imports/tests:
+**Backend Priority:**
+1. Redis (sync client) - REQUIRED for multi-worker/multi-node deployments
+2. Memory-only MongoDB (revocations_collection) - Single-process only
+3. In-memory fallback (jwt_blacklist, revoked_all_users) - Single-process only
+
+**Behavior:**
+- If Redis is configured (MEM_OR_EXTERNAL=REDIS) and connection succeeds:
+  Revocations are persisted in Redis (sync client) and survive restarts.
+  Shared across all workers/nodes in distributed deployments.
+
+- If database.memory_only is True and revocations_collection exists:
+  Revocations stored in memory-only MongoDB for single-process persistence.
+  Included in memory dumps but NOT shared across workers.
+
+- Otherwise:
+  Falls back to in-memory Python structures (jwt_blacklist, revoked_all_users).
+  Process-local only - NOT shared across workers.
+
+**Multi-Worker Safety:**
+Production deployments with THREADS>1 MUST configure Redis (MEM_OR_EXTERNAL=REDIS).
+The in-memory and memory-only DB fallbacks are NOT safe for multi-worker setups
+and will allow revoked tokens to remain valid on other workers.
+
+**Note on Redis Client:**
+This module uses a synchronous Redis client (_redis_client) because token
+revocation checks occur in synchronous code paths. For async rate limiting,
+see limit_throttle_util.py which uses the async Redis client (app.state.redis).
+
+**Public API (backward-compatible):**
 - `TimedHeap` (in-memory helper)
 - `jwt_blacklist` (in-memory map for fallback)
 - `revoke_all_for_user`, `unrevoke_all_for_user`, `is_user_revoked`
 - `purge_expired_tokens` (no-op when using Redis)
-
-New helpers used by auth/routes:
 - `add_revoked_jti(username, jti, ttl_seconds)`
 - `is_jti_revoked(username, jti)`
+
+**See Also:**
+- doorman.py validate_token_revocation_config() for multi-worker validation
+- doorman.py app_lifespan() for production Redis requirement enforcement
 """
 
 # External imports

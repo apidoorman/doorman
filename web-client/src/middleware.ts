@@ -1,28 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const PRIVATE_NET_CIDRS = [
-  /^localhost$/i,
-  /^127(?:\.\d{1,3}){3}$/,
-  /^::1$/,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[0-1])\./,
-  /^192\.168\./,
-  /^169\.254\./,
+// Minimal auth guard for app routes. If the access token cookie is missing,
+// redirect to login. Public paths bypass this guard. Detailed permission checks
+// still happen client-side (AuthContext) and on the backend.
+
+const PUBLIC_PATH_PREFIXES = [
+  '/login',
+  '/public',
+  '/_next',
+  '/api',
+  '/favicon.ico',
 ]
 
-function isPrivateHost(hostname: string): boolean {
-  return PRIVATE_NET_CIDRS.some(re => re.test(hostname))
-}
-
-function isAllowedHost(hostname: string): boolean {
-  const allow = (process.env.ALLOWED_REDIRECT_HOSTS || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-  return allow.includes(hostname)
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATH_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))
 }
 
 export function middleware(req: NextRequest) {
+  const { pathname, search } = req.nextUrl
+  if (isPublicPath(pathname)) {
+    return NextResponse.next()
+  }
+
+  const token = req.cookies.get('access_token_cookie')?.value
+  if (!token) {
+    const url = req.nextUrl.clone()
+    url.pathname = '/login'
+    // Optionally carry the original path so the client can navigate back after login
+    url.search = search ? `?next=${encodeURIComponent(pathname + search)}` : `?next=${encodeURIComponent(pathname)}`
+    return NextResponse.redirect(url)
+  }
+
   return NextResponse.next()
 }
 

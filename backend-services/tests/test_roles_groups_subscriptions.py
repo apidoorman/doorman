@@ -27,7 +27,7 @@ async def test_roles_crud(authed_client):
     g = await authed_client.get('/platform/role/qa')
     assert g.status_code == 200
 
-    roles = await authed_client.get('/platform/role/all')
+    roles = await authed_client.get('/platform/role/all?page=1&page_size=50')
     assert roles.status_code == 200
 
     u = await authed_client.put('/platform/role/qa', json={'manage_groups': True})
@@ -48,7 +48,7 @@ async def test_groups_crud(authed_client):
     g = await authed_client.get('/platform/group/qa-group')
     assert g.status_code == 200
 
-    lst = await authed_client.get('/platform/group/all')
+    lst = await authed_client.get('/platform/group/all?page=1&page_size=50')
     assert lst.status_code == 200
 
     ug = await authed_client.put(
@@ -184,7 +184,34 @@ async def test_token_defs_and_deduction_on_gateway(monkeypatch, authed_client):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def get(self, url, params=None, headers=None):
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
+
+        async def get(self, url, params=None, headers=None, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def post(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def put(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def delete(self, url, **kwargs):
             return _FakeHTTPResponse(200)
 
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)

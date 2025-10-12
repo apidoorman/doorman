@@ -1,0 +1,39 @@
+groups:
+  - name: doorman-gateway-sli-alerts
+    rules:
+      - alert: HighP95Latency
+        expr: histogram_quantile(0.95, sum by (le) (rate(doorman_http_request_duration_seconds_bucket[5m]))) > 0.25
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "High p95 latency"
+          description: "p95 latency > 250ms for 10m"
+
+      - alert: HighErrorRate
+        expr: sum(rate(doorman_http_requests_total{code=~"5..|4.."}[5m])) / sum(rate(doorman_http_requests_total[5m])) > 0.01
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "High error rate"
+          description: "Error rate > 1% for 10m"
+
+      - alert: UpstreamTimeoutSpike
+        expr: sum(rate(doorman_upstream_timeouts_total[5m])) > 1
+        for: 10m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Upstream timeouts elevated"
+          description: "Timeouts per second exceed 1 for 10m"
+
+      - alert: RetryRateElevated
+        expr: sum(rate(doorman_http_retries_total[5m])) > 2
+        for: 15m
+        labels:
+          severity: warn
+        annotations:
+          summary: "HTTP retry rate elevated"
+          description: "Retry rate > 2/s for 15m; investigate upstream health"
+

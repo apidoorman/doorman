@@ -1,0 +1,95 @@
+name: Performance Regression
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Target base URL (e.g., https://staging.example.com)'
+        required: false
+        type: string
+      bless_baseline:
+        description: 'Upload current run as new baseline artifact'
+        required: false
+        type: boolean
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Resolve target URL
+        id: target
+        run: |
+          URL="${{ inputs.base_url }}"
+          if [ -z "$URL" ]; then
+            URL="${{ secrets.PERF_TARGET_URL }}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "::error::No target URL provided. Set workflow input base_url or secret PERF_TARGET_URL."
+            exit 1
+          fi
+          echo "base_url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Run k6 load test
+        env:
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+        run: |
+          k6 run --summary-export load-tests/k6-summary.json load-tests/k6-load-test.js
+
+      - name: Collect optional server stats (CPU/event-loop)
+        if: ${{ env.PERF_STATS_URL != '' }}
+        env:
+          PERF_STATS_URL: ${{ secrets.PERF_STATS_URL }}
+        run: |
+          set -e
+          if [ -n "$PERF_STATS_URL" ]; then
+            curl -fsSL "$PERF_STATS_URL" -o load-tests/perf-stats.json || echo '{}' > load-tests/perf-stats.json
+          fi
+
+      - name: Upload perf summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-summary
+          path: |
+            load-tests/k6-summary.json
+            load-tests/perf-stats.json
+          if-no-files-found: error
+
+      - name: Maybe bless new baseline
+        if: ${{ inputs.bless_baseline == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-baseline
+          path: |
+            load-tests/k6-summary.json
+            load-tests/perf-stats.json
+          if-no-files-found: error
+
+      - name: Download baseline artifact from default branch
+        if: ${{ inputs.bless_baseline != true }}
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          name: perf-baseline
+          path: baseline
+          workflow: perf-regression.yml
+          branch: ${{ github.event.repository.default_branch }}
+          if_no_artifact_found: warn
+
+      - name: Setup Python
+        if: ${{ inputs.bless_baseline != true }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Compare against baseline
+        if: ${{ inputs.bless_baseline != true }}
+        run: |
+          python3 scripts/compare_perf.py load-tests/k6-summary.json baseline/k6-summary.json

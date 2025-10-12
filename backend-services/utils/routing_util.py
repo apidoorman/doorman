@@ -4,7 +4,8 @@ import logging
 
 # Internal imports
 from utils.doorman_cache_util import doorman_cache
-from utils.database import routing_collection
+from utils.database_async import routing_collection
+from utils.async_db import db_find_one
 from utils import api_util
 
 logger = logging.getLogger('doorman.gateway')
@@ -21,7 +22,7 @@ async def get_client_routing(client_key: str) -> Optional[Dict]:
     try:
         client_routing = doorman_cache.get_cache('client_routing_cache', client_key)
         if not client_routing:
-            client_routing = routing_collection.find_one({'client_key': client_key})
+            client_routing = await db_find_one(routing_collection, {'client_key': client_key})
             if not client_routing:
                 return None
             if client_routing.get('_id'): del client_routing['_id']

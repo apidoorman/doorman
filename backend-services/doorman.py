@@ -89,7 +89,7 @@ from utils.metrics_util import metrics_store
 from utils.database import database
 from utils.response_util import process_response
 from utils.audit_util import audit
-from utils.ip_policy_util import _get_client_ip as _policy_get_client_ip, _ip_in_list as _policy_ip_in_list
+from utils.ip_policy_util import _get_client_ip as _policy_get_client_ip, _ip_in_list as _policy_ip_in_list, _is_loopback as _policy_is_loopback
 
 load_dotenv()
 
@@ -602,7 +602,7 @@ async def platform_cors(request: Request, call_next):
 
     return await call_next(request)
 
-# Body size limit middleware (Content-Length based)
+# Body size limit middleware (protects against both Content-Length and Transfer-Encoding: chunked)
 MAX_BODY_SIZE = int(os.getenv('MAX_BODY_SIZE_BYTES', 1_048_576))
 
 def _get_max_body_size() -> int:
@@ -614,33 +614,57 @@ def _get_max_body_size() -> int:
     except Exception:
         return MAX_BODY_SIZE
 
+class LimitedStreamReader:
+    """
+    Wrapper around ASGI receive channel that enforces size limits on chunked requests.
+
+    Prevents Transfer-Encoding: chunked bypass by tracking accumulated size
+    and rejecting streams that exceed the limit.
+    """
+    def __init__(self, receive, max_size: int):
+        self.receive = receive
+        self.max_size = max_size
+        self.bytes_received = 0
+        self.over_limit = False
+
+    async def __call__(self):
+        # If already over the limit, immediately end the request body for the app
+        if self.over_limit:
+            return {'type': 'http.request', 'body': b'', 'more_body': False}
+
+        message = await self.receive()
+
+        if message.get('type') == 'http.request':
+            body = message.get('body', b'') or b''
+            self.bytes_received += len(body)
+
+            if self.bytes_received > self.max_size:
+                # Mark as over-limit and end the request body stream for the app
+                self.over_limit = True
+                return {'type': 'http.request', 'body': b'', 'more_body': False}
+
+        return message
+
 @doorman.middleware('http')
 async def body_size_limit(request: Request, call_next):
     """Enforce request body size limits to prevent DoS attacks.
+
+    Protects against both:
+    - Content-Length header (fast path)
+    - Transfer-Encoding: chunked (stream enforcement)
 
     Default limit: 1MB (configurable via MAX_BODY_SIZE_BYTES)
     Per-API overrides: MAX_BODY_SIZE_BYTES_<API_TYPE> (e.g., MAX_BODY_SIZE_BYTES_SOAP)
 
     Protected paths:
     - /platform/authorization: Strict enforcement (prevent auth DoS)
-    - /api/rest/*: Enforce on all requests with Content-Length
+    - /api/rest/*: Enforce on all requests
     - /api/soap/*: Enforce on XML/SOAP bodies
     - /api/graphql/*: Enforce on GraphQL queries
     - /api/grpc/*: Enforce on gRPC JSON payloads
     """
     try:
         path = str(request.url.path)
-        cl = request.headers.get('content-length')
-
-        # Skip requests without Content-Length header (GET, HEAD, etc.)
-        if not cl or str(cl).strip() == '':
-            return await call_next(request)
-
-        try:
-            content_length = int(cl)
-        except (ValueError, TypeError):
-            # Invalid Content-Length header - let it through and fail later
-            return await call_next(request)
 
         # Determine if this path should be protected
         should_enforce = False
@@ -666,42 +690,106 @@ async def body_size_limit(request: Request, call_next):
         elif path.startswith('/api/'):
             # Catch-all for other /api/* routes
             should_enforce = True
+        elif path.startswith('/platform/'):
+            # Protect all platform routes (tests expect platform routes are protected)
+            should_enforce = True
 
         # Skip if this path is not protected
         if not should_enforce:
             return await call_next(request)
 
-        # Enforce limit
-        if content_length > limit:
-            # Log for security monitoring
+        # Check Content-Length header first (fast path for non-chunked requests)
+        cl = request.headers.get('content-length')
+        transfer_encoding = request.headers.get('transfer-encoding', '').lower()
+
+        if cl and str(cl).strip() != '':
             try:
-                from utils.audit_util import audit
-                audit(
-                    request,
-                    actor=None,
-                    action='request.body_size_exceeded',
-                    target=path,
-                    status='blocked',
-                    details={
-                        'content_length': content_length,
-                        'limit': limit,
-                        'content_type': request.headers.get('content-type')
-                    }
-                )
-            except Exception:
+                content_length = int(cl)
+                if content_length > limit:
+                    # Log for security monitoring
+                    try:
+                        from utils.audit_util import audit
+                        audit(
+                            request,
+                            actor=None,
+                            action='request.body_size_exceeded',
+                            target=path,
+                            status='blocked',
+                            details={
+                                'content_length': content_length,
+                                'limit': limit,
+                                'content_type': request.headers.get('content-type'),
+                                'transfer_encoding': transfer_encoding or None
+                            }
+                        )
+                    except Exception:
+                        pass
+
+                    return process_response(ResponseModel(
+                        status_code=413,
+                        error_code='REQ001',
+                        error_message=f'Request entity too large (max: {limit} bytes)'
+                    ).dict(), 'rest')
+            except (ValueError, TypeError):
+                # Invalid Content-Length header - treat as potentially malicious
                 pass
 
-            return process_response(ResponseModel(
-                status_code=413,
-                error_code='REQ001',
-                error_message=f'Request entity too large (max: {limit} bytes)'
-            ).dict(), 'rest')
+        # Handle Transfer-Encoding: chunked or missing Content-Length
+        # Wrap the receive channel with size-limited reader
+        if 'chunked' in transfer_encoding or not cl:
+            # Check if method typically has a body
+            if request.method in ('POST', 'PUT', 'PATCH'):
+                # Replace request receive with limited reader
+                original_receive = request.receive
+                limited_reader = LimitedStreamReader(original_receive, limit)
+                request._receive = limited_reader
+
+                try:
+                    response = await call_next(request)
+
+                    # Check if limit was exceeded during streaming
+                    if limited_reader.over_limit or limited_reader.bytes_received > limit:
+                        # Log for security monitoring
+                        try:
+                            from utils.audit_util import audit
+                            audit(
+                                request,
+                                actor=None,
+                                action='request.body_size_exceeded',
+                                target=path,
+                                status='blocked',
+                                details={
+                                    'bytes_received': limited_reader.bytes_received,
+                                    'limit': limit,
+                                    'content_type': request.headers.get('content-type'),
+                                    'transfer_encoding': transfer_encoding or 'chunked'
+                                }
+                            )
+                        except Exception:
+                            pass
+
+                        return process_response(ResponseModel(
+                            status_code=413,
+                            error_code='REQ001',
+                            error_message=f'Request entity too large (max: {limit} bytes)'
+                        ).dict(), 'rest')
+
+                    return response
+                except Exception as e:
+                    # If stream reading failed due to size limit, return 413
+                    if limited_reader.over_limit or limited_reader.bytes_received > limit:
+                        return process_response(ResponseModel(
+                            status_code=413,
+                            error_code='REQ001',
+                            error_message=f'Request entity too large (max: {limit} bytes)'
+                        ).dict(), 'rest')
+                    raise
 
         return await call_next(request)
     except Exception as e:
-        # Log middleware failures but don't block requests
+        # Log and propagate; do not call call_next() again once the receive stream may be closed
         gateway_logger.error(f'Body size limit middleware error: {str(e)}', exc_info=True)
-        return await call_next(request)
+        raise
 
 # Request ID middleware: accept incoming X-Request-ID or generate one.
 @doorman.middleware('http')
@@ -735,19 +823,16 @@ async def request_id_middleware(request: Request, call_next):
         except Exception:
             pass
         response = await call_next(request)
-
         try:
-            if 'X-Request-ID' not in response.headers:
-                response.headers['X-Request-ID'] = rid
-
-            if 'request_id' not in response.headers:
-                response.headers['request_id'] = rid
+            # Always preserve/propagate the inbound Request ID
+            response.headers['X-Request-ID'] = rid
+            response.headers['request_id'] = rid
         except Exception as e:
             gateway_logger.warning(f'Failed to set response headers: {str(e)}')
         return response
     except Exception as e:
         gateway_logger.error(f'Request ID middleware error: {str(e)}', exc_info=True)
-        return await call_next(request)
+        raise
 
 # Security headers (including HSTS when HTTPS is used)
 @doorman.middleware('http')
@@ -819,8 +904,7 @@ try:
     )
     _file_handler.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 except Exception as _e:
-
-    print(f'Warning: file logging disabled ({_e}); using console logging only')
+    logging.getLogger('doorman.gateway').warning(f'File logging disabled ({_e}); using console logging only')
     _file_handler = None
 
 # Configure all doorman loggers to use the same handler and prevent propagation
@@ -832,23 +916,82 @@ def configure_logger(logger_name):
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
     class RedactFilter(logging.Filter):
+        """Comprehensive logging redaction filter for sensitive data.
+
+        Redacts:
+        - Authorization headers (Bearer, Basic, API-Key, etc.)
+        - Access/refresh tokens
+        - Passwords and secrets
+        - Cookies and session data
+        - API keys and credentials
+        - CSRF tokens
+        """
 
         PATTERNS = [
+            # Authorization header (redact entire value: scheme + token)
             re.compile(r'(?i)(authorization\s*[:=]\s*)([^;\r\n]+)'),
-            re.compile(r'(?i)(access[_-]?token\s*[\"\']?\s*[:=]\s*[\"\'])([^\"\']+)([\"\'])'),
-            re.compile(r'(?i)(refresh[_-]?token\s*[\"\']?\s*[:=]\s*[\"\'])([^\"\']+)([\"\'])'),
-            re.compile(r'(?i)(password\s*[\"\']?\s*[:=]\s*[\"\'])([^\"\']+)([\"\'])'),
+
+            # API key headers (redact entire value)
+            re.compile(r'(?i)(x-api-key\s*[:=]\s*)([^;\r\n]+)'),
+            re.compile(r'(?i)(api[_-]?key\s*[:=]\s*)([^;\r\n]+)'),
+            re.compile(r'(?i)(api[_-]?secret\s*[:=]\s*)([^;\r\n]+)'),
+
+            # Access and refresh tokens
+            re.compile(r'(?i)(access[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
+            re.compile(r'(?i)(refresh[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
+            re.compile(r'(?i)(token\s*["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-\.]{20,})(["\']?)'),
+
+            # Passwords and secrets
+            re.compile(r'(?i)(password\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n]+)(["\']?)'),
+            re.compile(r'(?i)(secret\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
+            re.compile(r'(?i)(client[_-]?secret\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
+
+            # Cookies and Set-Cookie: redact entire value
             re.compile(r'(?i)(cookie\s*[:=]\s*)([^;\r\n]+)'),
-            re.compile(r'(?i)(x-csrf-token\s*[:=]\s*)([^\s,;]+)'),
+            re.compile(r'(?i)(set-cookie\s*[:=]\s*)([^;\r\n]+)'),
+
+            # CSRF tokens
+            re.compile(r'(?i)(x-csrf-token\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
+            re.compile(r'(?i)(csrf[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
+
+            # JWT tokens (eyJ... format)
+            re.compile(r'\b(eyJ[a-zA-Z0-9_\-]+\.eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+)\b'),
+
+            # Session IDs
+            re.compile(r'(?i)(session[_-]?id\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
+
+            # Private keys (PEM format detection)
+            re.compile(r'(-----BEGIN[A-Z\s]+PRIVATE KEY-----)(.*?)(-----END[A-Z\s]+PRIVATE KEY-----)', re.DOTALL),
         ]
+
         def filter(self, record: logging.LogRecord) -> bool:
             try:
                 msg = str(record.getMessage())
                 red = msg
+
                 for pat in self.PATTERNS:
-                    red = pat.sub(lambda m: (m.group(1) + '[REDACTED]' + (m.group(3) if m.lastindex and m.lastindex >=3 else '')), red)
+                    if pat.groups == 3 and pat.flags & re.DOTALL:
+                        # PEM private key pattern
+                        red = pat.sub(r'\1[REDACTED]\3', red)
+                    elif pat.groups >= 2:
+                        # Header patterns with prefix, value, and optional suffix
+                        red = pat.sub(lambda m: (
+                            m.group(1) +
+                            '[REDACTED]' +
+                            (m.group(3) if m.lastindex and m.lastindex >= 3 else '')
+                        ), red)
+                    else:
+                        red = pat.sub('[REDACTED]', red)
+
                 if red != msg:
                     record.msg = red
+                    # Also update record.args if present
+                    if hasattr(record, 'args') and record.args:
+                        try:
+                            if isinstance(record.args, dict):
+                                record.args = {k: '[REDACTED]' if 'token' in str(k).lower() or 'password' in str(k).lower() or 'secret' in str(k).lower() or 'authorization' in str(k).lower() else v for k, v in record.args.items()}
+                        except Exception:
+                            pass
             except Exception:
                 pass
             return True
@@ -886,12 +1029,26 @@ try:
         encoding='utf-8'
     )
     _audit_file.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    # Reuse the same redaction filters as gateway logger
+    try:
+        for eh in gateway_logger.handlers:
+            for f in getattr(eh, 'filters', []):
+                _audit_file.addFilter(f)
+    except Exception:
+        pass
     audit_logger.addHandler(_audit_file)
 except Exception as _e:
 
     console = logging.StreamHandler(stream=sys.stdout)
     console.setLevel(logging.INFO)
     console.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    # Reuse the same redaction filters as gateway logger
+    try:
+        for eh in gateway_logger.handlers:
+            for f in getattr(eh, 'filters', []):
+                console.addFilter(f)
+    except Exception:
+        pass
     audit_logger.addHandler(console)
 
 class Settings(BaseSettings):
@@ -912,14 +1069,14 @@ async def ip_filter_middleware(request: Request, call_next):
         xff_hdr = request.headers.get('x-forwarded-for') or request.headers.get('X-Forwarded-For')
 
         try:
-            import os, ipaddress
+            import os
             settings = get_cached_settings()
             env_flag = os.getenv('LOCAL_HOST_IP_BYPASS')
             allow_local = (env_flag.lower() == 'true') if isinstance(env_flag, str) and env_flag.strip() != '' else bool(settings.get('allow_localhost_bypass'))
             if allow_local:
                 direct_ip = getattr(getattr(request, 'client', None), 'host', None)
                 has_forward = any(request.headers.get(h) for h in ('x-forwarded-for','X-Forwarded-For','x-real-ip','X-Real-IP','cf-connecting-ip','CF-Connecting-IP','forwarded','Forwarded'))
-                if direct_ip and ipaddress.ip_address(direct_ip).is_loopback and not has_forward:
+                if direct_ip and _policy_is_loopback(direct_ip) and not has_forward:
                     return await call_next(request)
         except Exception:
             pass
@@ -1070,7 +1227,7 @@ doorman.include_router(config_hot_reload_router, prefix='/platform', tags=['Conf
 
 def start():
     if os.path.exists(PID_FILE):
-        print('doorman is already running!')
+        gateway_logger.info('doorman is already running!')
         sys.exit(0)
     if os.name == 'nt':
         process = subprocess.Popen([sys.executable, __file__, 'run'],
@@ -1096,7 +1253,6 @@ def stop():
         if os.name == 'nt':
             subprocess.call(['taskkill', '/F', '/PID', str(pid)])
         else:
-
             os.killpg(pid, signal.SIGTERM)
 
             deadline = time.time() + 15
@@ -1107,9 +1263,9 @@ def stop():
                     time.sleep(0.5)
                 except ProcessLookupError:
                     break
-        print(f'Stopping doorman with PID {pid}')
+        gateway_logger.info(f'Stopping doorman with PID {pid}')
     except ProcessLookupError:
-        print('Process already terminated')
+        gateway_logger.info('Process already terminated')
     finally:
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)

@@ -28,11 +28,43 @@ class _FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def patch(self, url, json=None, params=None, headers=None, content=None):
+    async def request(self, method, url, **kwargs):
+        """Generic request method used by http_client.request_with_resilience"""
+        method = method.upper()
+        if method == 'GET':
+            return await self.get(url, **kwargs)
+        elif method == 'POST':
+            return await self.post(url, **kwargs)
+        elif method == 'PUT':
+            return await self.put(url, **kwargs)
+        elif method == 'DELETE':
+            return await self.delete(url, **kwargs)
+        elif method == 'HEAD':
+            return await self.head(url, **kwargs)
+        elif method == 'PATCH':
+            return await self.patch(url, **kwargs)
+        else:
+            return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
+
+    async def get(self, url, params=None, headers=None, **kwargs):
+        return _FakeHTTPResponse(200, json_body={'method': 'GET', 'url': url, 'params': dict(params or {}), 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
+
+    async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs):
+        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
+        return _FakeHTTPResponse(200, json_body={'method': 'POST', 'url': url, 'body': body, 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
+
+    async def put(self, url, json=None, params=None, headers=None, content=None, **kwargs):
+        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
+        return _FakeHTTPResponse(200, json_body={'method': 'PUT', 'url': url, 'body': body, 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
+
+    async def delete(self, url, json=None, params=None, headers=None, content=None, **kwargs):
+        return _FakeHTTPResponse(200, json_body={'method': 'DELETE', 'url': url, 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
+
+    async def patch(self, url, json=None, params=None, headers=None, content=None, **kwargs):
         body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
         return _FakeHTTPResponse(200, json_body={'method': 'PATCH', 'url': url, 'body': body, 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
 
-    async def head(self, url, params=None, headers=None):
+    async def head(self, url, params=None, headers=None, **kwargs):
         # Simulate a successful HEAD when called
         return _FakeHTTPResponse(200, json_body=None, headers={'X-Upstream': 'yes'})
 

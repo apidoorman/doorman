@@ -17,6 +17,7 @@ import os
 import uuid
 from fastapi import HTTPException, Request
 from jose import jwt, JWTError
+import asyncio
 
 from utils.auth_blacklist import is_user_revoked, is_jti_revoked
 from utils.database import user_collection, role_collection
@@ -109,7 +110,7 @@ async def auth_required(request: Request) -> dict:
             raise HTTPException(status_code=401, detail='Token has been revoked')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
-            user = user_collection.find_one({'username': username})
+            user = await asyncio.to_thread(user_collection.find_one, {'username': username})
             if not user:
                 raise HTTPException(status_code=404, detail='User not found')
             if user.get('_id'): del user['_id']
@@ -151,6 +152,7 @@ def create_access_token(data: dict, refresh: bool = False) -> str:
 
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
+        # Synchronous lookup is acceptable here (function is sync)
         user = user_collection.find_one({'username': username})
         if user:
             if user.get('_id'): del user['_id']

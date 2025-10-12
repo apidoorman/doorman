@@ -81,3 +81,41 @@ async def authed_client():
     except Exception:
         pass
     return client
+
+# Test helpers for API/endpoint setup used by backend-services tests
+async def create_api(client: AsyncClient, api_name: str, api_version: str):
+    payload = {
+        'api_name': api_name,
+        'api_version': api_version,
+        'api_description': f'{api_name} {api_version}',
+        'api_allowed_roles': ['admin'],
+        'api_allowed_groups': ['ALL'],
+        'api_servers': ['http://upstream.test'],
+        'api_type': 'REST',
+        'api_allowed_retry_count': 0,
+    }
+    r = await client.post('/platform/api', json=payload)
+    assert r.status_code in (200, 201), r.text
+    return r
+
+async def create_endpoint(client: AsyncClient, api_name: str, api_version: str, method: str, uri: str):
+    payload = {
+        'api_name': api_name,
+        'api_version': api_version,
+        'endpoint_method': method,
+        'endpoint_uri': uri,
+        'endpoint_description': f'{method} {uri}',
+    }
+    r = await client.post('/platform/endpoint', json=payload)
+    assert r.status_code in (200, 201), r.text
+    return r
+
+async def subscribe_self(client: AsyncClient, api_name: str, api_version: str):
+    r_me = await client.get('/platform/user/me')
+    username = (r_me.json().get('username') if r_me.status_code == 200 else 'admin')
+    r = await client.post(
+        '/platform/subscription/subscribe',
+        json={'username': username, 'api_name': api_name, 'api_version': api_version},
+    )
+    assert r.status_code in (200, 201), r.text
+    return r

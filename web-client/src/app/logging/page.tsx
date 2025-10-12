@@ -240,7 +240,8 @@ export default function LogsPage() {
           const endpointLog = sortedExpandedLogs.find((log: Log) => log.endpoint && log.method)
           const hasError = sortedExpandedLogs.some((log: Log) => log.level.toLowerCase() === 'error')
 
-          console.log(`Expanding request ${requestId}:`, {
+          const DEBUG = process.env.NODE_ENV !== 'production'
+          if (DEBUG) console.log(`Expanding request ${requestId}:`, {
             totalLogs: allLogsForRequest.length,
             userLog: userLog?.user,
             endpointLog: endpointLog?.endpoint,

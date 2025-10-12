@@ -13,9 +13,12 @@ from typing import Optional
 from models.response_model import ResponseModel
 from models.credit_model import CreditModel
 from models.user_credits_model import UserCreditModel
-from utils.database import credit_def_collection, user_credit_collection
+from utils.database_async import credit_def_collection, user_credit_collection
+from utils.async_db import db_find_one, db_insert_one, db_update_one, db_delete_one, db_find_list
 from utils.encryption_util import encrypt_value, decrypt_value
 from utils.doorman_cache_util import doorman_cache
+from utils.paging_util import validate_page_params
+from utils.constants import ErrorCodes, Messages
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -47,7 +50,7 @@ class CreditService:
             logger.error(request_id + f' | Credit creation failed with code {validation_error.error_code}')
             return validation_error.dict()
         try:
-            if doorman_cache.get_cache('credit_def_cache', data.api_credit_group) or credit_def_collection.find_one({'api_credit_group': data.api_credit_group}):
+            if doorman_cache.get_cache('credit_def_cache', data.api_credit_group) or await db_find_one(credit_def_collection, {'api_credit_group': data.api_credit_group}):
                 logger.error(request_id + ' | Credit creation failed with code CRD001')
                 return ResponseModel(
                     status_code=400,
@@ -59,7 +62,7 @@ class CreditService:
                 credit_data['api_key'] = encrypt_value(credit_data['api_key'])
             if credit_data.get('api_key_new') is not None:
                 credit_data['api_key_new'] = encrypt_value(credit_data['api_key_new'])
-            insert_result = credit_def_collection.insert_one(credit_data)
+            insert_result = await db_insert_one(credit_def_collection, credit_data)
             if not insert_result.acknowledged:
                 logger.error(request_id + ' | Credit creation failed with code CRD002')
                 return ResponseModel(
@@ -101,7 +104,7 @@ class CreditService:
                 ).dict()
             doc = doorman_cache.get_cache('credit_def_cache', api_credit_group)
             if not doc:
-                doc = credit_def_collection.find_one({'api_credit_group': api_credit_group})
+                doc = await db_find_one(credit_def_collection, {'api_credit_group': api_credit_group})
                 if not doc:
                     logger.error(request_id + ' | Credit update failed with code CRD004')
                     return ResponseModel(
@@ -117,7 +120,7 @@ class CreditService:
             if 'api_key_new' in not_null:
                 not_null['api_key_new'] = encrypt_value(not_null['api_key_new'])
             if not_null:
-                update_result = credit_def_collection.update_one({'api_credit_group': api_credit_group}, {'$set': not_null})
+                update_result = await db_update_one(credit_def_collection, {'api_credit_group': api_credit_group}, {'$set': not_null})
                 if not update_result.acknowledged or update_result.modified_count == 0:
                     logger.error(request_id + ' | Credit update failed with code CRD005')
                     return ResponseModel(
@@ -141,13 +144,13 @@ class CreditService:
         try:
             doc = doorman_cache.get_cache('credit_def_cache', api_credit_group)
             if not doc:
-                doc = credit_def_collection.find_one({'api_credit_group': api_credit_group})
+                doc = await db_find_one(credit_def_collection, {'api_credit_group': api_credit_group})
                 if not doc:
                     logger.error(request_id + ' | Credit deletion failed with code CRD007')
                     return ResponseModel(status_code=400, error_code='CRD007', error_message='Credit definition does not exist for the requested group').dict()
             else:
                 doorman_cache.delete_cache('credit_def_cache', api_credit_group)
-            delete_result = credit_def_collection.delete_one({'api_credit_group': api_credit_group})
+            delete_result = await db_delete_one(credit_def_collection, {'api_credit_group': api_credit_group})
             if not delete_result.acknowledged or delete_result.deleted_count == 0:
                 logger.error(request_id + ' | Credit deletion failed with code CRD008')
                 return ResponseModel(status_code=400, error_code='CRD008', error_message='Unable to delete credit definition').dict()
@@ -162,11 +165,20 @@ class CreditService:
         """List credit definitions (masked), paginated."""
         logger.info(request_id + ' | Listing credit definitions')
         try:
-            cursor = credit_def_collection.find({}).sort('api_credit_group', 1)
-            if page and page_size:
-                cursor = cursor.skip(max((page - 1), 0) * page_size).limit(page_size)
+            try:
+                page, page_size = validate_page_params(page, page_size)
+            except Exception as e:
+                return ResponseModel(
+                    status_code=400,
+                    error_code=ErrorCodes.PAGE_SIZE,
+                    error_message=(Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING)
+                ).dict()
+            all_defs = await db_find_list(credit_def_collection, {})
+            all_defs.sort(key=lambda d: d.get('api_credit_group'))
+            start = max((page - 1), 0) * page_size if page and page_size else 0
+            end = start + page_size if page and page_size else None
             items = []
-            for doc in cursor:
+            for doc in all_defs[start:end]:
                 if doc.get('_id'):
                     del doc['_id']
                 items.append({
@@ -230,6 +242,14 @@ class CreditService:
     async def get_all_credits(page: int, page_size: int, request_id, search: str = ''):
         logger.info(request_id + " | Getting all users' credits")
         try:
+            try:
+                page, page_size = validate_page_params(page, page_size)
+            except Exception as e:
+                return ResponseModel(
+                    status_code=400,
+                    error_code=ErrorCodes.PAGE_SIZE,
+                    error_message=(Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING)
+                ).dict()
 
             cursor = user_credit_collection.find().sort('username', 1)
             all_items = cursor.to_list(length=None)
