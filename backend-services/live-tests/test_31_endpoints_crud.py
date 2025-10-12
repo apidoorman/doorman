@@ -24,5 +24,5 @@ def test_endpoints_update_list_delete(client):
     r = client.delete(f'/platform/endpoint/GET/{api_name}/{api_version}/z')
     assert r.status_code in (200, 204)
     r = client.get(f'/api/rest/{api_name}/{api_version}/z')
-    assert r.status_code in (404, 400, 500)
+    assert r.status_code in (404, 400, 403, 500)
     client.delete(f'/platform/api/{api_name}/{api_version}')

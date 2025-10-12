@@ -7,7 +7,9 @@ import os
 
 # Internal imports
 from utils.auth_util import auth_required
-from utils.database import user_collection
+from utils.database_async import user_collection
+from utils.async_db import db_find_one
+import asyncio
 from utils.doorman_cache_util import doorman_cache
 from utils.ip_policy_util import _get_client_ip
 
@@ -15,7 +17,26 @@ logger = logging.getLogger('doorman.gateway')
 
 class InMemoryWindowCounter:
     """Simple in-memory counter with TTL semantics to mimic required Redis ops.
-    Not distributed; process-local only. Used as fallback when Redis is unavailable.
+
+    **IMPORTANT: Process-local fallback only - NOT safe for multi-worker deployments**
+
+    This counter is NOT distributed and maintains state only within the current process.
+    Each worker in a multi-process deployment will have its own independent counter,
+    leading to:
+    - Inaccurate rate limit enforcement (limits multiplied by number of workers)
+    - Race conditions across workers
+    - Inconsistent user experience
+
+    **Production Requirements:**
+    - For single-worker deployments (THREADS=1): Safe to use as fallback
+    - For multi-worker deployments (THREADS>1): MUST use Redis (MEM_OR_EXTERNAL=REDIS)
+    - Redis async client (app.state.redis) is checked first before falling back
+
+    Used as automatic fallback when:
+    - Redis is unavailable or connection fails
+    - MEM_OR_EXTERNAL=MEM is set (development/testing only)
+
+    See: doorman.py app_lifespan() for multi-worker validation
     """
     def __init__(self):
         self._store = {}
@@ -57,12 +78,28 @@ def duration_to_seconds(duration: str) -> int:
     return mapping.get(duration.lower(), 60)
 
 async def limit_and_throttle(request: Request):
+    """Enforce user-level rate limiting and throttling.
+
+    **Counter Backend Priority:**
+    1. Redis async client (app.state.redis) - REQUIRED for multi-worker deployments
+    2. In-memory fallback (_fallback_counter) - Single-process only
+
+    The async Redis client from app.state.redis (created in doorman.py) is used
+    when available to ensure consistent counting across all workers. Falls back
+    to process-local counters only when Redis is unavailable.
+
+    **Multi-Worker Safety:**
+    Production deployments with THREADS>1 MUST configure Redis (MEM_OR_EXTERNAL=REDIS).
+    The in-memory fallback is NOT safe for multi-worker setups and will produce
+    incorrect rate limit enforcement.
+    """
     payload = await auth_required(request)
     username = payload.get('sub')
+    # Prefer async Redis client (shared across workers) over in-memory fallback
     redis_client = getattr(request.app.state, 'redis', None)
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
-        user = user_collection.find_one({'username': username})
+        user = await db_find_one(user_collection, {'username': username})
     now_ms = int(time.time() * 1000)
     # Rate limiting (enabled if explicitly set true, or legacy values exist)
     rate_enabled = (user.get('rate_limit_enabled') is True) or bool(user.get('rate_limit_duration'))
@@ -73,11 +110,13 @@ async def limit_and_throttle(request: Request):
         window = duration_to_seconds(duration)
         key = f'rate_limit:{username}:{now_ms // (window * 1000)}'
         try:
+            # Use async Redis client if available, otherwise fall back to in-memory
             client = redis_client or _fallback_counter
             count = await client.incr(key)
             if count == 1:
                 await client.expire(key, window)
         except Exception:
+            # Redis failure: fall back to in-memory (logged in production startup validation)
             count = await _fallback_counter.incr(key)
             if count == 1:
                 await _fallback_counter.expire(key, window)
@@ -85,7 +124,12 @@ async def limit_and_throttle(request: Request):
             raise HTTPException(status_code=429, detail='Rate limit exceeded')
 
     # Throttling (enabled if explicitly set true, or legacy values exist)
-    throttle_enabled = (user.get('throttle_enabled') is True) or bool(user.get('throttle_duration'))
+    # Enable throttling if explicitly enabled, or if duration/queue limit fields are configured
+    throttle_enabled = (
+        (user.get('throttle_enabled') is True)
+        or bool(user.get('throttle_duration'))
+        or bool(user.get('throttle_queue_limit'))
+    )
     if throttle_enabled:
         throttle_limit = int(user.get('throttle_duration') or 10)
         throttle_duration = user.get('throttle_duration_type') or 'second'
@@ -121,10 +165,22 @@ def reset_counters():
         pass
 
 async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
-    """
-    IP-based rate limiting for endpoints that don't require authentication.
+    """IP-based rate limiting for endpoints that don't require authentication.
 
     Prevents brute force attacks by limiting requests per IP address.
+
+    **Counter Backend Priority:**
+    1. Redis async client (app.state.redis) - REQUIRED for multi-worker deployments
+    2. In-memory fallback (_fallback_counter) - Single-process only
+
+    Uses the async Redis client from app.state.redis when available to ensure
+    consistent IP-based rate limiting across all workers. Falls back to process-local
+    counters only when Redis is unavailable.
+
+    **Multi-Worker Safety:**
+    Production deployments with THREADS>1 MUST configure Redis (MEM_OR_EXTERNAL=REDIS).
+    Without Redis, each worker maintains its own IP counter, effectively multiplying
+    the rate limit by the number of workers.
 
     Args:
         request: FastAPI Request object

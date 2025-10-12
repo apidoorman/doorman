@@ -4,6 +4,8 @@ class Headers:
 class Defaults:
     PAGE = 1
     PAGE_SIZE = 10
+    MAX_PAGE_SIZE_ENV = 'MAX_PAGE_SIZE'
+    MAX_PAGE_SIZE_DEFAULT = 200
     MAX_MULTIPART_SIZE_BYTES_ENV = 'MAX_MULTIPART_SIZE_BYTES'
     MAX_MULTIPART_SIZE_BYTES_DEFAULT = 5_242_880
 
@@ -25,6 +27,7 @@ class ErrorCodes:
     AUTH_REQUIRED = 'AUTH001'
     REQUEST_TOO_LARGE = 'REQ002'
     REQUEST_FILE_TYPE = 'REQ003'
+    PAGE_SIZE = 'PAG001'
 
 class Messages:
     UNEXPECTED = 'An unexpected error occurred'
@@ -32,3 +35,5 @@ class Messages:
     ONLY_PROTO_ALLOWED = 'Only .proto files are allowed'
     PERMISSION_MANAGE_APIS = 'User does not have permission to manage APIs'
     GRPC_GEN_FAILED = 'Failed to generate gRPC code'
+    PAGE_TOO_LARGE = 'Page size exceeds maximum limit'
+    INVALID_PAGING = 'Invalid page or page size'

@@ -20,8 +20,31 @@ def _mk_xml_client(captured):
             return self
         async def __aexit__(self, exc_type, exc, tb):
             return False
-        async def post(self, url, content=None, params=None, headers=None):
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _FakeXMLResponse(405, '<error>Method not allowed</error>')
+        async def get(self, url, **kwargs):
+            return _FakeXMLResponse(200, '<ok/>', {'X-Upstream': 'yes', 'Content-Type': 'text/xml'})
+        async def post(self, url, content=None, params=None, headers=None, **kwargs):
             captured.append({'url': url, 'headers': dict(headers or {}), 'content': content})
+            return _FakeXMLResponse(200, '<ok/>', {'X-Upstream': 'yes', 'Content-Type': 'text/xml'})
+        async def put(self, url, **kwargs):
+            return _FakeXMLResponse(200, '<ok/>', {'X-Upstream': 'yes', 'Content-Type': 'text/xml'})
+        async def delete(self, url, **kwargs):
             return _FakeXMLResponse(200, '<ok/>', {'X-Upstream': 'yes', 'Content-Type': 'text/xml'})
     return _FakeXMLClient
 

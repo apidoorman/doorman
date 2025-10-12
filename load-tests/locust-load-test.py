@@ -49,9 +49,10 @@ class DoormanUser(FastHttpUser):
     # Authentication token
     auth_token: Optional[str] = None
 
-    # Test credentials
-    username = "admin"
-    password = "admin123"
+    # Test credentials (read from env for safety; defaults for dev only)
+    import os
+    username = os.getenv("TEST_USERNAME", "admin")
+    password = os.getenv("TEST_PASSWORD", "change-me")
 
     def on_start(self):
         """Called when a user starts - perform login"""

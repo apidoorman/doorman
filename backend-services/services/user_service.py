@@ -8,13 +8,17 @@ See https://github.com/apidoorman/doorman for more information
 from typing import List
 from fastapi import HTTPException
 import logging
+import asyncio
 
 # Internal imports
 from models.response_model import ResponseModel
 from utils import password_util
-from utils.database import user_collection, subscriptions_collection, api_collection
+from utils.database_async import user_collection, subscriptions_collection, api_collection
+from utils.async_db import db_find_one, db_insert_one, db_update_one, db_delete_one, db_find_list
 from utils.doorman_cache_util import doorman_cache
 from models.create_user_model import CreateUserModel
+from utils.paging_util import validate_page_params
+from utils.constants import ErrorCodes, Messages
 from utils.role_util import platform_role_required_bool
 from utils.bandwidth_util import get_current_usage
 import time
@@ -28,7 +32,7 @@ class UserService:
         """
         Retrieve a user by email.
         """
-        user = user_collection.find_one({'email': email})
+        user = await db_find_one(user_collection, {'email': email})
         if user.get('_id'): del user['_id']
         if not user:
             raise HTTPException(status_code=404, detail='User not found')
@@ -42,7 +46,7 @@ class UserService:
         try:
             user = doorman_cache.get_cache('user_cache', username)
             if not user:
-                user = user_collection.find_one({'username': username})
+                user = await db_find_one(user_collection, {'username': username})
                 if not user:
                     raise HTTPException(status_code=404, detail='User not found')
                 if user.get('_id'): del user['_id']
@@ -62,7 +66,7 @@ class UserService:
         logger.info(f'{request_id} | Getting user: {username}')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
-            user = user_collection.find_one({'username': username})
+            user = await db_find_one(user_collection, {'username': username})
             if not user:
                 logger.error(f'{request_id} | User retrieval failed with code USR002')
                 return ResponseModel(
@@ -117,7 +121,7 @@ class UserService:
         Retrieve a user by email.
         """
         logger.info(f'{request_id} | Getting user by email: {email}')
-        user = user_collection.find_one({'email': email})
+        user = await db_find_one(user_collection, {'email': email})
         if '_id' in user:
             del user['_id']
         if 'password' in user:
@@ -172,7 +176,7 @@ class UserService:
                 error_code='USR016',
                 error_message='Maximum 10 custom attributes allowed. Please replace an existing one.'
             ).dict()
-        if user_collection.find_one({'username': data.username}):
+        if await db_find_one(user_collection, {'username': data.username}):
             logger.error(f'{request_id} | User creation failed with code USR001')
             return ResponseModel(
                 status_code=400,
@@ -182,7 +186,7 @@ class UserService:
                 error_code='USR001',
                 error_message='Username already exists'
             ).dict()
-        if user_collection.find_one({'email': data.email}):
+        if await db_find_one(user_collection, {'email': data.email}):
             logger.error(f'{request_id} | User creation failed with code USR001')
             return ResponseModel(
                 status_code=400,
@@ -204,7 +208,7 @@ class UserService:
             ).dict()
         data.password = password_util.hash_password(data.password)
         data_dict = data.dict()
-        user_collection.insert_one(data_dict)
+        await db_insert_one(user_collection, data_dict)
         if '_id' in data_dict:
             del data_dict['_id']
         if 'password' in data_dict:
@@ -229,7 +233,7 @@ class UserService:
                 user = await UserService.get_user_by_email_with_password_helper(email)
             except Exception:
 
-                maybe_user = user_collection.find_one({'username': email})
+                maybe_user = await db_find_one(user_collection, {'username': email})
                 if maybe_user:
                     user = maybe_user
                 else:
@@ -248,7 +252,7 @@ class UserService:
         logger.info(f'{request_id} | Updating user: {username}')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
-            user = user_collection.find_one({'username': username})
+            user = await db_find_one(user_collection, {'username': username})
             if not user:
                 logger.error(f'{request_id} | User update failed with code USR002')
                 return ResponseModel(
@@ -277,7 +281,7 @@ class UserService:
                 ).dict()
         if non_null_update_data:
             try:
-                update_result = user_collection.update_one({'username': username}, {'$set': non_null_update_data})
+                update_result = await db_update_one(user_collection, {'username': username}, {'$set': non_null_update_data})
                 if update_result.modified_count > 0:
                     doorman_cache.delete_cache('user_cache', username)
                 if not update_result.acknowledged or update_result.modified_count == 0:
@@ -310,7 +314,7 @@ class UserService:
         logger.info(f'{request_id} | Deleting user: {username}')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
-            user = user_collection.find_one({'username': username})
+            user = await db_find_one(user_collection, {'username': username})
             if not user:
                 logger.error(f'{request_id} | User deletion failed with code USR002')
                 return ResponseModel(
@@ -318,7 +322,7 @@ class UserService:
                     error_code='USR002',
                     error_message='User not found'
                 ).dict()
-        delete_result = user_collection.delete_one({'username': username})
+        delete_result = await db_delete_one(user_collection, {'username': username})
         if not delete_result.acknowledged or delete_result.deleted_count == 0:
             logger.error(f'{request_id} | User deletion failed with code USR003')
             return ResponseModel(
@@ -358,14 +362,14 @@ class UserService:
             ).dict()
         hashed_password = password_util.hash_password(update_data.new_password)
         try:
-            update_result = user_collection.update_one({'username': username}, {'$set': {'password': hashed_password}})
+            update_result = await db_update_one(user_collection, {'username': username}, {'$set': {'password': hashed_password}})
             if update_result.modified_count > 0:
                 doorman_cache.delete_cache('user_cache', username)
         except Exception as e:
             doorman_cache.delete_cache('user_cache', username)
             logger.error(f'{request_id} | User password update failed with exception: {str(e)}', exc_info=True)
             raise
-        user = user_collection.find_one({'username': username})
+        user = await db_find_one(user_collection, {'username': username})
         if not user:
             logger.error(f'{request_id} | User password update failed with code USR002')
             return ResponseModel(
@@ -396,16 +400,16 @@ class UserService:
         Remove subscriptions after role change.
         """
         logger.info(f'{request_id} | Purging APIs for user: {username}')
-        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or subscriptions_collection.find_one({'username': username})
+        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or await db_find_one(subscriptions_collection, {'username': username})
         if user_subscriptions:
             for subscription in user_subscriptions.get('apis'):
                 api_name, api_version = subscription.split('/')
-                user = doorman_cache.get_cache('user_cache', username) or user_collection.find_one({'username': username})
-                api = doorman_cache.get_cache('api_cache', f'{api_name}/{api_version}') or api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+                user = doorman_cache.get_cache('user_cache', username) or await db_find_one(user_collection, {'username': username})
+                api = doorman_cache.get_cache('api_cache', f'{api_name}/{api_version}') or await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
                 if api and api.get('role') and user.get('role') not in api.get('role'):
                     user_subscriptions['apis'].remove(subscription)
             try:
-                update_result = subscriptions_collection.update_one(
+                update_result = await db_update_one(subscriptions_collection,
                     {'username': username},
                     {'$set': {'apis': user_subscriptions.get('apis', [])}}
                 )
@@ -424,9 +428,18 @@ class UserService:
         Get all users.
         """
         logger.info(f'{request_id} | Getting all users: Page={page} Page Size={page_size}')
+        try:
+            page, page_size = validate_page_params(page, page_size)
+        except Exception as e:
+            return ResponseModel(
+                status_code=400,
+                error_code=ErrorCodes.PAGE_SIZE,
+                error_message=(Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING)
+            ).dict()
         skip = (page - 1) * page_size
-        cursor = user_collection.find().sort('username', 1).skip(skip).limit(page_size)
-        users = cursor.to_list(length=None)
+        users_all = await db_find_list(user_collection, {})
+        users_all.sort(key=lambda u: u.get('username'))
+        users = users_all[skip: skip + page_size]
         for user in users:
             if user.get('_id'): del user['_id']
             if user.get('password'): del user['password']

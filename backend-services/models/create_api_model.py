@@ -19,6 +19,9 @@ class CreateApiModel(BaseModel):
     api_type: str = Field(None, description="Type of the API. Valid values: 'REST'", example='REST')
     api_allowed_retry_count: int = Field(0, description='Number of allowed retries for the API', example=0)
     api_grpc_package: Optional[str] = Field(None, description='Optional gRPC Python package to use for this API (e.g., "my.pkg"). When set, overrides request package and default.', example='my.pkg')
+    api_grpc_allowed_packages: Optional[List[str]] = Field(None, description='Allow-list of gRPC package/module base names (no dots). If set, requests must match one of these.', example=['customer_v1'])
+    api_grpc_allowed_services: Optional[List[str]] = Field(None, description='Allow-list of gRPC service names (e.g., Greeter). If set, only these services are permitted.', example=['Greeter'])
+    api_grpc_allowed_methods: Optional[List[str]] = Field(None, description='Allow-list of gRPC methods as Service.Method strings. If set, only these methods are permitted.', example=['Greeter.SayHello'])
 
     api_authorization_field_swap: Optional[str]  = Field(None, description='Header to swap for backend authorization header', example='backend-auth-header')
     api_allowed_headers: Optional[List[str]] = Field(None, description='Allowed headers for the API', example=['Content-Type', 'Authorization'])

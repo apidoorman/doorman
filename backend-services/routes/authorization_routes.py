@@ -119,7 +119,11 @@ async def authorization(request: Request):
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
 
-        _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+        _secure_env = os.getenv('COOKIE_SECURE')
+        if _secure_env is not None:
+            _secure = str(_secure_env).lower() == 'true'
+        else:
+            _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
         _domain = os.getenv('COOKIE_DOMAIN', None)
         _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
@@ -195,6 +199,20 @@ async def authorization(request: Request):
         )
         return response
     except HTTPException as e:
+        # Preserve IP rate limit semantics (429 + Retry-After headers)
+        if getattr(e, 'status_code', None) == 429:
+            headers = getattr(e, 'headers', {}) or {}
+            detail = e.detail if isinstance(e.detail, dict) else {}
+            return respond_rest(ResponseModel(
+                status_code=429,
+                response_headers={
+                    'request_id': request_id,
+                    **headers
+                },
+                error_code=str(detail.get('error_code') or 'IP_RATE_LIMIT'),
+                error_message=str(detail.get('message') or 'Too many requests')
+            ))
+        # Default mapping for auth failures
         return respond_rest(ResponseModel(
             status_code=401,
             response_headers={
@@ -567,7 +585,11 @@ async def extended_authorization(request: Request):
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
 
-        _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+        _secure_env = os.getenv('COOKIE_SECURE')
+        if _secure_env is not None:
+            _secure = str(_secure_env).lower() == 'true'
+        else:
+            _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
         _domain = os.getenv('COOKIE_DOMAIN', None)
         _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):

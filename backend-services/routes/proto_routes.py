@@ -229,11 +229,40 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                 raise ValueError('Invalid grpc file path')
             if pb2_grpc_file.exists():
                 content = pb2_grpc_file.read_text()
-                content = content.replace(
-                    f'import {safe_api_name}_{safe_api_version}_pb2 as {safe_api_name}__{safe_api_version}__pb2',
-                    f'from generated import {safe_api_name}_{safe_api_version}_pb2 as {safe_api_name}__{safe_api_version}__pb2'
-                )
-                pb2_grpc_file.write_text(content)
+                # Fix the import statement to use 'from generated import' instead of bare 'import'
+                # Match pattern: import {module}_pb2 as {alias}
+                import_pattern = rf'^import {safe_api_name}_{safe_api_version}_pb2 as (.+)$'
+                logger.info(f'{request_id} | Applying import fix with pattern: {import_pattern}')
+                # Show first 10 lines for debugging
+                lines = content.split('\n')[:10]
+                for i, line in enumerate(lines, 1):
+                    if 'import' in line and 'pb2' in line:
+                        logger.info(f'{request_id} | Line {i}: {repr(line)}')
+                new_content = re.sub(import_pattern, rf'from generated import {safe_api_name}_{safe_api_version}_pb2 as \1', content, flags=re.MULTILINE)
+                if new_content != content:
+                    logger.info(f'{request_id} | Import fix applied successfully')
+                    pb2_grpc_file.write_text(new_content)
+                    # Delete .pyc cache files so Python re-compiles from the fixed source
+                    pycache_dir = generated_dir / '__pycache__'
+                    if pycache_dir.exists():
+                        for pyc_file in pycache_dir.glob(f'{safe_api_name}_{safe_api_version}*.pyc'):
+                            try:
+                                pyc_file.unlink()
+                                logger.info(f'{request_id} | Deleted cache file: {pyc_file.name}')
+                            except Exception as e:
+                                logger.warning(f'{request_id} | Failed to delete cache file {pyc_file.name}: {e}')
+                    # Clear module from sys.modules cache so it gets reimported with fixed code
+                    import sys as sys_import
+                    pb2_module_name = f'{safe_api_name}_{safe_api_version}_pb2'
+                    pb2_grpc_module_name = f'{safe_api_name}_{safe_api_version}_pb2_grpc'
+                    if pb2_module_name in sys_import.modules:
+                        del sys_import.modules[pb2_module_name]
+                        logger.info(f'{request_id} | Cleared {pb2_module_name} from sys.modules')
+                    if pb2_grpc_module_name in sys_import.modules:
+                        del sys_import.modules[pb2_grpc_module_name]
+                        logger.info(f'{request_id} | Cleared {pb2_grpc_module_name} from sys.modules')
+                else:
+                    logger.warning(f'{request_id} | Import fix pattern did not match - no changes made')
             return process_response(ResponseModel(
                 status_code=200,
                 response_headers={'request_id': request_id},

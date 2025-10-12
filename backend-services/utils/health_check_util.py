@@ -63,7 +63,8 @@ def get_memory_usage():
 def get_active_connections():
     try:
         process = psutil.Process(os.getpid())
-        connections = process.connections()
+        # Use non-deprecated API; restrict to internet sockets for clarity.
+        connections = process.net_connections(kind='inet')
         return len(connections)
     except Exception as e:
         logger.error(f'Active connections check failed: {str(e)}')

@@ -10,6 +10,9 @@ import json
 import os
 import threading
 from typing import Dict, Any, Optional
+import asyncio
+import logging
+from utils import chaos_util
 
 class MemoryCache:
     def __init__(self, maxsize: int = 10000):
@@ -102,7 +105,7 @@ class MemoryCache:
             if key in self._access_order:
                 self._access_order.remove(key)
         if expired_keys:
-            print(f'Cleaned up {len(expired_keys)} expired cache entries')
+            logging.getLogger('doorman.cache').info(f'Cleaned up {len(expired_keys)} expired cache entries')
 
     def stop_auto_save(self):
         return
@@ -134,7 +137,7 @@ class DoormanCacheManager:
                 self.cache = redis.StrictRedis(connection_pool=pool)
                 self.is_redis = True
             except Exception as e:
-                print(f'Warning: Redis connection failed, falling back to memory cache: {e}')
+                logging.getLogger('doorman.cache').warning(f'Redis connection failed, falling back to memory cache: {e}')
                 maxsize = int(os.getenv('CACHE_MAX_SIZE', 10000))
                 self.cache = MemoryCache(maxsize=maxsize)
                 self.is_redis = False
@@ -181,13 +184,26 @@ class DoormanCacheManager:
     def set_cache(self, cache_name, key, value):
         ttl = self.default_ttls.get(cache_name, 86400)
         cache_key = self._get_key(cache_name, key)
+        if chaos_util.should_fail('redis'):
+            chaos_util.burn_error_budget('redis')
+            raise redis.ConnectionError('chaos: simulated redis outage')
         if self.is_redis:
-            self.cache.setex(cache_key, ttl, json.dumps(value))
+            try:
+                # Avoid blocking loop if called from async context
+                loop = asyncio.get_running_loop()
+                return loop.run_in_executor(None, self.cache.setex, cache_key, ttl, json.dumps(value))
+            except RuntimeError:
+                # Not in an event loop
+                self.cache.setex(cache_key, ttl, json.dumps(value))
+                return None
         else:
             self.cache.setex(cache_key, ttl, json.dumps(value))
 
     def get_cache(self, cache_name, key):
         cache_key = self._get_key(cache_name, key)
+        if chaos_util.should_fail('redis'):
+            chaos_util.burn_error_budget('redis')
+            raise redis.ConnectionError('chaos: simulated redis outage')
         value = self.cache.get(cache_key)
         if value:
             try:
@@ -198,13 +214,24 @@ class DoormanCacheManager:
 
     def delete_cache(self, cache_name, key):
         cache_key = self._get_key(cache_name, key)
+        if chaos_util.should_fail('redis'):
+            chaos_util.burn_error_budget('redis')
+            raise redis.ConnectionError('chaos: simulated redis outage')
         self.cache.delete(cache_key)
 
     def clear_cache(self, cache_name):
         pattern = f'{self.prefixes[cache_name]}*'
+        if chaos_util.should_fail('redis'):
+            chaos_util.burn_error_budget('redis')
+            raise redis.ConnectionError('chaos: simulated redis outage')
         keys = self.cache.keys(pattern)
         if keys:
-            self.cache.delete(*keys)
+            try:
+                loop = asyncio.get_running_loop()
+                return loop.run_in_executor(None, self.cache.delete, *keys)
+            except RuntimeError:
+                self.cache.delete(*keys)
+                return None
 
     def clear_all_caches(self):
         for cache_name in self.prefixes.keys():

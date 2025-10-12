@@ -1,12 +1,13 @@
 # Internal imports
-from utils.database import user_credit_collection, credit_def_collection
+from utils.database_async import user_credit_collection, credit_def_collection
+from utils.async_db import db_find_one, db_update_one
 from utils.encryption_util import decrypt_value
 from datetime import datetime, timezone
 
 async def deduct_credit(api_credit_group, username):
     if not api_credit_group:
         return False
-    doc = user_credit_collection.find_one({'username': username})
+    doc = await db_find_one(user_credit_collection, {'username': username})
     if not doc:
         return False
     users_credits = doc.get('users_credits') or {}
@@ -14,13 +15,13 @@ async def deduct_credit(api_credit_group, username):
     if not info or info.get('available_credits', 0) <= 0:
         return False
     available_credits = info.get('available_credits', 0) - 1
-    user_credit_collection.update_one({'username': username}, {'$set': {f'users_credits.{api_credit_group}.available_credits': available_credits}})
+    await db_update_one(user_credit_collection, {'username': username}, {'$set': {f'users_credits.{api_credit_group}.available_credits': available_credits}})
     return True
 
 async def get_user_api_key(api_credit_group, username):
     if not api_credit_group:
         return None
-    doc = user_credit_collection.find_one({'username': username})
+    doc = await db_find_one(user_credit_collection, {'username': username})
     if not doc:
         return None
     users_credits = doc.get('users_credits') or {}
@@ -46,7 +47,7 @@ async def get_credit_api_header(api_credit_group):
     """
     if not api_credit_group:
         return None
-    credit_def = credit_def_collection.find_one({'api_credit_group': api_credit_group})
+    credit_def = await db_find_one(credit_def_collection, {'api_credit_group': api_credit_group})
     if not credit_def:
         return None
 

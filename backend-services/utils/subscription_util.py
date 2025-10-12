@@ -11,7 +11,8 @@ import logging
 
 # Internal imports
 from utils.doorman_cache_util import doorman_cache
-from utils.database import subscriptions_collection
+from utils.database_async import subscriptions_collection
+from utils.async_db import db_find_one, db_update_one
 from utils.auth_util import SECRET_KEY, ALGORITHM, auth_required
 
 logger = logging.getLogger('doorman.gateway')
@@ -50,7 +51,7 @@ async def subscription_required(request: Request):
             else:
                 # Generic: first two segments after leading '/'
                 api_and_version = '/'.join(segs[:2])
-        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or subscriptions_collection.find_one({'username': username})
+        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or await db_find_one(subscriptions_collection, {'username': username})
         subscriptions = user_subscriptions.get('apis') if user_subscriptions and 'apis' in user_subscriptions else None
         if not subscriptions or api_and_version not in subscriptions:
             logger.info(f'User {username} attempted access to {api_and_version}')

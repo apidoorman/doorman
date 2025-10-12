@@ -18,6 +18,9 @@ os.environ.setdefault('COOKIE_DOMAIN', 'testserver')
 os.environ.setdefault('LOGIN_IP_RATE_LIMIT', '1000000')
 os.environ.setdefault('LOGIN_IP_RATE_WINDOW', '60')
 os.environ.setdefault('LOGIN_IP_RATE_DISABLED', 'true')
+os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
+os.environ.setdefault('ENABLE_HTTPX_CLIENT_CACHE', 'false')
+os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
 
 _HERE = os.path.dirname(__file__)
 _PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
@@ -35,6 +38,31 @@ try:
     _INITIAL_DB_SNAPSHOT: Optional[dict] = _db.db.dump_data() if getattr(_db, 'memory_only', True) else None
 except Exception:
     _INITIAL_DB_SNAPSHOT = None
+
+@pytest_asyncio.fixture(autouse=True)
+async def ensure_memory_dump_defaults(monkeypatch, tmp_path):
+    """Ensure sane defaults for memory dump/restore tests.
+
+    - Force memory-only mode for safety in tests
+    - Provide a default MEM_ENCRYPTION_KEY (tests can override or delete it)
+    - Point MEM_DUMP_PATH at a per-test temporary directory and also update
+      the imported module default if already loaded.
+    """
+    try:
+        monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
+        # Provide a stable, sufficiently long test key; individual tests may monkeypatch/delenv
+        monkeypatch.setenv('MEM_ENCRYPTION_KEY', os.environ.get('MEM_ENCRYPTION_KEY') or 'test-encryption-key-32-characters-min')
+        dump_base = tmp_path / 'mem' / 'memory_dump.bin'
+        monkeypatch.setenv('MEM_DUMP_PATH', str(dump_base))
+        # If memory_dump_util was already imported before env set, update its module-level default
+        try:
+            import utils.memory_dump_util as md
+            md.DEFAULT_DUMP_PATH = str(dump_base)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    yield
 
 @pytest_asyncio.fixture
 async def authed_client():

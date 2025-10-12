@@ -61,3 +61,16 @@ scripts/cleanup_inline_comments.py
 scripts/style_unify_python.py
 scripts/add_route_docblocks.py
 scripts/dedupe_docblocks.py
+# Logs and runtime artifacts
+*.log
+**/*.log
+backend-services/platform-logs/
+**/platform-logs/
+backend-services/platform-logs/doorman.log
+
+# Generated code and dumps
+backend-services/generated/
+**/generated/
+backend-services/proto/*.bin
+**/*memory_dump*.bin
+**/*.bin

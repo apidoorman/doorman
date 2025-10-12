@@ -30,7 +30,7 @@ const errorCount = new Counter('error_count');
 // Configuration
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000';
 const TEST_USERNAME = __ENV.TEST_USERNAME || 'admin';
-const TEST_PASSWORD = __ENV.TEST_PASSWORD || 'admin123';
+const TEST_PASSWORD = __ENV.TEST_PASSWORD || 'change-me';
 
 // Load test stages
 export const options = {

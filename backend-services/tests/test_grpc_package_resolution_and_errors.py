@@ -239,6 +239,19 @@ async def test_grpc_unknown_maps_to_500_error(monkeypatch, authed_client):
 
 
 @pytest.mark.asyncio
+async def test_grpc_rejects_traversal_in_package(authed_client):
+    name, ver = 'gtrv', 'v1'
+    await _setup_api(authed_client, name, ver)
+    # Package with traversal should be rejected with 400 GTW011
+    r = await authed_client.post(
+        f'/api/grpc/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'},
+        json={'method': 'Svc.M', 'message': {}, 'package': '../evil'}
+    )
+    assert r.status_code == 400
+    body = r.json()
+    assert body.get('error_code') == 'GTW011'
+
+@pytest.mark.asyncio
 async def test_grpc_proto_missing_returns_404_gtw012(monkeypatch, authed_client):
     import services.gateway_service as gs
     name, ver = 'gproto404', 'v1'
