@@ -65,7 +65,16 @@ async def authorization(request: Request):
 
         logger.info(f'{request_id} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        data = await request.json()
+        # Parse JSON body safely; invalid JSON should not 500
+        try:
+            data = await request.json()
+        except Exception:
+            return respond_rest(ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='AUTH004',
+                error_message='Invalid JSON payload'
+            ))
         email = data.get('email')
         password = data.get('password')
         if not email or not password:

@@ -5,6 +5,7 @@ Utilities to manage security-related settings and schedule auto-save of memory d
 # External imports
 import asyncio
 import os
+from pathlib import Path
 from typing import Optional, Dict, Any
 import logging
 
@@ -18,11 +19,15 @@ _CACHE: Dict[str, Any] = {}
 _AUTO_TASK: Optional[asyncio.Task] = None
 _STOP_EVENT: Optional[asyncio.Event] = None
 
+# Resolve generator dir to backend-services by default, unless overridden via env
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_GEN_DIR = _PROJECT_ROOT / 'generated'
+
 DEFAULTS = {
     'type': 'security_settings',
     'enable_auto_save': False,
     'auto_save_frequency_seconds': 900,
-    'dump_path': os.getenv('MEM_DUMP_PATH', 'generated/memory_dump.bin'),
+    'dump_path': os.getenv('MEM_DUMP_PATH', str(_GEN_DIR / 'memory_dump.bin')),
     'ip_whitelist': [],
     'ip_blacklist': [],
     'trust_x_forwarded_for': False,
@@ -32,7 +37,7 @@ DEFAULTS = {
 
 # Persist settings to a small JSON file so memory-only mode
 # can restore across restarts (before any DB state exists).
-SETTINGS_FILE = os.getenv('SECURITY_SETTINGS_FILE', 'generated/security_settings.json')
+SETTINGS_FILE = os.getenv('SECURITY_SETTINGS_FILE', str(_GEN_DIR / 'security_settings.json'))
 
 def _get_collection():
     return db.settings if not database.memory_only else database.db.settings

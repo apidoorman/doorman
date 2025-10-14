@@ -219,6 +219,7 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                 f'--grpc_python_out={generated_dir}',
                 str(proto_path)
             ], check=True)
+            logger.info(f"{request_id} | Proto compiled: src={proto_path} out={generated_dir}")
             init_path = (generated_dir / '__init__.py').resolve()
             if not validate_path(generated_dir, init_path):
                 raise ValueError('Invalid init path')
@@ -242,6 +243,7 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                 if new_content != content:
                     logger.info(f'{request_id} | Import fix applied successfully')
                     pb2_grpc_file.write_text(new_content)
+                    logger.info(f"{request_id} | Wrote fixed pb2_grpc at {pb2_grpc_file}")
                     # Delete .pyc cache files so Python re-compiles from the fixed source
                     pycache_dir = generated_dir / '__pycache__'
                     if pycache_dir.exists():
@@ -263,6 +265,16 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                         logger.info(f'{request_id} | Cleared {pb2_grpc_module_name} from sys.modules')
                 else:
                     logger.warning(f'{request_id} | Import fix pattern did not match - no changes made')
+                # Second pass: handle relative import form 'from . import X_pb2 as alias'
+                try:
+                    rel_pattern = rf'^from \\. import {safe_api_name}_{safe_api_version}_pb2 as (.+)$'
+                    content2 = pb2_grpc_file.read_text()
+                    new2 = re.sub(rel_pattern, rf'from generated import {safe_api_name}_{safe_api_version}_pb2 as \\1', content2, flags=re.MULTILINE)
+                    if new2 != content2:
+                        pb2_grpc_file.write_text(new2)
+                        logger.info(f"{request_id} | Applied relative import rewrite for module {safe_api_name}_{safe_api_version}_pb2")
+                except Exception as e:
+                    logger.warning(f"{request_id} | Failed relative import rewrite: {e}")
             return process_response(ResponseModel(
                 status_code=200,
                 response_headers={'request_id': request_id},
@@ -285,7 +297,7 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
             error_message=str(e.detail)
         ).dict(), 'rest')
     except Exception as e:
-        logger.error(f'{request_id} | Error uploading proto file: {str(e)}')
+        logger.error(f'{request_id} | Error uploading proto file: {type(e).__name__}: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
             status_code=500,
             response_headers={Headers.REQUEST_ID: request_id},

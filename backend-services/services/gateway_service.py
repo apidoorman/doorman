@@ -1085,6 +1085,13 @@ class GatewayService:
                     # Final fallback: strip invalid chars from default
                     default_base = ''.join(ch if ch in GatewayService._IDENT_ALLOWED else '_' for ch in default_base)
                 module_base = (api_pkg or pkg_override_valid or default_base)
+                try:
+                    logger.info(
+                        f"{request_id} | gRPC module_base resolved: module_base={module_base} "
+                        f"api_pkg={api_pkg_raw!r} pkg_override={pkg_override_raw!r} default_base={default_base}"
+                    )
+                except Exception:
+                    pass
 
                 # Allow-list enforcement (package/service/method)
                 try:
@@ -1135,14 +1142,27 @@ class GatewayService:
                     sys.path.insert(0, proj_root_str)
                 if gen_dir_str not in sys.path:
                     sys.path.insert(0, gen_dir_str)
+                try:
+                    logger.info(f"{request_id} | sys.path updated for gRPC import. project_root={proj_root_str}, generated_dir={gen_dir_str}")
+                except Exception:
+                    pass
 
                 # Try to import generated modules first (tests monkeypatch import_module)
                 pb2 = None
                 pb2_grpc = None
                 try:
-                    pb2 = importlib.import_module(f'{module_base}_pb2')
-                    pb2_grpc = importlib.import_module(f'{module_base}_pb2_grpc')
-                    logger.info(f"{request_id} | Successfully imported gRPC modules: {module_base}_pb2 and {module_base}_pb2_grpc")
+                    pb2_name = f'{module_base}_pb2'
+                    pb2_grpc_name = f'{module_base}_pb2_grpc'
+                    try:
+                        pb2 = importlib.import_module(pb2_name)
+                        pb2_grpc = importlib.import_module(pb2_grpc_name)
+                    except ModuleNotFoundError:
+                        # Fallback to 'generated.<name>' if rewrite expects package import
+                        gen_pb2_name = f'generated.{module_base}_pb2'
+                        gen_pb2_grpc_name = f'generated.{module_base}_pb2_grpc'
+                        pb2 = importlib.import_module(gen_pb2_name)
+                        pb2_grpc = importlib.import_module(gen_pb2_grpc_name)
+                    logger.info(f"{request_id} | Successfully imported gRPC modules: {pb2.__name__} and {pb2_grpc.__name__}")
                 except ModuleNotFoundError as mnf_exc:
                     logger.warning(f"{request_id} | gRPC modules not found, will attempt proto generation: {str(mnf_exc)}")
                 except ImportError as imp_exc:
@@ -1158,7 +1178,7 @@ class GatewayService:
                         request_id,
                         'GTW012',
                         f'Failed to import gRPC modules. Proto files may need regeneration. Error: {str(imp_exc)[:100]}',
-                        status=500
+                        status=404
                     )
                 except Exception as import_exc:
                     logger.error(f"{request_id} | Unexpected error importing gRPC modules: {type(import_exc).__name__}: {str(import_exc)}")
@@ -1172,6 +1192,10 @@ class GatewayService:
                 if pb2 is None or pb2_grpc is None:
                     try:
                         proto_dir.mkdir(exist_ok=True)
+                        try:
+                            logger.info(f"{request_id} | gRPC generated check: proto_path={proto_path} exists={proto_path.exists()} generated_dir={generated_dir} pb2={module_base}_pb2.py={ (generated_dir / (module_base + '_pb2.py')).exists() }")
+                        except Exception:
+                            pass
                         method_fq = body.get('method', '')
                         parsed_m = GatewayService._parse_and_validate_method(method_fq)
                         if not parsed_m:
@@ -1368,6 +1392,10 @@ class GatewayService:
                 sys.path.insert(0, proj_root_str)
             if gen_dir_str not in sys.path:
                 sys.path.insert(0, gen_dir_str)
+            try:
+                logger.info(f"{request_id} | sys.path prepared for import: project_root={proj_root_str}, generated_dir={gen_dir_str}")
+            except Exception:
+                pass
             parts = module_name.split('.') if '.' in module_name else [module_name]
             package_dir = generated_dir.joinpath(*parts[:-1]) if len(parts) > 1 else generated_dir
             pb2_module = None
@@ -1392,7 +1420,7 @@ class GatewayService:
                     pb2_path = package_dir / f"{parts[-1]}_pb2.py"
                     pb2_grpc_path = package_dir / f"{parts[-1]}_pb2_grpc.py"
                     if not (pb2_path.is_file() and pb2_grpc_path.is_file()):
-                        logger.error(f"{request_id} | Generated modules not found for '{module_name}'")
+                        logger.error(f"{request_id} | Generated modules not found for '{module_name}' pb2={pb2_path} exists={pb2_path.is_file()} pb2_grpc={pb2_grpc_path} exists={pb2_grpc_path.is_file()}")
                         # If upstream is HTTP-based, fall back to HTTP call
                         if isinstance(url, str) and url.startswith(('http://', 'https://')):
                             try:
@@ -1424,10 +1452,21 @@ class GatewayService:
                         # Guard against unexpected module names by re-validating the module_name
                         if GatewayService._validate_package_name(module_name) is None:
                             return GatewayService.error_response(request_id, 'GTW012', 'Invalid gRPC module name', status=400)
-                        pb2_module = importlib.import_module(f'{module_name}_pb2')
-                        service_module = importlib.import_module(f'{module_name}_pb2_grpc')
+                        import_name_pb2 = f'{module_name}_pb2'
+                        import_name_grpc = f'{module_name}_pb2_grpc'
+                        logger.info(f"{request_id} | Importing generated modules: {import_name_pb2} and {import_name_grpc}")
+                        try:
+                            pb2_module = importlib.import_module(import_name_pb2)
+                            service_module = importlib.import_module(import_name_grpc)
+                        except ModuleNotFoundError:
+                            # Try the 'generated.' package path as a fallback
+                            alt_pb2 = f'generated.{module_name}_pb2'
+                            alt_grpc = f'generated.{module_name}_pb2_grpc'
+                            logger.info(f"{request_id} | Retrying import via generated package: {alt_pb2} and {alt_grpc}")
+                            pb2_module = importlib.import_module(alt_pb2)
+                            service_module = importlib.import_module(alt_grpc)
                     except ImportError as e:
-                        logger.error(f'{request_id} | Failed to import gRPC module: {str(e)}')
+                        logger.error(f'{request_id} | Failed to import gRPC module: {str(e)}', exc_info=True)
                         # If upstream is HTTP-based, fall back to HTTP call
                         if isinstance(url, str) and url.startswith(('http://', 'https://')):
                             try:
@@ -1454,255 +1493,211 @@ class GatewayService:
                                 response=(http_response.json() if http_response.headers.get('Content-Type','').startswith('application/json') else http_response.text)
                             ).dict()
                         return GatewayService.error_response(request_id, 'GTW012', f'Failed to import gRPC module: {str(e)}', status=404)
-                parsed = GatewayService._parse_and_validate_method(body.get('method'))
-                if not parsed:
-                    return GatewayService.error_response(request_id, 'GTW011', 'Invalid gRPC method. Use Service.Method with alphanumerics/underscore.', status=400)
-                service_name, method_name = parsed
-                # Defer type validation to attribute access below; avoid premature 500s in test stubs
-                channel = grpc.aio.insecure_channel(url)
+            parsed = GatewayService._parse_and_validate_method(body.get('method'))
+            if not parsed:
+                return GatewayService.error_response(request_id, 'GTW011', 'Invalid gRPC method. Use Service.Method with alphanumerics/underscore.', status=400)
+            service_name, method_name = parsed
+            # If upstream is HTTP-based, fall back to HTTP call regardless of generated modules
+            if isinstance(url, str) and url.startswith(("http://", "https://")):
                 try:
-                    await asyncio.wait_for(channel.channel_ready(), timeout=2.0)
+                    client = GatewayService.get_http_client()
+                    http_url = url.rstrip('/') + '/grpc'
+                    http_response = await client.post(http_url, json=body, headers=headers)
+                finally:
+                    if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'false').lower() != 'true':
+                        try:
+                            await client.aclose()
+                        except Exception:
+                            pass
+                if http_response.status_code == 404:
+                    return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
+                response_headers = {'request_id': request_id}
+                try:
+                    if current_time and start_time:
+                        response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
                 except Exception:
                     pass
-                # Resolve request/reply message classes from pb2_module
-                request_class_name = f'{method_name}Request'
-                reply_class_name = f'{method_name}Reply'
+                return ResponseModel(
+                    status_code=http_response.status_code,
+                    response_headers=response_headers,
+                    response=(http_response.json() if http_response.headers.get('Content-Type','').startswith('application/json') else http_response.text)
+                ).dict()
 
-                try:
-                    logger.info(f'{request_id} | Resolving message types: {request_class_name} and {reply_class_name} from pb2_module')
+            # Defer type validation to attribute access below; avoid premature 500s in test stubs
+            logger.info(f"{request_id} | Connecting to gRPC upstream: {url}")
+            channel = grpc.aio.insecure_channel(url)
+            try:
+                await asyncio.wait_for(channel.channel_ready(), timeout=2.0)
+            except Exception:
+                pass
+            # Resolve request/reply message classes from pb2_module
+            request_class_name = f'{method_name}Request'
+            reply_class_name = f'{method_name}Reply'
 
-                    # Verify pb2_module is not None
-                    if pb2_module is None:
-                        logger.error(f'{request_id} | pb2_module is None - cannot resolve message types')
-                        return GatewayService.error_response(
-                            request_id,
-                            'GTW012',
-                            'Internal error: protobuf module not loaded',
-                            status=500
-                        )
+            try:
+                logger.info(f"{request_id} | Resolving message types: {request_class_name} and {reply_class_name} from pb2_module={getattr(pb2_module, '__name__', 'unknown')}")
 
-                    # Get request and reply classes
-                    try:
-                        request_class = getattr(pb2_module, request_class_name)
-                        reply_class = getattr(pb2_module, reply_class_name)
-                    except AttributeError as attr_err:
-                        logger.error(f'{request_id} | Message types not found in pb2_module: {str(attr_err)}')
-                        # In test mode, use generic shims
-                        if os.getenv('DOORMAN_TEST_MODE', '').lower() == 'true':
-                            logger.warning(f'{request_id} | Using generic message shims for test mode')
-                            request_message = object()
-                            class _RShim:
-                                @staticmethod
-                                def FromString(_b):
-                                    return type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})()})()
-                            reply_class = _RShim
-                        else:
-                            return GatewayService.error_response(
-                                request_id,
-                                'GTW012',
-                                f'Message types {request_class_name}/{reply_class_name} not found in protobuf module',
-                                status=404
-                            )
-
-                    # Create request message instance (skip if using test shims)
-                    if not isinstance(request_class, type(object)):
-                        try:
-                            request_message = request_class()
-                            logger.info(f'{request_id} | Successfully created request message of type {request_class_name}')
-                        except Exception as create_err:
-                            logger.error(f'{request_id} | Failed to instantiate request message: {type(create_err).__name__}: {str(create_err)}')
-                            return GatewayService.error_response(
-                                request_id,
-                                'GTW012',
-                                f'Failed to create request message: {type(create_err).__name__}',
-                                status=500
-                            )
-
-                except Exception as e:
-                    logger.error(f'{request_id} | Unexpected error in message type resolution: {type(e).__name__}: {str(e)}')
+                # Verify pb2_module is not None
+                if pb2_module is None:
+                    logger.error(f'{request_id} | pb2_module is None - cannot resolve message types')
                     return GatewayService.error_response(
                         request_id,
                         'GTW012',
-                        f'Unexpected error resolving message types: {type(e).__name__}',
+                        'Internal error: protobuf module not loaded',
                         status=500
                     )
-                for key, value in body['message'].items():
-                    try:
-                        setattr(request_message, key, value)
-                    except Exception:
-                        pass
-                # Retry policy configuration
-                attempts = max(1, int(retry) + 1)
-                env_max_retries = 0
+
+                # Get request and reply classes
                 try:
-                    env_max_retries = int(os.getenv('GRPC_MAX_RETRIES', '0'))
-                except Exception:
-                    env_max_retries = 0
-                attempts = max(attempts, env_max_retries + 1)
+                    request_class = getattr(pb2_module, request_class_name)
+                    reply_class = getattr(pb2_module, reply_class_name)
+                except AttributeError as attr_err:
+                    logger.error(f'{request_id} | Message types not found in pb2_module: {str(attr_err)}')
+                    return GatewayService.error_response(
+                        request_id,
+                        'GTW006',
+                        f'Message types {request_class_name}/{reply_class_name} not found in protobuf module',
+                        status=500
+                    )
 
-                base_ms = 0
-                max_ms = 0
-                jitter = 0.5
+                # Create request message instance
                 try:
-                    base_ms = int(os.getenv('GRPC_RETRY_BASE_MS', '100'))
-                    max_ms = int(os.getenv('GRPC_RETRY_MAX_MS', '1000'))
-                except Exception:
-                    base_ms, max_ms = 100, 1000
+                    request_message = request_class()
+                    logger.info(f'{request_id} | Successfully created request message of type {request_class_name}')
+                except Exception as create_err:
+                    logger.error(f'{request_id} | Failed to instantiate request message: {type(create_err).__name__}: {str(create_err)}')
+                    return GatewayService.error_response(
+                        request_id,
+                        'GTW006',
+                        f'Failed to create request message: {type(create_err).__name__}',
+                        status=500
+                    )
 
-                # Determine idempotency: default true for unary/server-stream, false for client/bidi unless overridden
-                stream_mode = str((body.get('stream') or body.get('streaming') or '')).lower()
-                idempotent_override = body.get('idempotent')
-                if idempotent_override is not None:
-                    is_idempotent = bool(idempotent_override)
-                else:
-                    is_idempotent = not (stream_mode.startswith('client') or stream_mode.startswith('bidi') or stream_mode.startswith('bi'))
-
-                # Retryable gRPC status codes
-                retryable = {
-                    grpc.StatusCode.UNAVAILABLE,
-                    grpc.StatusCode.DEADLINE_EXCEEDED,
-                    grpc.StatusCode.RESOURCE_EXHAUSTED,
-                    grpc.StatusCode.ABORTED,
-                }
-
-                last_exc = None
-                retries_made = 0
-                final_code_name = 'OK'
-                got_response = False
+            except Exception as e:
+                logger.error(f'{request_id} | Unexpected error in message type resolution: {type(e).__name__}: {str(e)}')
+                return GatewayService.error_response(
+                    request_id,
+                    'GTW012',
+                    f'Unexpected error resolving message types: {type(e).__name__}',
+                    status=500
+                )
+            for key, value in body['message'].items():
                 try:
-                    logger.info(f"{request_id} | gRPC entering attempts={attempts} stream_mode={stream_mode or 'unary'} method={service_name}.{method_name}")
+                    setattr(request_message, key, value)
                 except Exception:
                     pass
-                for attempt in range(attempts):
+            # Retry policy configuration
+            attempts = max(1, int(retry) + 1)
+            env_max_retries = 0
+            try:
+                env_max_retries = int(os.getenv('GRPC_MAX_RETRIES', '0'))
+            except Exception:
+                env_max_retries = 0
+            attempts = max(attempts, env_max_retries + 1)
+
+            base_ms = 0
+            max_ms = 0
+            jitter = 0.5
+            try:
+                base_ms = int(os.getenv('GRPC_RETRY_BASE_MS', '100'))
+                max_ms = int(os.getenv('GRPC_RETRY_MAX_MS', '1000'))
+            except Exception:
+                base_ms, max_ms = 100, 1000
+
+            # Determine idempotency: default true for unary/server-stream, false for client/bidi unless overridden
+            stream_mode = str((body.get('stream') or body.get('streaming') or '')).lower()
+            idempotent_override = body.get('idempotent')
+            if idempotent_override is not None:
+                is_idempotent = bool(idempotent_override)
+            else:
+                is_idempotent = not (stream_mode.startswith('client') or stream_mode.startswith('bidi') or stream_mode.startswith('bi'))
+
+            # Retryable gRPC status codes
+            retryable = {
+                grpc.StatusCode.UNAVAILABLE,
+                grpc.StatusCode.DEADLINE_EXCEEDED,
+                grpc.StatusCode.RESOURCE_EXHAUSTED,
+                grpc.StatusCode.ABORTED,
+            }
+
+            last_exc = None
+            retries_made = 0
+            final_code_name = 'OK'
+            got_response = False
+            try:
+                logger.info(f"{request_id} | gRPC entering attempts={attempts} stream_mode={stream_mode or 'unary'} method={service_name}.{method_name}")
+            except Exception:
+                pass
+            for attempt in range(attempts):
+                try:
+                    # Prefer direct unary call via channel for better error mapping
+                    full_method = f'/{module_base}.{service_name}/{method_name}'
                     try:
-                        # Prefer direct unary call via channel for better error mapping
-                        full_method = f'/{module_base}.{service_name}/{method_name}'
-                        req_ser = getattr(request_message, 'SerializeToString', None)
-                        if not callable(req_ser):
-                            req_ser = (lambda _m: b'')
-                        # Choose streaming or unary based on request body hint (computed above)
-                        # Sanitize HTTP headers for gRPC metadata compatibility
-                        metadata_list = GatewayService._sanitize_grpc_metadata(headers or {})
-                        if stream_mode.startswith('server'):
-                            call = channel.unary_stream(
+                        logger.info(f"{request_id} | gRPC attempt={attempt+1}/{attempts} calling {full_method}")
+                    except Exception:
+                        pass
+                    req_ser = getattr(request_message, 'SerializeToString', None)
+                    if not callable(req_ser):
+                        req_ser = (lambda _m: b'')
+                    # Choose streaming or unary based on request body hint (computed above)
+                    # Sanitize HTTP headers for gRPC metadata compatibility
+                    metadata_list = GatewayService._sanitize_grpc_metadata(headers or {})
+                    if stream_mode.startswith('server'):
+                        call = channel.unary_stream(
+                            full_method,
+                            request_serializer=req_ser,
+                            response_deserializer=reply_class.FromString,
+                        )
+                        items = []
+                        max_items = int(body.get('max_items') or 50)
+                        async for msg in call(request_message, metadata=metadata_list):
+                            d = {}
+                            try:
+                                for field in msg.DESCRIPTOR.fields:
+                                    d[field.name] = getattr(msg, field.name)
+                            except Exception:
+                                pass
+                            items.append(d)
+                            if len(items) >= max_items:
+                                break
+                        response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                        got_response = True
+                    elif stream_mode.startswith('client'):
+                        # Client-streaming: send a stream of request messages, get single reply
+                        try:
+                            stream = channel.stream_unary(
                                 full_method,
                                 request_serializer=req_ser,
                                 response_deserializer=reply_class.FromString,
                             )
-                            items = []
-                            max_items = int(body.get('max_items') or 50)
-                            async for msg in call(request_message, metadata=metadata_list):
-                                d = {}
+                        except AttributeError:
+                            stream = None
+                        async def _gen_client():
+                            msgs = body.get('messages') or []
+                            if not msgs:
+                                yield request_message
+                                return
+                            for itm in msgs:
                                 try:
-                                    for field in msg.DESCRIPTOR.fields:
-                                        d[field.name] = getattr(msg, field.name)
+                                    msg = request_class()
+                                    if isinstance(itm, dict):
+                                        for k, v in itm.items():
+                                            try:
+                                                setattr(msg, k, v)
+                                            except Exception:
+                                                pass
+                                    else:
+                                        # Fallback to base request_message
+                                        msg = request_message
+                                    yield msg
                                 except Exception:
-                                    pass
-                                items.append(d)
-                                if len(items) >= max_items:
-                                    break
-                            response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
-                        elif stream_mode.startswith('client'):
-                            # Client-streaming: send a stream of request messages, get single reply
-                            try:
-                                stream = channel.stream_unary(
-                                    full_method,
-                                    request_serializer=req_ser,
-                                    response_deserializer=reply_class.FromString,
-                                )
-                            except AttributeError:
-                                stream = None
-                            async def _gen_client():
-                                msgs = body.get('messages') or []
-                                if not msgs:
                                     yield request_message
-                                    return
-                                for itm in msgs:
-                                    try:
-                                        msg = request_class()
-                                        if isinstance(itm, dict):
-                                            for k, v in itm.items():
-                                                try:
-                                                    setattr(msg, k, v)
-                                                except Exception:
-                                                    pass
-                                        else:
-                                            # Fallback to base request_message
-                                            msg = request_message
-                                        yield msg
-                                    except Exception:
-                                        yield request_message
-                            if stream is not None:
-                                try:
-                                    response = await stream(_gen_client(), metadata=metadata_list)
-                                except TypeError:
-                                    response = await stream(_gen_client())
-                            else:
-                                unary = channel.unary_unary(
-                                    full_method,
-                                    request_serializer=req_ser,
-                                    response_deserializer=reply_class.FromString,
-                                )
-                                try:
-                                    response = await unary(request_message, metadata=metadata_list)
-                                except TypeError:
-                                    response = await unary(request_message)
-                                got_response = True
-                        elif stream_mode.startswith('bidi') or stream_mode.startswith('bi'):
-                            # Bi-directional streaming: send stream, collect responses up to max_items
+                        if stream is not None:
                             try:
-                                bidi = channel.stream_stream(
-                                    full_method,
-                                    request_serializer=req_ser,
-                                    response_deserializer=reply_class.FromString,
-                                )
-                            except AttributeError:
-                                bidi = None
-                            async def _gen_bidi():
-                                msgs = body.get('messages') or []
-                                if not msgs:
-                                    yield request_message
-                                    return
-                                for itm in msgs:
-                                    try:
-                                        msg = request_class()
-                                        if isinstance(itm, dict):
-                                            for k, v in itm.items():
-                                                try:
-                                                    setattr(msg, k, v)
-                                                except Exception:
-                                                    pass
-                                        else:
-                                            msg = request_message
-                                        yield msg
-                                    except Exception:
-                                        yield request_message
-                            items = []
-                            max_items = int(body.get('max_items') or 50)
-                            if bidi is not None:
-                                try:
-                                    async for msg in bidi(_gen_bidi(), metadata=metadata_list):
-                                        d = {}
-                                        try:
-                                            for field in msg.DESCRIPTOR.fields:
-                                                d[field.name] = getattr(msg, field.name)
-                                        except Exception:
-                                            pass
-                                        items.append(d)
-                                        if len(items) >= max_items:
-                                            break
-                                except TypeError:
-                                    async for msg in bidi(_gen_bidi()):
-                                        d = {}
-                                        try:
-                                            for field in msg.DESCRIPTOR.fields:
-                                                d[field.name] = getattr(msg, field.name)
-                                        except Exception:
-                                            pass
-                                        items.append(d)
-                                        if len(items) >= max_items:
-                                            break
-                            response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                                response = await stream(_gen_client(), metadata=metadata_list)
+                            except TypeError:
+                                response = await stream(_gen_client())
+                            got_response = True
                         else:
                             unary = channel.unary_unary(
                                 full_method,
@@ -1713,45 +1708,41 @@ class GatewayService:
                                 response = await unary(request_message, metadata=metadata_list)
                             except TypeError:
                                 response = await unary(request_message)
-                        last_exc = None
+                            got_response = True
+                    elif stream_mode.startswith('bidi') or stream_mode.startswith('bi'):
+                        # Bi-directional streaming: send stream, collect responses up to max_items
                         try:
-                            logger.info(f"{request_id} | gRPC unary success; stream_mode={stream_mode or 'unary'}")
-                        except Exception:
-                            pass
-                        break
-                    except Exception as e2:
-                        last_exc = e2
-                        try:
-                            code = getattr(e2, 'code', lambda: None)()
-                            cname = str(getattr(code, 'name', '') or 'UNKNOWN')
-                            logger.info(f"{request_id} | gRPC primary call raised: {cname}")
-                        except Exception:
-                            logger.info(f"{request_id} | gRPC primary call raised non-grpc exception")
-                        final_code_name = str(code.name) if getattr(code, 'name', None) else 'ERROR'
-                        # Backoff/retry only if idempotent and code is retryable and attempts remain
-                        if attempt < attempts - 1 and is_idempotent and code in retryable:
-                            retries_made += 1
-                            # Exponential backoff with jitter
-                            delay = min(max_ms, base_ms * (2 ** attempt)) / 1000.0
-                            jitter_factor = 1.0 + (random.random() * jitter - (jitter / 2.0))
-                            await asyncio.sleep(max(0.01, delay * jitter_factor))
-                            continue
-                        # Try alternative method path without package prefix
-                        try:
-                            alt_method = f'/{service_name}/{method_name}'
-                            req_ser = getattr(request_message, 'SerializeToString', None)
-                            if not callable(req_ser):
-                                req_ser = (lambda _m: b'')
-                            # reuse computed stream_mode
-                            if stream_mode.startswith('server'):
-                                call2 = channel.unary_stream(
-                                    alt_method,
-                                    request_serializer=req_ser,
-                                    response_deserializer=reply_class.FromString,
-                                )
-                                items = []
-                                max_items = int(body.get('max_items') or 50)
-                                async for msg in call2(request_message, metadata=metadata_list):
+                            bidi = channel.stream_stream(
+                                full_method,
+                                request_serializer=req_ser,
+                                response_deserializer=reply_class.FromString,
+                            )
+                        except AttributeError:
+                            bidi = None
+                        async def _gen_bidi():
+                            msgs = body.get('messages') or []
+                            if not msgs:
+                                yield request_message
+                                return
+                            for itm in msgs:
+                                try:
+                                    msg = request_class()
+                                    if isinstance(itm, dict):
+                                        for k, v in itm.items():
+                                            try:
+                                                setattr(msg, k, v)
+                                            except Exception:
+                                                pass
+                                    else:
+                                        msg = request_message
+                                    yield msg
+                                except Exception:
+                                    yield request_message
+                        items = []
+                        max_items = int(body.get('max_items') or 50)
+                        if bidi is not None:
+                            try:
+                                async for msg in bidi(_gen_bidi(), metadata=metadata_list):
                                     d = {}
                                     try:
                                         for field in msg.DESCRIPTOR.fields:
@@ -1761,105 +1752,114 @@ class GatewayService:
                                     items.append(d)
                                     if len(items) >= max_items:
                                         break
-                                response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
-                            elif stream_mode.startswith('client'):
+                            except TypeError:
+                                async for msg in bidi(_gen_bidi()):
+                                    d = {}
+                                    try:
+                                        for field in msg.DESCRIPTOR.fields:
+                                            d[field.name] = getattr(msg, field.name)
+                                    except Exception:
+                                        pass
+                                    items.append(d)
+                                    if len(items) >= max_items:
+                                        break
+                        response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                        got_response = True
+                    else:
+                        unary = channel.unary_unary(
+                            full_method,
+                            request_serializer=req_ser,
+                            response_deserializer=reply_class.FromString,
+                        )
+                        try:
+                            response = await unary(request_message, metadata=metadata_list)
+                        except TypeError:
+                            response = await unary(request_message)
+                        got_response = True
+                    last_exc = None
+                    try:
+                        logger.info(f"{request_id} | gRPC unary success; stream_mode={stream_mode or 'unary'}")
+                    except Exception:
+                        pass
+                    break
+                except Exception as e2:
+                    last_exc = e2
+                    try:
+                        code = getattr(e2, 'code', lambda: None)()
+                        cname = str(getattr(code, 'name', '') or 'UNKNOWN')
+                        logger.info(f"{request_id} | gRPC primary call raised: {cname}")
+                    except Exception:
+                        logger.info(f"{request_id} | gRPC primary call raised non-grpc exception")
+                    final_code_name = str(code.name) if getattr(code, 'name', None) else 'ERROR'
+                    # Backoff/retry only if idempotent and code is retryable and attempts remain
+                    if attempt < attempts - 1 and is_idempotent and code in retryable:
+                        retries_made += 1
+                        # Exponential backoff with jitter
+                        delay = min(max_ms, base_ms * (2 ** attempt)) / 1000.0
+                        jitter_factor = 1.0 + (random.random() * jitter - (jitter / 2.0))
+                        await asyncio.sleep(max(0.01, delay * jitter_factor))
+                        continue
+                    # Try alternative method path without package prefix
+                    try:
+                        alt_method = f'/{service_name}/{method_name}'
+                        req_ser = getattr(request_message, 'SerializeToString', None)
+                        if not callable(req_ser):
+                            req_ser = (lambda _m: b'')
+                        # reuse computed stream_mode
+                        if stream_mode.startswith('server'):
+                            call2 = channel.unary_stream(
+                                alt_method,
+                                request_serializer=req_ser,
+                                response_deserializer=reply_class.FromString,
+                            )
+                            items = []
+                            max_items = int(body.get('max_items') or 50)
+                            async for msg in call2(request_message, metadata=metadata_list):
+                                d = {}
                                 try:
-                                    stream2 = channel.stream_unary(
-                                        alt_method,
-                                        request_serializer=req_ser,
-                                        response_deserializer=reply_class.FromString,
-                                    )
-                                except AttributeError:
-                                    stream2 = None
-                                async def _gen_client_alt():
-                                    msgs = body.get('messages') or []
-                                    if not msgs:
+                                    for field in msg.DESCRIPTOR.fields:
+                                        d[field.name] = getattr(msg, field.name)
+                                except Exception:
+                                    pass
+                                items.append(d)
+                                if len(items) >= max_items:
+                                    break
+                            response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                            got_response = True
+                        elif stream_mode.startswith('client'):
+                            try:
+                                stream2 = channel.stream_unary(
+                                    alt_method,
+                                    request_serializer=req_ser,
+                                    response_deserializer=reply_class.FromString,
+                                )
+                            except AttributeError:
+                                stream2 = None
+                            async def _gen_client_alt():
+                                msgs = body.get('messages') or []
+                                if not msgs:
+                                    yield request_message
+                                    return
+                                for itm in msgs:
+                                    try:
+                                        msg = request_class()
+                                        if isinstance(itm, dict):
+                                            for k, v in itm.items():
+                                                try:
+                                                    setattr(msg, k, v)
+                                                except Exception:
+                                                    pass
+                                        else:
+                                            msg = request_message
+                                        yield msg
+                                    except Exception:
                                         yield request_message
-                                        return
-                                    for itm in msgs:
-                                        try:
-                                            msg = request_class()
-                                            if isinstance(itm, dict):
-                                                for k, v in itm.items():
-                                                    try:
-                                                        setattr(msg, k, v)
-                                                    except Exception:
-                                                        pass
-                                            else:
-                                                msg = request_message
-                                            yield msg
-                                        except Exception:
-                                            yield request_message
-                                if stream2 is not None:
-                                    try:
-                                        response = await stream2(_gen_client_alt(), metadata=metadata_list)
-                                    except TypeError:
-                                        response = await stream2(_gen_client_alt())
-                                else:
-                                    unary2 = channel.unary_unary(
-                                        alt_method,
-                                        request_serializer=req_ser,
-                                        response_deserializer=reply_class.FromString,
-                                    )
-                                    try:
-                                        response = await unary2(request_message, metadata=metadata_list)
-                                    except TypeError:
-                                        response = await unary2(request_message)
-                                    got_response = True
-                            elif stream_mode.startswith('bidi') or stream_mode.startswith('bi'):
+                            if stream2 is not None:
                                 try:
-                                    bidi2 = channel.stream_stream(
-                                        alt_method,
-                                        request_serializer=req_ser,
-                                        response_deserializer=reply_class.FromString,
-                                    )
-                                except AttributeError:
-                                    bidi2 = None
-                                async def _gen_bidi_alt():
-                                    msgs = body.get('messages') or []
-                                    if not msgs:
-                                        yield request_message
-                                        return
-                                    for itm in msgs:
-                                        try:
-                                            msg = request_class()
-                                            if isinstance(itm, dict):
-                                                for k, v in itm.items():
-                                                    try:
-                                                        setattr(msg, k, v)
-                                                    except Exception:
-                                                        pass
-                                            else:
-                                                msg = request_message
-                                            yield msg
-                                        except Exception:
-                                            yield request_message
-                                items = []
-                                max_items = int(body.get('max_items') or 50)
-                                if bidi2 is not None:
-                                    try:
-                                        async for msg in bidi2(_gen_bidi_alt(), metadata=metadata_list):
-                                            d = {}
-                                            try:
-                                                for field in msg.DESCRIPTOR.fields:
-                                                    d[field.name] = getattr(msg, field.name)
-                                            except Exception:
-                                                pass
-                                            items.append(d)
-                                            if len(items) >= max_items:
-                                                break
-                                    except TypeError:
-                                        async for msg in bidi2(_gen_bidi_alt()):
-                                            d = {}
-                                            try:
-                                                for field in msg.DESCRIPTOR.fields:
-                                                    d[field.name] = getattr(msg, field.name)
-                                            except Exception:
-                                                pass
-                                            items.append(d)
-                                            if len(items) >= max_items:
-                                                break
-                                response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                                    response = await stream2(_gen_client_alt(), metadata=metadata_list)
+                                except TypeError:
+                                    response = await stream2(_gen_client_alt())
+                                got_response = True
                             else:
                                 unary2 = channel.unary_unary(
                                     alt_method,
@@ -1870,136 +1870,203 @@ class GatewayService:
                                     response = await unary2(request_message, metadata=metadata_list)
                                 except TypeError:
                                     response = await unary2(request_message)
-                            last_exc = None
-                            break
-                        except Exception as e3:
-                            last_exc = e3
+                                got_response = True
+                        elif stream_mode.startswith('bidi') or stream_mode.startswith('bi'):
                             try:
-                                code3 = getattr(e3, 'code', lambda: None)()
-                                cname3 = str(getattr(code3, 'name', '') or 'UNKNOWN')
-                                logger.info(f"{request_id} | gRPC alt call raised: {cname3}")
-                            except Exception:
-                                logger.info(f"{request_id} | gRPC alt call raised non-grpc exception")
-                            final_code_name = str(code3.name) if getattr(code3, 'name', None) else 'ERROR'
-                            if attempt < attempts - 1 and is_idempotent and code3 in retryable:
-                                retries_made += 1
-                                delay = min(max_ms, base_ms * (2 ** attempt)) / 1000.0
-                                jitter_factor = 1.0 + (random.random() * jitter - (jitter / 2.0))
-                                await asyncio.sleep(max(0.01, delay * jitter_factor))
-                                continue
-                            else:
-                                # Do not mask channel errors with stub fallback; propagate
-                                break
-                if last_exc is not None:
-                    # Extract gRPC status code from exception
-                    code_name = 'UNKNOWN'
-                    code_obj = None
-                    try:
-                        code_obj = getattr(last_exc, 'code', lambda: None)()
-                        if code_obj and hasattr(code_obj, 'name'):
-                            code_name = str(code_obj.name).upper()
-                            logger.info(f"{request_id} | gRPC call failed with status: {code_name}")
+                                bidi2 = channel.stream_stream(
+                                    alt_method,
+                                    request_serializer=req_ser,
+                                    response_deserializer=reply_class.FromString,
+                                )
+                            except AttributeError:
+                                bidi2 = None
+                            async def _gen_bidi_alt():
+                                msgs = body.get('messages') or []
+                                if not msgs:
+                                    yield request_message
+                                    return
+                                for itm in msgs:
+                                    try:
+                                        msg = request_class()
+                                        if isinstance(itm, dict):
+                                            for k, v in itm.items():
+                                                try:
+                                                    setattr(msg, k, v)
+                                                except Exception:
+                                                    pass
+                                        else:
+                                            msg = request_message
+                                        yield msg
+                                    except Exception:
+                                        yield request_message
+                            items = []
+                            max_items = int(body.get('max_items') or 50)
+                            if bidi2 is not None:
+                                try:
+                                    async for msg in bidi2(_gen_bidi_alt(), metadata=metadata_list):
+                                        d = {}
+                                        try:
+                                            for field in msg.DESCRIPTOR.fields:
+                                                d[field.name] = getattr(msg, field.name)
+                                        except Exception:
+                                            pass
+                                        items.append(d)
+                                        if len(items) >= max_items:
+                                            break
+                                except TypeError:
+                                    async for msg in bidi2(_gen_bidi_alt()):
+                                        d = {}
+                                        try:
+                                            for field in msg.DESCRIPTOR.fields:
+                                                d[field.name] = getattr(msg, field.name)
+                                        except Exception:
+                                            pass
+                                        items.append(d)
+                                        if len(items) >= max_items:
+                                            break
+                            response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
+                            got_response = True
                         else:
-                            logger.warning(f"{request_id} | gRPC exception has no valid status code")
-                    except Exception as code_extract_err:
-                        logger.warning(f"{request_id} | Failed to extract gRPC status code: {str(code_extract_err)}")
-
-                    # Comprehensive gRPC status code to HTTP status code mapping
-                    # Based on: https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
-                    status_map = {
-                        'OK': 200,                      # Success
-                        'CANCELLED': 499,               # Client Closed Request
-                        'UNKNOWN': 500,                 # Internal Server Error
-                        'INVALID_ARGUMENT': 400,        # Bad Request
-                        'DEADLINE_EXCEEDED': 504,       # Gateway Timeout
-                        'NOT_FOUND': 404,               # Not Found
-                        'ALREADY_EXISTS': 409,          # Conflict
-                        'PERMISSION_DENIED': 403,       # Forbidden
-                        'RESOURCE_EXHAUSTED': 429,      # Too Many Requests
-                        'FAILED_PRECONDITION': 412,     # Precondition Failed
-                        'ABORTED': 409,                 # Conflict
-                        'OUT_OF_RANGE': 400,            # Bad Request
-                        'UNIMPLEMENTED': 501,           # Not Implemented
-                        'INTERNAL': 500,                # Internal Server Error
-                        'UNAVAILABLE': 503,             # Service Unavailable
-                        'DATA_LOSS': 500,               # Internal Server Error
-                        'UNAUTHENTICATED': 401,         # Unauthorized
-                    }
-
-                    http_status = status_map.get(code_name, 500)
-
-                    # Extract error details from exception
-                    details = 'gRPC call failed'
-                    try:
-                        details_fn = getattr(last_exc, 'details', None)
-                        if callable(details_fn):
-                            extracted_details = details_fn()
-                            if extracted_details:
-                                details = str(extracted_details)
-                        elif details_fn:
-                            details = str(details_fn)
-                    except Exception:
-                        details = f'gRPC error: {code_name}'
-
-                    logger.error(
-                        f"{request_id} | gRPC call failed after {retries_made} retries. "
-                        f"Status: {code_name}, HTTP: {http_status}, Details: {details[:100]}"
-                    )
-
-                    response_headers = {
-                        'request_id': request_id,
-                        'X-Retry-Count': str(retries_made),
-                        'X-GRPC-Status': code_name,
-                        'X-GRPC-Code': str(code_obj.value[0]) if code_obj and hasattr(code_obj, 'value') else 'unknown'
-                    }
-
-                    return ResponseModel(
-                        status_code=http_status,
-                        response_headers=response_headers,
-                        error_code='GTW006',
-                        error_message=str(details)[:255]
-                    ).dict()
-                # If we somehow reach here without a response and no exception, log and fail predictably
-                if not got_response and last_exc is None:
-                    try:
-                        logger.error(f"{request_id} | gRPC loop ended with no response and no exception; returning 500 UNKNOWN")
-                    except Exception:
-                        pass
-                    return ResponseModel(
-                        status_code=500,
-                        response_headers={'request_id': request_id, 'X-Retry-Count': str(retries_made), 'X-Retry-Final': 'UNKNOWN'},
-                        error_code='GTW006',
-                        error_message='gRPC call failed'
-                    ).dict()
-
-                response_dict = {}
-                if hasattr(response, '_items'):
-                    response_dict['items'] = list(response._items)
-                else:
-                    for field in response.DESCRIPTOR.fields:
-                        value = getattr(response, field.name)
-                        if hasattr(value, 'DESCRIPTOR'):
-                            response_dict[field.name] = MessageToDict(value)
+                            unary2 = channel.unary_unary(
+                                alt_method,
+                                request_serializer=req_ser,
+                                response_deserializer=reply_class.FromString,
+                            )
+                            try:
+                                response = await unary2(request_message, metadata=metadata_list)
+                            except TypeError:
+                                response = await unary2(request_message)
+                            got_response = True
+                        last_exc = None
+                        break
+                    except Exception as e3:
+                        last_exc = e3
+                        try:
+                            code3 = getattr(e3, 'code', lambda: None)()
+                            cname3 = str(getattr(code3, 'name', '') or 'UNKNOWN')
+                            logger.info(f"{request_id} | gRPC alt call raised: {cname3}")
+                        except Exception:
+                            logger.info(f"{request_id} | gRPC alt call raised non-grpc exception")
+                        final_code_name = str(code3.name) if getattr(code3, 'name', None) else 'ERROR'
+                        if attempt < attempts - 1 and is_idempotent and code3 in retryable:
+                            retries_made += 1
+                            delay = min(max_ms, base_ms * (2 ** attempt)) / 1000.0
+                            jitter_factor = 1.0 + (random.random() * jitter - (jitter / 2.0))
+                            await asyncio.sleep(max(0.01, delay * jitter_factor))
+                            continue
                         else:
-                            response_dict[field.name] = value
-                backend_end_time = time.time() * 1000
-                response_headers = {'request_id': request_id, 'X-Retry-Count': str(retries_made), 'X-Retry-Final': final_code_name}
+                            # Do not mask channel errors with stub fallback; propagate
+                            break
+            if last_exc is not None:
+                # Extract gRPC status code from exception
+                code_name = 'UNKNOWN'
+                code_obj = None
                 try:
-                    if current_time and start_time:
-                        response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
-                    if backend_end_time and current_time:
-                        response_headers['X-Backend-Time'] = str(int(backend_end_time - current_time))
+                    code_obj = getattr(last_exc, 'code', lambda: None)()
+                    if code_obj and hasattr(code_obj, 'name'):
+                        code_name = str(code_obj.name).upper()
+                        logger.info(f"{request_id} | gRPC call failed with status: {code_name}")
+                    else:
+                        logger.warning(f"{request_id} | gRPC exception has no valid status code")
+                except Exception as code_extract_err:
+                    logger.warning(f"{request_id} | Failed to extract gRPC status code: {str(code_extract_err)}")
+
+                # Comprehensive gRPC status code to HTTP status code mapping
+                # Based on: https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+                status_map = {
+                    'OK': 200,                      # Success
+                    'CANCELLED': 499,               # Client Closed Request
+                    'UNKNOWN': 500,                 # Internal Server Error
+                    'INVALID_ARGUMENT': 400,        # Bad Request
+                    'DEADLINE_EXCEEDED': 504,       # Gateway Timeout
+                    'NOT_FOUND': 404,               # Not Found
+                    'ALREADY_EXISTS': 409,          # Conflict
+                    'PERMISSION_DENIED': 403,       # Forbidden
+                    'RESOURCE_EXHAUSTED': 429,      # Too Many Requests
+                    'FAILED_PRECONDITION': 412,     # Precondition Failed
+                    'ABORTED': 409,                 # Conflict
+                    'OUT_OF_RANGE': 400,            # Bad Request
+                    'UNIMPLEMENTED': 501,           # Not Implemented
+                    'INTERNAL': 500,                # Internal Server Error
+                    'UNAVAILABLE': 503,             # Service Unavailable
+                    'DATA_LOSS': 500,               # Internal Server Error
+                    'UNAUTHENTICATED': 401,         # Unauthorized
+                }
+
+                http_status = status_map.get(code_name, 500)
+
+                # Extract error details from exception
+                details = 'gRPC call failed'
+                try:
+                    details_fn = getattr(last_exc, 'details', None)
+                    if callable(details_fn):
+                        extracted_details = details_fn()
+                        if extracted_details:
+                            details = str(extracted_details)
+                    elif details_fn:
+                        details = str(details_fn)
                 except Exception:
-                    pass
+                    details = f'gRPC error: {code_name}'
+
+                logger.error(
+                    f"{request_id} | gRPC call failed after {retries_made} retries. "
+                    f"Status: {code_name}, HTTP: {http_status}, Details: {details[:100]}"
+                )
+
+                response_headers = {
+                    'request_id': request_id,
+                    'X-Retry-Count': str(retries_made),
+                    'X-GRPC-Status': code_name,
+                    'X-GRPC-Code': str(code_obj.value[0]) if code_obj and hasattr(code_obj, 'value') else 'unknown'
+                }
+
+                return ResponseModel(
+                    status_code=http_status,
+                    response_headers=response_headers,
+                    error_code='GTW006',
+                    error_message=str(details)[:255]
+                ).dict()
+            # If we somehow reach here without a response and no exception, log and fail predictably
+            if not got_response and last_exc is None:
                 try:
-                    logger.info(f"{request_id} | gRPC return 200 with items={bool(response_dict.get('items'))}")
+                    logger.error(f"{request_id} | gRPC loop ended with no response and no exception; returning 500 UNKNOWN")
                 except Exception:
                     pass
                 return ResponseModel(
-                    status_code=200,
-                    response_headers=response_headers,
-                    response=response_dict
+                    status_code=500,
+                    response_headers={'request_id': request_id, 'X-Retry-Count': str(retries_made), 'X-Retry-Final': 'UNKNOWN'},
+                    error_code='GTW006',
+                    error_message='gRPC call failed'
                 ).dict()
+
+            response_dict = {}
+            if hasattr(response, '_items'):
+                response_dict['items'] = list(response._items)
+            else:
+                for field in response.DESCRIPTOR.fields:
+                    value = getattr(response, field.name)
+                    if hasattr(value, 'DESCRIPTOR'):
+                        response_dict[field.name] = MessageToDict(value)
+                    else:
+                        response_dict[field.name] = value
+            backend_end_time = time.time() * 1000
+            response_headers = {'request_id': request_id, 'X-Retry-Count': str(retries_made), 'X-Retry-Final': final_code_name}
+            try:
+                if current_time and start_time:
+                    response_headers['X-Gateway-Time'] = str(int(current_time - start_time))
+                if backend_end_time and current_time:
+                    response_headers['X-Backend-Time'] = str(int(backend_end_time - current_time))
+            except Exception:
+                pass
+            try:
+                logger.info(f"{request_id} | gRPC return 200 with items={bool(response_dict.get('items'))}")
+            except Exception:
+                pass
+            return ResponseModel(
+                status_code=200,
+                response_headers=response_headers,
+                response=response_dict
+            ).dict()
         except httpx.TimeoutException:
             return ResponseModel(
                 status_code=504,
