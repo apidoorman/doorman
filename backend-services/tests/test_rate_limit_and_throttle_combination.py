@@ -35,18 +35,27 @@ async def test_throttle_queue_limit_exceeded_returns_429(monkeypatch, authed_cli
     await create_endpoint(authed_client, name, ver, 'GET', '/t')
     await subscribe_self(authed_client, name, ver)
 
-    # Reduce queue limit to 1 so the second concurrent request in window trips 429
+    # Configure throttle: 1 request per second, queue limit 1
     from utils.database import user_collection
-    user_collection.update_one({'username': 'admin'}, {'$set': {'throttle_queue_limit': 1}})
+    user_collection.update_one({'username': 'admin'}, {'$set': {'throttle_duration': 1, 'throttle_queue_limit': 1}})
     await authed_client.delete('/api/caches')
+    # Reset counters and wait for new window (must wait past 300ms grace period)
+    from utils.limit_throttle_util import reset_counters
+    reset_counters()
+    now_ms = int(time.time() * 1000)
+    wait_ms = 1000 - (now_ms % 1000) + 350  # Wait 350ms into new window (past 300ms grace)
+    time.sleep(wait_ms / 1000.0)
 
     import services.gateway_service as gs
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
 
+    # Make first request - should succeed
     r1 = await authed_client.get(f'/api/rest/{name}/{ver}/t')
+    assert r1.status_code == 200, f"First request failed with {r1.status_code}"
+
+    # Make second request immediately - should hit queue limit
     r2 = await authed_client.get(f'/api/rest/{name}/{ver}/t')
-    assert r1.status_code == 200
-    assert r2.status_code == 429
+    assert r2.status_code == 429, f"Second request should have been throttled but got {r2.status_code}"
 
 
 @pytest.mark.asyncio
@@ -66,6 +75,12 @@ async def test_throttle_dynamic_wait_increases_latency(monkeypatch, authed_clien
         'rate_limit_duration': 1000, 'rate_limit_duration_type': 'second'
     }})
     await authed_client.delete('/api/caches')
+    # Reset counters and wait past grace period (350ms into new window)
+    from utils.limit_throttle_util import reset_counters
+    reset_counters()
+    now_ms = int(time.time() * 1000)
+    wait_ms = 1000 - (now_ms % 1000) + 350  # Wait 350ms into new window (past 300ms grace)
+    time.sleep(wait_ms / 1000.0)
 
     import services.gateway_service as gs
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)

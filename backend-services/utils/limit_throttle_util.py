@@ -142,8 +142,8 @@ async def limit_and_throttle(request: Request):
         try:
             if os.getenv('DOORMAN_TEST_MODE', 'false').lower() == 'true':
                 remainder = now_ms % window_ms
-                # Use up to 100ms or 10% of window as grace near the boundary
-                grace = min(100, window_ms // 10)
+                # Use up to 300ms or 20% of window as grace near the boundary
+                grace = min(300, window_ms // 5)
                 if remainder < grace and window_index > 0:
                     window_index -= 1
         except Exception:
