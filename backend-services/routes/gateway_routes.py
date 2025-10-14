@@ -204,7 +204,7 @@ Response:
     response_model=ResponseModel,
     include_in_schema=False)
 async def gateway(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
 
@@ -396,7 +396,7 @@ Response:
     response_model=ResponseModel)
 
 async def soap_gateway(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         parts = [p for p in (path or '').split('/') if p]
@@ -523,7 +523,8 @@ Response:
     response_model=ResponseModel)
 
 async def graphql_gateway(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    # Reuse Request ID from middleware if present, else accept inbound header, else generate
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         if not request.headers.get('X-API-Version'):
@@ -613,7 +614,7 @@ Response:
     description='GraphQL gateway CORS preflight', include_in_schema=False)
 
 async def graphql_preflight(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         from utils import api_util as _api_util
@@ -663,7 +664,7 @@ Response:
     response_model=ResponseModel)
 
 async def grpc_gateway(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         if not request.headers.get('X-API-Version'):

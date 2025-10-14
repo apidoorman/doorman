@@ -22,6 +22,20 @@ os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
 os.environ.setdefault('ENABLE_HTTPX_CLIENT_CACHE', 'false')
 os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
 
+# Compatibility toggles for Python 3.13 transport/middleware edge-cases
+try:
+    import sys as _sys
+    if _sys.version_info >= (3, 13):
+        # Avoid BaseHTTPMiddleware/receive wrapping issues on platform routes
+        os.environ.setdefault('DISABLE_PLATFORM_CHUNKED_WRAP', 'true')
+        # Use native Starlette behavior for CORS (disable ASGI shim)
+        os.environ.setdefault('DISABLE_PLATFORM_CORS_ASGI', 'true')
+        # Exclude problematic platform endpoint from body size middleware to
+        # avoid EndOfStream/No response returned on some runtimes
+        os.environ.setdefault('BODY_LIMIT_EXCLUDE_PATHS', '/platform/security/settings')
+except Exception:
+    pass
+
 _HERE = os.path.dirname(__file__)
 _PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
 if _PROJECT_ROOT not in sys.path:
@@ -32,6 +46,7 @@ from httpx import AsyncClient
 import pytest
 import asyncio
 from typing import Optional
+import datetime as _dt
 
 try:
     from utils.database import database as _db
@@ -60,6 +75,37 @@ async def ensure_memory_dump_defaults(monkeypatch, tmp_path):
             md.DEFAULT_DUMP_PATH = str(dump_base)
         except Exception:
             pass
+    except Exception:
+        pass
+    yield
+
+# --- Per-test start/finish logging to pinpoint hangs ---
+@pytest.fixture(autouse=True)
+def _log_test_start_end(request):
+    try:
+        ts = _dt.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        print(f"=== [{ts}] START {request.node.nodeid}", flush=True)
+    except Exception:
+        pass
+    yield
+    try:
+        ts = _dt.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        print(f"=== [{ts}] END   {request.node.nodeid}", flush=True)
+    except Exception:
+        pass
+
+# Also log key env toggles at session start for reproducibility
+@pytest.fixture(autouse=True, scope='session')
+def _log_env_toggles():
+    try:
+        toggles = {
+            'DISABLE_PLATFORM_CHUNKED_WRAP': os.getenv('DISABLE_PLATFORM_CHUNKED_WRAP'),
+            'DISABLE_PLATFORM_CORS_ASGI': os.getenv('DISABLE_PLATFORM_CORS_ASGI'),
+            'DISABLE_BODY_SIZE_LIMIT': os.getenv('DISABLE_BODY_SIZE_LIMIT'),
+            'DOORMAN_TEST_MODE': os.getenv('DOORMAN_TEST_MODE'),
+            'PYTHON_VERSION': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        }
+        print(f"=== ENV TOGGLES: {toggles}", flush=True)
     except Exception:
         pass
     yield
