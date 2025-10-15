@@ -4,24 +4,26 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from typing import Dict, Any, Optional, Callable
 from fastapi import HTTPException
 import json
 import re
 from datetime import datetime
 import uuid
-import xml.etree.ElementTree as ET
+try:
+    from defusedxml import ElementTree as ET
+    _DEFUSED = True
+except Exception:
+    import xml.etree.ElementTree as ET
+    _DEFUSED = False
 from graphql import parse, GraphQLError
 import grpc
-from zeep import Client, Settings
-from zeep.exceptions import Fault, ValidationError as ZeepValidationError
 
-# Internal imports
 from models.field_validation_model import FieldValidation
 from models.validation_schema_model import ValidationSchema
 from utils.doorman_cache_util import doorman_cache
-from utils.database import endpoint_validation_collection
+from utils.database_async import endpoint_validation_collection
+from utils.async_db import db_find_one
 
 class ValidationError(Exception):
     def __init__(self, message: str, field_path: str):
@@ -46,7 +48,14 @@ class ValidationUtil:
             'uuid': self._validate_uuid
         }
         self.custom_validators: Dict[str, Callable] = {}
-        self.wsdl_clients: Dict[str, Client] = {}
+        # When defusedxml is unavailable, apply a basic pre-parse guard against DOCTYPE/ENTITY.
+
+    def _reject_unsafe_xml(self, xml_text: str) -> None:
+        if _DEFUSED:
+            return
+        lowered = xml_text.lower()
+        if '<!doctype' in lowered or '<!entity' in lowered:
+            raise HTTPException(status_code=400, detail='XML DTD/entities are not allowed')
 
     def register_custom_validator(self, name: str, validator: Callable[[Any, FieldValidation], None]) -> None:
         self.custom_validators[name] = validator
@@ -61,7 +70,7 @@ class ValidationUtil:
         """
         validation_doc = doorman_cache.get_cache('endpoint_validation_cache', endpoint_id)
         if not validation_doc:
-            validation_doc = endpoint_validation_collection.find_one({'endpoint_id': endpoint_id})
+            validation_doc = await db_find_one(endpoint_validation_collection, {'endpoint_id': endpoint_id})
             if validation_doc:
                 try:
                     vdoc = dict(validation_doc)
@@ -210,18 +219,11 @@ class ValidationUtil:
         if not schema:
             return
         try:
+            self._reject_unsafe_xml(soap_envelope)
             root = ET.fromstring(soap_envelope)
             body = root.find('.//{http://schemas.xmlsoap.org/soap/envelope/}Body')
             if body is None:
                 raise ValidationError('SOAP Body not found', 'Body')
-            wsdl_client = await self._get_wsdl_client(endpoint_id)
-            if wsdl_client:
-                try:
-                    operation = self._get_soap_operation(body[0].tag)
-                    if operation:
-                        wsdl_client.service.validate(operation, body[0])
-                except (Fault, ZeepValidationError) as e:
-                    raise ValidationError(f'WSDL validation failed: {str(e)}', 'Body')
             request_data = self._xml_to_dict(body[0])
             for field_path, validation in schema.validation_schema.items():
                 try:
@@ -291,7 +293,7 @@ class ValidationUtil:
             return tag.split('}', 1)[1]
         return tag
 
-    def _xml_to_dict(self, element: ET.Element) -> Dict[str, Any]:
+    def _xml_to_dict(self, element: Any) -> Dict[str, Any]:
         result = {}
         for child in element:
             key = self._strip_ns(child.tag)
@@ -313,15 +315,5 @@ class ValidationUtil:
             else:
                 result[field.name] = value
         return result
-
-    async def _get_wsdl_client(self, endpoint_id: str) -> Optional[Client]:
-        if endpoint_id in self.wsdl_clients:
-            return self.wsdl_clients[endpoint_id]
-
-        return None
-
-    def _get_soap_operation(self, element_tag: str) -> Optional[str]:
-        match = re.search(r'\{[^}]+\}([^}]+)$', element_tag)
-        return match.group(1) if match else None
 
 validation_util = ValidationUtil()

@@ -1,6 +1,5 @@
 import pytest
 
-
 def _make_request(path: str, headers: dict | None = None):
     from starlette.requests import Request
     hdrs = []
@@ -18,7 +17,6 @@ def _make_request(path: str, headers: dict | None = None):
     }
     return Request(scope)
 
-
 @pytest.mark.asyncio
 async def test_subscription_required_rest_path_parsing(monkeypatch):
     import utils.subscription_util as su
@@ -32,7 +30,6 @@ async def test_subscription_required_rest_path_parsing(monkeypatch):
     payload = await su.subscription_required(req)
     assert payload.get('sub') == 'alice'
 
-
 @pytest.mark.asyncio
 async def test_subscription_required_soap_path_parsing(monkeypatch):
     import utils.subscription_util as su
@@ -45,7 +42,6 @@ async def test_subscription_required_soap_path_parsing(monkeypatch):
     payload = await su.subscription_required(req)
     assert payload.get('sub') == 'alice'
 
-
 @pytest.mark.asyncio
 async def test_subscription_required_graphql_header_parsing(monkeypatch):
     import utils.subscription_util as su
@@ -54,11 +50,9 @@ async def test_subscription_required_graphql_header_parsing(monkeypatch):
     monkeypatch.setattr(su, 'auth_required', fake_auth)
     monkeypatch.setattr(su.doorman_cache, 'get_cache', lambda name, key: {'apis': ['svc3/v3']} if (name, key) == ('user_subscription_cache', 'alice') else None)
 
-    # GraphQL path uses last segment as api name and X-API-Version for version
     req = _make_request('/api/graphql/svc3', headers={'X-API-Version': 'v3'})
     payload = await su.subscription_required(req)
     assert payload.get('sub') == 'alice'
-
 
 @pytest.mark.asyncio
 async def test_subscription_required_grpc_path_parsing(monkeypatch):
@@ -72,7 +66,6 @@ async def test_subscription_required_grpc_path_parsing(monkeypatch):
     payload = await su.subscription_required(req)
     assert payload.get('sub') == 'alice'
 
-
 @pytest.mark.asyncio
 async def test_subscription_required_unknown_prefix_fallback(monkeypatch):
     import utils.subscription_util as su
@@ -80,7 +73,6 @@ async def test_subscription_required_unknown_prefix_fallback(monkeypatch):
         return {'sub': 'alice'}
     monkeypatch.setenv('PYTHONASYNCIODEBUG', '0')
     monkeypatch.setattr(su, 'auth_required', fake_auth)
-    # Expect fallback to take first two segments after leading '/', i.e., svc5/v5
     monkeypatch.setattr(su.doorman_cache, 'get_cache', lambda name, key: {'apis': ['svc5/v5']} if (name, key) == ('user_subscription_cache', 'alice') else None)
 
     req = _make_request('/api/other/svc5/v5/op')

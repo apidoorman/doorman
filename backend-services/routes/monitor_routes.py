@@ -2,7 +2,6 @@
 Routes to expose gateway metrics to the web client.
 """
 
-# External imports
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 import uuid
@@ -12,7 +11,6 @@ import io
 import csv
 from fastapi.responses import Response as FastAPIResponse
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.response_util import process_response
 from utils.metrics_util import metrics_store
@@ -101,7 +99,7 @@ Response:
 @monitor_router.get('/monitor/liveness',
     description='Kubernetes liveness probe endpoint (no auth)',
     response_model=LivenessResponse)
-async def liveness():
+async def liveness(request: Request):
     return {'status': 'alive'}
 
 """
@@ -114,18 +112,38 @@ Response:
 """
 
 @monitor_router.get('/monitor/readiness',
-    description='Kubernetes readiness probe endpoint (no auth)',
+    description='Kubernetes readiness probe endpoint. Detailed status requires manage_gateway permission.',
     response_model=ReadinessResponse)
-async def readiness():
+async def readiness(request: Request):
+    """Readiness probe endpoint.
+
+    Public/unauthenticated callers:
+        Returns minimal status: {'status': 'ready' | 'degraded'}
+
+    Authorized users with 'manage_gateway':
+        Returns detailed status including mongodb, redis, mode, cache_backend
+    """
+
+    authorized = False
+    try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        authorized = await platform_role_required_bool(username, 'manage_gateway') if username else False
+    except Exception:
+        authorized = False
+
     try:
         mongo_ok = await check_mongodb()
         redis_ok = await check_redis()
         ready = mongo_ok and redis_ok
+
+        if not authorized:
+            return {'status': 'ready' if ready else 'degraded'}
+
         return {
             'status': 'ready' if ready else 'degraded',
             'mongodb': mongo_ok,
             'redis': redis_ok,
-
             'mode': 'memory' if getattr(database, 'memory_only', False) else 'mongodb',
             'cache_backend': 'redis' if getattr(doorman_cache, 'is_redis', False) else 'memory',
         }

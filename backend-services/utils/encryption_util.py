@@ -1,4 +1,3 @@
-# External imports
 from typing import Optional
 import os
 import base64

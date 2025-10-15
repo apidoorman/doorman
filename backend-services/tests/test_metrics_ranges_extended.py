@@ -1,4 +1,3 @@
-# External imports
 import pytest
 
 @pytest.mark.asyncio
@@ -21,7 +20,27 @@ async def test_metrics_range_parameters(monkeypatch, authed_client):
         def __init__(self, timeout=None, limits=None, http2=False): pass
         async def __aenter__(self): return self
         async def __aexit__(self, exc_type, exc, tb): return False
-        async def get(self, url, params=None, headers=None): return _FakeHTTPResponse()
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _FakeHTTPResponse(405)
+        async def get(self, url, params=None, headers=None, **kwargs): return _FakeHTTPResponse()
+        async def post(self, url, **kwargs): return _FakeHTTPResponse()
+        async def put(self, url, **kwargs): return _FakeHTTPResponse()
+        async def delete(self, url, **kwargs): return _FakeHTTPResponse()
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
 
     await authed_client.get(f'/api/rest/{name}/{ver}/p')

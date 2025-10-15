@@ -1,10 +1,7 @@
-# External imports
 from fastapi.responses import JSONResponse, Response
 import os
 import logging
-from fastapi.responses import Response
 
-# Internal imports
 from models.response_model import ResponseModel
 
 logger = logging.getLogger('doorman.gateway')

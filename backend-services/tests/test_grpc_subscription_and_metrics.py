@@ -1,7 +1,6 @@
 import json
 import pytest
 
-
 async def _setup_api(client, name, ver, public=False):
     payload = {
         'api_name': name,
@@ -25,29 +24,23 @@ async def _setup_api(client, name, ver, public=False):
     })
     assert r2.status_code in (200, 201)
 
-
 @pytest.mark.asyncio
 async def test_grpc_requires_subscription_when_not_public(monkeypatch, authed_client):
-    # Create non-public API and endpoint; do NOT subscribe admin
     name, ver = 'gsub', 'v1'
     await _setup_api(authed_client, name, ver, public=False)
 
-    # Call without subscription should 403 (subscription_required guard)
     r = await authed_client.post(
         f'/api/grpc/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json={'method': 'Svc.M', 'message': {}}
     )
     assert r.status_code == 403
 
-
 @pytest.mark.asyncio
 async def test_grpc_metrics_bytes_in_out(monkeypatch, authed_client):
-    # Create API and endpoint, subscribe admin
     name, ver = 'gmet', 'v1'
     await _setup_api(authed_client, name, ver, public=False)
     from conftest import subscribe_self
     await subscribe_self(authed_client, name, ver)
 
-    # Fake pb2 and grpc to return deterministic response size
     import services.gateway_service as gs
     def _imp(name):
         if name.endswith('_pb2'):
@@ -83,24 +76,21 @@ async def test_grpc_metrics_bytes_in_out(monkeypatch, authed_client):
     fake_grpc = type('G', (), {'aio': _Aio, 'StatusCode': gs.grpc.StatusCode, 'RpcError': Exception})
     monkeypatch.setattr(gs, 'grpc', fake_grpc)
 
-    # Baseline metrics
     m0 = await authed_client.get('/platform/monitor/metrics')
     j0 = m0.json().get('response') or m0.json()
     tin0 = int(j0.get('total_bytes_in', 0))
     tout0 = int(j0.get('total_bytes_out', 0))
 
-    # Prepare JSON body and explicit Content-Length header
     body_obj = {'method': 'Svc.M', 'message': {}}
     raw = json.dumps(body_obj)
     headers = {'Content-Type': 'application/json', 'X-API-Version': ver, 'Content-Length': str(len(raw))}
     r = await authed_client.post(f'/api/grpc/{name}', headers=headers, content=raw)
-    assert r.status_code in (200, 500, 501, 503)  # allow server-side mapping variance
+    assert r.status_code in (200, 500, 501, 503)
 
     m1 = await authed_client.get('/platform/monitor/metrics')
     j1 = m1.json().get('response') or m1.json()
     tin1 = int(j1.get('total_bytes_in', 0))
     tout1 = int(j1.get('total_bytes_out', 0))
     assert tin1 - tin0 >= len(raw)
-    # tout may be small or zero depending on serialization; assert non-negative growth is fine
     assert tout1 >= tout0
 

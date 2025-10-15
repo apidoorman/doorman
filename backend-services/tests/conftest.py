@@ -5,15 +5,29 @@ Ensures the backend-services directory is on sys.path so imports like
 `from utils...` resolve correctly when tests run from the repo root in CI.
 """
 
-# External imports
 import os
 import sys
 
 os.environ.setdefault('MEM_OR_EXTERNAL', 'MEM')
 os.environ.setdefault('JWT_SECRET_KEY', 'test-secret-key')
-os.environ.setdefault('STARTUP_ADMIN_EMAIL', 'admin@doorman.dev')
-os.environ.setdefault('STARTUP_ADMIN_PASSWORD', 'password1')
+os.environ.setdefault('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev')
+os.environ.setdefault('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
 os.environ.setdefault('COOKIE_DOMAIN', 'testserver')
+os.environ.setdefault('LOGIN_IP_RATE_LIMIT', '1000000')
+os.environ.setdefault('LOGIN_IP_RATE_WINDOW', '60')
+os.environ.setdefault('LOGIN_IP_RATE_DISABLED', 'true')
+os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
+os.environ.setdefault('ENABLE_HTTPX_CLIENT_CACHE', 'false')
+os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
+
+try:
+    import sys as _sys
+    if _sys.version_info >= (3, 13):
+        os.environ.setdefault('DISABLE_PLATFORM_CHUNKED_WRAP', 'true')
+        os.environ.setdefault('DISABLE_PLATFORM_CORS_ASGI', 'true')
+        os.environ.setdefault('BODY_LIMIT_EXCLUDE_PATHS', '/platform/security/settings')
+except Exception:
+    pass
 
 _HERE = os.path.dirname(__file__)
 _PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
@@ -24,6 +38,66 @@ import pytest_asyncio
 from httpx import AsyncClient
 import pytest
 import asyncio
+from typing import Optional
+import datetime as _dt
+
+try:
+    from utils.database import database as _db
+    _INITIAL_DB_SNAPSHOT: Optional[dict] = _db.db.dump_data() if getattr(_db, 'memory_only', True) else None
+except Exception:
+    _INITIAL_DB_SNAPSHOT = None
+
+@pytest_asyncio.fixture(autouse=True)
+async def ensure_memory_dump_defaults(monkeypatch, tmp_path):
+    """Ensure sane defaults for memory dump/restore tests.
+
+    - Force memory-only mode for safety in tests
+    - Provide a default MEM_ENCRYPTION_KEY (tests can override or delete it)
+    - Point MEM_DUMP_PATH at a per-test temporary directory and also update
+      the imported module default if already loaded.
+    """
+    try:
+        monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
+        monkeypatch.setenv('MEM_ENCRYPTION_KEY', os.environ.get('MEM_ENCRYPTION_KEY') or 'test-encryption-key-32-characters-min')
+        dump_base = tmp_path / 'mem' / 'memory_dump.bin'
+        monkeypatch.setenv('MEM_DUMP_PATH', str(dump_base))
+        try:
+            import utils.memory_dump_util as md
+            md.DEFAULT_DUMP_PATH = str(dump_base)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    yield
+
+@pytest.fixture(autouse=True)
+def _log_test_start_end(request):
+    try:
+        ts = _dt.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        print(f"=== [{ts}] START {request.node.nodeid}", flush=True)
+    except Exception:
+        pass
+    yield
+    try:
+        ts = _dt.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        print(f"=== [{ts}] END   {request.node.nodeid}", flush=True)
+    except Exception:
+        pass
+
+@pytest.fixture(autouse=True, scope='session')
+def _log_env_toggles():
+    try:
+        toggles = {
+            'DISABLE_PLATFORM_CHUNKED_WRAP': os.getenv('DISABLE_PLATFORM_CHUNKED_WRAP'),
+            'DISABLE_PLATFORM_CORS_ASGI': os.getenv('DISABLE_PLATFORM_CORS_ASGI'),
+            'DISABLE_BODY_SIZE_LIMIT': os.getenv('DISABLE_BODY_SIZE_LIMIT'),
+            'DOORMAN_TEST_MODE': os.getenv('DOORMAN_TEST_MODE'),
+            'PYTHON_VERSION': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        }
+        print(f"=== ENV TOGGLES: {toggles}", flush=True)
+    except Exception:
+        pass
+    yield
 
 @pytest_asyncio.fixture
 async def authed_client():
@@ -33,7 +107,7 @@ async def authed_client():
 
     r = await client.post(
         '/platform/authorization',
-        json={'email': os.environ.get('STARTUP_ADMIN_EMAIL'), 'password': os.environ.get('STARTUP_ADMIN_PASSWORD')},
+        json={'email': os.environ.get('DOORMAN_ADMIN_EMAIL'), 'password': os.environ.get('DOORMAN_ADMIN_PASSWORD')},
     )
     assert r.status_code == 200, r.text
 
@@ -81,21 +155,52 @@ def event_loop():
 @pytest_asyncio.fixture(autouse=True)
 async def reset_http_client():
     """Reset the pooled httpx client between tests to prevent connection pool exhaustion."""
-    # Reset before the test (important for tests that monkeypatch httpx.AsyncClient)
-    try:
-        from services.gateway_service import GatewayService
-        await GatewayService.aclose_http_client()
-    except Exception:
-        pass
-    yield
-    # After each test, close and reset the pooled client
     try:
         from services.gateway_service import GatewayService
         await GatewayService.aclose_http_client()
     except Exception:
         pass
 
-# Test helpers expected by some suites
+    try:
+        from utils.limit_throttle_util import reset_counters
+        reset_counters()
+    except Exception:
+        pass
+
+    yield
+    try:
+        from services.gateway_service import GatewayService
+        await GatewayService.aclose_http_client()
+    except Exception:
+        pass
+
+@pytest_asyncio.fixture(autouse=True, scope='module')
+async def reset_in_memory_db_state():
+    """Restore in-memory DB and caches before each test to ensure isolation.
+
+    Prevents prior tests (e.g., password changes, user revocations, settings tweaks)
+    from affecting later ones.
+    """
+    try:
+        if _INITIAL_DB_SNAPSHOT is not None:
+            from utils.database import database as _db
+            _db.db.load_data(_INITIAL_DB_SNAPSHOT)
+            try:
+                from utils.database import user_collection
+                from utils import password_util as _pw
+                pwd = os.environ.get('DOORMAN_ADMIN_PASSWORD') or 'test-only-password-12chars'
+                user_collection.update_one({'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}})
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        from utils.doorman_cache_util import doorman_cache
+        doorman_cache.clear_all()
+    except Exception:
+        pass
+    yield
+
 async def create_api(client: AsyncClient, api_name: str, api_version: str):
     payload = {
         'api_name': api_name,

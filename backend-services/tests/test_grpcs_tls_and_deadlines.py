@@ -1,6 +1,5 @@
 import pytest
 
-
 async def _setup_api(client, name, ver, url):
     payload = {
         'api_name': name,
@@ -24,7 +23,6 @@ async def _setup_api(client, name, ver, url):
     assert r2.status_code in (200, 201)
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
-
 
 @pytest.mark.asyncio
 async def test_grpcs_misconfig_returns_500(monkeypatch, authed_client):

@@ -1,4 +1,3 @@
-# External imports
 import io
 import pytest
 

@@ -4,10 +4,8 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from pydantic import BaseModel, Field
 
-# Internal imports
 from models.validation_schema_model import ValidationSchema
 
 class CreateEndpointValidationModel(BaseModel):

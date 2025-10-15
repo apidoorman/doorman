@@ -3,7 +3,6 @@ In-memory metrics for gateway requests.
 Records count, status code distribution, and response time stats, with per-minute buckets.
 """
 
-# External imports
 from __future__ import annotations
 import time
 from collections import defaultdict, deque
@@ -20,11 +19,14 @@ class MinuteBucket:
     total_ms: float = 0.0
     bytes_in: int = 0
     bytes_out: int = 0
+    upstream_timeouts: int = 0
+    retries: int = 0
 
     status_counts: Dict[int, int] = field(default_factory=dict)
     api_counts: Dict[str, int] = field(default_factory=dict)
     api_error_counts: Dict[str, int] = field(default_factory=dict)
     user_counts: Dict[str, int] = field(default_factory=dict)
+    latencies: Deque[float] = field(default_factory=deque)
 
     def add(self, ms: float, status: int, username: Optional[str], api_key: Optional[str], bytes_in: int = 0, bytes_out: int = 0) -> None:
         self.count += 1
@@ -50,6 +52,22 @@ class MinuteBucket:
             except Exception:
                 pass
 
+        if username:
+            try:
+                self.user_counts[username] = self.user_counts.get(username, 0) + 1
+            except Exception:
+                pass
+
+        try:
+            if self.latencies is None:
+                self.latencies = deque()
+            self.latencies.append(ms)
+            max_samples = int(os.getenv('METRICS_PCT_SAMPLES', '500'))
+            while len(self.latencies) > max_samples:
+                self.latencies.popleft()
+        except Exception:
+            pass
+
     def to_dict(self) -> Dict:
         return {
             'start_ts': self.start_ts,
@@ -58,6 +76,8 @@ class MinuteBucket:
             'total_ms': self.total_ms,
             'bytes_in': self.bytes_in,
             'bytes_out': self.bytes_out,
+            'upstream_timeouts': self.upstream_timeouts,
+            'retries': self.retries,
             'status_counts': dict(self.status_counts or {}),
             'api_counts': dict(self.api_counts or {}),
             'api_error_counts': dict(self.api_error_counts or {}),
@@ -75,6 +95,8 @@ class MinuteBucket:
             bytes_out=int(d.get('bytes_out', 0)),
         )
         try:
+            mb.upstream_timeouts = int(d.get('upstream_timeouts', 0))
+            mb.retries = int(d.get('retries', 0))
             mb.status_counts = dict(d.get('status_counts') or {})
             mb.api_counts = dict(d.get('api_counts') or {})
             mb.api_error_counts = dict(d.get('api_error_counts') or {})
@@ -83,18 +105,14 @@ class MinuteBucket:
             pass
         return mb
 
-        if username:
-            try:
-                self.user_counts[username] = self.user_counts.get(username, 0) + 1
-            except Exception:
-                pass
-
 class MetricsStore:
     def __init__(self, max_minutes: int = 60 * 24 * 30):
         self.total_requests: int = 0
         self.total_ms: float = 0.0
         self.total_bytes_in: int = 0
         self.total_bytes_out: int = 0
+        self.total_upstream_timeouts: int = 0
+        self.total_retries: int = 0
         self.status_counts: Dict[int, int] = defaultdict(int)
         self.username_counts: Dict[str, int] = defaultdict(int)
         self.api_counts: Dict[str, int] = defaultdict(int)
@@ -134,6 +152,26 @@ class MetricsStore:
         if api_key:
             self.api_counts[api_key] += 1
 
+    def record_retry(self, api_key: Optional[str] = None) -> None:
+        now = time.time()
+        minute_start = self._minute_floor(now)
+        bucket = self._ensure_bucket(minute_start)
+        try:
+            bucket.retries += 1
+            self.total_retries += 1
+        except Exception:
+            pass
+
+    def record_upstream_timeout(self, api_key: Optional[str] = None) -> None:
+        now = time.time()
+        minute_start = self._minute_floor(now)
+        bucket = self._ensure_bucket(minute_start)
+        try:
+            bucket.upstream_timeouts += 1
+            self.total_upstream_timeouts += 1
+        except Exception:
+            pass
+
     def snapshot(self, range_key: str, group: str = 'minute', sort: str = 'asc') -> Dict:
 
         range_to_minutes = {
@@ -172,17 +210,31 @@ class MetricsStore:
                     'avg_ms': avg_ms,
                     'bytes_in': int(d['bytes_in']),
                     'bytes_out': int(d['bytes_out']),
+                    'error_rate': (int(d['error_count']) / int(d['count'])) if d['count'] else 0.0,
                 })
         else:
             for b in buckets:
                 avg_ms = (b.total_ms / b.count) if b.count else 0.0
+                p95 = 0.0
+                try:
+                    arr = list(b.latencies)
+                    if arr:
+                        arr.sort()
+                        k = max(0, int(0.95 * len(arr)) - 1)
+                        p95 = float(arr[k])
+                except Exception:
+                    p95 = 0.0
                 series.append({
                     'timestamp': b.start_ts,
                     'count': b.count,
                     'error_count': b.error_count,
                     'avg_ms': avg_ms,
+                    'p95_ms': p95,
                     'bytes_in': b.bytes_in,
                     'bytes_out': b.bytes_out,
+                    'error_rate': (b.error_count / b.count) if b.count else 0.0,
+                    'upstream_timeouts': b.upstream_timeouts,
+                    'retries': b.retries,
                 })
 
         reverse = (str(sort).lower() == 'desc')
@@ -199,6 +251,8 @@ class MetricsStore:
             'avg_response_ms': avg_total_ms,
             'total_bytes_in': self.total_bytes_in,
             'total_bytes_out': self.total_bytes_out,
+            'total_upstream_timeouts': self.total_upstream_timeouts,
+            'total_retries': self.total_retries,
             'status_counts': status,
             'series': series,
             'top_users': sorted(self.username_counts.items(), key=lambda kv: kv[1], reverse=True)[:10],
@@ -223,6 +277,8 @@ class MetricsStore:
             self.total_ms = float(data.get('total_ms', 0.0))
             self.total_bytes_in = int(data.get('total_bytes_in', 0))
             self.total_bytes_out = int(data.get('total_bytes_out', 0))
+            self.total_upstream_timeouts = int(data.get('total_upstream_timeouts', 0))
+            self.total_retries = int(data.get('total_retries', 0))
             self.status_counts = defaultdict(int, data.get('status_counts') or {})
             self.username_counts = defaultdict(int, data.get('username_counts') or {})
             self.api_counts = defaultdict(int, data.get('api_counts') or {})
@@ -233,7 +289,6 @@ class MetricsStore:
                 except Exception:
                     continue
         except Exception:
-            # If anything goes wrong, keep current in-memory metrics
             pass
 
     def save_to_file(self, path: str) -> None:
@@ -260,5 +315,4 @@ class MetricsStore:
         except Exception:
             pass
 
-# Global metrics store
 metrics_store = MetricsStore()

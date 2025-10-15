@@ -5,7 +5,6 @@ _RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
 if not _RUN_LIVE:
     pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 
-
 def test_bandwidth_limit_enforced_and_window_resets_live(client):
     name, ver = 'bwlive', 'v1'
     client.post('/platform/api', json={

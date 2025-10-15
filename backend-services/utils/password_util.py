@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import bcrypt
 
 def hash_password(password: str):

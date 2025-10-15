@@ -1,4 +1,3 @@
-# External imports
 import os
 import pytest
 
@@ -58,8 +57,6 @@ async def test_memory_dump_then_restore_flow(monkeypatch, authed_client, tmp_pat
 
     check = await authed_client.get('/platform/user/e2euser')
     assert check.status_code == 200
-
-# ---- CORS tools checker extended scenarios ----
 
 @pytest.mark.asyncio
 async def test_cors_wildcard_without_credentials_allows(monkeypatch, authed_client):

@@ -4,8 +4,8 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from fastapi import APIRouter, HTTPException, Request, Depends
+import os
 import uuid
 import time
 import logging
@@ -13,7 +13,6 @@ import json
 import re
 from datetime import datetime
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils import api_util
 from utils.doorman_cache_util import doorman_cache
@@ -44,20 +43,33 @@ Response:
 """
 
 @gateway_router.api_route('/status', methods=['GET'],
-    description='Check if the gateway is online and healthy',
+    description='Gateway status (requires manage_gateway)',
     response_model=ResponseModel)
 
-async def status():
-    """Check if the gateway is online and healthy"""
+async def status(request: Request):
+    """Restricted status endpoint.
+
+    Requires authenticated user with 'manage_gateway'. Returns detailed status.
+    """
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        if not await platform_role_required_bool(username, 'manage_gateway'):
+            return process_response(ResponseModel(
+                status_code=403,
+                response_headers={'request_id': request_id},
+                error_code='GTW013',
+                error_message='Forbidden'
+            ).dict(), 'rest')
+
         mongodb_status = await check_mongodb()
         redis_status = await check_redis()
         memory_usage = get_memory_usage()
         active_connections = get_active_connections()
         uptime = get_uptime()
-        return ResponseModel(
+        return process_response(ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},
             response={
@@ -68,18 +80,29 @@ async def status():
                 'active_connections': active_connections,
                 'uptime': uptime
             }
-        ).dict()
+        ).dict(), 'rest')
     except Exception as e:
+        if hasattr(e, 'status_code') and getattr(e, 'status_code') == 401:
+            return process_response(ResponseModel(
+                status_code=401,
+                response_headers={'request_id': request_id},
+                error_code='GTW401',
+                error_message='Unauthorized'
+            ).dict(), 'rest')
         logger.error(f'{request_id} | Status check failed: {str(e)}')
-        return ResponseModel(
+        return process_response(ResponseModel(
             status_code=500,
             response_headers={'request_id': request_id},
             error_code='GTW006',
             error_message='Internal server error'
-        ).dict()
+        ).dict(), 'rest')
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Status check time {end_time - start_time}ms')
+
+@gateway_router.get('/health', description='Public health probe', include_in_schema=False)
+async def health():
+    return {'status': 'online'}
 
 """
 Clear all caches
@@ -120,12 +143,15 @@ Response:
 )
 
 async def clear_all_caches(request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
         username = payload.get('sub')
         if not await platform_role_required_bool(username, 'manage_gateway'):
             return process_response(ResponseModel(
                 status_code=403,
+                response_headers={'request_id': request_id},
                 error_code='GTW008',
                 error_message='You do not have permission to clear caches'
             ).dict(), 'rest')
@@ -138,14 +164,19 @@ async def clear_all_caches(request: Request):
         audit(request, actor=username, action='gateway.clear_caches', target='all', status='success', details=None)
         return process_response(ResponseModel(
             status_code=200,
+            response_headers={'request_id': request_id},
             message='All caches cleared'
             ).dict(), 'rest')
     except Exception as e:
         return process_response(ResponseModel(
             status_code=500,
+            response_headers={'request_id': request_id},
             error_code='GTW999',
             error_message='An unexpected error occurred'
             ).dict(), 'rest')
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f'{request_id} | Clear caches took {end_time - start_time:.2f}ms')
 
 """
 Endpoint
@@ -170,7 +201,7 @@ Response:
     response_model=ResponseModel,
     include_in_schema=False)
 async def gateway(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
 
@@ -243,7 +274,6 @@ async def gateway(request: Request, path: str):
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-# Per-method wrappers with unique operation IDs for OpenAPI
 @gateway_router.get('/rest/{path:path}', description='REST gateway endpoint (GET)', response_model=ResponseModel, operation_id='rest_get')
 async def rest_get(request: Request, path: str):
     return await gateway(request, path)
@@ -306,7 +336,6 @@ async def rest_preflight(request: Request, path: str):
             from fastapi.responses import Response as StarletteResponse
             return StarletteResponse(status_code=204, headers={'request_id': request_id})
 
-        # Optional strict mode: return 405 for OPTIONS when endpoint is unregistered
         try:
             import os as _os, re as _re
             if _os.getenv('STRICT_OPTIONS_405', 'false').lower() == 'true':
@@ -362,7 +391,7 @@ Response:
     response_model=ResponseModel)
 
 async def soap_gateway(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         parts = [p for p in (path or '').split('/') if p]
@@ -489,7 +518,7 @@ Response:
     response_model=ResponseModel)
 
 async def graphql_gateway(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         if not request.headers.get('X-API-Version'):
@@ -519,9 +548,6 @@ async def graphql_gateway(request: Request, path: str):
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        api_name = re.sub(r'^.*/', '',request.url.path)
-        api_key = doorman_cache.get_cache('api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0'))
-        api = await api_util.get_api(api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0'))
         if api and api.get('validation_enabled'):
             body = await request.json()
             query = body.get('query')
@@ -581,7 +607,7 @@ Response:
     description='GraphQL gateway CORS preflight', include_in_schema=False)
 
 async def graphql_preflight(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         from utils import api_util as _api_util
@@ -631,7 +657,7 @@ Response:
     response_model=ResponseModel)
 
 async def grpc_gateway(request: Request, path: str):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         if not request.headers.get('X-API-Version'):
@@ -660,9 +686,6 @@ async def grpc_gateway(request: Request, path: str):
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        api_name = re.sub(r'^.*/', '', request.url.path)
-        api_key = doorman_cache.get_cache('api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0'))
-        api = await api_util.get_api(api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0'))
         if api and api.get('validation_enabled'):
             body = await request.json()
             request_data = json.loads(body.get('data', '{}'))
@@ -675,7 +698,15 @@ async def grpc_gateway(request: Request, path: str):
                     error_code='GTW011',
                     error_message=str(e)
                 ).dict(), 'grpc')
-        return process_response(await GatewayService.grpc_gateway(username, request, request_id, start_time, path), 'grpc')
+        svc_resp = await GatewayService.grpc_gateway(username, request, request_id, start_time, path)
+        if not isinstance(svc_resp, dict):
+            svc_resp = ResponseModel(
+                status_code=500,
+                response_headers={'request_id': request_id},
+                error_code='GTW006',
+                error_message='Internal server error'
+            ).dict()
+        return process_response(svc_resp, 'grpc')
     except HTTPException as e:
         return process_response(ResponseModel(
             status_code=e.status_code,

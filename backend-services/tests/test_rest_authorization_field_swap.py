@@ -1,6 +1,5 @@
 import pytest
 
-
 class _Resp:
     def __init__(self, status_code=200, json_body=None, headers=None):
         self.status_code = status_code
@@ -13,7 +12,6 @@ class _Resp:
     def json(self):
         return self._json_body
 
-
 def _mk_client_capture(seen):
     class _Client:
         def __init__(self, timeout=None, limits=None, http2=False):
@@ -22,16 +20,40 @@ def _mk_client_capture(seen):
             return self
         async def __aexit__(self, exc_type, exc, tb):
             return False
-        async def post(self, url, json=None, params=None, headers=None, content=None):
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _Resp(405)
+        async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs):
             payload = {'method': 'POST', 'url': url, 'params': dict(params or {}), 'body': json, 'headers': headers or {}}
             seen.append({'url': url, 'params': dict(params or {}), 'headers': dict(headers or {}), 'json': json})
             return _Resp(200, json_body=payload, headers={'X-Upstream': 'yes'})
-        async def get(self, url, params=None, headers=None):
+        async def get(self, url, params=None, headers=None, **kwargs):
             payload = {'method': 'GET', 'url': url, 'params': dict(params or {}), 'headers': headers or {}}
             seen.append({'url': url, 'params': dict(params or {}), 'headers': dict(headers or {})})
             return _Resp(200, json_body=payload, headers={'X-Upstream': 'yes'})
+        async def put(self, url, **kwargs):
+            payload = {'method': 'PUT', 'url': url, 'params': {}, 'headers': {}}
+            seen.append({'url': url, 'params': {}, 'headers': {}})
+            return _Resp(200, json_body=payload, headers={'X-Upstream': 'yes'})
+        async def delete(self, url, **kwargs):
+            payload = {'method': 'DELETE', 'url': url, 'params': {}, 'headers': {}}
+            seen.append({'url': url, 'params': {}, 'headers': {}})
+            return _Resp(200, json_body=payload, headers={'X-Upstream': 'yes'})
     return _Client
-
 
 async def _setup_api(client, name, ver, swap_header, allowed_headers=None):
     payload = {
@@ -60,7 +82,6 @@ async def _setup_api(client, name, ver, swap_header, allowed_headers=None):
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 @pytest.mark.asyncio
 async def test_auth_swap_injects_authorization_from_custom_header(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -79,7 +100,6 @@ async def test_auth_swap_injects_authorization_from_custom_header(monkeypatch, a
     auth_val = forwarded.get('Authorization') or forwarded.get('authorization')
     assert auth_val == 'Bearer backend-token'
 
-
 @pytest.mark.asyncio
 async def test_auth_swap_missing_source_header_no_crash(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -94,9 +114,7 @@ async def test_auth_swap_missing_source_header_no_crash(monkeypatch, authed_clie
     )
     assert r.status_code == 200
     fwd = (r.json() or {}).get('headers') or {}
-    # Authorization should not be injected if source header is missing
     assert not (('Authorization' in fwd) or ('authorization' in fwd))
-
 
 @pytest.mark.asyncio
 async def test_auth_swap_with_empty_value_does_not_override(monkeypatch, authed_client):
@@ -106,7 +124,6 @@ async def test_auth_swap_with_empty_value_does_not_override(monkeypatch, authed_
     await _setup_api(authed_client, name, ver, swap_from, allowed_headers=['Content-Type', swap_from, 'Authorization'])
     seen = []
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _mk_client_capture(seen))
-    # Provide normal Authorization but empty backend header; should keep existing Authorization
     r = await authed_client.get(
         f'/api/rest/{name}/{ver}/p',
         headers={swap_from: '', 'Authorization': 'Bearer existing'}

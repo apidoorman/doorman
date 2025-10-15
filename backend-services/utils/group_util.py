@@ -4,14 +4,13 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import logging
 from fastapi import HTTPException, Request
 
-# Internal imports
 from utils.doorman_cache_util import doorman_cache
 from services.user_service import UserService
-from utils.database import api_collection
+from utils.database_async import api_collection
+from utils.async_db import db_find_one
 from utils.auth_util import auth_required
 
 logger = logging.getLogger('doorman.gateway')
@@ -47,7 +46,7 @@ async def group_required(request: Request = None, full_path: str = None, user_to
             user = await UserService.get_user_by_username_helper(user_to_subscribe)
         else:
             user = await UserService.get_user_by_username_helper(username)
-        api = doorman_cache.get_cache('api_cache', api_and_version) or api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+        api = doorman_cache.get_cache('api_cache', api_and_version) or await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
         if not api:
             raise HTTPException(status_code=404, detail='API not found')
         if not set(user.get('groups') or []).intersection(api.get('api_allowed_groups') or []):

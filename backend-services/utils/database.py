@@ -4,18 +4,46 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from pymongo import MongoClient, IndexModel, ASCENDING
 from dotenv import load_dotenv
 import os
 import uuid
 import copy
 import json
+import threading
+import secrets
+import string as _string
+import logging
 
-# Internal imports
 from utils import password_util
+from utils import chaos_util
 
 load_dotenv()
+
+logger = logging.getLogger('doorman.gateway')
+
+def _build_admin_seed_doc(email: str, pwd_hash: str) -> dict:
+    """Canonical admin bootstrap document used for both memory and Mongo modes.
+
+    Ensures identical defaults across storage backends.
+    """
+    return {
+        'username': 'admin',
+        'email': email,
+        'password': pwd_hash,
+        'role': 'admin',
+        'groups': ['ALL', 'admin'],
+        'ui_access': True,
+        'rate_limit_duration': 1,
+        'rate_limit_duration_type': 'second',
+        'throttle_duration': 1,
+        'throttle_duration_type': 'second',
+        'throttle_wait_duration': 0,
+        'throttle_wait_duration_type': 'second',
+        'throttle_queue_limit': 1,
+        'custom_attributes': {'custom_key': 'custom_value'},
+        'active': True,
+    }
 
 class Database:
     def __init__(self):
@@ -28,16 +56,27 @@ class Database:
             self.client = None
             self.db_existed = False
             self.db = InMemoryDB()
-            print('Memory-only mode: Using in-memory collections')
+            logger.info('Memory-only mode: Using in-memory collections')
             return
         mongo_hosts = os.getenv('MONGO_DB_HOSTS')
         replica_set_name = os.getenv('MONGO_REPLICA_SET_NAME')
+        mongo_user = os.getenv('MONGO_DB_USER')
+        mongo_pass = os.getenv('MONGO_DB_PASSWORD')
+
+        if not mongo_user or not mongo_pass:
+            raise RuntimeError(
+                'MONGO_DB_USER and MONGO_DB_PASSWORD are required when MEM_OR_EXTERNAL != MEM. '
+                'Set these environment variables to secure your MongoDB connection.'
+            )
+
         host_list = [host.strip() for host in mongo_hosts.split(',') if host.strip()]
         self.db_existed = True
+
         if len(host_list) > 1 and replica_set_name:
-            connection_uri = f"mongodb://{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
+            connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
         else:
-            connection_uri = f"mongodb://{','.join(host_list)}/doorman"
+            connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman"
+
         self.client = MongoClient(
             connection_uri,
             serverSelectionTimeoutMS=5000,
@@ -47,6 +86,13 @@ class Database:
         self.db = self.client.get_database()
     def initialize_collections(self):
         if self.memory_only:
+            # Resolve admin seed credentials consistently across modes (no auto-generation)
+            def _admin_seed_creds():
+                email = os.getenv('DOORMAN_ADMIN_EMAIL') or 'admin@doorman.dev'
+                pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
+                if not pwd:
+                    raise RuntimeError('DOORMAN_ADMIN_PASSWORD is required for admin initialization')
+                return email, password_util.hash_password(pwd)
 
             users = self.db.users
             roles = self.db.roles
@@ -85,22 +131,8 @@ class Database:
                 })
 
             if not users.find_one({'username': 'admin'}):
-                users.insert_one({
-                    'username': 'admin',
-                    'email': os.getenv('STARTUP_ADMIN_EMAIL'),
-                    'password': password_util.hash_password(os.getenv('STARTUP_ADMIN_PASSWORD')),
-                    'role': 'admin',
-                    'groups': ['ALL', 'admin'],
-                    'ui_access': True,
-                    'rate_limit_duration': 2000000,
-                    'rate_limit_duration_type': 'minute',
-                    'throttle_duration': 100000000,
-                    'throttle_duration_type': 'second',
-                    'throttle_wait_duration': 5000000,
-                    'throttle_wait_duration_type': 'seconds',
-                    'custom_attributes': {'custom_key': 'custom_value'},
-                    'active': True
-                })
+                _email, _pwd_hash = _admin_seed_creds()
+                users.insert_one(_build_admin_seed_doc(_email, _pwd_hash))
 
             try:
                 adm = users.find_one({'username': 'admin'})
@@ -133,41 +165,43 @@ class Database:
                     lf.writelines(entries)
             except Exception:
                 pass
-            print('Memory-only mode: Core data initialized (admin user/role/groups)')
+            logger.info('Memory-only mode: Core data initialized (admin user/role/groups)')
             return
         collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings', 'revocations']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
                 self.db.create_collection(collection)
-                print(f'Created collection: {collection}')
+                logger.debug(f'Created collection: {collection}')
         if not self.db_existed:
             if not self.db.users.find_one({'username': 'admin'}):
-                self.db.users.insert_one({
-                    'username': 'admin',
-                    'email': 'admin@doorman.dev',
-                    'role': 'admin',
-                    'groups': [
-                        'ALL',
-                        'admin'
-                    ],
-                    'rate_limit_duration': 1,
-                    'rate_limit_duration_type': 'second',
-                    'throttle_duration': 1,
-                    'throttle_duration_type': 'second',
-                    'throttle_wait_duration': 0,
-                    'throttle_wait_duration_type': 'second',
-                    'custom_attributes': {
-                        'custom_key': 'custom_value'
-                    },
-                    'active': True,
-                    'throttle_queue_limit': 1,
-                    'ui_access': True
-                })
+                # Resolve admin seed credentials consistently across modes (no auto-generation)
+                def _admin_seed_creds_mongo():
+                    email = os.getenv('DOORMAN_ADMIN_EMAIL') or 'admin@doorman.dev'
+                    pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
+                    if not pwd:
+                        raise RuntimeError('DOORMAN_ADMIN_PASSWORD is required for admin initialization')
+                    return email, password_util.hash_password(pwd)
+                _email, _pwd_hash = _admin_seed_creds_mongo()
+                self.db.users.insert_one(_build_admin_seed_doc(_email, _pwd_hash))
         try:
             adm = self.db.users.find_one({'username': 'admin'})
             if adm and adm.get('ui_access') is not True:
                 self.db.users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
+        except Exception:
+            pass
+        try:
+            adm2 = self.db.users.find_one({'username': 'admin'})
+            if adm2 and not adm2.get('password'):
+                env_pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
+                if env_pwd:
+                    self.db.users.update_one(
+                        {'username': 'admin'},
+                        {'$set': {'password': password_util.hash_password(env_pwd)}}
+                    )
+                    logger.warning('Admin user lacked password; set from DOORMAN_ADMIN_PASSWORD')
+                else:
+                    raise RuntimeError('Admin user missing password and DOORMAN_ADMIN_PASSWORD not set')
         except Exception:
             pass
             if not self.db.roles.find_one({'role_name': 'admin'}):
@@ -203,8 +237,7 @@ class Database:
 
     def create_indexes(self):
         if self.memory_only:
-
-            print('Memory-only mode: Skipping MongoDB index creation')
+            logger.debug('Memory-only mode: Skipping MongoDB index creation')
             return
         self.db.apis.create_indexes([
             IndexModel([('api_id', ASCENDING)], unique=True),
@@ -299,6 +332,7 @@ class InMemoryCollection:
     def __init__(self, name):
         self.name = name
         self._docs = []
+        self._lock = threading.RLock()
 
     def _match(self, doc, query):
         if not query:
@@ -318,68 +352,92 @@ class InMemoryCollection:
         return True
 
     def find_one(self, query=None):
-        query = query or {}
-        for d in self._docs:
-            if self._match(d, query):
-                return copy.deepcopy(d)
-        return None
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            query = query or {}
+            for d in self._docs:
+                if self._match(d, query):
+                    return copy.deepcopy(d)
+            return None
 
     def find(self, query=None):
-        query = query or {}
-        matches = [d for d in self._docs if self._match(d, query)]
-        return InMemoryCursor(matches)
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            query = query or {}
+            matches = [d for d in self._docs if self._match(d, query)]
+            return InMemoryCursor(matches)
 
     def insert_one(self, doc):
-        new_doc = copy.deepcopy(doc)
-        if '_id' not in new_doc:
-            new_doc['_id'] = str(uuid.uuid4())
-        self._docs.append(new_doc)
-        return InMemoryInsertResult(new_doc['_id'])
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            new_doc = copy.deepcopy(doc)
+            if '_id' not in new_doc:
+                new_doc['_id'] = str(uuid.uuid4())
+            self._docs.append(new_doc)
+            return InMemoryInsertResult(new_doc['_id'])
 
     def update_one(self, query, update):
-        set_data = update.get('$set', {}) if isinstance(update, dict) else {}
-        push_data = update.get('$push', {}) if isinstance(update, dict) else {}
-        for i, d in enumerate(self._docs):
-            if self._match(d, query):
-                updated = copy.deepcopy(d)
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            set_data = update.get('$set', {}) if isinstance(update, dict) else {}
+            push_data = update.get('$push', {}) if isinstance(update, dict) else {}
+            for i, d in enumerate(self._docs):
+                if self._match(d, query):
+                    updated = copy.deepcopy(d)
 
-                if set_data:
-                    for k, v in set_data.items():
+                    if set_data:
+                        for k, v in set_data.items():
 
-                        if isinstance(k, str) and '.' in k:
-                            parts = k.split('.')
-                            cur = updated
-                            for part in parts[:-1]:
-                                nxt = cur.get(part)
-                                if not isinstance(nxt, dict):
-                                    nxt = {}
-                                    cur[part] = nxt
-                                cur = nxt
-                            cur[parts[-1]] = v
-                        else:
-                            updated[k] = v
+                            if isinstance(k, str) and '.' in k:
+                                parts = k.split('.')
+                                cur = updated
+                                for part in parts[:-1]:
+                                    nxt = cur.get(part)
+                                    if not isinstance(nxt, dict):
+                                        nxt = {}
+                                        cur[part] = nxt
+                                    cur = nxt
+                                cur[parts[-1]] = v
+                            else:
+                                updated[k] = v
 
-                if push_data:
-                    for k, v in push_data.items():
-                        cur = updated.get(k)
-                        if cur is None or not isinstance(cur, list):
-                            updated[k] = [v]
-                        else:
-                            updated[k].append(v)
-                self._docs[i] = updated
-                return InMemoryUpdateResult(1)
-        return InMemoryUpdateResult(0)
+                    if push_data:
+                        for k, v in push_data.items():
+                            cur = updated.get(k)
+                            if cur is None or not isinstance(cur, list):
+                                updated[k] = [v]
+                            else:
+                                updated[k].append(v)
+                    self._docs[i] = updated
+                    return InMemoryUpdateResult(1)
+            return InMemoryUpdateResult(0)
 
     def delete_one(self, query):
-        for i, d in enumerate(self._docs):
-            if self._match(d, query):
-                del self._docs[i]
-                return InMemoryDeleteResult(1)
-        return InMemoryDeleteResult(0)
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            for i, d in enumerate(self._docs):
+                if self._match(d, query):
+                    del self._docs[i]
+                    return InMemoryDeleteResult(1)
+            return InMemoryDeleteResult(0)
 
     def count_documents(self, query=None):
-        query = query or {}
-        return len([1 for d in self._docs if self._match(d, query)])
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            query = query or {}
+            return len([1 for d in self._docs if self._match(d, query)])
 
     def create_indexes(self, *args, **kwargs):
 
@@ -399,7 +457,6 @@ class InMemoryDB:
         self.user_credits = InMemoryCollection('user_credits')
         self.endpoint_validations = InMemoryCollection('endpoint_validations')
         self.settings = InMemoryCollection('settings')
-        # New durable in-memory store for token revocations
         self.revocations = InMemoryCollection('revocations')
 
     def list_collection_names(self):
@@ -488,3 +545,15 @@ else:
         revocations_collection = db.revocations
     except Exception:
         revocations_collection = None
+
+def close_database_connections():
+    """
+    Close all database connections for graceful shutdown.
+    """
+    global mongodb_client
+    try:
+        if mongodb_client:
+            mongodb_client.close()
+            logger.info("MongoDB connections closed")
+    except Exception as e:
+        logger.warning(f"Error closing MongoDB connections: {e}")

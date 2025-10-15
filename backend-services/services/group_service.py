@@ -4,17 +4,17 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from pymongo.errors import DuplicateKeyError
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from models.update_group_model import UpdateGroupModel
 from utils.database import group_collection
 from utils.cache_manager_util import cache_manager
 from utils.doorman_cache_util import doorman_cache
 from models.create_group_model import CreateGroupModel
+from utils.paging_util import validate_page_params
+from utils.constants import ErrorCodes, Messages
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -175,6 +175,14 @@ class GroupService:
         Get all groups.
         """
         logger.info(request_id + ' | Getting groups: Page=' + str(page) + ' Page Size=' + str(page_size))
+        try:
+            page, page_size = validate_page_params(page, page_size)
+        except Exception as e:
+            return ResponseModel(
+                status_code=400,
+                error_code=ErrorCodes.PAGE_SIZE,
+                error_message=(Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING)
+            ).dict()
         skip = (page - 1) * page_size
         cursor = group_collection.find().sort('group_name', 1).skip(skip).limit(page_size)
         groups = cursor.to_list(length=None)

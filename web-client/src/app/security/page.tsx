@@ -68,7 +68,7 @@ const SecurityPage = () => {
   const [settings, setSettings] = useState<SecuritySettings>({
     enable_auto_save: false,
     auto_save_frequency_seconds: 900,
-    dump_path: 'generated/memory_dump.bin',
+    dump_path: 'backend-services/generated/memory_dump.bin',
     ip_whitelist: [],
     ip_blacklist: [],
     trust_x_forwarded_for: false,
@@ -130,7 +130,7 @@ const SecurityPage = () => {
       setSettings({
         enable_auto_save: !!data.enable_auto_save,
         auto_save_frequency_seconds: Number(data.auto_save_frequency_seconds || 900),
-        dump_path: data.dump_path || 'generated/memory_dump.bin',
+        dump_path: data.dump_path || 'backend-services/generated/memory_dump.bin',
         ip_whitelist: Array.isArray(data.ip_whitelist) ? data.ip_whitelist : [],
         ip_blacklist: Array.isArray(data.ip_blacklist) ? data.ip_blacklist : [],
         trust_x_forwarded_for: !!data.trust_x_forwarded_for,
@@ -392,14 +392,14 @@ const SecurityPage = () => {
                   <div className="space-y-2 md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Dump Path
-                      <InfoTooltip text="Filesystem path for the encrypted memory dump. Store on an encrypted volume if possible. Example: generated/memory_dump.bin" />
+                      <InfoTooltip text="Filesystem path for the encrypted memory dump. Store on an encrypted volume if possible. Example: backend-services/generated/memory_dump.bin" />
                     </label>
                     <input
                       type="text"
                       value={settings.dump_path}
                       onChange={(e) => setSettings(s => ({ ...s, dump_path: e.target.value }))}
                       className="input"
-                      placeholder="generated/memory_dump.bin"
+                      placeholder="backend-services/generated/memory_dump.bin"
                       disabled={settingsLoading || settingsSaving}
                     />
                   </div>
@@ -602,7 +602,7 @@ const SecurityPage = () => {
                           value={settings.dump_path}
                           onChange={(e) => setSettings(s => ({ ...s, dump_path: e.target.value }))}
                           className="input"
-                          placeholder="generated/memory_dump.bin"
+                          placeholder="backend-services/generated/memory_dump.bin"
                           disabled={settingsLoading || settingsSaving}
                         />
                       </div>

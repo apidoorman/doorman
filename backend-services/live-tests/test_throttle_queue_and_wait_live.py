@@ -5,7 +5,6 @@ _RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
 if not _RUN_LIVE:
     pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 
-
 def test_throttle_queue_limit_exceeded_429_live(client):
     from config import ADMIN_EMAIL
     name, ver = 'throtq', 'v1'
@@ -27,13 +26,11 @@ def test_throttle_queue_limit_exceeded_429_live(client):
         'endpoint_description': 't'
     })
     client.post('/platform/subscription/subscribe', json={'username': 'admin', 'api_name': name, 'api_version': ver})
-    # Set queue limit to 1
     client.put('/platform/user/admin', json={'throttle_queue_limit': 1})
     client.delete('/api/caches')
     r1 = client.get(f'/api/rest/{name}/{ver}/t')
     r2 = client.get(f'/api/rest/{name}/{ver}/t')
     assert r2.status_code == 429
-
 
 def test_throttle_dynamic_wait_live(client):
     name, ver = 'throtw', 'v1'

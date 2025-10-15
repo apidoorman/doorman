@@ -1,6 +1,5 @@
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_routing_endpoint_servers_take_precedence_over_api_servers(authed_client):
     from utils.database import api_collection, endpoint_collection
@@ -8,7 +7,6 @@ async def test_routing_endpoint_servers_take_precedence_over_api_servers(authed_
     from utils import routing_util
 
     name, ver = 'route1', 'v1'
-    # Create API with two API servers
     r = await authed_client.post('/platform/api', json={
         'api_name': name,
         'api_version': ver,
@@ -20,7 +18,6 @@ async def test_routing_endpoint_servers_take_precedence_over_api_servers(authed_
         'api_allowed_retry_count': 0,
     })
     assert r.status_code in (200, 201)
-    # Create endpoint with endpoint-specific servers
     r2 = await authed_client.post('/platform/endpoint', json={
         'api_name': name,
         'api_version': ver,
@@ -34,12 +31,10 @@ async def test_routing_endpoint_servers_take_precedence_over_api_servers(authed_
     api = api_collection.find_one({'api_name': name, 'api_version': ver})
     assert api
     api.pop('_id', None)
-    # Clear rotation cache to start at the beginning
     doorman_cache.clear_cache('endpoint_server_cache')
 
     picked = await routing_util.pick_upstream_server(api, 'POST', '/echo', client_key=None)
     assert picked == 'http://ep1'
-
 
 @pytest.mark.asyncio
 async def test_routing_client_specific_routing_over_endpoint_and_api(authed_client):
@@ -69,7 +64,6 @@ async def test_routing_client_specific_routing_over_endpoint_and_api(authed_clie
     api = api_collection.find_one({'api_name': name, 'api_version': ver})
     api.pop('_id', None)
 
-    # Insert client-specific routing with two servers
     routing_collection.insert_one({
         'client_key': 'ck1',
         'routing_servers': ['http://r1', 'http://r2'],
@@ -78,12 +72,10 @@ async def test_routing_client_specific_routing_over_endpoint_and_api(authed_clie
     doorman_cache.clear_cache('client_routing_cache')
     doorman_cache.clear_cache('endpoint_server_cache')
 
-    # Client routing should win over endpoint/api
     s1 = await routing_util.pick_upstream_server(api, 'POST', '/echo', client_key='ck1')
     s2 = await routing_util.pick_upstream_server(api, 'POST', '/echo', client_key='ck1')
     assert s1 == 'http://r1'
     assert s2 == 'http://r2'
-
 
 @pytest.mark.asyncio
 async def test_routing_round_robin_api_servers_rotates(authed_client):
@@ -102,7 +94,6 @@ async def test_routing_round_robin_api_servers_rotates(authed_client):
         'api_type': 'REST',
         'api_allowed_retry_count': 0,
     })
-    # Create endpoint without endpoint_servers so API-level servers apply
     await authed_client.post('/platform/endpoint', json={
         'api_name': name,
         'api_version': ver,
@@ -118,7 +109,6 @@ async def test_routing_round_robin_api_servers_rotates(authed_client):
     s2 = await routing_util.pick_upstream_server(api, 'GET', '/status', client_key=None)
     s3 = await routing_util.pick_upstream_server(api, 'GET', '/status', client_key=None)
     assert [s1, s2, s3] == ['http://a1', 'http://a2', 'http://a1']
-
 
 @pytest.mark.asyncio
 async def test_routing_round_robin_endpoint_servers_rotates(authed_client):
@@ -154,7 +144,6 @@ async def test_routing_round_robin_endpoint_servers_rotates(authed_client):
     s3 = await routing_util.pick_upstream_server(api, 'POST', '/echo', client_key=None)
     assert [s1, s2, s3] == ['http://e1', 'http://e2', 'http://e1']
 
-
 @pytest.mark.asyncio
 async def test_routing_round_robin_index_persists_in_cache(authed_client):
     from utils.database import api_collection
@@ -183,13 +172,11 @@ async def test_routing_round_robin_index_persists_in_cache(authed_client):
     api.pop('_id', None)
 
     doorman_cache.clear_cache('endpoint_server_cache')
-    # First two picks advance index 0->1->2
-    await routing_util.pick_upstream_server(api, 'GET', '/status', client_key=None)  # a1
-    await routing_util.pick_upstream_server(api, 'GET', '/status', client_key=None)  # a2
+    await routing_util.pick_upstream_server(api, 'GET', '/status', client_key=None)
+    await routing_util.pick_upstream_server(api, 'GET', '/status', client_key=None)
     idx = doorman_cache.get_cache('endpoint_server_cache', api['api_id'])
-    assert idx == 2  # next index to use
+    assert idx == 2
 
-    # Next pick uses index 2 (a3), then wraps to 0
     s3 = await routing_util.pick_upstream_server(api, 'GET', '/status', client_key=None)
     assert s3 == 'http://a3'
     idx_after = doorman_cache.get_cache('endpoint_server_cache', api['api_id'])

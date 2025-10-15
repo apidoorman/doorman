@@ -1,4 +1,3 @@
-# External imports
 import json
 import pytest
 
@@ -35,7 +34,30 @@ async def test_bandwidth_enforcement_and_usage_tracking(monkeypatch, authed_clie
             return self
         async def __aexit__(self, exc_type, exc, tb):
             return False
-        async def post(self, url, data=None, json=None, headers=None, params=None):
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _FakeHTTPResponse(405)
+        async def get(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+        async def post(self, url, data=None, json=None, headers=None, params=None, **kwargs):
+            return _FakeHTTPResponse(200)
+        async def put(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+        async def delete(self, url, **kwargs):
             return _FakeHTTPResponse(200)
 
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
@@ -83,7 +105,27 @@ async def test_monitor_tracks_bytes_in_out(monkeypatch, authed_client):
         def __init__(self, timeout=None, limits=None, http2=False): pass
         async def __aenter__(self): return self
         async def __aexit__(self, exc_type, exc, tb): return False
-        async def post(self, url, data=None, json=None, headers=None, params=None): return _FakeHTTPResponse(200)
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _FakeHTTPResponse(405)
+        async def get(self, url, **kwargs): return _FakeHTTPResponse(200)
+        async def post(self, url, data=None, json=None, headers=None, params=None, **kwargs): return _FakeHTTPResponse(200)
+        async def put(self, url, **kwargs): return _FakeHTTPResponse(200)
+        async def delete(self, url, **kwargs): return _FakeHTTPResponse(200)
 
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
 

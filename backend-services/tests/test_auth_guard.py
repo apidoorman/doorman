@@ -1,4 +1,3 @@
-# External imports
 import pytest
 
 @pytest.mark.asyncio

@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from datetime import datetime, timedelta
 
 try:
@@ -17,6 +16,7 @@ import os
 import uuid
 from fastapi import HTTPException, Request
 from jose import jwt, JWTError
+import asyncio
 
 from utils.auth_blacklist import is_user_revoked, is_jti_revoked
 from utils.database import user_collection, role_collection
@@ -78,8 +78,12 @@ async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> b
     except Exception:
         return False
 
-async def auth_required(request: Request):
-    """Validate JWT token and CSRF for HTTPS"""
+async def auth_required(request: Request) -> dict:
+    """Validate JWT token and CSRF for HTTPS
+
+    Returns:
+        dict: JWT payload containing 'sub' (username), 'jti', and 'accesses'
+    """
     token = request.cookies.get('access_token_cookie')
     if not token:
         raise HTTPException(status_code=401, detail='Unauthorized')
@@ -91,7 +95,12 @@ async def auth_required(request: Request):
         if not await validate_csrf_double_submit(csrf_header, csrf_cookie):
             raise HTTPException(status_code=401, detail='Invalid CSRF token')
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={'verify_signature': True}
+        )
         username = payload.get('sub')
         jti = payload.get('jti')
         if not username or not jti:
@@ -100,7 +109,7 @@ async def auth_required(request: Request):
             raise HTTPException(status_code=401, detail='Token has been revoked')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
-            user = user_collection.find_one({'username': username})
+            user = await asyncio.to_thread(user_collection.find_one, {'username': username})
             if not user:
                 raise HTTPException(status_code=404, detail='User not found')
             if user.get('_id'): del user['_id']
@@ -118,7 +127,16 @@ async def auth_required(request: Request):
         logger.error(f'Unexpected error in auth_required: {str(e)}')
         raise HTTPException(status_code=401, detail='Unauthorized')
 
-def create_access_token(data: dict, refresh: bool = False):
+def create_access_token(data: dict, refresh: bool = False) -> str:
+    """Create a JWT access token with user permissions.
+
+    Args:
+        data: Dictionary containing at least 'sub' (username)
+        refresh: If True, create refresh token with longer expiry
+
+    Returns:
+        str: Encoded JWT token
+    """
     to_encode = data.copy()
 
     if refresh:

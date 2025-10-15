@@ -1,0 +1,4 @@
+
+syntax = "proto3";
+package grpcbad1760495362_v1;
+service Greeter {}

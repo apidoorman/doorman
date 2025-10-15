@@ -1,0 +1,81 @@
+# Doorman API Gateway - Hot-Reloadable Configuration
+#
+# This file is automatically reloaded when SIGHUP signal is sent to the process.
+# Environment variables override values in this file.
+#
+# Reload configuration:
+#   kill -HUP $(cat doorman.pid)
+#   # or
+#   pkill -HUP -f doorman
+
+# Logging Configuration
+log_level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_format: json  # json, text
+log_file: logs/doorman.log
+
+# Timeout Configuration (seconds)
+gateway_timeout: 30  # Max time for gateway to respond
+upstream_timeout: 30  # Max time waiting for upstream service
+connection_timeout: 10  # Max time to establish connection
+
+# Rate Limiting
+rate_limit_enabled: true
+rate_limit_requests: 100  # Requests per window
+rate_limit_window: 60  # Window size in seconds
+
+# Cache Configuration
+cache_ttl: 300  # Cache TTL in seconds (5 minutes)
+cache_max_size: 1000  # Maximum cache entries
+
+# Circuit Breaker
+circuit_breaker_enabled: true
+circuit_breaker_threshold: 5  # Failures before opening circuit
+circuit_breaker_timeout: 60  # Seconds before retry
+
+# Retry Configuration
+retry_enabled: true
+retry_max_attempts: 3
+retry_backoff: 1.0  # Exponential backoff multiplier
+
+# Monitoring
+metrics_enabled: true
+metrics_interval: 60  # Metrics collection interval (seconds)
+
+# Feature Flags (can be toggled without restart)
+feature_request_replay: false
+feature_ab_testing: false
+feature_cost_analytics: false
+
+# Advanced Configuration
+# (These can also be set via environment variables with the same name in uppercase)
+
+# HTTP Client Pool
+http_pool_size: 100
+http_pool_max_size: 200
+
+# Database Connection Pool
+db_pool_min_size: 10
+db_pool_max_size: 50
+
+# Redis Configuration
+redis_max_connections: 50
+redis_socket_timeout: 5
+redis_socket_connect_timeout: 5
+
+# Gateway Behavior
+gateway_follow_redirects: true
+gateway_max_redirects: 5
+gateway_verify_ssl: true
+
+# Request Limits
+max_request_size: 10485760  # 10 MB
+max_response_size: 10485760  # 10 MB
+
+# Audit Logging
+audit_enabled: true
+audit_log_requests: true
+audit_log_responses: false  # May be verbose
+
+# Performance Tuning
+async_workers: 4
+connection_pool_recycle: 3600  # Recycle connections after 1 hour
