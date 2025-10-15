@@ -71,25 +71,7 @@ Notes
 - Required secrets: `DOORMAN_ADMIN_EMAIL`, `DOORMAN_ADMIN_PASSWORD`, `JWT_SECRET_KEY`. For HA, set `MEM_OR_EXTERNAL=REDIS` and configure Redis.
  - The web client now uses `next.config.mjs`, so TypeScript is not required at runtime inside the container.
 
-### Frontend build-time env via --build-arg
-You can bake public frontend env into the Next.js bundle during `docker build` without committing any file:
-
-```bash
-# Pass values at build time (used only by the web client build)
-docker build \
-  --build-arg NEXT_PUBLIC_SERVER_URL=http://localhost:3001 \
-  --build-arg NEXT_PUBLIC_API_URL=http://localhost:3001 \
-  --build-arg NEXT_PUBLIC_APP_URL=http://localhost:3000 \
-  -t doorman:latest .
-
-# Then run (backend env comes from ./.env at runtime)
-docker run --rm --name doorman \
-  -p 3001:3001 -p 3000:3000 \
-  --env-file "$(pwd)/.env" \
-  doorman:latest
-```
-
-Details
+Frontend details
 - Only NEXT_PUBLIC_* variables are exposed to the browser. Do not pass secrets.
 - Build-args affect the frontend build output. Changing them requires a rebuild.
 - The backend still reads its env at runtime from `--env-file` (or `/env/*.env`).
