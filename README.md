@@ -24,7 +24,7 @@ Doorman supports user management, authentication, authorizaiton, dynamic routing
 Ensure an env file exists at the repo root: `./.env` (use `./.env.example` as a reference). Keep this file outside the image and pass it at runtime. Note - this is set for development, update variables and hosts to reflect a production environment.
 
 ### Quickstart
-Copy-paste the commands below as-is.
+See commands below.
 
 ```bash
 # 1) Build the image
