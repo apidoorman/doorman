@@ -19,7 +19,6 @@ def _get_client_ip(request: Request, trust_xff: bool) -> Optional[str]:
         settings = get_cached_settings()
         trusted = settings.get('xff_trusted_proxies') or []
         src_ip = request.client.host if request.client else None
-        # Normalize common test hosts to loopback for trust evaluation
         if isinstance(src_ip, str) and src_ip in ('testserver', 'localhost'):
             src_ip = '127.0.0.1'
 
@@ -65,7 +64,6 @@ def _is_loopback(ip: Optional[str]) -> bool:
     try:
         if not ip:
             return False
-        # Treat test hostnames as loopback in test environments
         if ip in ('testserver', 'localhost'):
             return True
         import ipaddress

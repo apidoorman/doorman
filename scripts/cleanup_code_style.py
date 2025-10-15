@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Repo-wide cleanup for style cohesion:
 - Remove inline comments from Python and TS/TSX (safe string-aware pass)
@@ -19,9 +18,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-
 ROOT = Path(__file__).resolve().parents[1]
-
 
 def strip_python_inline_comment(line: str) -> str:
     """Remove trailing inline comment starting with #, respecting strings."""
@@ -48,22 +45,19 @@ def strip_python_inline_comment(line: str) -> str:
             i += 1
             continue
         if not s_quote and not d_quote and ch == '#':
-            # strip everything after '#'
             return line[:i].rstrip()
         i += 1
     return line.rstrip()
-
 
 def is_ts_full_line_comment(line: str) -> bool:
     stripped = line.lstrip()
     return stripped.startswith('//')
 
-
 def strip_ts_inline_comment(line: str) -> str:
     """Strip trailing // comments in TS/TSX respecting quotes and template strings."""
     in_s = False
     in_d = False
-    in_bt = False  # backtick template
+    in_bt = False
     esc = False
     i = 0
     while i < len(line):
@@ -93,7 +87,6 @@ def strip_ts_inline_comment(line: str) -> str:
         i += 1
     return line.rstrip()
 
-
 def collapse_blank_runs(lines: Iterable[str]) -> list[str]:
     out: list[str] = []
     blank = 0
@@ -107,11 +100,9 @@ def collapse_blank_runs(lines: Iterable[str]) -> list[str]:
         else:
             blank = 0
             out.append(line.rstrip())
-    # Trim trailing blank line at EOF
     while out and out[-1] == "":
         out.pop()
     return out
-
 
 def process_file(path: Path) -> bool:
     text = path.read_text(encoding='utf-8', errors='replace').splitlines()
@@ -121,7 +112,6 @@ def process_file(path: Path) -> bool:
     if path.suffix == '.py':
         for ln in text:
             if ln.lstrip().startswith('#'):
-                # Drop indented full-line comments (inside blocks), keep top-level ones
                 if ln.startswith(' '):
                     changed = True
                     continue
@@ -134,7 +124,6 @@ def process_file(path: Path) -> bool:
     elif path.suffix in {'.ts', '.tsx', '.js', '.jsx'}:
         for ln in text:
             if is_ts_full_line_comment(ln):
-                # drop full-line // comments entirely
                 changed = True
                 continue
             stripped = strip_ts_inline_comment(ln)
@@ -145,13 +134,11 @@ def process_file(path: Path) -> bool:
         return False
 
     out = collapse_blank_runs(out)
-    # Detect if any content change vs original (ignoring trivial trailing spaces)
     if '\n'.join(out) != '\n'.join([l.rstrip() for l in text]).rstrip():
         changed = True
     if changed:
         path.write_text('\n'.join(out) + '\n', encoding='utf-8')
     return changed
-
 
 def gather_targets() -> list[Path]:
     patterns = [
@@ -164,13 +151,11 @@ def gather_targets() -> list[Path]:
         if not root.exists():
             continue
         for p in root.rglob('*'):
-            # Skip virtual environments and caches
             if any(seg in p.parts for seg in ('venv', '.venv', 'env', '.env', 'node_modules', '.pytest_cache', '__pycache__')):
                 continue
             if p.is_file() and p.suffix in exts:
                 files.append(p)
     return files
-
 
 def main() -> int:
     targets = gather_targets()
@@ -183,7 +168,6 @@ def main() -> int:
             print(f"WARN: Failed to process {f}: {e}")
     print(f"Processed {len(targets)} files; modified {changed}.")
     return 0
-
 
 if __name__ == '__main__':
     raise SystemExit(main())

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import getpass
 import json
@@ -8,17 +7,14 @@ from urllib.parse import urljoin
 
 import requests
 
-
 def base_url() -> str:
     return os.getenv('BASE_URL', 'http://localhost:5001').rstrip('/') + '/'
-
 
 def _csrf(sess: requests.Session) -> str | None:
     for c in sess.cookies:
         if c.name == 'csrf_token':
             return c.value
     return None
-
 
 def _headers(sess: requests.Session, headers: dict | None = None) -> dict:
     out = {'Accept': 'application/json'}
@@ -29,7 +25,6 @@ def _headers(sess: requests.Session, headers: dict | None = None) -> dict:
         out['X-CSRF-Token'] = csrf
     return out
 
-
 def login(sess: requests.Session, email: str, password: str) -> dict:
     url = urljoin(base_url(), '/platform/authorization'.lstrip('/'))
     r = sess.post(url, json={'email': email, 'password': password}, headers=_headers(sess))
@@ -37,10 +32,8 @@ def login(sess: requests.Session, email: str, password: str) -> dict:
         raise SystemExit(f'Login failed: {r.status_code} {r.text}')
     body = r.json()
     if 'access_token' in body:
-        # Some flows rely on cookie; set it if missing
         sess.cookies.set('access_token_cookie', body['access_token'], domain=os.getenv('COOKIE_DOMAIN') or None, path='/')
     return body
-
 
 def confirm(prompt: str, assume_yes: bool = False) -> None:
     if assume_yes:
@@ -48,7 +41,6 @@ def confirm(prompt: str, assume_yes: bool = False) -> None:
     ans = input(f"{prompt} [y/N]: ").strip().lower()
     if ans not in ('y', 'yes'):
         raise SystemExit('Aborted.')
-
 
 def do_metrics(sess: requests.Session, args):
     url = urljoin(base_url(), '/platform/monitor/metrics')
@@ -59,7 +51,6 @@ def do_metrics(sess: requests.Session, args):
     except Exception:
         print(r.text)
 
-
 def do_dump(sess: requests.Session, args):
     confirm('Proceed with memory dump?', args.yes)
     url = urljoin(base_url(), '/platform/memory/dump')
@@ -68,7 +59,6 @@ def do_dump(sess: requests.Session, args):
     print(f'HTTP {r.status_code}')
     print(r.text)
 
-
 def do_restore(sess: requests.Session, args):
     confirm('DANGER: Restore will overwrite in-memory DB. Continue?', args.yes)
     url = urljoin(base_url(), '/platform/memory/restore')
@@ -76,7 +66,6 @@ def do_restore(sess: requests.Session, args):
     r = sess.post(url, json=payload, headers=_headers(sess))
     print(f'HTTP {r.status_code}')
     print(r.text)
-
 
 def do_chaos(sess: requests.Session, args):
     confirm(f"Set chaos outage: backend={args.backend} enabled={args.enabled} duration_ms={args.duration_ms}?", args.yes)
@@ -88,13 +77,11 @@ def do_chaos(sess: requests.Session, args):
     print(f'HTTP {r.status_code}')
     print(r.text)
 
-
 def do_chaos_stats(sess: requests.Session, args):
     url = urljoin(base_url(), '/platform/tools/chaos/stats')
     r = sess.get(url, headers=_headers(sess))
     print(f'HTTP {r.status_code}')
     print(r.text)
-
 
 def do_revoke(sess: requests.Session, args):
     confirm(f'Revoke all tokens for {args.username}?', args.yes)
@@ -103,7 +90,6 @@ def do_revoke(sess: requests.Session, args):
     print(f'HTTP {r.status_code}')
     print(r.text)
 
-
 def do_enable_user(sess: requests.Session, args):
     confirm(f'Enable user {args.username}?', args.yes)
     url = urljoin(base_url(), f'/platform/authorization/admin/enable/{args.username}')
@@ -111,14 +97,12 @@ def do_enable_user(sess: requests.Session, args):
     print(f'HTTP {r.status_code}')
     print(r.text)
 
-
 def do_disable_user(sess: requests.Session, args):
     confirm(f'Disable user {args.username} and revoke all tokens?', args.yes)
     url = urljoin(base_url(), f'/platform/authorization/admin/disable/{args.username}')
     r = sess.post(url, json={}, headers=_headers(sess))
     print(f'HTTP {r.status_code}')
     print(r.text)
-
 
 def do_rotate_admin(sess: requests.Session, args):
     username = 'admin'
@@ -129,7 +113,6 @@ def do_rotate_admin(sess: requests.Session, args):
     r = sess.put(url, json=payload, headers=_headers(sess))
     print(f'HTTP {r.status_code}')
     print(r.text)
-
 
 def main():
     p = argparse.ArgumentParser(description='Doorman admin CLI')
@@ -171,7 +154,6 @@ def main():
         os.environ['BASE_URL'] = args.base_url
 
     sess = requests.Session()
-    # If a prior cookie/token is not set, try to login
     if not any(c.name == 'access_token_cookie' for c in sess.cookies):
         email = args.email
         pwd = args.password or os.getenv('DOORMAN_ADMIN_PASSWORD')
@@ -200,7 +182,6 @@ def main():
     else:
         p.print_help()
         return 2
-
 
 if __name__ == '__main__':
     sys.exit(main())

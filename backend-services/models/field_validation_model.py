@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from typing import List, Union, Optional, Dict, Any
 from pydantic import BaseModel, Field
 

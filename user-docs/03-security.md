@@ -405,7 +405,7 @@ Required for memory-only mode dumps:
 
 ```bash
 MEM_ENCRYPTION_KEY=your-memory-dump-encryption-key-32chars+
-MEM_DUMP_PATH=generated/memory_dump.bin
+MEM_DUMP_PATH=backend-services/generated/memory_dump.bin
 ```
 
 **Security:**

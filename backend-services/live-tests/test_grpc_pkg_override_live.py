@@ -5,7 +5,6 @@ _RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
 if not _RUN_LIVE:
     pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 
-
 def _fake_pb2_module(method_name='M'):
     class Req:
         pass
@@ -19,7 +18,6 @@ def _fake_pb2_module(method_name='M'):
     setattr(Req, '__name__', f'{method_name}Request')
     setattr(Reply, '__name__', f'{method_name}Reply')
     return Req, Reply
-
 
 def _make_import_module_recorder(record, pb2_map):
     def _imp(name):
@@ -49,7 +47,6 @@ def _make_import_module_recorder(record, pb2_map):
         raise ImportError(name)
     return _imp
 
-
 def _make_fake_grpc_unary(sequence_codes, grpc_mod):
     counter = {'i': 0}
     class AioChan:
@@ -76,7 +73,6 @@ def _make_fake_grpc_unary(sequence_codes, grpc_mod):
             return Chan()
     fake = type('G', (), {'aio': aio, 'StatusCode': grpc_mod.StatusCode, 'RpcError': Exception})
     return fake
-
 
 @pytest.mark.asyncio
 async def test_grpc_with_api_grpc_package_config(monkeypatch, authed_client):
@@ -110,7 +106,6 @@ async def test_grpc_with_api_grpc_package_config(monkeypatch, authed_client):
     assert r.status_code == 200
     assert any(n == 'api.pkg_pb2' for n in record)
 
-
 @pytest.mark.asyncio
 async def test_grpc_with_request_package_override(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -141,7 +136,6 @@ async def test_grpc_with_request_package_override(monkeypatch, authed_client):
     r = await authed_client.post(f'/api/grpc/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json={'method': 'Svc.M', 'message': {}, 'package': 'req.pkg'})
     assert r.status_code == 200
     assert any(n == 'req.pkg_pb2' for n in record)
-
 
 @pytest.mark.asyncio
 async def test_grpc_without_package_server_uses_fallback_path(monkeypatch, authed_client):
@@ -174,7 +168,6 @@ async def test_grpc_without_package_server_uses_fallback_path(monkeypatch, authe
     r = await authed_client.post(f'/api/grpc/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json={'method': 'Svc.M', 'message': {}})
     assert r.status_code == 200
     assert any(n.endswith(default_pkg) for n in record)
-
 
 @pytest.mark.asyncio
 async def test_grpc_unavailable_then_success_with_retry_live(monkeypatch, authed_client):

@@ -9,7 +9,6 @@ import os
 import sys
 import asyncio
 
-# TEST-ONLY credentials - DO NOT use these in production
 os.environ.setdefault('MEM_OR_EXTERNAL', 'MEM')
 os.environ.setdefault('JWT_SECRET_KEY', 'test-secret-key')
 os.environ.setdefault('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev')
@@ -27,19 +26,16 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
-
 @pytest.fixture
 def event_loop():
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
-
 @pytest.fixture
 def client():
     from doorman import doorman
     return AsyncClient(app=doorman, base_url='http://testserver')
-
 
 @pytest_asyncio.fixture
 async def authed_client():
@@ -82,7 +78,6 @@ async def authed_client():
         pass
     return client
 
-# Test helpers for API/endpoint setup used by backend-services tests
 async def create_api(client: AsyncClient, api_name: str, api_version: str):
     payload = {
         'api_name': api_name,

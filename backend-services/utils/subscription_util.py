@@ -4,12 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from fastapi import HTTPException, Depends, Request
 from jose import jwt, JWTError
 import logging
 
-# Internal imports
 from utils.doorman_cache_util import doorman_cache
 from utils.database_async import subscriptions_collection
 from utils.async_db import db_find_one, db_update_one
@@ -41,15 +39,11 @@ async def subscription_required(request: Request):
             api_version = request.headers.get('X-API-Version', 'v1')
             api_and_version = f'{api_name}/{api_version}'
         else:
-            # Fallback: take first two segments after leading '/'
-            # e.g., '/api/other/svc/v1/...' -> 'svc/v1'
             p = full_path.lstrip('/')
             segs = p.split('/')
             if segs and segs[0] == 'api' and len(segs) >= 4:
-                # Assume shape: /api/<unknown>/<api>/<version>/...
                 api_and_version = '/'.join(segs[2:4])
             else:
-                # Generic: first two segments after leading '/'
                 api_and_version = '/'.join(segs[:2])
         user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or await db_find_one(subscriptions_collection, {'username': username})
         subscriptions = user_subscriptions.get('apis') if user_subscriptions and 'apis' in user_subscriptions else None

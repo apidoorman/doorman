@@ -2,7 +2,6 @@
 Routes for managing security settings.
 """
 
-# External imports
 from fastapi import APIRouter, Request
 from typing import Optional
 import os
@@ -12,7 +11,6 @@ import uuid
 import time
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from models.security_settings_model import SecuritySettingsModel
 from utils.response_util import process_response

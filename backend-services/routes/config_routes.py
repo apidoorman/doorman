@@ -2,7 +2,6 @@
 Routes to export and import platform configuration (APIs, Endpoints, Roles, Groups, Routings).
 """
 
-# External imports
 from fastapi import APIRouter, Request
 from typing import Any, Dict, List, Optional
 import uuid
@@ -10,7 +9,6 @@ import time
 import logging
 import copy
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.response_util import process_response
 from utils.auth_util import auth_required

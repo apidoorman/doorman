@@ -1,6 +1,5 @@
 import pytest
 
-
 async def _setup_api(client, name, ver):
     payload = {
         'api_name': name,
@@ -25,7 +24,6 @@ async def _setup_api(client, name, ver):
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 def _fake_import(grpc_module_name: str):
     def _imp(n):
         if n.endswith('_pb2'):
@@ -39,12 +37,11 @@ def _fake_import(grpc_module_name: str):
             setattr(mod, 'MReply', Reply)
             return mod
         if n.endswith('_pb2_grpc'):
-            class Stub: 
+            class Stub:
                 def __init__(self, ch): pass
             return type('SVC', (), {'SvcStub': Stub})
         raise ImportError(n)
     return _imp
-
 
 @pytest.mark.asyncio
 async def test_grpc_client_streaming(monkeypatch, authed_client):
@@ -56,7 +53,6 @@ async def test_grpc_client_streaming(monkeypatch, authed_client):
     class Chan:
         def stream_unary(self, method, request_serializer=None, response_deserializer=None):
             async def _call(req_iter, metadata=None):
-                # Consume iterator
                 count = 0
                 async for _ in req_iter:
                     count += 1
@@ -73,7 +69,6 @@ async def test_grpc_client_streaming(monkeypatch, authed_client):
     body = {'method': 'Svc.M', 'message': {}, 'stream': 'client', 'messages': [{}, {}, {}]}
     r = await authed_client.post(f'/api/grpc/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json=body)
     assert r.status_code == 200
-
 
 @pytest.mark.asyncio
 async def test_grpc_client_streaming_field_mapping(monkeypatch, authed_client):
@@ -108,7 +103,6 @@ async def test_grpc_client_streaming_field_mapping(monkeypatch, authed_client):
     data = r.json().get('response') or r.json()
     assert int(data.get('sum', 0)) == 6
 
-
 @pytest.mark.asyncio
 async def test_grpc_bidi_streaming(monkeypatch, authed_client):
     name, ver = 'gbidi', 'v1'
@@ -135,7 +129,6 @@ async def test_grpc_bidi_streaming(monkeypatch, authed_client):
     assert r.status_code == 200
     data = r.json().get('response') or r.json()
     assert isinstance(data.get('items'), list) and len(data['items']) == 2
-
 
 @pytest.mark.asyncio
 async def test_grpc_bidi_streaming_field_echo(monkeypatch, authed_client):

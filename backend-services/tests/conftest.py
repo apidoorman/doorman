@@ -5,11 +5,9 @@ Ensures the backend-services directory is on sys.path so imports like
 `from utils...` resolve correctly when tests run from the repo root in CI.
 """
 
-# External imports
 import os
 import sys
 
-# TEST-ONLY credentials - DO NOT use these in production
 os.environ.setdefault('MEM_OR_EXTERNAL', 'MEM')
 os.environ.setdefault('JWT_SECRET_KEY', 'test-secret-key')
 os.environ.setdefault('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev')
@@ -22,16 +20,11 @@ os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
 os.environ.setdefault('ENABLE_HTTPX_CLIENT_CACHE', 'false')
 os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
 
-# Compatibility toggles for Python 3.13 transport/middleware edge-cases
 try:
     import sys as _sys
     if _sys.version_info >= (3, 13):
-        # Avoid BaseHTTPMiddleware/receive wrapping issues on platform routes
         os.environ.setdefault('DISABLE_PLATFORM_CHUNKED_WRAP', 'true')
-        # Use native Starlette behavior for CORS (disable ASGI shim)
         os.environ.setdefault('DISABLE_PLATFORM_CORS_ASGI', 'true')
-        # Exclude problematic platform endpoint from body size middleware to
-        # avoid EndOfStream/No response returned on some runtimes
         os.environ.setdefault('BODY_LIMIT_EXCLUDE_PATHS', '/platform/security/settings')
 except Exception:
     pass
@@ -65,11 +58,9 @@ async def ensure_memory_dump_defaults(monkeypatch, tmp_path):
     """
     try:
         monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
-        # Provide a stable, sufficiently long test key; individual tests may monkeypatch/delenv
         monkeypatch.setenv('MEM_ENCRYPTION_KEY', os.environ.get('MEM_ENCRYPTION_KEY') or 'test-encryption-key-32-characters-min')
         dump_base = tmp_path / 'mem' / 'memory_dump.bin'
         monkeypatch.setenv('MEM_DUMP_PATH', str(dump_base))
-        # If memory_dump_util was already imported before env set, update its module-level default
         try:
             import utils.memory_dump_util as md
             md.DEFAULT_DUMP_PATH = str(dump_base)
@@ -79,7 +70,6 @@ async def ensure_memory_dump_defaults(monkeypatch, tmp_path):
         pass
     yield
 
-# --- Per-test start/finish logging to pinpoint hangs ---
 @pytest.fixture(autouse=True)
 def _log_test_start_end(request):
     try:
@@ -94,7 +84,6 @@ def _log_test_start_end(request):
     except Exception:
         pass
 
-# Also log key env toggles at session start for reproducibility
 @pytest.fixture(autouse=True, scope='session')
 def _log_env_toggles():
     try:
@@ -166,14 +155,12 @@ def event_loop():
 @pytest_asyncio.fixture(autouse=True)
 async def reset_http_client():
     """Reset the pooled httpx client between tests to prevent connection pool exhaustion."""
-    # Reset before the test (important for tests that monkeypatch httpx.AsyncClient)
     try:
         from services.gateway_service import GatewayService
         await GatewayService.aclose_http_client()
     except Exception:
         pass
 
-    # Reset rate limit counters before each test
     try:
         from utils.limit_throttle_util import reset_counters
         reset_counters()
@@ -181,7 +168,6 @@ async def reset_http_client():
         pass
 
     yield
-    # After each test, close and reset the pooled client
     try:
         from services.gateway_service import GatewayService
         await GatewayService.aclose_http_client()
@@ -215,7 +201,6 @@ async def reset_in_memory_db_state():
         pass
     yield
 
-# Test helpers expected by some suites
 async def create_api(client: AsyncClient, api_name: str, api_version: str):
     payload = {
         'api_name': api_name,

@@ -1,4 +1,3 @@
-# External imports
 import uuid
 import pytest
 

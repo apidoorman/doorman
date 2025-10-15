@@ -1,10 +1,7 @@
 import pytest
 
-
 async def _allow_tools(client):
-    # Grant admin manage_security so tools route is permitted
     await client.put('/platform/user/admin', json={'manage_security': True})
-
 
 @pytest.mark.asyncio
 async def test_tools_cors_checker_allows_when_method_and_headers_match(monkeypatch, authed_client):
@@ -19,7 +16,6 @@ async def test_tools_cors_checker_allows_when_method_and_headers_match(monkeypat
     data = r.json()
     assert data.get('preflight', {}).get('allowed') is True
 
-
 @pytest.mark.asyncio
 async def test_tools_cors_checker_denies_when_method_not_allowed(monkeypatch, authed_client):
     await _allow_tools(authed_client)
@@ -31,7 +27,6 @@ async def test_tools_cors_checker_denies_when_method_not_allowed(monkeypatch, au
     data = r.json()
     assert data.get('preflight', {}).get('allowed') is False
     assert data.get('preflight', {}).get('method_allowed') is False
-
 
 @pytest.mark.asyncio
 async def test_tools_cors_checker_denies_when_headers_not_allowed(monkeypatch, authed_client):
@@ -46,11 +41,9 @@ async def test_tools_cors_checker_denies_when_headers_not_allowed(monkeypatch, a
     assert data.get('preflight', {}).get('allowed') is False
     assert 'X-CSRF-Token' in (data.get('preflight', {}).get('not_allowed_headers') or [])
 
-
 @pytest.mark.asyncio
 async def test_tools_cors_checker_credentials_and_wildcard_interaction(monkeypatch, authed_client):
     await _allow_tools(authed_client)
-    # Wildcard origins with credentials allowed (non-strict) -> origin allowed, but note warns
     monkeypatch.setenv('ALLOWED_ORIGINS', '*')
     monkeypatch.setenv('ALLOW_CREDENTIALS', 'true')
     monkeypatch.setenv('CORS_STRICT', 'false')

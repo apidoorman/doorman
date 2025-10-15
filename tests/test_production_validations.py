@@ -105,7 +105,7 @@ def test_redis_validation():
     print("Testing Redis Configuration Validation:")
     for mode, redis_host, should_pass, description in test_cases:
         if mode == 'MEM':
-            is_valid = True  # No Redis required for MEM
+            is_valid = True
         else:
             is_valid = bool(redis_host)
         status = '✓' if is_valid == should_pass else '✗'

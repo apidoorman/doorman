@@ -5,14 +5,12 @@ import pytest
 
 from config import ENABLE_GRPC
 
-
 def _find_port() -> int:
     s = socket.socket()
     s.bind(('127.0.0.1', 0))
     p = s.getsockname()[1]
     s.close()
     return p
-
 
 @pytest.mark.skipif(not ENABLE_GRPC, reason='gRPC disabled')
 def test_public_grpc_with_proto_upload(client):
@@ -45,12 +43,10 @@ message DeleteReply { bool ok = 1; }
 
     base = client.base_url.rstrip('/')
     ts = int(time.time())
-    # Avoid hyphens in api_name to ensure valid proto package identifiers
     api_name = f'grpcdemo{ts}'
     api_version = 'v1'
     pkg = f'{api_name}_{api_version}'
 
-    # Build and start a matching gRPC server for the uploaded proto
     with tempfile.TemporaryDirectory() as td:
         tmp = pathlib.Path(td)
         (tmp / 'svc.proto').write_text(PROTO.replace('{pkg}', pkg))
@@ -84,12 +80,10 @@ message DeleteReply { bool ok = 1; }
         time.sleep(0.2)
 
         try:
-            # Upload proto to gateway so it generates matching stubs
             files = {'file': ('svc.proto', PROTO.replace('{pkg}', pkg), 'application/octet-stream')}
             r_up = client.post(f'/platform/proto/{api_name}/{api_version}', files=files)
             assert r_up.status_code in (200, 201), r_up.text
 
-            # Create API and endpoint pointing at our test gRPC server
             r_api = client.post('/platform/api', json={
                 'api_name': api_name,
                 'api_version': api_version,
@@ -100,7 +94,6 @@ message DeleteReply { bool ok = 1; }
                 'api_type': 'REST',
                 'active': True,
                 'api_public': True,
-                # Explicit package for clarity; gateway will prefer API config
                 'api_grpc_package': pkg
             })
             assert r_api.status_code in (200, 201), r_api.text
@@ -114,7 +107,6 @@ message DeleteReply { bool ok = 1; }
             })
             assert r_ep.status_code in (200, 201), r_ep.text
 
-            # Exercise CRUD via gateway
             url = f"{base}/api/grpc/{api_name}"
             hdr = {'X-API-Version': api_version}
             assert requests.post(url, json={'method': 'Resource.Create', 'message': {'name': 'A'}}, headers=hdr).status_code == 200

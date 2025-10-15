@@ -81,7 +81,6 @@ async def enforce_pre_request_limit(request: Request, username: Optional[str]) -
     user = _get_user(username)
     if not user:
         return
-    # Enforce when limit is set unless explicitly disabled
     if user.get('bandwidth_limit_enabled') is False:
         return
     limit = user.get('bandwidth_limit_bytes')

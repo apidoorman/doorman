@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 import os
 import random
 import json
@@ -22,23 +21,19 @@ import importlib
 import string
 from pathlib import Path
 
-# Provide a shim for gql.Client so tests can monkeypatch `Client` even when gql
-# is not installed or used at runtime.
 try:
-    from gql import Client as _GqlClient  # type: ignore
+    from gql import Client as _GqlClient
     def gql(q):
         return q
-except Exception:  # pragma: no cover
-    class _GqlClient:  # type: ignore
+except Exception:
+    class _GqlClient:
         def __init__(self, *args, **kwargs):
             pass
-    def gql(q):  # type: ignore
+    def gql(q):
         return q
 
-# Expose symbol name expected by tests
 Client = _GqlClient
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils import api_util, routing_util
 from utils import credit_util
@@ -183,19 +178,15 @@ class GatewayService:
         ctype = ctype_raw.split(';', 1)[0].strip().lower()
         body = getattr(response, 'content', b'')
 
-        # Explicit JSON types
         if ctype in ('application/json', 'application/graphql+json') or 'application/graphql' in ctype:
             return json.loads(body)
 
-        # Explicit XML types
         if ctype in ('application/xml', 'text/xml'):
             return ET.fromstring(body)
 
-        # Known raw passthrough types
         if ctype in ('application/octet-stream', 'text/plain'):
             return body
 
-        # Unspecified/empty content-type: attempt best-effort parse
         if not ctype:
             try:
                 return json.loads(body)
@@ -205,12 +196,7 @@ class GatewayService:
                 except Exception:
                     return body
 
-        # Unknown but explicit type: do not guess; return raw bytes
         return body
-
-    # ========================================================================
-    # Refactored Helper Methods (P2 #21 - Extract Duplicate Code)
-    # ========================================================================
 
     @staticmethod
     async def _resolve_api_from_path(path: str, request_id: str):
@@ -290,20 +276,16 @@ class GatewayService:
         if not api or not api.get('api_credits_enabled'):
             return
 
-        # Add system-level credit API key
         ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
         if ai_token_headers:
             header_name = ai_token_headers[0]
             header_value = ai_token_headers[1]
 
-            # Handle key rotation: ai_token_headers[1] could be a list [old_key, new_key]
             if isinstance(header_value, list):
-                # Use new key if available during rotation
                 header_value = header_value[-1] if len(header_value) > 0 else header_value[0]
 
             headers[header_name] = header_value
 
-            # Override with user-specific API key if available
             if username and not bool(api.get('api_public')):
                 user_specific_api_key = await credit_util.get_user_api_key(
                     api.get('api_credit_group'),
@@ -334,44 +316,31 @@ class GatewayService:
 
         for k, v in headers.items():
             try:
-                # Convert key to lowercase and sanitize
                 key = str(k).lower().strip()
 
-                # Skip empty keys
                 if not key:
                     continue
 
-                # Replace invalid characters with hyphens
-                # Keep only alphanumeric, hyphens, underscores, and dots
                 sanitized_key = ''.join(
                     c if c.isalnum() or c in ('-', '_', '.') else '-'
                     for c in key
                 )
 
-                # Skip if sanitization resulted in empty key
                 if not sanitized_key:
                     continue
 
-                # Convert value to string and encode to ASCII
                 value = str(v) if v is not None else ''
 
-                # Try to encode as ASCII to ensure compatibility
                 try:
                     value.encode('ascii')
                 except UnicodeEncodeError:
-                    # If value contains non-ASCII, skip it
                     continue
 
                 metadata_list.append((sanitized_key, value))
             except Exception:
-                # Skip problematic headers silently
                 continue
 
         return metadata_list
-
-    # ========================================================================
-    # gRPC Input Validation Helpers
-    # ========================================================================
 
     _IDENT_ALLOWED = set(string.ascii_letters + string.digits + "_")
     _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -381,9 +350,6 @@ class GatewayService:
         try:
             base_r = base.resolve()
             target_r = target.resolve()
-            # lgtm [py/path-injection]
-            # codeql[py/path-injection]
-            # Safe check: resolving and enforcing target under base prevents traversal/absolute path escapes.
             return str(target_r).startswith(str(base_r))
         except Exception:
             return False
@@ -442,10 +408,6 @@ class GatewayService:
         except Exception:
             return None
 
-    # ========================================================================
-    # Gateway Methods
-    # ========================================================================
-
     @staticmethod
     async def rest_gateway(username, request, request_id, start_time, path, url=None, method=None, retry=0):
         """
@@ -472,7 +434,6 @@ class GatewayService:
                 if not endpoints:
                     return GatewayService.error_response(request_id, 'GTW002', 'No endpoints found for the requested API')
                 regex_pattern = re.compile(r'\{[^/]+\}')
-                # Treat HEAD like GET for endpoint registration matching
                 match_method = 'GET' if str(request.method).upper() == 'HEAD' else request.method
                 composite = match_method + '/' + endpoint_uri
                 if not any(re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), composite) for ep in endpoints):
@@ -491,7 +452,6 @@ class GatewayService:
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             else:
-                # Recursive retry path: url/method provided, but we still need API context
                 try:
                     parts = [p for p in (path or '').split('/') if p]
                     api_name_version = ''
@@ -501,7 +461,6 @@ class GatewayService:
                         endpoint_uri = '/'.join(parts[2:])
                     api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
                     api = await api_util.get_api(api_key, api_name_version)
-                    # Do not mutate url/method or retry here; caller passed those
                 except Exception:
                     api = None
                     endpoint_uri = ''
@@ -510,7 +469,6 @@ class GatewayService:
             query_params = getattr(request, 'query_params', {})
             allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
-            # Propagate request ID to upstream for distributed tracing
             headers['X-Request-ID'] = request_id
             if api and api.get('api_credits_enabled'):
                 ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
@@ -528,14 +486,11 @@ class GatewayService:
                     swap_from = api.get('api_authorization_field_swap')
                     source_val = None
                     if swap_from:
-                        # Look up swap header among forwarded headers (case variants)
                         for key_variant in (swap_from, str(swap_from).lower(), str(swap_from).title()):
                             if key_variant in headers:
                                 source_val = headers.get(key_variant)
                                 break
-                    # Determine original Authorization from incoming request
                     orig_auth = request.headers.get('Authorization') or request.headers.get('authorization')
-                    # Apply only when non-empty. Prefer swap header; otherwise preserve original Authorization.
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
                     elif orig_auth is not None and str(orig_auth).strip() != '':
@@ -625,7 +580,6 @@ class GatewayService:
                     try:
                         response_content = http_response.json()
                     except Exception as _e:
-                        # Upstream declared JSON but sent malformed body: map to 500 (GTW006)
                         logger.error(f'{request_id} | REST upstream malformed JSON: {str(_e)}')
                         return ResponseModel(
                             status_code=500,
@@ -636,7 +590,6 @@ class GatewayService:
                 else:
                     response_content = http_response.text
             backend_end_time = time.time() * 1000
-            # Retries are handled by the HTTP helper
             if http_response.status_code == 404:
                 return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
             logger.info(f'{request_id} | REST gateway status code: {http_response.status_code}')
@@ -732,7 +685,6 @@ class GatewayService:
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             else:
-                # Recursive call with url present; re-derive API context for headers/validation
                 try:
                     parts = [p for p in (path or '').split('/') if p]
                     api_name_version = ''
@@ -756,7 +708,6 @@ class GatewayService:
                 content_type = 'text/xml; charset=utf-8'
             allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
-            # Propagate request ID to upstream for distributed tracing
             headers['X-Request-ID'] = request_id
             headers['Content-Type'] = content_type
             if 'SOAPAction' not in headers:
@@ -771,7 +722,6 @@ class GatewayService:
                             if key_variant in headers:
                                 source_val = headers.get(key_variant)
                                 break
-                    # Check original Authorization from incoming request
                     orig_auth = request.headers.get('Authorization') or request.headers.get('authorization')
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
@@ -806,7 +756,6 @@ class GatewayService:
             response_content = http_response.text
             logger.info(f'{request_id} | SOAP gateway response: {response_content}')
             backend_end_time = time.time() * 1000
-            # Retries handled by HTTP helper
             if http_response.status_code == 404:
                 return GatewayService.error_response(request_id, 'GTW005', 'Endpoint does not exist in backend service')
             logger.info(f'{request_id} | SOAP gateway status code: {http_response.status_code}')
@@ -886,7 +835,6 @@ class GatewayService:
             current_time = time.time() * 1000
             allowed_headers = api.get('api_allowed_headers') or []
             headers = await get_headers(request, allowed_headers)
-            # Propagate request ID to upstream for distributed tracing
             headers['X-Request-ID'] = request_id
             headers['Content-Type'] = 'application/json'
             headers['Accept'] = 'application/json'
@@ -907,7 +855,6 @@ class GatewayService:
                             if key_variant in headers:
                                 source_val = headers.get(key_variant)
                                 break
-                    # Preserve original Authorization if swap header missing/empty
                     orig_auth = request.headers.get('Authorization') or request.headers.get('authorization')
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
@@ -927,17 +874,14 @@ class GatewayService:
             except Exception as e:
                 return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
 
-            # Try test-friendly Client path first (monkeypatchable for tests)
-            # If Client has async context manager support, it's been monkeypatched by tests
             result = None
             if hasattr(Client, '__aenter__'):
                 try:
-                    async with Client(transport=None, fetch_schema_from_transport=False) as session:  # type: ignore
-                        result = await session.execute(gql(query), variable_values=variables)  # type: ignore
+                    async with Client(transport=None, fetch_schema_from_transport=False) as session:
+                        result = await session.execute(gql(query), variable_values=variables)
                 except Exception as _e:
                     logger.debug(f'{request_id} | GraphQL Client execution failed; falling back to HTTP: {_e}')
 
-            # Default path: use httpx to call upstream GraphQL server
             if result is None:
                 client_key = request.headers.get('client-key')
                 server = await routing_util.pick_upstream_server(api, 'POST', '/graphql', client_key)
@@ -956,7 +900,6 @@ class GatewayService:
                         api_config=api,
                     )
                 except AttributeError:
-                    # Fallback for tests that stub AsyncClient without `.request`
                     http_resp = await client.post(
                         url,
                         json={'query': query, 'variables': variables},
@@ -1053,7 +996,6 @@ class GatewayService:
                     logger.error(f'{request_id} | Invalid JSON in request body')
                     return GatewayService.error_response(request_id, 'GTW011', 'Invalid JSON in request body', status=400)
 
-                # Validate method and optional package inputs early
                 parsed = GatewayService._parse_and_validate_method(body.get('method'))
                 if not parsed:
                     return GatewayService.error_response(request_id, 'GTW011', 'Invalid gRPC method. Use Service.Method with alphanumerics/underscore.', status=400)
@@ -1074,7 +1016,6 @@ class GatewayService:
                             await validation_util.validate_grpc_request(endpoint_id, body.get('message'))
                     except Exception as e:
                         return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
-                # Resolve and validate module base: API config > request override > default derived
                 api_pkg_raw = None
                 try:
                     api_pkg_raw = (api.get('api_grpc_package') or '').strip() if api else None
@@ -1085,7 +1026,6 @@ class GatewayService:
                 pkg_override_valid = GatewayService._validate_package_name(pkg_override) if pkg_override else None
                 default_base = f'{api_name}_{api_version}'.replace('-', '_')
                 if not GatewayService._is_valid_identifier(default_base):
-                    # Final fallback: strip invalid chars from default
                     default_base = ''.join(ch if ch in GatewayService._IDENT_ALLOWED else '_' for ch in default_base)
                 module_base = (api_pkg or pkg_override_valid or default_base)
                 try:
@@ -1096,7 +1036,6 @@ class GatewayService:
                 except Exception:
                     pass
 
-                # Allow-list enforcement (package/service/method)
                 try:
                     allowed_pkgs = api.get('api_grpc_allowed_packages') if api else None
                     allowed_svcs = api.get('api_grpc_allowed_services') if api else None
@@ -1104,7 +1043,6 @@ class GatewayService:
 
                     service_name, method_name = _service_name_preview, _method_name_preview
 
-                    # If allow-lists are configured, enforce them
                     if allowed_pkgs and isinstance(allowed_pkgs, list):
                         if module_base not in allowed_pkgs:
                             return GatewayService.error_response(
@@ -1122,7 +1060,6 @@ class GatewayService:
                                 request_id, 'GTW013', 'gRPC method not allowed', status=403
                             )
                 except Exception:
-                    # On any unexpected error, default to safe deny with 403
                     return GatewayService.error_response(
                         request_id, 'GTW013', 'gRPC target not allowed', status=403
                     )
@@ -1134,10 +1071,6 @@ class GatewayService:
                 if not GatewayService._validate_under_base(project_root, proto_path):
                     return GatewayService.error_response(request_id, 'GTW012', 'Invalid path for proto resolution', status=400)
 
-                # Ensure both project root (for 'from generated import ...') and
-                # the generated directory itself (for 'import ..._pb2') are on sys.path.
-                # The proto upload flow may rewrite imports to 'from generated import ...',
-                # which requires the parent directory of 'generated' to be importable.
                 generated_dir = project_root / 'generated'
                 gen_dir_str = str(generated_dir)
                 proj_root_str = str(project_root)
@@ -1150,7 +1083,6 @@ class GatewayService:
                 except Exception:
                     pass
 
-                # Try to import generated modules first (tests monkeypatch import_module)
                 pb2 = None
                 pb2_grpc = None
                 try:
@@ -1160,7 +1092,6 @@ class GatewayService:
                         pb2 = importlib.import_module(pb2_name)
                         pb2_grpc = importlib.import_module(pb2_grpc_name)
                     except ModuleNotFoundError:
-                        # Fallback to 'generated.<name>' if rewrite expects package import
                         gen_pb2_name = f'generated.{module_base}_pb2'
                         gen_pb2_grpc_name = f'generated.{module_base}_pb2_grpc'
                         pb2 = importlib.import_module(gen_pb2_name)
@@ -1170,7 +1101,6 @@ class GatewayService:
                     logger.warning(f"{request_id} | gRPC modules not found, will attempt proto generation: {str(mnf_exc)}")
                 except ImportError as imp_exc:
                     logger.error(f"{request_id} | ImportError loading gRPC modules (likely broken import in generated file): {str(imp_exc)}")
-                    # Clear the module from cache and return specific error
                     mod_pb2 = f'{module_base}_pb2'
                     mod_pb2_grpc = f'{module_base}_pb2_grpc'
                     if mod_pb2 in sys.modules:
@@ -1196,9 +1126,6 @@ class GatewayService:
                     try:
                         proto_dir.mkdir(exist_ok=True)
                         try:
-                            # lgtm [py/path-injection]
-                            # codeql[py/path-injection]
-                            # Safe: path check/creation under fixed project directories; user input sanitized earlier
                             logger.info(f"{request_id} | gRPC generated check: proto_path={proto_path} exists={proto_path.exists()} generated_dir={generated_dir} pb2={module_base}_pb2.py={ (generated_dir / (module_base + '_pb2.py')).exists() }")
                         except Exception:
                             pass
@@ -1226,14 +1153,11 @@ class GatewayService:
                             'message DeleteRequest { int32 id = 1; }\n'
                             'message DeleteReply { bool ok = 1; }\n'
                         )
-                        # lgtm [py/path-injection]
-                        # codeql[py/path-injection]
-                        # Safe write: sanitized module_base + fixed 'proto' base directory
                         proto_path.write_text(proto_content, encoding='utf-8')
                         generated_dir = project_root / 'generated'
                         generated_dir.mkdir(exist_ok=True)
                         try:
-                            from grpc_tools import protoc as _protoc  # type: ignore
+                            from grpc_tools import protoc as _protoc
                             code = _protoc.main([
                                 'protoc', f'--proto_path={str(proto_dir)}', f'--python_out={str(generated_dir)}', f'--grpc_python_out={str(generated_dir)}', str(proto_path)
                             ])
@@ -1244,7 +1168,6 @@ class GatewayService:
                                 init_path.write_text('"""Generated gRPC code."""\n', encoding='utf-8')
                         except Exception as ge:
                             logger.error(f'{request_id} | On-demand proto generation failed: {ge}')
-                            # In test mode, allow fallback without generation
                             if os.getenv('DOORMAN_TEST_MODE', '').lower() == 'true':
                                 pb2 = type('PB2', (), {})
                                 pb2_grpc = type('SVC', (), {})
@@ -1274,22 +1197,17 @@ class GatewayService:
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
                         return GatewayService.error_response(request_id, 'GTW008', 'User does not have any credits', status=401)
             current_time = time.time() * 1000
-            # Ensure api is available even in retry recursion
             try:
                 if not url:
-                    # already resolved above
                     pass
                 else:
-                    # When called recursively with url present, rebuild api_path
                     api_version = request.headers.get('X-API-Version', 'v1')
                     if not api_name:
-                        # Derive from request path
                         path_parts = (path or '').strip('/').split('/')
                         api_name = path_parts[-1] if path_parts else None
                     if api_name:
                         api_path = f'{api_name}/{api_version}'
                         api = doorman_cache.get_cache('api_cache', api_path) or await api_util.get_api(None, api_path)
-                        # Recompute module_base in recursive path
                         try:
                             api_pkg_raw = (api.get('api_grpc_package') or '').strip() if api else None
                         except Exception:
@@ -1301,7 +1219,6 @@ class GatewayService:
                         if not GatewayService._is_valid_identifier(default_base):
                             default_base = ''.join(ch if ch in GatewayService._IDENT_ALLOWED else '_' for ch in default_base)
                         module_base = (api_pkg or pkg_override_valid or default_base)
-                        # Enforce allow-lists in recursive path as well
                         try:
                             allowed_pkgs = api.get('api_grpc_allowed_packages') if api else None
                             allowed_svcs = api.get('api_grpc_allowed_services') if api else None
@@ -1336,7 +1253,6 @@ class GatewayService:
                 pass
             allowed_headers = (api or {}).get('api_allowed_headers') or []
             headers = await get_headers(request, allowed_headers)
-            # Propagate request ID to upstream for distributed tracing
             headers['X-Request-ID'] = request_id
             try:
                 body = await request.json()
@@ -1352,15 +1268,12 @@ class GatewayService:
             if 'message' not in body:
                 logger.error(f'{request_id} | Missing message in request body')
                 return GatewayService.error_response(request_id, 'GTW011', 'Missing message in request body', status=400)
-            # Validate method and (optional) package at this stage as well
             parsed_method = GatewayService._parse_and_validate_method(body.get('method'))
             if not parsed_method:
                 return GatewayService.error_response(request_id, 'GTW011', 'Invalid gRPC method. Use Service.Method with alphanumerics/underscore.', status=400)
-            # Validate package override if present
             pkg_override = (body.get('package') or '').strip() or None
             if pkg_override and GatewayService._validate_package_name(pkg_override) is None:
                 return GatewayService.error_response(request_id, 'GTW011', 'Invalid gRPC package. Use letters, digits, underscore only.', status=400)
-            # Re-apply allow-list checks after validation in this path
             try:
                 svc_name, mth_name = parsed_method
                 allowed_pkgs = api.get('api_grpc_allowed_packages') if api else None
@@ -1374,10 +1287,9 @@ class GatewayService:
                     return GatewayService.error_response(request_id, 'GTW013', 'gRPC method not allowed', status=403)
             except Exception:
                 return GatewayService.error_response(request_id, 'GTW013', 'gRPC target not allowed', status=403)
-            # Preserve previously resolved module_base (api_grpc_package > request package > default)
             proto_rel = Path(module_base.replace('.', '/'))
             proto_filename = f'{proto_rel.name}.proto'
-            
+
             try:
                 endpoint_doc = await api_util.get_endpoint(api, 'POST', '/grpc')
                 endpoint_id = endpoint_doc.get('endpoint_id') if endpoint_doc else None
@@ -1386,11 +1298,10 @@ class GatewayService:
             except Exception as e:
                 return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
             proto_path = (GatewayService._PROJECT_ROOT / 'proto' / proto_rel.with_suffix('.proto'))
-            # Prefer modules imported earlier (tests may monkeypatch importlib)
             use_imported = False
             try:
                 if 'pb2' in locals() and 'pb2_grpc' in locals():
-                    use_imported = (pb2 is not None and pb2_grpc is not None)  # type: ignore[name-defined]
+                    use_imported = (pb2 is not None and pb2_grpc is not None)
             except Exception:
                 use_imported = False
             module_name = module_base
@@ -1410,15 +1321,11 @@ class GatewayService:
             pb2_module = None
             service_module = None
             if use_imported:
-                pb2_module = pb2  # type: ignore[name-defined]
-                service_module = pb2_grpc  # type: ignore[name-defined]
+                pb2_module = pb2
+                service_module = pb2_grpc
                 logger.info(f"{request_id} | Using imported gRPC modules for {module_name}")
             else:
-                # lgtm [py/path-injection]
-                # codeql[py/path-injection]
-                # Safe existence check: proto_path built from sanitized package under fixed project root
                 if not proto_path.exists():
-                    # In test mode, allow direct import via monkeypatched importlib
                     if os.getenv('DOORMAN_TEST_MODE', '').lower() == 'true':
                         try:
                             pb2_module = importlib.import_module(f'{module_name}_pb2')
@@ -1428,15 +1335,10 @@ class GatewayService:
                             logger.error(f'{request_id} | Proto file not found: {str(proto_path)}')
                             return GatewayService.error_response(request_id, 'GTW012', f'Proto file not found for API: {api_path}', status=404)
                 if not use_imported:
-                    # Ensure generated files exist when not using imported modules
                     pb2_path = package_dir / f"{parts[-1]}_pb2.py"
                     pb2_grpc_path = package_dir / f"{parts[-1]}_pb2_grpc.py"
-                    # lgtm [py/path-injection]
-                    # codeql[py/path-injection]
-                    # Safe: filenames are derived from validated identifiers and constrained to generated dir
                     if not (pb2_path.is_file() and pb2_grpc_path.is_file()):
                         logger.error(f"{request_id} | Generated modules not found for '{module_name}' pb2={pb2_path} exists={pb2_path.is_file()} pb2_grpc={pb2_grpc_path} exists={pb2_grpc_path.is_file()}")
-                        # If upstream is HTTP-based, fall back to HTTP call
                         if isinstance(url, str) and url.startswith(('http://', 'https://')):
                             try:
                                 client = GatewayService.get_http_client()
@@ -1464,7 +1366,6 @@ class GatewayService:
                         return GatewayService.error_response(request_id, 'GTW012', f'Generated gRPC modules not found for package: {module_name}', status=404)
                 if not use_imported:
                     try:
-                        # Guard against unexpected module names by re-validating the module_name
                         if GatewayService._validate_package_name(module_name) is None:
                             return GatewayService.error_response(request_id, 'GTW012', 'Invalid gRPC module name', status=400)
                         import_name_pb2 = f'{module_name}_pb2'
@@ -1474,7 +1375,6 @@ class GatewayService:
                             pb2_module = importlib.import_module(import_name_pb2)
                             service_module = importlib.import_module(import_name_grpc)
                         except ModuleNotFoundError:
-                            # Try the 'generated.' package path as a fallback
                             alt_pb2 = f'generated.{module_name}_pb2'
                             alt_grpc = f'generated.{module_name}_pb2_grpc'
                             logger.info(f"{request_id} | Retrying import via generated package: {alt_pb2} and {alt_grpc}")
@@ -1482,7 +1382,6 @@ class GatewayService:
                             service_module = importlib.import_module(alt_grpc)
                     except ImportError as e:
                         logger.error(f'{request_id} | Failed to import gRPC module: {str(e)}', exc_info=True)
-                        # If upstream is HTTP-based, fall back to HTTP call
                         if isinstance(url, str) and url.startswith(('http://', 'https://')):
                             try:
                                 client = GatewayService.get_http_client()
@@ -1512,7 +1411,6 @@ class GatewayService:
             if not parsed:
                 return GatewayService.error_response(request_id, 'GTW011', 'Invalid gRPC method. Use Service.Method with alphanumerics/underscore.', status=400)
             service_name, method_name = parsed
-            # If upstream is HTTP-based, fall back to HTTP call regardless of generated modules
             if isinstance(url, str) and url.startswith(("http://", "https://")):
                 try:
                     client = GatewayService.get_http_client()
@@ -1538,21 +1436,18 @@ class GatewayService:
                     response=(http_response.json() if http_response.headers.get('Content-Type','').startswith('application/json') else http_response.text)
                 ).dict()
 
-            # Defer type validation to attribute access below; avoid premature 500s in test stubs
             logger.info(f"{request_id} | Connecting to gRPC upstream: {url}")
             channel = grpc.aio.insecure_channel(url)
             try:
                 await asyncio.wait_for(channel.channel_ready(), timeout=2.0)
             except Exception:
                 pass
-            # Resolve request/reply message classes from pb2_module
             request_class_name = f'{method_name}Request'
             reply_class_name = f'{method_name}Reply'
 
             try:
                 logger.info(f"{request_id} | Resolving message types: {request_class_name} and {reply_class_name} from pb2_module={getattr(pb2_module, '__name__', 'unknown')}")
 
-                # Verify pb2_module is not None
                 if pb2_module is None:
                     logger.error(f'{request_id} | pb2_module is None - cannot resolve message types')
                     return GatewayService.error_response(
@@ -1562,7 +1457,6 @@ class GatewayService:
                         status=500
                     )
 
-                # Get request and reply classes
                 try:
                     request_class = getattr(pb2_module, request_class_name)
                     reply_class = getattr(pb2_module, reply_class_name)
@@ -1575,7 +1469,6 @@ class GatewayService:
                         status=500
                     )
 
-                # Create request message instance
                 try:
                     request_message = request_class()
                     logger.info(f'{request_id} | Successfully created request message of type {request_class_name}')
@@ -1601,7 +1494,6 @@ class GatewayService:
                     setattr(request_message, key, value)
                 except Exception:
                     pass
-            # Retry policy configuration
             attempts = max(1, int(retry) + 1)
             env_max_retries = 0
             try:
@@ -1619,7 +1511,6 @@ class GatewayService:
             except Exception:
                 base_ms, max_ms = 100, 1000
 
-            # Determine idempotency: default true for unary/server-stream, false for client/bidi unless overridden
             stream_mode = str((body.get('stream') or body.get('streaming') or '')).lower()
             idempotent_override = body.get('idempotent')
             if idempotent_override is not None:
@@ -1627,7 +1518,6 @@ class GatewayService:
             else:
                 is_idempotent = not (stream_mode.startswith('client') or stream_mode.startswith('bidi') or stream_mode.startswith('bi'))
 
-            # Retryable gRPC status codes
             retryable = {
                 grpc.StatusCode.UNAVAILABLE,
                 grpc.StatusCode.DEADLINE_EXCEEDED,
@@ -1645,7 +1535,6 @@ class GatewayService:
                 pass
             for attempt in range(attempts):
                 try:
-                    # Prefer direct unary call via channel for better error mapping
                     full_method = f'/{module_base}.{service_name}/{method_name}'
                     try:
                         logger.info(f"{request_id} | gRPC attempt={attempt+1}/{attempts} calling {full_method}")
@@ -1654,8 +1543,6 @@ class GatewayService:
                     req_ser = getattr(request_message, 'SerializeToString', None)
                     if not callable(req_ser):
                         req_ser = (lambda _m: b'')
-                    # Choose streaming or unary based on request body hint (computed above)
-                    # Sanitize HTTP headers for gRPC metadata compatibility
                     metadata_list = GatewayService._sanitize_grpc_metadata(headers or {})
                     if stream_mode.startswith('server'):
                         call = channel.unary_stream(
@@ -1678,7 +1565,6 @@ class GatewayService:
                         response = type('R', (), {'DESCRIPTOR': type('D', (), {'fields': []})(), 'ok': True, '_items': items})()
                         got_response = True
                     elif stream_mode.startswith('client'):
-                        # Client-streaming: send a stream of request messages, get single reply
                         try:
                             stream = channel.stream_unary(
                                 full_method,
@@ -1702,7 +1588,6 @@ class GatewayService:
                                             except Exception:
                                                 pass
                                     else:
-                                        # Fallback to base request_message
                                         msg = request_message
                                     yield msg
                                 except Exception:
@@ -1725,7 +1610,6 @@ class GatewayService:
                                 response = await unary(request_message)
                             got_response = True
                     elif stream_mode.startswith('bidi') or stream_mode.startswith('bi'):
-                        # Bi-directional streaming: send stream, collect responses up to max_items
                         try:
                             bidi = channel.stream_stream(
                                 full_method,
@@ -1806,21 +1690,17 @@ class GatewayService:
                     except Exception:
                         logger.info(f"{request_id} | gRPC primary call raised non-grpc exception")
                     final_code_name = str(code.name) if getattr(code, 'name', None) else 'ERROR'
-                    # Backoff/retry only if idempotent and code is retryable and attempts remain
                     if attempt < attempts - 1 and is_idempotent and code in retryable:
                         retries_made += 1
-                        # Exponential backoff with jitter
                         delay = min(max_ms, base_ms * (2 ** attempt)) / 1000.0
                         jitter_factor = 1.0 + (random.random() * jitter - (jitter / 2.0))
                         await asyncio.sleep(max(0.01, delay * jitter_factor))
                         continue
-                    # Try alternative method path without package prefix
                     try:
                         alt_method = f'/{service_name}/{method_name}'
                         req_ser = getattr(request_message, 'SerializeToString', None)
                         if not callable(req_ser):
                             req_ser = (lambda _m: b'')
-                        # reuse computed stream_mode
                         if stream_mode.startswith('server'):
                             call2 = channel.unary_stream(
                                 alt_method,
@@ -1970,10 +1850,8 @@ class GatewayService:
                             await asyncio.sleep(max(0.01, delay * jitter_factor))
                             continue
                         else:
-                            # Do not mask channel errors with stub fallback; propagate
                             break
             if last_exc is not None:
-                # Extract gRPC status code from exception
                 code_name = 'UNKNOWN'
                 code_obj = None
                 try:
@@ -1986,31 +1864,28 @@ class GatewayService:
                 except Exception as code_extract_err:
                     logger.warning(f"{request_id} | Failed to extract gRPC status code: {str(code_extract_err)}")
 
-                # Comprehensive gRPC status code to HTTP status code mapping
-                # Based on: https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
                 status_map = {
-                    'OK': 200,                      # Success
-                    'CANCELLED': 499,               # Client Closed Request
-                    'UNKNOWN': 500,                 # Internal Server Error
-                    'INVALID_ARGUMENT': 400,        # Bad Request
-                    'DEADLINE_EXCEEDED': 504,       # Gateway Timeout
-                    'NOT_FOUND': 404,               # Not Found
-                    'ALREADY_EXISTS': 409,          # Conflict
-                    'PERMISSION_DENIED': 403,       # Forbidden
-                    'RESOURCE_EXHAUSTED': 429,      # Too Many Requests
-                    'FAILED_PRECONDITION': 412,     # Precondition Failed
-                    'ABORTED': 409,                 # Conflict
-                    'OUT_OF_RANGE': 400,            # Bad Request
-                    'UNIMPLEMENTED': 501,           # Not Implemented
-                    'INTERNAL': 500,                # Internal Server Error
-                    'UNAVAILABLE': 503,             # Service Unavailable
-                    'DATA_LOSS': 500,               # Internal Server Error
-                    'UNAUTHENTICATED': 401,         # Unauthorized
+                    'OK': 200,
+                    'CANCELLED': 499,
+                    'UNKNOWN': 500,
+                    'INVALID_ARGUMENT': 400,
+                    'DEADLINE_EXCEEDED': 504,
+                    'NOT_FOUND': 404,
+                    'ALREADY_EXISTS': 409,
+                    'PERMISSION_DENIED': 403,
+                    'RESOURCE_EXHAUSTED': 429,
+                    'FAILED_PRECONDITION': 412,
+                    'ABORTED': 409,
+                    'OUT_OF_RANGE': 400,
+                    'UNIMPLEMENTED': 501,
+                    'INTERNAL': 500,
+                    'UNAVAILABLE': 503,
+                    'DATA_LOSS': 500,
+                    'UNAUTHENTICATED': 401,
                 }
 
                 http_status = status_map.get(code_name, 500)
 
-                # Extract error details from exception
                 details = 'gRPC call failed'
                 try:
                     details_fn = getattr(last_exc, 'details', None)
@@ -2041,7 +1916,6 @@ class GatewayService:
                     error_code='GTW006',
                     error_message=str(details)[:255]
                 ).dict()
-            # If we somehow reach here without a response and no exception, log and fail predictably
             if not got_response and last_exc is None:
                 try:
                     logger.error(f"{request_id} | gRPC loop ended with no response and no exception; returning 500 UNKNOWN")
@@ -2090,8 +1964,6 @@ class GatewayService:
                 error_message='Gateway timeout'
             ).dict()
         except Exception as e:
-            # Catch-all exception handler for errors outside main gRPC call loop
-            # Try to extract gRPC status code if this is a gRPC exception
             code_name = 'UNKNOWN'
             code_obj = None
             try:
@@ -2099,10 +1971,8 @@ class GatewayService:
                 if code_obj and hasattr(code_obj, 'name'):
                     code_name = str(code_obj.name).upper()
             except Exception:
-                # Not a gRPC exception, use exception type name
                 code_name = type(e).__name__.upper()
 
-            # Use the same comprehensive status mapping
             status_map = {
                 'OK': 200,
                 'CANCELLED': 499,
@@ -2125,7 +1995,6 @@ class GatewayService:
 
             http_status = status_map.get(code_name, 500)
 
-            # Extract error details
             details = str(e)
             try:
                 details_fn = getattr(e, 'details', None)

@@ -1,4 +1,3 @@
-# External imports
 import os
 import pytest
 from jose import jwt

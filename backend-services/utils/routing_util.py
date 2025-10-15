@@ -1,8 +1,6 @@
-# External imports
 from typing import Optional, Dict
 import logging
 
-# Internal imports
 from utils.doorman_cache_util import doorman_cache
 from utils.database_async import routing_collection
 from utils.async_db import db_find_one

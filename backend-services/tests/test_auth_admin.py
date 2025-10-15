@@ -1,4 +1,3 @@
-# External imports
 import os
 import pytest
 
@@ -11,7 +10,6 @@ async def test_auth_admin_endpoints(authed_client):
     )
     assert r.status_code == 200, r.text
 
-    # Use test credentials from environment (set in conftest.py for test-only use)
     relog = await authed_client.post(
         '/platform/authorization',
         json={

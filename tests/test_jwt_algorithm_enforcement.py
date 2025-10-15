@@ -10,7 +10,6 @@ def test_jwt_algorithm_enforcement():
     print("=" * 70)
     print()
 
-    # Simulate the jwt.decode configuration from auth_util.py
     algorithm = 'HS256'
 
     test_cases = [

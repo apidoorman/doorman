@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from typing import Dict, Any, Optional, Callable
 from fastapi import HTTPException
 import json
@@ -12,16 +11,14 @@ import re
 from datetime import datetime
 import uuid
 try:
-    # Prefer defusedxml to prevent entity expansion and XXE attacks
-    from defusedxml import ElementTree as ET  # type: ignore
+    from defusedxml import ElementTree as ET
     _DEFUSED = True
 except Exception:
-    import xml.etree.ElementTree as ET  # type: ignore
+    import xml.etree.ElementTree as ET
     _DEFUSED = False
 from graphql import parse, GraphQLError
 import grpc
 
-# Internal imports
 from models.field_validation_model import FieldValidation
 from models.validation_schema_model import ValidationSchema
 from utils.doorman_cache_util import doorman_cache
@@ -51,14 +48,11 @@ class ValidationUtil:
             'uuid': self._validate_uuid
         }
         self.custom_validators: Dict[str, Callable] = {}
-        # SOAP note: validation is structural-only (XML path/schema).
-        # WSDL-based validation has been removed to avoid dead/stubbed code.
         # When defusedxml is unavailable, apply a basic pre-parse guard against DOCTYPE/ENTITY.
 
     def _reject_unsafe_xml(self, xml_text: str) -> None:
         if _DEFUSED:
             return
-        # Basic guard to prevent entity expansion and DTD usage when using stdlib ET
         lowered = xml_text.lower()
         if '<!doctype' in lowered or '<!entity' in lowered:
             raise HTTPException(status_code=400, detail='XML DTD/entities are not allowed')
@@ -321,7 +315,5 @@ class ValidationUtil:
             else:
                 result[field.name] = value
         return result
-
-    # WSDL validation removed: operation extraction utility no longer required.
 
 validation_util = ValidationUtil()

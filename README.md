@@ -59,8 +59,8 @@ REDIS_DB=0
 
 # Memory Dump Config (memory-only mode)
 # Base path/stem for encrypted in-memory database dumps (.bin). Timestamp is appended.
-# Example produces files like generated/memory_dump-YYYYMMDDTHHMMSSZ.bin
-MEM_DUMP_PATH=generated/memory_dump.bin
+# Example produces files like backend-services/generated/memory_dump-YYYYMMDDTHHMMSSZ.bin
+MEM_DUMP_PATH=backend-services/generated/memory_dump.bin
 
 # Authorization Config
 JWT_SECRET_KEY=please-change-me # REQUIRED: app will fail to start without this

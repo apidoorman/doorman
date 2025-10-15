@@ -1,6 +1,5 @@
 import pytest
 
-
 class _Resp:
     def __init__(self, status_code=200, body='<ok/>', headers=None):
         self.status_code = status_code
@@ -10,7 +9,6 @@ class _Resp:
             base.update(headers)
         self.headers = base
         self.content = (self.text or '').encode('utf-8')
-
 
 def _mk_retry_xml_client(sequence, seen):
     counter = {'i': 0}
@@ -65,7 +63,6 @@ def _mk_retry_xml_client(sequence, seen):
             return _Resp(code)
     return _Client
 
-
 async def _setup_soap(client, name, ver, retry_count=0):
     payload = {
         'api_name': name,
@@ -90,7 +87,6 @@ async def _setup_soap(client, name, ver, retry_count=0):
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 @pytest.mark.asyncio
 async def test_soap_retry_on_500_then_success(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -103,7 +99,6 @@ async def test_soap_retry_on_500_then_success(monkeypatch, authed_client):
     )
     assert r.status_code == 200
     assert len(seen) == 2
-
 
 @pytest.mark.asyncio
 async def test_soap_retry_on_502_then_success(monkeypatch, authed_client):
@@ -118,7 +113,6 @@ async def test_soap_retry_on_502_then_success(monkeypatch, authed_client):
     assert r.status_code == 200
     assert len(seen) == 2
 
-
 @pytest.mark.asyncio
 async def test_soap_retry_on_503_then_success(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -132,7 +126,6 @@ async def test_soap_retry_on_503_then_success(monkeypatch, authed_client):
     assert r.status_code == 200
     assert len(seen) == 2
 
-
 @pytest.mark.asyncio
 async def test_soap_retry_on_504_then_success(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -145,7 +138,6 @@ async def test_soap_retry_on_504_then_success(monkeypatch, authed_client):
     )
     assert r.status_code == 200
     assert len(seen) == 2
-
 
 @pytest.mark.asyncio
 async def test_soap_no_retry_when_retry_count_zero(monkeypatch, authed_client):

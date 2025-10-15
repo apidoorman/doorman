@@ -1,4 +1,3 @@
-# External imports
 import pytest
 
 async def _ensure_api_and_endpoint(client, api_name, version, method, uri):

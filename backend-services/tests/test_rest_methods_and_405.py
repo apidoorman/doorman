@@ -1,6 +1,5 @@
 import pytest
 
-
 class _FakeHTTPResponse:
     def __init__(self, status_code=200, json_body=None, text_body=None, headers=None):
         self.status_code = status_code
@@ -16,7 +15,6 @@ class _FakeHTTPResponse:
         if self._json_body is None:
             return _json.loads(self.text or '{}')
         return self._json_body
-
 
 class _FakeAsyncClient:
     def __init__(self, *args, **kwargs):
@@ -65,9 +63,7 @@ class _FakeAsyncClient:
         return _FakeHTTPResponse(200, json_body={'method': 'PATCH', 'url': url, 'body': body, 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
 
     async def head(self, url, params=None, headers=None, **kwargs):
-        # Simulate a successful HEAD when called
         return _FakeHTTPResponse(200, json_body=None, headers={'X-Upstream': 'yes'})
-
 
 async def _setup_api(client, name, ver, endpoint_method='GET', endpoint_uri='/p'):
     r = await client.post('/platform/api', json={
@@ -89,12 +85,10 @@ async def _setup_api(client, name, ver, endpoint_method='GET', endpoint_uri='/p'
         'endpoint_description': endpoint_method.lower(),
     })
     assert r2.status_code in (200, 201)
-    # Subscribe admin
     rme = await client.get('/platform/user/me')
     username = (rme.json().get('username') if rme.status_code == 200 else 'admin')
     sr = await client.post('/platform/subscription/subscribe', json={'username': username, 'api_name': name, 'api_version': ver})
     assert sr.status_code in (200, 201)
-
 
 @pytest.mark.asyncio
 async def test_rest_head_supported_when_upstream_allows(monkeypatch, authed_client):
@@ -104,7 +98,6 @@ async def test_rest_head_supported_when_upstream_allows(monkeypatch, authed_clie
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.request('HEAD', f'/api/rest/{name}/{ver}/p')
     assert r.status_code == 200
-
 
 @pytest.mark.asyncio
 async def test_rest_patch_supported_when_registered(monkeypatch, authed_client):
@@ -117,12 +110,9 @@ async def test_rest_patch_supported_when_registered(monkeypatch, authed_client):
     j = r.json().get('response', r.json())
     assert j.get('method') == 'PATCH'
 
-
 @pytest.mark.asyncio
 async def test_rest_options_unregistered_endpoint_returns_405(monkeypatch, authed_client):
-    # Enable strict OPTIONS behavior via env flag
     monkeypatch.setenv('STRICT_OPTIONS_405', 'true')
-    # Create API without registering the specific endpoint
     name, ver = 'optunreg', 'v1'
     r = await authed_client.post('/platform/api', json={
         'api_name': name,
@@ -138,10 +128,8 @@ async def test_rest_options_unregistered_endpoint_returns_405(monkeypatch, authe
     resp = await authed_client.options(f'/api/rest/{name}/{ver}/not-made')
     assert resp.status_code == 405
 
-
 @pytest.mark.asyncio
 async def test_rest_unsupported_method_returns_405(authed_client):
-    # Register a GET endpoint but call TRACE which is unsupported
     name, ver = 'unsup', 'v1'
     await _setup_api(authed_client, name, ver, endpoint_method='GET', endpoint_uri='/p')
     r = await authed_client.request('TRACE', f'/api/rest/{name}/{ver}/p')

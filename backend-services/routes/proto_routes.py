@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
 from werkzeug.utils import secure_filename
 from pathlib import Path
@@ -17,7 +16,6 @@ from datetime import datetime
 import sys
 import subprocess
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required
 from utils.response_util import process_response
@@ -27,35 +25,29 @@ from utils.role_util import platform_role_required_bool
 proto_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
 
-PROJECT_ROOT = Path(__file__).parent.parent.absolute()
+PROJECT_ROOT = Path(__file__).parent.resolve()
 
 def sanitize_filename(filename: str):
     """Sanitize and validate filename with comprehensive security checks"""
     if not filename:
         raise ValueError('Empty filename provided')
 
-    # Check for path traversal attempts
     if '..' in filename:
         raise ValueError('Path traversal detected: .. not allowed in filename')
 
-    # Check for absolute paths
     if filename.startswith('/') or filename.startswith('\\'):
         raise ValueError('Absolute paths not allowed in filename')
 
-    # Check for drive letters (Windows)
     if len(filename) >= 2 and filename[1] == ':':
         raise ValueError('Drive letters not allowed in filename')
 
-    # Check length
     if len(filename) > 255:
         raise ValueError('Filename too long (max 255 characters)')
 
-    # Use werkzeug's secure_filename for additional sanitization
     sanitized = secure_filename(filename)
     if not sanitized:
         raise ValueError('Invalid filename after sanitization')
 
-    # Validate pattern (allow only alphanumeric, underscore, dash, dot)
     safe_pattern = re.compile(r'^[a-zA-Z0-9_\-\.]+$')
     if not safe_pattern.match(sanitized):
         raise ValueError('Filename contains invalid characters (use only letters, numbers, underscore, dash, dot)')
@@ -76,29 +68,24 @@ def validate_path(base_path: Path, target_path: Path):
 
 def validate_proto_content(content: bytes, max_size: int = 1024 * 1024) -> str:
     """Validate proto file content for security and correctness"""
-    # Check file size
     if len(content) > max_size:
         raise ValueError(f'File too large (max {max_size} bytes)')
 
-    # Check for null bytes (binary content)
     if b'\x00' in content:
         raise ValueError('Invalid proto file: binary content detected')
 
-    # Check if valid UTF-8
     try:
         content_str = content.decode('utf-8')
     except UnicodeDecodeError:
         raise ValueError('Invalid proto file: not valid UTF-8')
 
-    # Check for basic proto syntax (must contain syntax or message declaration)
     if 'syntax' not in content_str and 'message' not in content_str and 'service' not in content_str:
         raise ValueError('Invalid proto file: missing proto syntax (syntax/message/service)')
 
-    # Check for suspicious patterns (shell injection attempts)
     suspicious_patterns = [
-        r'`',  # Backticks
-        r'\$\(',  # Command substitution
-        r';\s*(?:rm|mv|cp|chmod|cat|wget|curl)',  # Shell commands
+        r'`',
+        r'\$\(',
+        r';\s*(?:rm|mv|cp|chmod|cat|wget|curl)',
     ]
     for pattern in suspicious_patterns:
         if re.search(pattern, content_str):
@@ -193,9 +180,8 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
         content = await file.read()
 
-        # Validate content for security and correctness
         try:
-            max_proto_size = int(os.getenv('MAX_PROTO_SIZE_BYTES', 1024 * 1024))  # 1MB default
+            max_proto_size = int(os.getenv('MAX_PROTO_SIZE_BYTES', 1024 * 1024))
             proto_content = validate_proto_content(content, max_size=max_proto_size)
         except ValueError as e:
             return process_response(ResponseModel(
@@ -230,11 +216,8 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                 raise ValueError('Invalid grpc file path')
             if pb2_grpc_file.exists():
                 content = pb2_grpc_file.read_text()
-                # Fix the import statement to use 'from generated import' instead of bare 'import'
-                # Match pattern: import {module}_pb2 as {alias}
                 import_pattern = rf'^import {safe_api_name}_{safe_api_version}_pb2 as (.+)$'
                 logger.info(f'{request_id} | Applying import fix with pattern: {import_pattern}')
-                # Show first 10 lines for debugging
                 lines = content.split('\n')[:10]
                 for i, line in enumerate(lines, 1):
                     if 'import' in line and 'pb2' in line:
@@ -244,7 +227,6 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                     logger.info(f'{request_id} | Import fix applied successfully')
                     pb2_grpc_file.write_text(new_content)
                     logger.info(f"{request_id} | Wrote fixed pb2_grpc at {pb2_grpc_file}")
-                    # Delete .pyc cache files so Python re-compiles from the fixed source
                     pycache_dir = generated_dir / '__pycache__'
                     if pycache_dir.exists():
                         for pyc_file in pycache_dir.glob(f'{safe_api_name}_{safe_api_version}*.pyc'):
@@ -253,7 +235,6 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                                 logger.info(f'{request_id} | Deleted cache file: {pyc_file.name}')
                             except Exception as e:
                                 logger.warning(f'{request_id} | Failed to delete cache file {pyc_file.name}: {e}')
-                    # Clear module from sys.modules cache so it gets reimported with fixed code
                     import sys as sys_import
                     pb2_module_name = f'{safe_api_name}_{safe_api_version}_pb2'
                     pb2_grpc_module_name = f'{safe_api_name}_{safe_api_version}_pb2_grpc'
@@ -265,7 +246,6 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                         logger.info(f'{request_id} | Cleared {pb2_grpc_module_name} from sys.modules')
                 else:
                     logger.warning(f'{request_id} | Import fix pattern did not match - no changes made')
-                # Second pass: handle relative import form 'from . import X_pb2 as alias'
                 try:
                     rel_pattern = rf'^from \\. import {safe_api_name}_{safe_api_version}_pb2 as (.+)$'
                     content2 = pb2_grpc_file.read_text()
@@ -433,10 +413,9 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
             ).dict(), 'rest')
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
 
-        # Read and validate content
         content = await proto_file.read()
         try:
-            max_proto_size = int(os.getenv('MAX_PROTO_SIZE_BYTES', 1024 * 1024))  # 1MB default
+            max_proto_size = int(os.getenv('MAX_PROTO_SIZE_BYTES', 1024 * 1024))
             proto_content = validate_proto_content(content, max_size=max_proto_size)
         except ValueError as e:
             return process_response(ResponseModel(
@@ -446,7 +425,6 @@ async def update_proto_file(api_name: str, api_version: str, request: Request, p
                 error_message=f'Invalid proto file: {str(e)}'
             ).dict(), 'rest')
 
-        # Write validated content
         proto_path.write_text(proto_content)
         try:
             subprocess.run([

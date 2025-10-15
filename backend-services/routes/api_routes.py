@@ -4,14 +4,12 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from fastapi import APIRouter, Depends, Request
 from typing import List
 import logging
 import uuid
 import time
 
-# Internal imports
 from models.response_model import ResponseModel
 from services.api_service import ApiService
 from utils.auth_util import auth_required

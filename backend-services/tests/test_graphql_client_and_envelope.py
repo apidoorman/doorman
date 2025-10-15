@@ -1,6 +1,5 @@
 import pytest
 
-
 async def _setup_graphql(client, name, ver, allowed_headers=None):
     payload = {
         'api_name': name,
@@ -26,7 +25,6 @@ async def _setup_graphql(client, name, ver, allowed_headers=None):
     assert r2.status_code in (200, 201)
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
-
 
 @pytest.mark.asyncio
 async def test_graphql_uses_gql_client_when_available(monkeypatch, authed_client):
@@ -62,10 +60,8 @@ async def test_graphql_uses_gql_client_when_available(monkeypatch, authed_client
     )
     assert r.status_code == 200
     body = r.json()
-    # Loose envelope by default: raw response dict
     assert body.get('ok') is True and body.get('from') == 'client'
     assert calls.get('vars') == {'a': 1}
-
 
 @pytest.mark.asyncio
 async def test_graphql_fallback_to_httpx_when_client_unavailable(monkeypatch, authed_client):
@@ -104,7 +100,6 @@ async def test_graphql_fallback_to_httpx_when_client_unavailable(monkeypatch, au
     body = r.json()
     assert body.get('from') == 'httpx'
 
-
 @pytest.mark.asyncio
 async def test_graphql_errors_returned_in_errors_array(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -141,7 +136,6 @@ async def test_graphql_errors_returned_in_errors_array(monkeypatch, authed_clien
     assert r.status_code == 200
     body = r.json()
     assert isinstance(body.get('errors'), list) and body['errors'][0]['message'] == 'boom'
-
 
 @pytest.mark.asyncio
 async def test_graphql_strict_envelope_wraps_response(monkeypatch, authed_client):
@@ -180,7 +174,6 @@ async def test_graphql_strict_envelope_wraps_response(monkeypatch, authed_client
     assert r.status_code == 200
     body = r.json()
     assert body.get('status_code') == 200 and isinstance(body.get('response'), dict)
-
 
 @pytest.mark.asyncio
 async def test_graphql_loose_envelope_returns_raw_response(monkeypatch, authed_client):

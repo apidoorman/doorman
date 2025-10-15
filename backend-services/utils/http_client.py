@@ -27,17 +27,14 @@ from utils.metrics_util import metrics_store
 
 logger = logging.getLogger('doorman.gateway')
 
-
 class CircuitOpenError(Exception):
     pass
-
 
 @dataclass
 class _BreakerState:
     failures: int = 0
     opened_at: float = 0.0
-    state: str = 'closed'  # closed | open | half_open
-
+    state: str = 'closed'
 
 class _CircuitManager:
     def __init__(self) -> None:
@@ -57,7 +54,6 @@ class _CircuitManager:
         st = self.get(key)
         if st.state == 'open':
             if self.now() - st.opened_at >= open_seconds:
-                # Enter half-open after cooldown
                 st.state = 'half_open'
                 st.failures = 0
             else:
@@ -71,19 +67,15 @@ class _CircuitManager:
     def record_failure(self, key: str, threshold: int) -> None:
         st = self.get(key)
         st.failures += 1
-        # If we're probing in half-open, any failure immediately re-opens
         if st.state == 'half_open':
             st.state = 'open'
             st.opened_at = self.now()
             return
-        # In closed state, open once failures cross threshold
         if st.state == 'closed' and st.failures >= max(1, threshold):
             st.state = 'open'
             st.opened_at = self.now()
 
-
 circuit_manager = _CircuitManager()
-
 
 def _build_timeout(api_config: Optional[dict]) -> httpx.Timeout:
     # Per-API overrides if present on document; otherwise env defaults
@@ -101,19 +93,14 @@ def _build_timeout(api_config: Optional[dict]) -> httpx.Timeout:
     pool = _f('api_pool_timeout', 'HTTP_TIMEOUT', 30.0)
     return httpx.Timeout(connect=connect, read=read, write=write, pool=pool)
 
-
 def _should_retry_status(status: int) -> bool:
     return status in (500, 502, 503, 504)
 
-
 def _backoff_delay(attempt: int) -> float:
-    # Full jitter exponential backoff: base * 2^attempt with cap
     base = float(os.getenv('HTTP_RETRY_BASE_DELAY', 0.25))
     cap = float(os.getenv('HTTP_RETRY_MAX_DELAY', 2.0))
     delay = min(cap, base * (2 ** max(0, attempt - 1)))
-    # Jitter within [0, delay]
     return random.uniform(0, delay)
-
 
 async def request_with_resilience(
     client: httpx.AsyncClient,
@@ -142,7 +129,6 @@ async def request_with_resilience(
     timeout = _build_timeout(api_config)
     attempts = max(1, int(retries) + 1)
 
-    # Circuit check before issuing request(s)
     if enabled:
         circuit_manager.check(api_key, open_seconds)
 
@@ -150,14 +136,12 @@ async def request_with_resilience(
     response: Optional[httpx.Response] = None
     for attempt in range(1, attempts + 1):
         if attempt > 1:
-            # Record retry count for SLI tracking
             try:
                 metrics_store.record_retry(api_key)
             except Exception:
                 pass
             await asyncio.sleep(_backoff_delay(attempt))
         try:
-            # Primary path: use generic request() if available
             try:
                 requester = getattr(client, 'request')
             except Exception:
@@ -169,11 +153,9 @@ async def request_with_resilience(
                     timeout=timeout,
                 )
             else:
-                # Fallback for tests that monkeypatch AsyncClient without request()
                 meth = getattr(client, method.lower(), None)
                 if meth is None:
                     raise AttributeError('HTTP client lacks request method')
-                # Do not pass timeout: test doubles often omit this parameter
                 kwargs = {}
                 if headers:
                     kwargs['headers'] = headers
@@ -182,7 +164,6 @@ async def request_with_resilience(
                 if json is not None:
                     kwargs['json'] = json
                 elif data is not None:
-                    # Best-effort mapping for simple test doubles: pass body as json when provided
                     kwargs['json'] = data
                 response = await meth(
                     url,
@@ -190,15 +171,12 @@ async def request_with_resilience(
                 )
 
             if _should_retry_status(response.status_code) and attempt < attempts:
-                # Mark a transient failure and retry
                 if enabled:
                     circuit_manager.record_failure(api_key, threshold)
                 continue
 
-            # Success path (or final non-retryable response)
             if enabled:
                 if _should_retry_status(response.status_code):
-                    # Final failure; open circuit if threshold exceeded
                     circuit_manager.record_failure(api_key, threshold)
                 else:
                     circuit_manager.record_success(api_key)
@@ -213,18 +191,14 @@ async def request_with_resilience(
             if enabled:
                 circuit_manager.record_failure(api_key, threshold)
             if attempt >= attempts:
-                # Surface last exception
                 raise
         except Exception as e:
-            # Non-transient error: do not retry
             last_exc = e
             if enabled:
-                # Count as failure but do not retry further
                 circuit_manager.record_failure(api_key, threshold)
             raise
 
-    # Should not reach here: either returned response or raised
     assert response is not None or last_exc is not None
     if response is not None:
         return response
-    raise last_exc  # type: ignore[misc]
+    raise last_exc

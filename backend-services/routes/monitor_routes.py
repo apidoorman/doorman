@@ -2,7 +2,6 @@
 Routes to expose gateway metrics to the web client.
 """
 
-# External imports
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 import uuid
@@ -12,7 +11,6 @@ import io
 import csv
 from fastapi.responses import Response as FastAPIResponse
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.response_util import process_response
 from utils.metrics_util import metrics_store
@@ -102,7 +100,6 @@ Response:
     description='Kubernetes liveness probe endpoint (no auth)',
     response_model=LivenessResponse)
 async def liveness(request: Request):
-    # Always return alive for liveness; readiness reflects degraded/terminating
     return {'status': 'alive'}
 
 """
@@ -126,9 +123,7 @@ async def readiness(request: Request):
     Authorized users with 'manage_gateway':
         Returns detailed status including mongodb, redis, mode, cache_backend
     """
-    # For tests and simple readiness checks, do not return 503; reflect degraded state in body
 
-    # Check if caller is authorized for detailed status
     authorized = False
     try:
         payload = await auth_required(request)
@@ -142,11 +137,9 @@ async def readiness(request: Request):
         redis_ok = await check_redis()
         ready = mongo_ok and redis_ok
 
-        # Minimal response for unauthenticated/unauthorized callers
         if not authorized:
             return {'status': 'ready' if ready else 'degraded'}
 
-        # Detailed response for authorized callers
         return {
             'status': 'ready' if ready else 'degraded',
             'mongodb': mongo_ok,

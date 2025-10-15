@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
 import json
 import sys
 from pathlib import Path
 
-REGRESSION_THRESHOLD = 0.10  # 10%
+REGRESSION_THRESHOLD = 0.10
 
 def load_summary(path: Path):
     with path.open('r', encoding='utf-8') as f:
@@ -16,7 +15,6 @@ def extract_metrics(summary: dict):
     p50 = float(http.get('p(50)', 0.0))
     p95 = float(http.get('p(95)', 0.0))
     p99 = float(http.get('p(99)', 0.0))
-    # Prefer provided rate; fallback to 0 if missing
     rps = float(http_reqs.get('rate', 0.0))
     return {
         'p50': p50,
@@ -49,7 +47,6 @@ def main():
     print(f"  p50={curm['p50']:.2f}ms  p95={curm['p95']:.2f}ms  p99={curm['p99']:.2f}ms  rps={curm['rps']:.2f}")
 
     failures = []
-    # p95 must not regress more than +10%
     for q in ('p50', 'p95', 'p99'):
         base_v = basem[q]
         cur_v = curm[q]
@@ -58,7 +55,6 @@ def main():
             if cur_v > allowed:
                 failures.append(f"{q} regression: {cur_v:.2f}ms > {allowed:.2f}ms (baseline {base_v:.2f}ms)")
 
-    # RPS must not drop more than -10%
     base_rps = basem['rps']
     cur_rps = curm['rps']
     if base_rps > 0:
@@ -66,7 +62,6 @@ def main():
         if cur_rps < allowed_rps:
             failures.append(f'RPS regression: {cur_rps:.2f} < {allowed_rps:.2f} (baseline {base_rps:.2f})')
 
-    # Optional: compare CPU/event-loop utilization if perf-stats.json files are present alongside summaries
     try:
         cur_stats = (current.parent / 'perf-stats.json')
         base_stats = (baseline.parent / 'perf-stats.json')
@@ -76,7 +71,7 @@ def main():
             for key in ('cpu_percent', 'loop_lag_ms_p95'):
                 if key in cstats and key in bstats:
                     print(f"{key}: baseline={bstats[key]} current={cstats[key]}")
-                
+
     except Exception:
         pass
 

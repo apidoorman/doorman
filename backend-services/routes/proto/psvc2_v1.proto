@@ -1,0 +1,1 @@
+syntax = "proto3"; package psvc2_v1; service S { rpc M (R) returns (Q) {} } message R { string a = 1; } message Q { string b = 1; }

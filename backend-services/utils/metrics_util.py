@@ -3,7 +3,6 @@ In-memory metrics for gateway requests.
 Records count, status code distribution, and response time stats, with per-minute buckets.
 """
 
-# External imports
 from __future__ import annotations
 import time
 from collections import defaultdict, deque
@@ -60,7 +59,6 @@ class MinuteBucket:
                 pass
 
         try:
-            # Keep a bounded reservoir of latency samples per-minute for percentile calc
             if self.latencies is None:
                 self.latencies = deque()
             self.latencies.append(ms)
@@ -217,7 +215,6 @@ class MetricsStore:
         else:
             for b in buckets:
                 avg_ms = (b.total_ms / b.count) if b.count else 0.0
-                # compute p95 from latencies if present
                 p95 = 0.0
                 try:
                     arr = list(b.latencies)
@@ -292,7 +289,6 @@ class MetricsStore:
                 except Exception:
                     continue
         except Exception:
-            # If anything goes wrong, keep current in-memory metrics
             pass
 
     def save_to_file(self, path: str) -> None:
@@ -319,5 +315,4 @@ class MetricsStore:
         except Exception:
             pass
 
-# Global metrics store
 metrics_store = MetricsStore()

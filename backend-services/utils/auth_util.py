@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from datetime import datetime, timedelta
 
 try:
@@ -152,7 +151,6 @@ def create_access_token(data: dict, refresh: bool = False) -> str:
 
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
-        # Synchronous lookup is acceptable here (function is sync)
         user = user_collection.find_one({'username': username})
         if user:
             if user.get('_id'): del user['_id']

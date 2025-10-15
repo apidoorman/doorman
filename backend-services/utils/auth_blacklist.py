@@ -44,7 +44,6 @@ see limit_throttle_util.py which uses the async Redis client (app.state.redis).
 - doorman.py app_lifespan() for production Redis requirement enforcement
 """
 
-# External imports
 from datetime import datetime, timedelta
 import heapq
 import os
@@ -53,20 +52,18 @@ import time
 
 try:
     from utils.database import database, revocations_collection
-except Exception:  # pragma: no cover
-    database = None  # type: ignore
-    revocations_collection = None  # type: ignore
+except Exception:
+    database = None
+    revocations_collection = None
 
 try:
-    import redis  # type: ignore
-except Exception:  # pragma: no cover
-    redis = None  # type: ignore
+    import redis
+except Exception:
+    redis = None
 
-# In-memory fallback structures (legacy behavior)
 jwt_blacklist = {}
 revoked_all_users = set()
 
-# Module-level Redis client (sync) for durability
 _redis_client = None
 _redis_enabled = False
 
@@ -75,7 +72,6 @@ def _init_redis_if_possible():
     if _redis_client is not None:
         return
     try:
-        # Honor unified MEM/REDIS flag (same as database/cache utils)
         flag = os.getenv('MEM_OR_EXTERNAL') or os.getenv('MEM_OR_REDIS', 'MEM')
         if str(flag).upper() == 'MEM':
             _redis_enabled = False
@@ -90,7 +86,6 @@ def _init_redis_if_possible():
         db = int(os.getenv('REDIS_DB', 0))
         pool = redis.ConnectionPool(host=host, port=port, db=db, decode_responses=True, max_connections=100)
         _redis_client = redis.StrictRedis(connection_pool=pool)
-        # cheap ping to verify
         try:
             _redis_client.ping()
             _redis_enabled = True
@@ -111,7 +106,6 @@ def revoke_all_for_user(username: str):
     """Mark all tokens for a user as revoked (durable if Redis is enabled)."""
     _init_redis_if_possible()
     try:
-        # Memory-only mode: persist flag into in-memory DB for dumping
         if database is not None and getattr(database, 'memory_only', False) and revocations_collection is not None:
             try:
                 existing = revocations_collection.find_one({'type': 'revoke_all', 'username': username})
@@ -123,7 +117,7 @@ def revoke_all_for_user(username: str):
                 revoked_all_users.add(username)
             return
         if _redis_enabled and _redis_client is not None:
-            _redis_client.set(_revoke_all_key(username), '1')  # no TTL – admin will clear explicitly
+            _redis_client.set(_revoke_all_key(username), '1')
         else:
             revoked_all_users.add(username)
     except Exception:
@@ -215,7 +209,6 @@ def add_revoked_jti(username: str, jti: str, ttl_seconds: Optional[int] = None):
             return
     except Exception:
         pass
-    # Fallback to in-memory
     th = jwt_blacklist.get(username)
     if not th:
         th = TimedHeap()
@@ -237,7 +230,6 @@ def is_jti_revoked(username: str, jti: str) -> bool:
                     exp = int(doc.get('expires_at') or 0)
                     now = int(time.time())
                     if exp <= now:
-                        # expire eagerly
                         revocations_collection.delete_one({'_id': doc.get('_id')})
                         return False
                     return True
@@ -247,7 +239,6 @@ def is_jti_revoked(username: str, jti: str) -> bool:
             return bool(_redis_client.exists(_revoked_jti_key(username, jti)))
     except Exception:
         pass
-    # Fallback check in-memory
     th = jwt_blacklist.get(username)
     if not th:
         return False
@@ -262,11 +253,9 @@ async def purge_expired_tokens():
     _init_redis_if_possible()
     if _redis_enabled:
         return
-    # Purge memory-only DB entries
     try:
         if database is not None and getattr(database, 'memory_only', False) and revocations_collection is not None:
             now = int(time.time())
-            # remove all expired jti docs
             to_delete = []
             for d in revocations_collection.find({'type': 'jti'}):
                 try:
@@ -278,7 +267,6 @@ async def purge_expired_tokens():
                 revocations_collection.delete_one({'_id': d.get('_id')})
     except Exception:
         pass
-    # Purge in-memory fallback heaps
     for key, timed_heap in list(jwt_blacklist.items()):
         timed_heap.purge()
         if not timed_heap.heap:

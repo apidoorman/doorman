@@ -1,6 +1,5 @@
 import pytest
 
-
 async def _setup_graphql_api(client, name='geflow', ver='v1'):
     await client.post('/platform/api', json={
         'api_name': name,
@@ -21,7 +20,6 @@ async def _setup_graphql_api(client, name='geflow', ver='v1'):
         'endpoint_description': 'gql'
     })
     return name, ver
-
 
 @pytest.mark.asyncio
 async def test_graphql_upstream_error_returns_errors_array_200(monkeypatch, authed_client):
@@ -51,7 +49,6 @@ async def test_graphql_upstream_error_returns_errors_array_200(monkeypatch, auth
     assert r.status_code == 200
     assert isinstance(r.json().get('errors'), list)
 
-
 @pytest.mark.asyncio
 async def test_graphql_upstream_http_error_maps_to_errors_with_status(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -71,7 +68,6 @@ async def test_graphql_upstream_http_error_maps_to_errors_with_status(monkeypatc
         async def __aexit__(self, exc_type, exc, tb):
             return False
         async def post(self, url, json=None, headers=None):
-            # Simulate upstream HTTP 500 but include errors payload with status
             return FakeHTTPResp({'errors': [{'message': 'http fail', 'status': 500}]}, 500)
     class Dummy:
         pass
@@ -79,11 +75,9 @@ async def test_graphql_upstream_http_error_maps_to_errors_with_status(monkeypatc
     monkeypatch.setattr(gs.httpx, 'AsyncClient', FakeHTTPX)
 
     r = await authed_client.post(f'/api/graphql/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json={'query': '{ q }', 'variables': {}})
-    # Current behavior keeps 200; ensure errors include status info
     assert r.status_code == 200
     errs = r.json().get('errors')
     assert isinstance(errs, list) and errs[0].get('status') == 500
-
 
 @pytest.mark.asyncio
 async def test_graphql_strict_envelope_contains_status_code_field(monkeypatch, authed_client):

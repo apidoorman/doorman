@@ -1,7 +1,5 @@
-# External imports
 import os
 
-# Internal imports
 from utils.auth_util import is_jwt_configured
 
 def test_is_jwt_configured_true(monkeypatch):

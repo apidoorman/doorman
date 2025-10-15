@@ -4,7 +4,6 @@ import time
 import pytest
 import requests
 
-# Ensure backend packages are importable when running from live-tests dir
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from config import BASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD, require_env, STRICT_HEALTH

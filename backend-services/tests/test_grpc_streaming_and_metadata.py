@@ -1,9 +1,7 @@
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_grpc_server_streaming(monkeypatch, authed_client):
-    # Setup API
     name, ver = 'gstr', 'v1'
     payload = {
         'api_name': name,
@@ -42,7 +40,7 @@ async def test_grpc_server_streaming(monkeypatch, authed_client):
             setattr(mod, 'MReply', Reply)
             return mod
         if n.endswith('_pb2_grpc'):
-            class Stub: 
+            class Stub:
                 def __init__(self, ch): pass
             return type('SVC', (), {'SvcStub': Stub})
         raise ImportError(n)
@@ -67,7 +65,6 @@ async def test_grpc_server_streaming(monkeypatch, authed_client):
     assert resp.status_code == 200
     data = resp.json().get('response') or resp.json()
     assert isinstance(data.get('items'), list) and len(data['items']) == 2
-
 
 @pytest.mark.asyncio
 async def test_grpc_metadata_pass_through(monkeypatch, authed_client):

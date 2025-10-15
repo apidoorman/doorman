@@ -1,4 +1,3 @@
-# External imports
 import logging
 from types import SimpleNamespace
 

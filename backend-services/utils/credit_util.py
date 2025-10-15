@@ -1,4 +1,3 @@
-# Internal imports
 from utils.database_async import user_credit_collection, credit_def_collection
 from utils.async_db import db_find_one, db_update_one
 from utils.encryption_util import decrypt_value
@@ -56,13 +55,10 @@ async def get_credit_api_header(api_credit_group):
     api_key_new_encrypted = credit_def.get('api_key_new')
     rotation_expires = credit_def.get('api_key_rotation_expires')
 
-    # Decrypt primary API key
     api_key = decrypt_value(api_key_encrypted)
     api_key = api_key if api_key is not None else api_key_encrypted
 
-    # Check if rotation is active
     if api_key_new_encrypted and rotation_expires:
-        # Parse rotation expiry (handle both datetime and string)
         if isinstance(rotation_expires, str):
             try:
                 rotation_expires_dt = datetime.fromisoformat(rotation_expires.replace('Z', '+00:00'))
@@ -73,18 +69,14 @@ async def get_credit_api_header(api_credit_group):
         else:
             rotation_expires_dt = None
 
-        # Check if rotation period is still active
         now = datetime.now(timezone.utc)
         if rotation_expires_dt and now < rotation_expires_dt:
-            # Rotation period active - accept both keys
             api_key_new = decrypt_value(api_key_new_encrypted)
             api_key_new = api_key_new if api_key_new is not None else api_key_new_encrypted
             return [api_key_header, [api_key, api_key_new]]
         elif rotation_expires_dt and now >= rotation_expires_dt:
-            # Rotation expired - new key becomes primary
             api_key_new = decrypt_value(api_key_new_encrypted)
             api_key_new = api_key_new if api_key_new is not None else api_key_new_encrypted
             return [api_key_header, api_key_new]
 
-    # No rotation active - return primary key only
     return [api_key_header, api_key]

@@ -19,7 +19,6 @@ config_hot_reload_router = APIRouter(
     tags=['Configuration Hot Reload']
 )
 
-
 @config_hot_reload_router.get(
     '/current',
     summary='Get Current Configuration',
@@ -31,7 +30,6 @@ async def get_current_config(
 ):
     """Get current configuration (admin only)"""
     try:
-        # Check admin permission
         accesses = payload.get('accesses', {})
         if not accesses.get('manage_gateway'):
             raise HTTPException(
@@ -39,7 +37,6 @@ async def get_current_config(
                 detail='Insufficient permissions: manage_gateway required'
             )
 
-        # Dump current config
         config = hot_config.dump()
 
         return ResponseModel(
@@ -62,7 +59,6 @@ async def get_current_config(
             detail='Failed to retrieve configuration'
         )
 
-
 @config_hot_reload_router.post(
     '/reload',
     summary='Trigger Configuration Reload',
@@ -74,7 +70,6 @@ async def trigger_config_reload(
 ):
     """Trigger configuration reload (admin only)"""
     try:
-        # Check admin permission
         accesses = payload.get('accesses', {})
         if not accesses.get('manage_gateway'):
             raise HTTPException(
@@ -82,7 +77,6 @@ async def trigger_config_reload(
                 detail='Insufficient permissions: manage_gateway required'
             )
 
-        # Reload configuration
         hot_config.reload()
 
         return ResponseModel(
@@ -104,7 +98,6 @@ async def trigger_config_reload(
             detail='Failed to reload configuration'
         )
 
-
 @config_hot_reload_router.get(
     '/reloadable-keys',
     summary='List Reloadable Configuration Keys',
@@ -117,40 +110,32 @@ async def get_reloadable_keys(
     """Get list of reloadable configuration keys"""
     try:
         reloadable_keys = [
-            # Logging
             {'key': 'LOG_LEVEL', 'description': 'Log level (DEBUG, INFO, WARNING, ERROR)', 'example': 'INFO'},
             {'key': 'LOG_FORMAT', 'description': 'Log format (json, text)', 'example': 'json'},
             {'key': 'LOG_FILE', 'description': 'Log file path', 'example': 'logs/doorman.log'},
 
-            # Timeouts
             {'key': 'GATEWAY_TIMEOUT', 'description': 'Gateway timeout in seconds', 'example': '30'},
             {'key': 'UPSTREAM_TIMEOUT', 'description': 'Upstream timeout in seconds', 'example': '30'},
             {'key': 'CONNECTION_TIMEOUT', 'description': 'Connection timeout in seconds', 'example': '10'},
 
-            # Rate Limiting
             {'key': 'RATE_LIMIT_ENABLED', 'description': 'Enable rate limiting', 'example': 'true'},
             {'key': 'RATE_LIMIT_REQUESTS', 'description': 'Requests per window', 'example': '100'},
             {'key': 'RATE_LIMIT_WINDOW', 'description': 'Window size in seconds', 'example': '60'},
 
-            # Cache
             {'key': 'CACHE_TTL', 'description': 'Cache TTL in seconds', 'example': '300'},
             {'key': 'CACHE_MAX_SIZE', 'description': 'Maximum cache entries', 'example': '1000'},
 
-            # Circuit Breaker
             {'key': 'CIRCUIT_BREAKER_ENABLED', 'description': 'Enable circuit breaker', 'example': 'true'},
             {'key': 'CIRCUIT_BREAKER_THRESHOLD', 'description': 'Failures before opening', 'example': '5'},
             {'key': 'CIRCUIT_BREAKER_TIMEOUT', 'description': 'Timeout before retry (seconds)', 'example': '60'},
 
-            # Retry
             {'key': 'RETRY_ENABLED', 'description': 'Enable retry logic', 'example': 'true'},
             {'key': 'RETRY_MAX_ATTEMPTS', 'description': 'Maximum retry attempts', 'example': '3'},
             {'key': 'RETRY_BACKOFF', 'description': 'Backoff multiplier', 'example': '1.0'},
 
-            # Monitoring
             {'key': 'METRICS_ENABLED', 'description': 'Enable metrics collection', 'example': 'true'},
             {'key': 'METRICS_INTERVAL', 'description': 'Metrics interval (seconds)', 'example': '60'},
 
-            # Feature Flags
             {'key': 'FEATURE_REQUEST_REPLAY', 'description': 'Enable request replay', 'example': 'false'},
             {'key': 'FEATURE_AB_TESTING', 'description': 'Enable A/B testing', 'example': 'false'},
             {'key': 'FEATURE_COST_ANALYTICS', 'description': 'Enable cost analytics', 'example': 'false'},

@@ -2,7 +2,6 @@
 Tools and diagnostics routes (e.g., CORS checker).
 """
 
-# External imports
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -11,7 +10,6 @@ import uuid
 import time
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.response_util import process_response
 from utils.auth_util import auth_required
@@ -189,12 +187,10 @@ async def cors_check(request: Request, body: CorsCheckRequest):
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-
 class ChaosToggleRequest(BaseModel):
     backend: str = Field(..., description='Backend to toggle (redis|mongo)')
     enabled: bool = Field(..., description='Enable or disable outage simulation')
     duration_ms: Optional[int] = Field(default=None, description='Optional duration for outage before auto-disable')
-
 
 @tools_router.post('/chaos/toggle', description='Toggle simulated backend outages (redis|mongo)', response_model=ResponseModel)
 async def chaos_toggle(request: Request, body: ChaosToggleRequest):
@@ -238,7 +234,6 @@ async def chaos_toggle(request: Request, body: ChaosToggleRequest):
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
-
 
 @tools_router.get('/chaos/stats', description='Get chaos simulation stats', response_model=ResponseModel)
 async def chaos_stats(request: Request):

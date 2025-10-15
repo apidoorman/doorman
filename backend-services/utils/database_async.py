@@ -6,18 +6,16 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 try:
-    from motor.motor_asyncio import AsyncIOMotorClient  # type: ignore
-except Exception:  # pragma: no cover - dev/test fallback when motor not installed
-    AsyncIOMotorClient = None  # type: ignore
+    from motor.motor_asyncio import AsyncIOMotorClient
+except Exception:
+    AsyncIOMotorClient = None
 from dotenv import load_dotenv
 import os
 import asyncio
 from typing import Optional
 import logging
 
-# Internal imports - reuse InMemoryDB from sync version
 from utils.database import InMemoryDB, InMemoryCollection
 from utils import password_util
 
@@ -37,7 +35,7 @@ class AsyncDatabase:
         if self.memory_only:
             self.client = None
             self.db_existed = False
-            self.db = InMemoryDB()  # Reuse sync InMemoryDB (it's thread-safe)
+            self.db = InMemoryDB()
             logger.info('Async Memory-only mode: Using in-memory collections')
             return
 
@@ -46,7 +44,6 @@ class AsyncDatabase:
         mongo_user = os.getenv('MONGO_DB_USER')
         mongo_pass = os.getenv('MONGO_DB_PASSWORD')
 
-        # Validate MongoDB credentials when not in memory-only mode
         if not mongo_user or not mongo_pass:
             raise RuntimeError(
                 'MONGO_DB_USER and MONGO_DB_PASSWORD are required when MEM_OR_EXTERNAL != MEM. '
@@ -56,13 +53,11 @@ class AsyncDatabase:
         host_list = [host.strip() for host in mongo_hosts.split(',') if host.strip()]
         self.db_existed = True
 
-        # Build connection URI with authentication
         if len(host_list) > 1 and replica_set_name:
             connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
         else:
             connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman"
 
-        # Create async Motor client (guard if dependency missing)
         if AsyncIOMotorClient is None:
             raise RuntimeError('motor is required for async MongoDB mode; install motor or set MEM_OR_EXTERNAL=MEM')
         self.client = AsyncIOMotorClient(
@@ -76,12 +71,10 @@ class AsyncDatabase:
     async def initialize_collections(self):
         """Initialize collections and default data."""
         if self.memory_only:
-            # In memory mode, use sync operations (they're thread-safe and fast)
             from utils.database import database
             database.initialize_collections()
             return
 
-        # For MongoDB, check and create collections
         collections = [
             'users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions',
             'routings', 'credit_defs', 'user_credits', 'endpoint_validations',
@@ -96,7 +89,6 @@ class AsyncDatabase:
                 await self.db.create_collection(collection)
                 logger.debug(f'Created collection: {collection}')
 
-        # Initialize default admin user if needed
         if not self.db_existed:
             admin_exists = await self.db.users.find_one({'username': 'admin'})
             if not admin_exists:
@@ -123,7 +115,6 @@ class AsyncDatabase:
                     'ui_access': True
                 })
 
-        # Ensure ui_access and password for admin (legacy fix)
         try:
             adm = await self.db.users.find_one({'username': 'admin'})
             if adm and adm.get('ui_access') is not True:
@@ -144,7 +135,6 @@ class AsyncDatabase:
         except Exception:
             pass
 
-        # Initialize default roles
         admin_role = await self.db.roles.find_one({'role_name': 'admin'})
         if not admin_role:
             await self.db.roles.insert_one({
@@ -165,7 +155,6 @@ class AsyncDatabase:
                 'manage_security': True
             })
 
-        # Initialize default groups
         admin_group = await self.db.groups.find_one({'group_name': 'admin'})
         if not admin_group:
             await self.db.groups.insert_one({
@@ -190,13 +179,11 @@ class AsyncDatabase:
 
         from pymongo import IndexModel, ASCENDING
 
-        # APIs indexes
         await self.db.apis.create_indexes([
             IndexModel([('api_id', ASCENDING)], unique=True),
             IndexModel([('name', ASCENDING), ('version', ASCENDING)])
         ])
 
-        # Endpoints indexes
         await self.db.endpoints.create_indexes([
             IndexModel([
                 ('endpoint_method', ASCENDING),
@@ -206,39 +193,32 @@ class AsyncDatabase:
             ], unique=True),
         ])
 
-        # Users indexes
         await self.db.users.create_indexes([
             IndexModel([('username', ASCENDING)], unique=True),
             IndexModel([('email', ASCENDING)], unique=True)
         ])
 
-        # Groups indexes
         await self.db.groups.create_indexes([
             IndexModel([('group_name', ASCENDING)], unique=True)
         ])
 
-        # Roles indexes
         await self.db.roles.create_indexes([
             IndexModel([('role_name', ASCENDING)], unique=True)
         ])
 
-        # Subscriptions indexes
         await self.db.subscriptions.create_indexes([
             IndexModel([('username', ASCENDING)], unique=True)
         ])
 
-        # Routings indexes
         await self.db.routings.create_indexes([
             IndexModel([('client_key', ASCENDING)], unique=True)
         ])
 
-        # Credit definitions indexes
         await self.db.credit_defs.create_indexes([
             IndexModel([('api_credit_group', ASCENDING)], unique=True),
             IndexModel([('username', ASCENDING)], unique=True)
         ])
 
-        # Endpoint validations indexes
         await self.db.endpoint_validations.create_indexes([
             IndexModel([('endpoint_id', ASCENDING)], unique=True)
         ])
@@ -262,22 +242,15 @@ class AsyncDatabase:
             self.client.close()
             logger.info("Async MongoDB connections closed")
 
-
-# Initialize async database instance
 async_database = AsyncDatabase()
 
-# In memory mode, mirror the initialized sync DB to ensure default data (admin
-# user, roles, groups) are present. This avoids duplicate initialization logic
-# and keeps async collections consistent with the sync path used elsewhere.
 if async_database.memory_only:
     try:
         from utils.database import database as _sync_db
         async_database.db = _sync_db.db
     except Exception:
-        # Fallback: ensure collections are at least created
         pass
 
-# Async collection exports for easy import
 if async_database.memory_only:
     db = async_database.db
     mongodb_client = None
@@ -309,7 +282,6 @@ else:
         revocations_collection = db.revocations
     except Exception:
         revocations_collection = None
-
 
 async def close_async_database_connections():
     """Close all async database connections for graceful shutdown."""

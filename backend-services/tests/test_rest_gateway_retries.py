@@ -1,6 +1,5 @@
 import pytest
 
-
 class _Resp:
     def __init__(self, status_code=200, body=b'{"ok":true}', headers=None):
         self.status_code = status_code
@@ -14,7 +13,6 @@ class _Resp:
     def json(self):
         import json
         return json.loads(self.text)
-
 
 def _mk_retry_client(sequence, seen):
     """Factory for a fake AsyncClient that returns statuses from `sequence`.
@@ -81,9 +79,7 @@ def _mk_retry_client(sequence, seen):
 
     return _Client
 
-
 async def _setup_api(client, name, ver, retry_count=0, allowed_headers=None):
-    # Create API with custom retry count and allowed headers
     payload = {
         'api_name': name,
         'api_version': ver,
@@ -109,7 +105,6 @@ async def _setup_api(client, name, ver, retry_count=0, allowed_headers=None):
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 @pytest.mark.asyncio
 async def test_rest_retry_on_500_then_success(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -120,7 +115,6 @@ async def test_rest_retry_on_500_then_success(monkeypatch, authed_client):
     r = await authed_client.post(f'/api/rest/{name}/{ver}/p', json={'a': 1})
     assert r.status_code == 200
     assert len(seen) == 2
-
 
 @pytest.mark.asyncio
 async def test_rest_retry_on_502_then_success(monkeypatch, authed_client):
@@ -133,7 +127,6 @@ async def test_rest_retry_on_502_then_success(monkeypatch, authed_client):
     assert r.status_code == 200
     assert len(seen) == 2
 
-
 @pytest.mark.asyncio
 async def test_rest_retry_on_503_then_success(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -144,7 +137,6 @@ async def test_rest_retry_on_503_then_success(monkeypatch, authed_client):
     r = await authed_client.post(f'/api/rest/{name}/{ver}/p', json={'a': 1})
     assert r.status_code == 200
     assert len(seen) == 2
-
 
 @pytest.mark.asyncio
 async def test_rest_retry_on_504_then_success(monkeypatch, authed_client):
@@ -157,7 +149,6 @@ async def test_rest_retry_on_504_then_success(monkeypatch, authed_client):
     assert r.status_code == 200
     assert len(seen) == 2
 
-
 @pytest.mark.asyncio
 async def test_rest_no_retry_when_retry_count_zero(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -169,19 +160,16 @@ async def test_rest_no_retry_when_retry_count_zero(monkeypatch, authed_client):
     assert r.status_code == 500
     assert len(seen) == 1
 
-
 @pytest.mark.asyncio
 async def test_rest_retry_stops_after_limit(monkeypatch, authed_client):
     import services.gateway_service as gs
     name, ver = 'retryLimit', 'v1'
     await _setup_api(authed_client, name, ver, retry_count=1)
     seen = []
-    # Always fail: expect one retry then return failure
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _mk_retry_client([500, 500, 200], seen))
     r = await authed_client.post(f'/api/rest/{name}/{ver}/p', json={'a': 1})
     assert r.status_code == 500
     assert len(seen) == 2
-
 
 @pytest.mark.asyncio
 async def test_rest_retry_preserves_headers_and_params(monkeypatch, authed_client):
@@ -197,7 +185,6 @@ async def test_rest_retry_preserves_headers_and_params(monkeypatch, authed_clien
     )
     assert r.status_code == 200
     assert len(seen) == 2
-    # Both attempts should include the same header and params
     assert all(call['params'].get('foo') == 'bar' for call in seen)
     def _hdr(call):
         return call['headers'].get('X-Custom') or call['headers'].get('x-custom')

@@ -1,4 +1,3 @@
-# External imports
 from __future__ import annotations
 import os
 import uuid
@@ -6,7 +5,6 @@ import random
 import string
 from datetime import datetime, timedelta
 
-# Internal imports
 from utils import password_util
 from utils.database import (
 

@@ -4,11 +4,9 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import logging
 from fastapi import HTTPException, Request
 
-# Internal imports
 from utils.doorman_cache_util import doorman_cache
 from services.user_service import UserService
 from utils.database_async import api_collection

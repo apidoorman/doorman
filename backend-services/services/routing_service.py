@@ -4,12 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from pymongo.errors import DuplicateKeyError
 import uuid
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from models.create_routing_model import CreateRoutingModel
 from models.update_routing_model import UpdateRoutingModel

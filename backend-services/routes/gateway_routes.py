@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from fastapi import APIRouter, HTTPException, Request, Depends
 import os
 import uuid
@@ -14,7 +13,6 @@ import json
 import re
 from datetime import datetime
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils import api_util
 from utils.doorman_cache_util import doorman_cache
@@ -84,7 +82,6 @@ async def status(request: Request):
             }
         ).dict(), 'rest')
     except Exception as e:
-        # If auth fails, respond unauthorized
         if hasattr(e, 'status_code') and getattr(e, 'status_code') == 401:
             return process_response(ResponseModel(
                 status_code=401,
@@ -277,7 +274,6 @@ async def gateway(request: Request, path: str):
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-# Per-method wrappers with unique operation IDs for OpenAPI
 @gateway_router.get('/rest/{path:path}', description='REST gateway endpoint (GET)', response_model=ResponseModel, operation_id='rest_get')
 async def rest_get(request: Request, path: str):
     return await gateway(request, path)
@@ -340,7 +336,6 @@ async def rest_preflight(request: Request, path: str):
             from fastapi.responses import Response as StarletteResponse
             return StarletteResponse(status_code=204, headers={'request_id': request_id})
 
-        # Optional strict mode: return 405 for OPTIONS when endpoint is unregistered
         try:
             import os as _os, re as _re
             if _os.getenv('STRICT_OPTIONS_405', 'false').lower() == 'true':
@@ -523,7 +518,6 @@ Response:
     response_model=ResponseModel)
 
 async def graphql_gateway(request: Request, path: str):
-    # Reuse Request ID from middleware if present, else accept inbound header, else generate
     request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -554,7 +548,6 @@ async def graphql_gateway(request: Request, path: str):
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        # Validation check using already-resolved API (no need to re-resolve)
         if api and api.get('validation_enabled'):
             body = await request.json()
             query = body.get('query')
@@ -693,7 +686,6 @@ async def grpc_gateway(request: Request, path: str):
         logger.info(f"{request_id} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f')[:-3]}ms")
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        # Validation check using already-resolved API (no need to re-resolve)
         if api and api.get('validation_enabled'):
             body = await request.json()
             request_data = json.loads(body.get('data', '{}'))
@@ -708,7 +700,6 @@ async def grpc_gateway(request: Request, path: str):
                 ).dict(), 'grpc')
         svc_resp = await GatewayService.grpc_gateway(username, request, request_id, start_time, path)
         if not isinstance(svc_resp, dict):
-            # Guard against unexpected None from service: return a 500 error
             svc_resp = ResponseModel(
                 status_code=500,
                 response_headers={'request_id': request_id},

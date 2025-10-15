@@ -78,7 +78,6 @@ def test_graphql_gateway_basic_flow(client):
     r = client.post(f'/api/graphql/{api_name}', json=q, headers={'X-API-Version': api_version})
     assert r.status_code == 200, r.text
     data = r.json().get('response', r.json())
-    # GraphQL response is nested under 'data' key
     if isinstance(data, dict) and 'data' in data:
         data = data['data']
     assert data.get('hello') == 'Hello, Doorman!'

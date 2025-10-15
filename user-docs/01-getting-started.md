@@ -53,7 +53,7 @@ REDIS_PORT=6379
 REDIS_DB=0
 
 # Memory dump path (memory mode only)
-MEM_DUMP_PATH=generated/memory_dump.bin
+MEM_DUMP_PATH=backend-services/generated/memory_dump.bin
 
 # JWT secrets (REQUIRED - change these!)
 JWT_SECRET_KEY=change-this-to-a-strong-secret-key

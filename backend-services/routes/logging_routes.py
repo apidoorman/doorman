@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Request, Query, HTTPException
 from fastapi.responses import StreamingResponse
@@ -13,7 +12,6 @@ import time
 import logging
 import io
 
-# Internal imports
 from models.response_model import ResponseModel
 from services.logging_service import LoggingService
 from utils.auth_util import auth_required

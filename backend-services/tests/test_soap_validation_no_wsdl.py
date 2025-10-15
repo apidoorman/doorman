@@ -1,10 +1,8 @@
 import pytest
 from fastapi import HTTPException
 
-
 @pytest.mark.asyncio
 async def test_soap_structural_validation_passes_without_wsdl():
-    # Arrange: store a structural validation schema for a SOAP endpoint
     from utils.database import endpoint_validation_collection
     from utils.validation_util import validation_util
 
@@ -14,7 +12,6 @@ async def test_soap_structural_validation_passes_without_wsdl():
         'endpoint_id': endpoint_id,
         'validation_enabled': True,
         'validation_schema': {
-            # SOAP maps operation children as top-level keys in request_data
             'username': {
                 'required': True,
                 'type': 'string',
@@ -29,7 +26,6 @@ async def test_soap_structural_validation_passes_without_wsdl():
         }
     })
 
-    # Valid SOAP 1.1 envelope (operation CreateUser is stripped; children become keys)
     envelope = (
         "<?xml version='1.0' encoding='UTF-8'?>"
         "<soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/'>"
@@ -42,13 +38,10 @@ async def test_soap_structural_validation_passes_without_wsdl():
         "</soap:Envelope>"
     )
 
-    # Act / Assert: should not raise
     await validation_util.validate_soap_request(endpoint_id, envelope)
-
 
 @pytest.mark.asyncio
 async def test_soap_structural_validation_fails_without_wsdl():
-    # Arrange: enable a structural schema with a required field
     from utils.database import endpoint_validation_collection
     from utils.validation_util import validation_util
 
@@ -66,7 +59,6 @@ async def test_soap_structural_validation_fails_without_wsdl():
         }
     })
 
-    # Missing required field 'username'
     bad_envelope = (
         "<?xml version='1.0' encoding='UTF-8'?>"
         "<soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/'>"

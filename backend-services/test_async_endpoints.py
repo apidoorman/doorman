@@ -10,7 +10,6 @@ from typing import Dict, Any
 import asyncio
 import time
 
-# Async imports
 from utils.database_async import (
     user_collection as async_user_collection,
     api_collection as async_api_collection,
@@ -18,7 +17,6 @@ from utils.database_async import (
 )
 from utils.doorman_cache_async import async_doorman_cache
 
-# Sync imports for comparison
 from utils.database import (
     user_collection as sync_user_collection,
     api_collection as sync_api_collection
@@ -27,20 +25,16 @@ from utils.doorman_cache_util import doorman_cache
 
 router = APIRouter(prefix="/test/async", tags=["Async Testing"])
 
-
 @router.get("/health")
 async def async_health_check() -> Dict[str, Any]:
     """Test async database and cache health."""
     try:
-        # Test async database
         if async_database.is_memory_only():
             db_status = "memory_only"
         else:
-            # Try a simple query
             await async_user_collection.find_one({'username': 'admin'})
             db_status = "connected"
 
-        # Test async cache
         cache_operational = await async_doorman_cache.is_operational()
         cache_info = await async_doorman_cache.get_cache_info()
 
@@ -58,18 +52,15 @@ async def async_health_check() -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
 
-
 @router.get("/performance/sync")
 async def test_sync_performance() -> Dict[str, Any]:
     """Test SYNC (blocking) database operations - SLOW under load."""
     start_time = time.time()
 
     try:
-        # These operations BLOCK the event loop
         user = sync_user_collection.find_one({'username': 'admin'})
         apis = list(sync_api_collection.find({}).limit(10))
 
-        # Cache operations also BLOCK
         cached_user = doorman_cache.get_cache('user_cache', 'admin')
         if not cached_user:
             doorman_cache.set_cache('user_cache', 'admin', user)
@@ -86,25 +77,20 @@ async def test_sync_performance() -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync test failed: {str(e)}")
 
-
 @router.get("/performance/async")
 async def test_async_performance() -> Dict[str, Any]:
     """Test ASYNC (non-blocking) database operations - FAST under load."""
     start_time = time.time()
 
     try:
-        # These operations are NON-BLOCKING
         user = await async_user_collection.find_one({'username': 'admin'})
 
         if async_database.is_memory_only():
-            # In memory mode, to_list is sync
             apis = async_api_collection.find({}).limit(10)
             apis = list(apis)
         else:
-            # In MongoDB mode, to_list is async
             apis = await async_api_collection.find({}).limit(10).to_list(length=10)
 
-        # Cache operations also NON-BLOCKING
         cached_user = await async_doorman_cache.get_cache('user_cache', 'admin')
         if not cached_user:
             await async_doorman_cache.set_cache('user_cache', 'admin', user)
@@ -121,14 +107,12 @@ async def test_async_performance() -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Async test failed: {str(e)}")
 
-
 @router.get("/performance/parallel")
 async def test_parallel_performance() -> Dict[str, Any]:
     """Test PARALLEL async operations - Maximum performance."""
     start_time = time.time()
 
     try:
-        # Execute multiple operations in PARALLEL
         user_task = async_user_collection.find_one({'username': 'admin'})
 
         if async_database.is_memory_only():
@@ -140,14 +124,12 @@ async def test_parallel_performance() -> Dict[str, Any]:
 
         cache_task = async_doorman_cache.get_cache('user_cache', 'admin')
 
-        # Wait for all operations to complete in parallel
         user, apis, cached_user = await asyncio.gather(
             user_task,
             apis_task,
             cache_task
         )
 
-        # Cache if needed
         if not cached_user and user:
             await async_doorman_cache.set_cache('user_cache', 'admin', user)
 
@@ -163,7 +145,6 @@ async def test_parallel_performance() -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Parallel test failed: {str(e)}")
 
-
 @router.get("/cache/test")
 async def test_cache_operations() -> Dict[str, Any]:
     """Test async cache operations."""
@@ -175,16 +156,12 @@ async def test_cache_operations() -> Dict[str, Any]:
             "role": "user"
         }
 
-        # Test set
         await async_doorman_cache.set_cache('user_cache', test_key, test_value)
 
-        # Test get
         retrieved = await async_doorman_cache.get_cache('user_cache', test_key)
 
-        # Test delete
         await async_doorman_cache.delete_cache('user_cache', test_key)
 
-        # Verify deletion
         after_delete = await async_doorman_cache.get_cache('user_cache', test_key)
 
         return {
@@ -196,7 +173,6 @@ async def test_cache_operations() -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cache test failed: {str(e)}")
 
-
 @router.get("/load-test-compare")
 async def load_test_comparison() -> Dict[str, Any]:
     """
@@ -205,7 +181,6 @@ async def load_test_comparison() -> Dict[str, Any]:
     This endpoint simulates 10 concurrent database queries.
     """
     try:
-        # Test SYNC (blocking) - operations are sequential
         sync_start = time.time()
         sync_results = []
         for i in range(10):
@@ -213,7 +188,6 @@ async def load_test_comparison() -> Dict[str, Any]:
             sync_results.append(user is not None)
         sync_elapsed = time.time() - sync_start
 
-        # Test ASYNC (non-blocking) - operations can overlap
         async_start = time.time()
         async_tasks = [
             async_user_collection.find_one({'username': 'admin'})
