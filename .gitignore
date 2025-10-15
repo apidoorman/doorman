@@ -39,6 +39,8 @@ backend-services/proto/
 **/*.pid
 .DS_Store
 **/.DS_Store
+.idea/
+.vscode/
 
 # Cookie jars
 cookies.txt
@@ -62,6 +64,7 @@ scripts/dedupe_docblocks.py
 # Logs and runtime artifacts
 *.log
 **/*.log
+pytest_backend_verbose.log
 backend-services/platform-logs/
 **/platform-logs/
 backend-services/platform-logs/doorman.log
@@ -70,6 +73,10 @@ backend-services/platform-logs/doorman.log
 backend-services/generated/
 **/generated/
 backend-services/proto/*.bin
+backend-services/proto/*
+backend-services/routes/proto/*
 **/*memory_dump*.bin
 **/*.bin
 .production.env
+.coverage
+coverage_html/

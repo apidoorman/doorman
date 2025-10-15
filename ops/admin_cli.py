@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 import requests
 
 def base_url() -> str:
-    return os.getenv('BASE_URL', 'http://localhost:5001').rstrip('/') + '/'
+    return os.getenv('BASE_URL', 'http://localhost:3001').rstrip('/') + '/'
 
 def _csrf(sess: requests.Session) -> str | None:
     for c in sess.cookies:
@@ -116,7 +116,7 @@ def do_rotate_admin(sess: requests.Session, args):
 
 def main():
     p = argparse.ArgumentParser(description='Doorman admin CLI')
-    p.add_argument('--base-url', default=os.getenv('BASE_URL'), help='Override base URL (default env BASE_URL or http://localhost:5001)')
+    p.add_argument('--base-url', default=os.getenv('BASE_URL'), help='Override base URL (default env BASE_URL or http://localhost:3001)')
     p.add_argument('--email', default=os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'))
     p.add_argument('--password', default=os.getenv('DOORMAN_ADMIN_PASSWORD'))
     p.add_argument('-y', '--yes', action='store_true', help='Assume yes for safety prompts')

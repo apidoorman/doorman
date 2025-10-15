@@ -53,7 +53,7 @@ Load Tests (k6 preferred, Locust optional)
 Run against a running Doorman instance. k6 script writes a JSON summary; helper scripts compare against a baseline to detect regressions.
 
 - k6 quick run (BASE_URL defaults to http://localhost:8000):
-  - k6 run load-tests/k6-load-test.js --env BASE_URL=http://localhost:8000
+  - k6 run load-tests/k6/load.test.js --env BASE_URL=http://localhost:8000
 
 - End-to-end perf check with regression gating:
   - BASE_URL=http://localhost:8000 bash scripts/run_perf_check.sh
@@ -82,4 +82,3 @@ Troubleshooting
 - Auth: Admin password must match the one you started Doorman with.
 - k6 missing: Install from https://k6.io/docs/get-started/installation/
 - Baseline not found: Create one per the Load Tests section above.
-

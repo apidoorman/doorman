@@ -17,7 +17,7 @@ Throughout this guide, the **platform API** lives under `/platform/*` and the **
 ## Conventions
 
 ```bash
-BASE=http://localhost:5001        # Backend URL
+BASE=http://localhost:3001        # Backend URL
 COOKIE=/tmp/doorman.cookies       # Cookie jar path
 ```
 

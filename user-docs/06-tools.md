@@ -429,7 +429,7 @@ Command‑line helper for common maintenance actions with safety prompts.
 
 ```bash
 # Environment (development defaults shown)
-export BASE_URL=http://localhost:5001
+export BASE_URL=http://localhost:3001
 export DOORMAN_ADMIN_EMAIL=admin@doorman.dev
 export DOORMAN_ADMIN_PASSWORD=your-admin-password
 

@@ -7,10 +7,10 @@ set -euo pipefail
 # - Combines .coverage files and prints a report
 #
 # Env:
-#   BASE_URL (default http://localhost:5001)
+#   BASE_URL (default http://localhost:3001)
 #   DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD (required for live tests)
 
-BASE_URL="${BASE_URL:-http://localhost:5001}"
+BASE_URL="${BASE_URL:-http://localhost:3001}"
 EMAIL="${DOORMAN_ADMIN_EMAIL:-}"
 PASSWORD="${DOORMAN_ADMIN_PASSWORD:-}"
 

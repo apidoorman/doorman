@@ -1,7 +1,7 @@
 // k6 load test for /api/rest/* and /platform/* with thresholds and JUnit output
 // Usage:
-//   k6 run k6/load.test.js \
-//     -e BASE_URL=http://localhost:5001 \
+//   k6 run load-tests/k6/load.test.js \
+//     -e BASE_URL=http://localhost:3001 \
 //     -e RPS=50 \
 //     -e DURATION=1m \
 //     -e REST_PATHS='["/api/rest/health"]' \
@@ -19,7 +19,7 @@ import http from 'k6/http'
 import { check, sleep, group } from 'k6'
 import { Trend, Rate, Counter } from 'k6/metrics'
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:5001'
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001'
 const DURATION = __ENV.DURATION || '1m'
 const RPS = Number(__ENV.RPS || 20)
 const REST_PATHS = (function () {
@@ -134,6 +134,7 @@ export function handleSummary (data) {
   return {
     'junit.xml': junitXml,
     'summary.json': JSON.stringify(data, null, 2),
+    'load-tests/k6-summary.json': JSON.stringify(data, null, 2),
   }
 }
 
@@ -142,7 +143,6 @@ function escapeXml (s) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/\"/g, '&quot;')
     .replace(/'/g, '&apos;')
 }
-
