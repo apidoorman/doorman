@@ -52,9 +52,15 @@ def test_redis_auth_url_building():
         print(f"{status} {test['name']}")
         print(f"   Host: {redis_host}:{redis_port}/{redis_db}")
         print(f"   Password set: {bool(redis_password)}")
-        print(f"   URL: {redis_url}")
+        # Avoid printing clear-text secrets; mask password in URL display
+        def _mask(url: str) -> str:
+            # Replace ':password@' with ':***@' if present
+            return re.sub(r":([^@]+)@", ":***@", url)
+
+        import re  # local import for test-only masking
+        print(f"   URL: {_mask(redis_url)}")
         if redis_url != test['expected_url']:
-            print(f"   Expected: {test['expected_url']}")
+            print(f"   Expected: {_mask(test['expected_url'])}")
         print()
 
     print("=" * 70)

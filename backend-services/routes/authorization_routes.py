@@ -614,6 +614,9 @@ async def extended_authorization(request: Request):
         # Cookies set twice: WITH domain for subdomain sharing, WITHOUT domain for exact match
 
         # Set CSRF token with domain attribute (for subdomain sharing)
+        # lgtm [py/insecure-cookie]
+        # codeql[py/insecure-cookie]
+        # Intentionally not HttpOnly: double-submit CSRF token accessible to client JS; access token cookie is HttpOnly.
         response.set_cookie(
             key='csrf_token',
             value=csrf_token,
@@ -626,6 +629,9 @@ async def extended_authorization(request: Request):
         )
 
         # Set CSRF token without domain attribute (exact domain only)
+        # lgtm [py/insecure-cookie]
+        # codeql[py/insecure-cookie]
+        # Intentionally not HttpOnly: double-submit CSRF token accessible to client JS; access token cookie is HttpOnly.
         response.set_cookie(
             key='csrf_token',
             value=csrf_token,

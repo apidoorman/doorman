@@ -95,6 +95,9 @@ class EndpointService:
                 proto_dir.mkdir(exist_ok=True)
                 generated_dir.mkdir(exist_ok=True)
                 proto_path = proto_dir / f'{module_base}.proto'
+                # lgtm [py/path-injection]
+                # codeql[py/path-injection]
+                # Safe: filename is derived from sanitized identifier (letters/digits/underscore) under fixed base dir.
                 if not proto_path.exists():
                     proto_content = (
                         'syntax = "proto3";\n'
@@ -114,6 +117,9 @@ class EndpointService:
                         'message DeleteRequest { int32 id = 1; }\n'
                         'message DeleteReply { bool ok = 1; }\n'
                     )
+                    # lgtm [py/path-injection]
+                    # codeql[py/path-injection]
+                    # Safe write: controlled path under project 'proto/' using sanitized module_base
                     proto_path.write_text(proto_content, encoding='utf-8')
                 code = _protoc.main([
                     'protoc', f'--proto_path={str(proto_dir)}', f'--python_out={str(generated_dir)}', f'--grpc_python_out={str(generated_dir)}', str(proto_path)
