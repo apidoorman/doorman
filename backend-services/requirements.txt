@@ -27,8 +27,8 @@ httpx>=0.24.1,<0.25.0  # Pinned to avoid breaking changes
 cryptography>=42.0.2
 
 # Testing
-pytest-asyncio>=0.23.5
-pytest>=7.4.4
+pytest-asyncio>=0.23.6
+pytest>=8.3.3
 pytest-cov>=4.1.0
 
 # GraphQL (server-side for live-tests)
