@@ -25,7 +25,7 @@ def test_load_testing_implementation():
 
     locations = [
         {
-            'file': 'load-tests/k6-load-test.js',
+            'file': 'load-tests/k6/load.test.js',
             'type': 'k6 Load Test',
             'scenarios': 4,
             'description': 'JavaScript-based load testing with k6'
@@ -253,16 +253,16 @@ def test_load_testing_implementation():
     print("Running Tests:")
     print()
     print("  k6 - Basic Run:")
-    print("    k6 run load-tests/k6-load-test.js")
+    print("    k6 run load-tests/k6/load.test.js")
     print()
     print("  k6 - Custom Configuration:")
     print("    k6 run --env BASE_URL=https://api.example.com \\")
     print("           --env TEST_USERNAME=admin \\")
     print("           --env TEST_PASSWORD=secret \\")
-    print("           load-tests/k6-load-test.js")
+    print("           load-tests/k6/load.test.js")
     print()
     print("  k6 - Generate JSON Results:")
-    print("    k6 run --out json=results.json load-tests/k6-load-test.js")
+    print("    k6 run --out json=results.json load-tests/k6/load.test.js")
     print()
     print("  Locust - Web UI Mode:")
     print("    locust -f load-tests/locust-load-test.py \\")

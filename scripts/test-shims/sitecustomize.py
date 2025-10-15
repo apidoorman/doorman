@@ -1,13 +1,17 @@
 """
-Ensure the 'doorman.gateway' and 'doorman.logging' loggers have a redaction filter
-attached, even when the application module isn't imported (e.g., unit tests that
-only import logging). Python automatically imports sitecustomize at interpreter
-startup when it's present on sys.path.
+Optional dev sitecustomize to mirror logging redaction during ad-hoc runs.
+
+Primary redaction hooks live under:
+ - backend-services/sitecustomize.py
+ - backend-services/tests/sitecustomize.py
+
+Keeping this here avoids cluttering the repo root.
 """
 
 import logging
 import re
 import sys
+
 
 class _RedactFilter(logging.Filter):
     PATTERNS = [
@@ -31,6 +35,7 @@ class _RedactFilter(logging.Filter):
             pass
         return True
 
+
 def _ensure_logger(name: str):
     logger = logging.getLogger(name)
     for h in logger.handlers:
@@ -40,6 +45,7 @@ def _ensure_logger(name: str):
     h.setLevel(logging.INFO)
     h.addFilter(_RedactFilter())
     logger.addHandler(h)
+
 
 try:
     _ensure_logger('doorman.gateway')

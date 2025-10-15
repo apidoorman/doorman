@@ -20,8 +20,18 @@ A lightweight API gateway built for AI, REST, SOAP, GraphQL, and gRPC APIs. No s
 ## Features
 Doorman supports user management, authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, mongodb, and endpoint request payload validation. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
 
+## Repository Structure
+- `backend-services/`: Python gateway core, routes, services, tests, and runtime assets.
+- `web-client/`: Next.js frontend (uses `next.config.mjs`).
+- `docker/`: Entrypoint and container scripts.
+- `user-docs/`: End-user documentation and guides.
+- `scripts/`: Helper scripts (preflight, coverage, maintenance).
+- `user-docs/examples/tests/`: Example tests previously at the repo root.
+- `generated/`: Local dev artifacts (migrated into `backend-services/generated` at runtime).
+- Dev shims moved to `scripts/test-shims/`: helper wrappers to run specific backend tests directly if desired.
+
 ## Launch With Docker
-Ensure an env file exists at the repo root: `./.env` (use `./.env.example` as a reference). Keep this file outside the image and pass it at runtime. Note - this is set for development, update variables and hosts to reflect a production environment.
+Ensure an env file exists at the repo root: `./.env` (use `./backend-services/.env.example` as a reference). Keep this file outside the image and pass it at runtime. Note - this is set for development, update variables and hosts to reflect a production environment.
 
 ### Quickstart
 See commands below.

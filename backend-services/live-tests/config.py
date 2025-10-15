@@ -1,6 +1,6 @@
 import os
 
-BASE_URL = os.getenv('DOORMAN_BASE_URL', 'http://localhost:5001').rstrip('/')
+BASE_URL = os.getenv('DOORMAN_BASE_URL', 'http://localhost:3001').rstrip('/')
 ADMIN_EMAIL = os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev')
 ADMIN_PASSWORD = os.getenv('DOORMAN_ADMIN_PASSWORD')
 if not ADMIN_PASSWORD:

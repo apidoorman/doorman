@@ -86,7 +86,7 @@ def test_jwt_algorithm_enforcement():
     print()
     print("4. Related files:")
     print("   - utils/auth_util.py:94-99 (main auth)")
-    print("   - tests/test_redis_token_revocation_ha.py:48-52 (test code)")
+    print("   - backend-services/tests/test_redis_token_revocation_ha.py:48-52 (test code)")
     print()
 
 if __name__ == '__main__':
