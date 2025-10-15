@@ -20,114 +20,79 @@ A lightweight API gateway built for AI, REST, SOAP, GraphQL, and gRPC APIs. No s
 ## Features
 Doorman supports user management, authentication, authorizaiton, dynamic routing, roles, groups, rate limiting, throttling, logging, redis caching, mongodb, and endpoint request payload validation. It allows you to manage REST, AI, SOAP, GraphQL, and gRPC APIs.
 
-## Get Started
-Doorman is simple to setup. In production you should run Redis and (optionally) MongoDB. In memory-only mode, Doorman persists encrypted dumps to disk for quick restarts.
+## Launch With Docker
+Ensure an env file exists at the repo root: `./.env` (use `./.env.example` as a reference). Keep this file outside the image and pass it at runtime. Note - this is set for development, update variables and hosts to reflect a production environment.
 
-Clone Doorman repository
-
-```bash
-  git clone https://github.com/apidoorman/doorman.git
-```
-
-Install requirements (backend)
+### Quickstart
+Copy-paste the commands below as-is.
 
 ```bash
-  cd backend-services
-  pip install -r requirements.txt
+# 1) Build the image
+docker build -t doorman:latest .
+
+# 2) Run the container (publishes backend 3001 and web 3000)
+docker run --rm \
+  --name doorman \
+  -p 3001:3001 -p 3000:3000 \
+  --env-file "$(pwd)/.env" \
+  doorman:latest
 ```
 
-Set environment variables in a .env file (see backend-services/.env.example)
-```bash
-# Startup admin should be used for setup only
-# IMPORTANT: Use strong, unique credentials. Never commit real credentials to version control.
-DOORMAN_ADMIN_EMAIL=<your-admin-email>
-DOORMAN_ADMIN_PASSWORD=<strong-password-12+chars>
+- Backend: http://localhost:3001
+- Web client: http://localhost:3000 (set `WEB_PORT` to change)
 
-# Cache/database mode (unified flag)
-# MEM for in-memory cache + in-memory DB; REDIS to use Redis-backed cache (DB can still be memory-only)
-MEM_OR_EXTERNAL=MEM
-MEM_ENCRYPTION_KEY=32+char-secret-used-to-encrypt-dumps
-
-# Mongo DB Config
-MONGO_DB_HOSTS=localhost:27017 # Comma separated
-MONGO_REPLICA_SET_NAME=rs0
-
-# Redis Config
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DB=0
-
-# Memory Dump Config (memory-only mode)
-# Base path/stem for encrypted in-memory database dumps (.bin). Timestamp is appended.
-# Example produces files like backend-services/generated/memory_dump-YYYYMMDDTHHMMSSZ.bin
-MEM_DUMP_PATH=backend-services/generated/memory_dump.bin
-
-# Authorization Config
-JWT_SECRET_KEY=please-change-me # REQUIRED: app will fail to start without this
-TOKEN_ENCRYPTION_KEY=optional-secret-for-api-key-encryption
-
-# HTTP Config
-ALLOWED_ORIGINS=https://localhost:8443  # Comma separated
-ALLOW_CREDENTIALS=True
-ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD  # Comma separated
-ALLOW_HEADERS=*  # Comma separated, allow all for now. Will set this per API
-HTTPS_ONLY=True
-COOKIE_DOMAIN=localhost # should match your origin host name
-
-# Application Config
-PORT=5001
-THREADS=4
-DEV_RELOAD=False # Helpful when running in console for debug
-SSL_CERTFILE=./certs/localhost.crt # Update to your cert path if using HTTPS_ONLY
-SSL_KEYFILE=./certs/localhost.key # Update to your key path if using HTTPS_ONLY
-PID_FILE=doorman.pid
-```
-
-Create and give permissions to folders (inside backend-services)
-
-```
-cd backend-services && mkdir -p proto generated && chmod 755 proto generated
-```
-
-Start Doorman background process (from backend-services)
-    
-```bash
-  python doorman.py start
-```
-
-Stop Doorman background process
-    
-```bash
-  python doorman.py stop
-```
-
-Run Doorman console instance for debugging
-    
-```bash
-  python doorman.py run
-```
-
-Web client (Next.js)
+Detach and follow logs:
 
 ```bash
-cd web-client
-cp .env.local.example .env.local
-npm ci
-npm run dev OR npm run build
+docker run -d --name doorman -p 3001:3001 -p 3000:3000 --env-file "$(pwd)/.env" doorman:latest
+docker logs -f doorman
+docker stop doorman
 ```
 
-## Docker (Production)
-Use Docker for production. Env variables are required.
+Override only the web port (optional):
 
-- Build: `docker build -t doorman:latest .`
-- Provide env (pick one):
-  - Env folder: create `./env/production.env`, run with `-v "$(pwd)/env:/env:ro"`
-  - Single file: `--env-file "$(pwd)/backend-services/.env"`
-  - Platform-injected: set env vars in DigitalOcean/AWS/Kubernetes (no files)
-- Start: `docker run --rm --name doorman -p 5001:5001 -p 3000:3000 -v "$(pwd)/env:/env:ro" doorman:latest`
-- Stop: `docker stop doorman`
+```bash
+docker run --rm --name doorman -p 3001:3001 -p 3002:3002 \
+  -e WEB_PORT=3002 \
+  --env-file "$(pwd)/.env" \
+  doorman:latest
+```
 
-Required vars (set in your env or platform): `DOORMAN_ADMIN_EMAIL`, `DOORMAN_ADMIN_PASSWORD`, `JWT_SECRET_KEY`, `PORT`, `MEM_OR_EXTERNAL` (and Redis vars if using REDIS).
+### Alternative: mount an /env folder
+
+```bash
+# Prepare your env folder (example: ./env/production.env)
+docker build -t doorman:latest .
+docker run --rm --name doorman -p 3001:3001 -p 3000:3000 -v "$(pwd)/env:/env:ro" doorman:latest
+```
+
+Notes
+- The container loads env without overriding already-set variables. Platform/injected env and `/env/*.env` take precedence over repo files.
+- Required secrets: `DOORMAN_ADMIN_EMAIL`, `DOORMAN_ADMIN_PASSWORD`, `JWT_SECRET_KEY`. For HA, set `MEM_OR_EXTERNAL=REDIS` and configure Redis.
+ - The web client now uses `next.config.mjs`, so TypeScript is not required at runtime inside the container.
+
+### Frontend build-time env via --build-arg
+You can bake public frontend env into the Next.js bundle during `docker build` without committing any file:
+
+```bash
+# Pass values at build time (used only by the web client build)
+docker build \
+  --build-arg NEXT_PUBLIC_SERVER_URL=http://localhost:3001 \
+  --build-arg NEXT_PUBLIC_API_URL=http://localhost:3001 \
+  --build-arg NEXT_PUBLIC_APP_URL=http://localhost:3000 \
+  -t doorman:latest .
+
+# Then run (backend env comes from ./.env at runtime)
+docker run --rm --name doorman \
+  -p 3001:3001 -p 3000:3000 \
+  --env-file "$(pwd)/.env" \
+  doorman:latest
+```
+
+Details
+- Only NEXT_PUBLIC_* variables are exposed to the browser. Do not pass secrets.
+- Build-args affect the frontend build output. Changing them requires a rebuild.
+- The backend still reads its env at runtime from `--env-file` (or `/env/*.env`).
 
 ## License Information
 The contents of this repository are property of Doorman Dev, LLC.
