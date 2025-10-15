@@ -5,7 +5,6 @@ See https://github.com/apidoorman/doorman for more information
 """
 
 from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
-from werkzeug.utils import secure_filename
 from pathlib import Path
 import os
 import re
@@ -44,7 +43,13 @@ def sanitize_filename(filename: str):
     if len(filename) > 255:
         raise ValueError('Filename too long (max 255 characters)')
 
-    sanitized = secure_filename(filename)
+    # Locally sanitize to avoid external deps: keep only letters, numbers, underscore, dash, dot
+    # Strip any directory components
+    filename = os.path.basename(filename)
+    sanitized = re.sub(r'[^a-zA-Z0-9_\-.]+', '_', filename)
+    # Disallow leading dots to avoid hidden files like .env
+    if sanitized.startswith('.'):
+        sanitized = sanitized.lstrip('.')
     if not sanitized:
         raise ValueError('Invalid filename after sanitization')
 
