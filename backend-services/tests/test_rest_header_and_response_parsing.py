@@ -1,6 +1,5 @@
 import pytest
 
-
 class _Resp:
     def __init__(self, status_code=200, body=b'{"ok":true}', headers=None):
         self.status_code = status_code
@@ -25,7 +24,6 @@ class _Resp:
         import json
         return json.loads(self.text)
 
-
 def _mk_client_capture(seen, resp_status=200, resp_headers=None, resp_body=b'{"ok":true}'):
     class _Client:
         def __init__(self, timeout=None, limits=None, http2=False):
@@ -34,11 +32,36 @@ def _mk_client_capture(seen, resp_status=200, resp_headers=None, resp_body=b'{"o
             return self
         async def __aexit__(self, exc_type, exc, tb):
             return False
-        async def post(self, url, json=None, params=None, headers=None, content=None):
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _Resp(405)
+        async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs):
             seen.append({'url': url, 'params': dict(params or {}), 'headers': dict(headers or {}), 'json': json})
             return _Resp(resp_status, body=resp_body, headers=resp_headers)
+        async def get(self, url, **kwargs):
+            seen.append({'url': url, 'params': {}, 'headers': {}})
+            return _Resp(resp_status, body=resp_body, headers=resp_headers)
+        async def put(self, url, **kwargs):
+            seen.append({'url': url, 'params': {}, 'headers': {}})
+            return _Resp(resp_status, body=resp_body, headers=resp_headers)
+        async def delete(self, url, **kwargs):
+            seen.append({'url': url, 'params': {}, 'headers': {}})
+            return _Resp(resp_status, body=resp_body, headers=resp_headers)
     return _Client
-
 
 async def _setup_api(client, name, ver, allowed_headers=None):
     payload = {
@@ -66,7 +89,6 @@ async def _setup_api(client, name, ver, allowed_headers=None):
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 @pytest.mark.asyncio
 async def test_header_allowlist_forwards_only_allowed_headers_case_insensitive(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -82,11 +104,9 @@ async def test_header_allowlist_forwards_only_allowed_headers_case_insensitive(m
     assert r.status_code == 200
     assert len(seen) == 1
     forwarded = seen[0]['headers']
-    # Must include x-custom (case-insensitive match) but not X-Blocked
     keys_lower = {k.lower(): v for k, v in forwarded.items()}
     assert keys_lower.get('x-custom') == 'abc'
     assert 'x-blocked' not in keys_lower
-
 
 @pytest.mark.asyncio
 async def test_header_block_non_allowlisted_headers(monkeypatch, authed_client):
@@ -104,7 +124,6 @@ async def test_header_block_non_allowlisted_headers(monkeypatch, authed_client):
     forwarded = seen[0]['headers']
     assert 'X-NotAllowed' not in forwarded and 'x-notallowed' not in {k.lower() for k in forwarded}
 
-
 def test_response_parse_application_json():
     import services.gateway_service as gs
     body = b'{"x": 1}'
@@ -112,15 +131,12 @@ def test_response_parse_application_json():
     out = gs.GatewayService.parse_response(resp)
     assert isinstance(out, dict) and out.get('x') == 1
 
-
 def test_response_parse_text_plain_fallback():
     import services.gateway_service as gs
     body = b'hello world'
     resp = _Resp(headers={'Content-Type': 'text/plain'}, body=body)
     out = gs.GatewayService.parse_response(resp)
-    # Fallback returns raw bytes
     assert out == body
-
 
 def test_response_parse_application_xml():
     import services.gateway_service as gs
@@ -130,15 +146,12 @@ def test_response_parse_application_xml():
     from xml.etree.ElementTree import Element
     assert isinstance(out, Element) and out.tag == 'root'
 
-
 def test_response_parse_malformed_json_as_text():
     import services.gateway_service as gs
-    # Not marking as application/json so fallback returns bytes
-    body = b'{"x": 1'  # malformed
+    body = b'{"x": 1'
     resp = _Resp(headers={'Content-Type': 'text/plain'}, body=body)
     out = gs.GatewayService.parse_response(resp)
     assert out == body
-
 
 def test_response_binary_passthrough_no_decode():
     import services.gateway_service as gs
@@ -146,3 +159,64 @@ def test_response_binary_passthrough_no_decode():
     resp = _Resp(headers={'Content-Type': 'application/octet-stream'}, body=binary)
     out = gs.GatewayService.parse_response(resp)
     assert out == binary
+
+def test_response_malformed_json_with_application_json_raises():
+    import services.gateway_service as gs
+    body = b'{"x": 1'
+    resp = _Resp(headers={'Content-Type': 'application/json'}, body=body)
+    import pytest
+    with pytest.raises(Exception):
+        gs.GatewayService.parse_response(resp)
+
+@pytest.mark.asyncio
+async def test_rest_gateway_returns_500_on_malformed_json_upstream(monkeypatch, authed_client):
+    import services.gateway_service as gs
+    name, ver = 'jsonfail', 'v1'
+    await _setup_api(authed_client, name, ver)
+
+    bad_body = b'{"x": 1'
+
+    class _Resp2:
+        def __init__(self):
+            self.status_code = 200
+            self.headers = {'Content-Type': 'application/json'}
+            self.content = bad_body
+            self.text = bad_body.decode('utf-8', errors='ignore')
+        def json(self):
+            import json
+            return json.loads(self.text)
+
+    class _Client2:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, exc_type, exc, tb): return False
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _Resp2()
+        async def get(self, url, params=None, headers=None, **kwargs): return _Resp2()
+        async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs): return _Resp2()
+        async def head(self, url, params=None, headers=None, **kwargs): return _Resp2()
+        async def put(self, url, **kwargs): return _Resp2()
+        async def delete(self, url, **kwargs): return _Resp2()
+
+    monkeypatch.setattr(gs.httpx, 'AsyncClient', _Client2)
+
+    r = await authed_client.post(f'/api/rest/{name}/{ver}/p', headers={'Content-Type': 'application/json'}, json={'k': 'v'})
+    assert r.status_code == 500
+    body = r.json()
+    payload = body.get('response', body)
+    assert (payload.get('error_code') or payload.get('error_message'))

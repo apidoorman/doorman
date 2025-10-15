@@ -1,0 +1,72 @@
+name: Performance Non-Regression
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend-services/requirements.txt
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Start Doorman (memory mode)
+        env:
+          PORT: '8000'
+          THREADS: '1'
+          ENV: 'development'
+          MEM_OR_EXTERNAL: 'MEM'
+          DOORMAN_ADMIN_PASSWORD: 'local-dev-admin-pass'
+          JWT_SECRET_KEY: 'local-dev-jwt-secret-key-please-change'
+          ALLOWED_ORIGINS: 'http://localhost:3000'
+        run: |
+          # Use PID-supervised mode so scripts can find backend-services/doorman.pid
+          python backend-services/doorman.py start
+          # Wait for liveness
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8000/platform/monitor/liveness > /dev/null; then
+              echo "Doorman is live"; break; fi; sleep 1; done
+
+      - name: Run perf check (baseline gate)
+        env:
+          BASE_URL: 'http://localhost:8000'
+        run: |
+          if [ -f load-tests/baseline/k6-summary.json ]; then
+            bash scripts/run_perf_check.sh
+          else
+            echo "No baseline found at load-tests/baseline/k6-summary.json; running once to produce current summary."
+            k6 run load-tests/k6-load-test.js --env BASE_URL=${BASE_URL}
+          fi
+
+      - name: Upload perf artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-artifacts
+          path: |
+            load-tests/k6-summary.json
+            load-tests/perf-stats.json
+            load-tests/baseline/k6-summary.json
+
+      - name: Stop Doorman
+        if: always()
+        run: |
+          python backend-services/doorman.py stop || true

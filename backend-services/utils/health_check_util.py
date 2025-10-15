@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import psutil
 import time
 import logging
@@ -12,7 +11,6 @@ from datetime import timedelta
 from redis.asyncio import Redis
 import os
 
-# Internal imports
 from utils.database import mongodb_client, database
 from utils.doorman_cache_util import doorman_cache
 
@@ -63,7 +61,7 @@ def get_memory_usage():
 def get_active_connections():
     try:
         process = psutil.Process(os.getpid())
-        connections = process.connections()
+        connections = process.net_connections(kind='inet')
         return len(connections)
     except Exception as e:
         logger.error(f'Active connections check failed: {str(e)}')

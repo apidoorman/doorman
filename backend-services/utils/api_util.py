@@ -1,15 +1,23 @@
-# External imports
 from typing import Optional, Dict
 
-# Internal imports
 from utils.doorman_cache_util import doorman_cache
-from utils.database import api_collection, endpoint_collection
+from utils.database_async import api_collection, endpoint_collection
+from utils.async_db import db_find_one, db_find_list
 
-async def get_api(api_key, api_name_version):
+async def get_api(api_key: Optional[str], api_name_version: str) -> Optional[Dict]:
+    """Get API document by key or name/version.
+
+    Args:
+        api_key: API key for cache lookup (optional)
+        api_name_version: API path like '/myapi/v1'
+
+    Returns:
+        Optional[Dict]: API document or None if not found
+    """
     api = doorman_cache.get_cache('api_cache', api_key) if api_key else None
     if not api:
         api_name, api_version = api_name_version.lstrip('/').split('/')
-        api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+        api = await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
         if not api:
             return None
         api.pop('_id', None)
@@ -17,11 +25,18 @@ async def get_api(api_key, api_name_version):
         doorman_cache.set_cache('api_id_cache', api_name_version, api_key)
     return api
 
-async def get_api_endpoints(api_id):
+async def get_api_endpoints(api_id: str) -> Optional[list]:
+    """Get list of endpoints for an API.
+
+    Args:
+        api_id: API identifier
+
+    Returns:
+        Optional[list]: List of endpoint strings (METHOD + URI) or None
+    """
     endpoints = doorman_cache.get_cache('api_endpoint_cache', api_id)
     if not endpoints:
-        endpoints_cursor = endpoint_collection.find({'api_id': api_id})
-        endpoints_list = list(endpoints_cursor)
+        endpoints_list = await db_find_list(endpoint_collection, {'api_id': api_id})
         if not endpoints_list:
             return None
         endpoints = [
@@ -42,7 +57,7 @@ async def get_endpoint(api: Dict, method: str, endpoint_uri: str) -> Optional[Di
     endpoint = doorman_cache.get_cache('endpoint_cache', cache_key)
     if endpoint:
         return endpoint
-    doc = endpoint_collection.find_one({
+    doc = await db_find_one(endpoint_collection, {
         'api_name': api_name,
         'api_version': api_version,
         'endpoint_uri': endpoint_uri,

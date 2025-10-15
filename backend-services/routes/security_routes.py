@@ -2,8 +2,8 @@
 Routes for managing security settings.
 """
 
-# External imports
 from fastapi import APIRouter, Request
+from typing import Optional
 import os
 import sys
 import subprocess
@@ -11,7 +11,6 @@ import uuid
 import time
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from models.security_settings_model import SecuritySettingsModel
 from utils.response_util import process_response
@@ -38,7 +37,7 @@ Response:
 )
 
 async def get_security_settings(request: Request):
-    request_id = str(uuid.uuid4())
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
@@ -115,9 +114,8 @@ Response:
     description='Update security settings',
     response_model=ResponseModel,
 )
-
-async def update_security_settings(request: Request, body: SecuritySettingsModel):
-    request_id = str(uuid.uuid4())
+async def update_security_settings(request: Request, body: Optional[SecuritySettingsModel] = None):
+    request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
         payload = await auth_required(request)
@@ -131,7 +129,12 @@ async def update_security_settings(request: Request, body: SecuritySettingsModel
                 error_code='SEC002',
                 error_message='You do not have permission to update security settings'
             ).dict(), 'rest')
-        new_settings = await save_settings(body.dict(exclude_none=True))
+        payload_dict = {}
+        try:
+            payload_dict = (body.dict(exclude_none=True) if body is not None else {})
+        except Exception:
+            payload_dict = {}
+        new_settings = await save_settings(payload_dict)
         audit(request, actor=username, action='security.update_settings', target='security_settings', status='success', details={k: new_settings.get(k) for k in ('enable_auto_save','auto_save_frequency_seconds','dump_path')}, request_id=request_id)
 
         settings_with_mode = dict(new_settings)

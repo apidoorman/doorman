@@ -4,11 +4,9 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import logging
 from fastapi import HTTPException
 
-# Internal imports
 from utils.database import role_collection, user_collection
 from utils.doorman_cache_util import doorman_cache
 
@@ -61,7 +59,6 @@ async def is_admin_user(username: str) -> bool:
     except Exception:
         return False
 
-# Backward-compat function names (to ease transition if referenced elsewhere)
 async def is_platform_admin_role(role_name: str) -> bool:
     return await is_admin_role(role_name)
 

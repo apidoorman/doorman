@@ -1,4 +1,3 @@
-# External imports
 import os
 import time
 import json

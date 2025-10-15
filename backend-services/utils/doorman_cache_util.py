@@ -4,33 +4,53 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import redis
 import json
 import os
 import threading
 from typing import Dict, Any, Optional
+import asyncio
+import logging
+from utils import chaos_util
 
 class MemoryCache:
-    def __init__(self):
+    def __init__(self, maxsize: int = 10000):
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
+        self._maxsize = maxsize
+        self._access_order = []
 
     def setex(self, key: str, ttl: int, value: str):
         with self._lock:
+            self._cleanup_expired()
+
+            if key not in self._cache and len(self._cache) >= self._maxsize:
+                if self._access_order:
+                    lru_key = self._access_order.pop(0)
+                    self._cache.pop(lru_key, None)
+
             self._cache[key] = {
                 'value': value,
                 'expires_at': self._get_current_time() + ttl
             }
+
+            if key in self._access_order:
+                self._access_order.remove(key)
+            self._access_order.append(key)
 
     def get(self, key: str) -> Optional[str]:
         with self._lock:
             if key in self._cache:
                 cache_entry = self._cache[key]
                 if self._get_current_time() < cache_entry['expires_at']:
+                    if key in self._access_order:
+                        self._access_order.remove(key)
+                    self._access_order.append(key)
                     return cache_entry['value']
                 else:
                     del self._cache[key]
+                    if key in self._access_order:
+                        self._access_order.remove(key)
             return None
 
     def delete(self, *keys):
@@ -38,6 +58,8 @@ class MemoryCache:
             for key in keys:
                 if key in self._cache:
                     self._cache.pop(key, None)
+                if key in self._access_order:
+                    self._access_order.remove(key)
 
     def keys(self, pattern: str) -> list:
         with self._lock:
@@ -60,20 +82,23 @@ class MemoryCache:
             return {
                 'total_entries': total_entries,
                 'active_entries': active_entries,
-                'expired_entries': expired_entries
+                'expired_entries': expired_entries,
+                'maxsize': self._maxsize,
+                'usage_percent': (total_entries / self._maxsize * 100) if self._maxsize > 0 else 0
             }
 
     def _cleanup_expired(self):
-        with self._lock:
-            current_time = self._get_current_time()
-            expired_keys = [
-                key for key, entry in self._cache.items()
-                if current_time >= entry['expires_at']
-            ]
-            for key in expired_keys:
-                del self._cache[key]
-            if expired_keys:
-                print(f'Cleaned up {len(expired_keys)} expired cache entries')
+        current_time = self._get_current_time()
+        expired_keys = [
+            key for key, entry in self._cache.items()
+            if current_time >= entry['expires_at']
+        ]
+        for key in expired_keys:
+            del self._cache[key]
+            if key in self._access_order:
+                self._access_order.remove(key)
+        if expired_keys:
+            logging.getLogger('doorman.cache').info(f'Cleaned up {len(expired_keys)} expired cache entries')
 
     def stop_auto_save(self):
         return
@@ -86,7 +111,8 @@ class DoormanCacheManager:
             cache_flag = os.getenv('MEM_OR_REDIS', 'MEM')
         self.cache_type = str(cache_flag).upper()
         if self.cache_type == 'MEM':
-            self.cache = MemoryCache()
+            maxsize = int(os.getenv('CACHE_MAX_SIZE', 10000))
+            self.cache = MemoryCache(maxsize=maxsize)
             self.is_redis = False
         else:
             try:
@@ -103,8 +129,9 @@ class DoormanCacheManager:
                 self.cache = redis.StrictRedis(connection_pool=pool)
                 self.is_redis = True
             except Exception as e:
-                print(f'Warning: Redis connection failed, falling back to memory cache: {e}')
-                self.cache = MemoryCache()
+                logging.getLogger('doorman.cache').warning(f'Redis connection failed, falling back to memory cache: {e}')
+                maxsize = int(os.getenv('CACHE_MAX_SIZE', 10000))
+                self.cache = MemoryCache(maxsize=maxsize)
                 self.is_redis = False
                 self.cache_type = 'MEM'
         self.prefixes = {
@@ -149,13 +176,24 @@ class DoormanCacheManager:
     def set_cache(self, cache_name, key, value):
         ttl = self.default_ttls.get(cache_name, 86400)
         cache_key = self._get_key(cache_name, key)
+        if chaos_util.should_fail('redis'):
+            chaos_util.burn_error_budget('redis')
+            raise redis.ConnectionError('chaos: simulated redis outage')
         if self.is_redis:
-            self.cache.setex(cache_key, ttl, json.dumps(value))
+            try:
+                loop = asyncio.get_running_loop()
+                return loop.run_in_executor(None, self.cache.setex, cache_key, ttl, json.dumps(value))
+            except RuntimeError:
+                self.cache.setex(cache_key, ttl, json.dumps(value))
+                return None
         else:
             self.cache.setex(cache_key, ttl, json.dumps(value))
 
     def get_cache(self, cache_name, key):
         cache_key = self._get_key(cache_name, key)
+        if chaos_util.should_fail('redis'):
+            chaos_util.burn_error_budget('redis')
+            raise redis.ConnectionError('chaos: simulated redis outage')
         value = self.cache.get(cache_key)
         if value:
             try:
@@ -166,13 +204,24 @@ class DoormanCacheManager:
 
     def delete_cache(self, cache_name, key):
         cache_key = self._get_key(cache_name, key)
+        if chaos_util.should_fail('redis'):
+            chaos_util.burn_error_budget('redis')
+            raise redis.ConnectionError('chaos: simulated redis outage')
         self.cache.delete(cache_key)
 
     def clear_cache(self, cache_name):
         pattern = f'{self.prefixes[cache_name]}*'
+        if chaos_util.should_fail('redis'):
+            chaos_util.burn_error_budget('redis')
+            raise redis.ConnectionError('chaos: simulated redis outage')
         keys = self.cache.keys(pattern)
         if keys:
-            self.cache.delete(*keys)
+            try:
+                loop = asyncio.get_running_loop()
+                return loop.run_in_executor(None, self.cache.delete, *keys)
+            except RuntimeError:
+                self.cache.delete(*keys)
+                return None
 
     def clear_all_caches(self):
         for cache_name in self.prefixes.keys():
@@ -214,5 +263,39 @@ class DoormanCacheManager:
         except Exception:
             return False
 
-# Initialize the cache manager
+    def invalidate_on_db_failure(self, cache_name, key, operation):
+        """
+        Cache invalidation wrapper for database operations.
+
+        Invalidates cache on:
+        1. Database exceptions (to force fresh read on next access)
+        2. Successful updates (to prevent stale cache)
+
+        Does NOT invalidate if:
+        - No matching document found (modified_count == 0 but no exception)
+
+        Usage:
+            try:
+                result = user_collection.update_one({'username': username}, {'$set': updates})
+                doorman_cache.invalidate_on_db_failure('user_cache', username, lambda: result)
+            except Exception as e:
+                doorman_cache.delete_cache('user_cache', username)
+                raise
+
+        Args:
+            cache_name: Cache type (user_cache, role_cache, etc.)
+            key: Cache key to invalidate
+            operation: Lambda returning db operation result
+        """
+        try:
+            result = operation()
+            if hasattr(result, 'modified_count') and result.modified_count > 0:
+                self.delete_cache(cache_name, key)
+            elif hasattr(result, 'deleted_count') and result.deleted_count > 0:
+                self.delete_cache(cache_name, key)
+            return result
+        except Exception as e:
+            self.delete_cache(cache_name, key)
+            raise
+
 doorman_cache = DoormanCacheManager()

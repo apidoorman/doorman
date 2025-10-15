@@ -2,7 +2,6 @@
 Routes for dumping and restoring in-memory database state.
 """
 
-# External imports
 from fastapi import APIRouter, Request
 from typing import Optional
 from pydantic import BaseModel
@@ -11,7 +10,6 @@ import uuid
 import time
 import logging
 
-# Internal imports
 from utils.response_util import process_response
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required

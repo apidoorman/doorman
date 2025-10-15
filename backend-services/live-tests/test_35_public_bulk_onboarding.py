@@ -7,14 +7,12 @@ import pytest
 from servers import start_rest_echo_server, start_soap_echo_server
 from config import ENABLE_GRAPHQL, ENABLE_GRPC
 
-
 def _find_port():
     s = socket.socket()
     s.bind(('127.0.0.1', 0))
     p = s.getsockname()[1]
     s.close()
     return p
-
 
 def test_bulk_public_rest_crud(client):
     srv = start_rest_echo_server()
@@ -53,7 +51,6 @@ def test_bulk_public_rest_crud(client):
             assert s.delete(url).status_code == 200
     finally:
         srv.stop()
-
 
 def test_bulk_public_soap_crud(client):
     srv = start_soap_echo_server()
@@ -98,7 +95,6 @@ def test_bulk_public_soap_crud(client):
                 assert resp.status_code == 200
     finally:
         srv.stop()
-
 
 @pytest.mark.skipif(not ENABLE_GRAPHQL, reason='GraphQL disabled')
 def test_bulk_public_graphql_crud(client):
@@ -196,7 +192,6 @@ def test_bulk_public_graphql_crud(client):
             except Exception:
                 pass
 
-
 import os as _os
 _RUN_LIVE = _os.getenv('DOORMAN_RUN_LIVE', '0') in ('1','true','True')
 @pytest.mark.skipif(not _RUN_LIVE, reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
@@ -230,10 +225,9 @@ message DeleteReply { bool ok = 1; }
 
     base = client.base_url.rstrip('/')
     ts = int(time.time())
-    for i in range(0):  # disabled
+    for i in range(0):
         api_name = f'pub-grpc-{ts}-{i}'
         api_version = 'v1'
-        # Protobuf package identifiers must be valid identifiers: no dashes, etc.
         pkg = f'{api_name}_{api_version}'.replace('-', '_')
         with tempfile.TemporaryDirectory() as td:
             tmp = pathlib.Path(td)
@@ -277,7 +271,6 @@ message DeleteReply { bool ok = 1; }
                 assert r.status_code in (200, 201), r.text
                 r = client.post('/platform/endpoint', json={'api_name': api_name, 'api_version': api_version, 'endpoint_method': 'POST', 'endpoint_uri': '/grpc', 'endpoint_description': 'grpc'})
                 assert r.status_code in (200, 201), r.text
-                # call CRUD via gateway
                 url = f"{base}/api/grpc/{api_name}"
                 hdr = {'X-API-Version': api_version}
                 pass

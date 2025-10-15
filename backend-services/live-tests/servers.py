@@ -114,4 +114,3 @@ def start_soap_echo_server():
 
     return _ThreadedHTTPServer(Handler).start()
 
-# Optional servers (GraphQL, gRPC) are set up inside tests conditionally to avoid hard deps here.

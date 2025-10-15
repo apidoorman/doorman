@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 import logging
 import os
 import json
@@ -22,12 +21,10 @@ class LoggingService:
         if env_dir and str(env_dir).strip():
             self.log_directory = os.path.abspath(env_dir)
         else:
-            # Match doorman.py default: <backend-services>/platform-logs
             base_dir = os.path.dirname(os.path.abspath(__file__))
             backend_root = os.path.normpath(os.path.join(base_dir, '..'))
             candidate = os.path.join(backend_root, 'platform-logs')
             self.log_directory = candidate if os.path.isdir(candidate) else os.path.join(backend_root, 'logs')
-        # Include both gateway logs and audit trail
         self.log_file_patterns = ['doorman.log*', 'doorman-trail.log*']
         self.max_logs_per_request = 1000
 
@@ -282,13 +279,11 @@ class LoggingService:
         """
         try:
             s = line.strip()
-            # JSON format from doorman JSONFormatter
             if s.startswith('{') and s.endswith('}'):
                 try:
                     rec = json.loads(s)
                     timestamp_str = rec.get('time') or rec.get('timestamp')
                     try:
-                        # time is already an ISO-like string per formatter
                         timestamp = timestamp_str or datetime.utcnow().isoformat()
                     except Exception:
                         timestamp = datetime.utcnow().isoformat()
@@ -306,7 +301,6 @@ class LoggingService:
                 except Exception:
                     pass
 
-            # Plain text format: "ts - logger - level - message"
             parts = s.split(' - ', 3)
             if len(parts) < 4:
                 return None

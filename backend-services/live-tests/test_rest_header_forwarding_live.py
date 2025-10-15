@@ -5,7 +5,6 @@ _RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
 if not _RUN_LIVE:
     pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 
-
 @pytest.mark.asyncio
 async def test_forward_allowed_headers_only(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
@@ -48,7 +47,6 @@ async def test_forward_allowed_headers_only(monkeypatch, authed_client):
     ch = {k.lower(): v for k, v in (captured.get('headers') or {}).items()}
     assert 'x-allowed' in ch and 'x-blocked' not in ch
 
-
 @pytest.mark.asyncio
 async def test_response_headers_filtered_by_allowlist(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
@@ -87,6 +85,5 @@ async def test_response_headers_filtered_by_allowlist(monkeypatch, authed_client
     monkeypatch.setattr(gs.httpx, 'AsyncClient', HC)
     r = await authed_client.get(f'/api/rest/{name}/{ver}/p')
     assert r.status_code == 200
-    # Only X-Upstream forwarded back per allowlist
     assert r.headers.get('X-Upstream') == 'yes'
     assert 'X-Secret' not in r.headers

@@ -1,22 +1,26 @@
-# External imports
 from typing import Optional, Dict
 import logging
 
-# Internal imports
 from utils.doorman_cache_util import doorman_cache
-from utils.database import routing_collection
+from utils.database_async import routing_collection
+from utils.async_db import db_find_one
 from utils import api_util
 
 logger = logging.getLogger('doorman.gateway')
 
-async def get_client_routing(client_key):
-    """
-    Get the routing information for a specific client.
+async def get_client_routing(client_key: str) -> Optional[Dict]:
+    """Get the routing information for a specific client.
+
+    Args:
+        client_key: Client identifier for routing lookup
+
+    Returns:
+        Optional[Dict]: Routing document or None if not found
     """
     try:
         client_routing = doorman_cache.get_cache('client_routing_cache', client_key)
         if not client_routing:
-            client_routing = routing_collection.find_one({'client_key': client_key})
+            client_routing = await db_find_one(routing_collection, {'client_key': client_key})
             if not client_routing:
                 return None
             if client_routing.get('_id'): del client_routing['_id']
@@ -26,7 +30,15 @@ async def get_client_routing(client_key):
         logger.error(f'Error in get_client_routing: {e}')
         return None
 
-async def get_routing_info(client_key):
+async def get_routing_info(client_key: str) -> Optional[str]:
+    """Get next upstream server for client using round-robin.
+
+    Args:
+        client_key: Client identifier for routing lookup
+
+    Returns:
+        Optional[str]: Upstream server URL or None if no routing found
+    """
     routing = await get_client_routing(client_key)
     if not routing:
         return None

@@ -2,8 +2,8 @@
 Utilities to dump and restore in-memory database state with encryption.
 """
 
-# External imports
 import os
+from pathlib import Path
 import json
 import base64
 from typing import Optional, Any
@@ -12,10 +12,10 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-# Internal imports
 from .database import database
 
-DEFAULT_DUMP_PATH = os.getenv('MEM_DUMP_PATH', 'generated/memory_dump.bin')
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DUMP_PATH = os.getenv('MEM_DUMP_PATH', str(_PROJECT_ROOT / 'generated' / 'memory_dump.bin'))
 
 def _derive_key(key_material: str, salt: bytes) -> bytes:
     hkdf = HKDF(
@@ -144,6 +144,39 @@ def _from_jsonable(obj: Any) -> Any:
         return [_from_jsonable(v) for v in obj]
     return obj
 
+def _sanitize_for_dump(data: Any) -> Any:
+    """
+    Remove sensitive data before dumping to prevent secret exposure.
+    """
+    SENSITIVE_KEYS = {
+        'password', 'secret', 'token', 'key', 'api_key',
+        'access_token', 'refresh_token', 'jwt', 'jwt_secret',
+        'csrf_token', 'session', 'cookie',
+        'credential', 'auth', 'authorization',
+        'ssn', 'credit_card', 'cvv', 'private_key',
+        'encryption_key', 'signing_key'
+    }
+    def should_redact(key: str) -> bool:
+        if not isinstance(key, str):
+            return False
+        key_lower = key.lower()
+        return any(s in key_lower for s in SENSITIVE_KEYS)
+    def redact_value(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {
+                k: '[REDACTED]' if should_redact(str(k)) else redact_value(v)
+                for k, v in obj.items()
+            }
+        elif isinstance(obj, list):
+            return [redact_value(item) for item in obj]
+        elif isinstance(obj, str):
+            if len(obj) > 32:
+                cleaned = obj.replace('-', '').replace('_', '').replace('.', '')
+                if cleaned.isalnum():
+                    return '[REDACTED-TOKEN]'
+        return obj
+    return redact_value(data)
+
 def dump_memory_to_file(path: Optional[str] = None) -> str:
     if not database.memory_only:
         raise RuntimeError('Memory dump is only available in memory-only mode')
@@ -151,11 +184,14 @@ def dump_memory_to_file(path: Optional[str] = None) -> str:
     os.makedirs(dump_dir, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     dump_path = os.path.join(dump_dir, f'{stem}-{ts}.bin')
+    raw_data = database.db.dump_data()
+    sanitized_data = _sanitize_for_dump(_to_jsonable(raw_data))
     payload = {
         'version': 1,
         'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-
-        'data': _to_jsonable(database.db.dump_data()),
+        'sanitized': True,
+        'note': 'Sensitive fields (passwords, tokens, secrets) have been redacted',
+        'data': sanitized_data,
     }
     plaintext = json.dumps(payload, separators=(',', ':'), default=_json_default).encode('utf-8')
     key = os.getenv('MEM_ENCRYPTION_KEY', '')
@@ -178,6 +214,18 @@ def restore_memory_from_file(path: Optional[str] = None) -> dict:
 
     data = _from_jsonable(payload.get('data', {}))
     database.db.load_data(data)
+    try:
+        from utils.database import user_collection
+        from utils import password_util as _pw
+        import os as _os
+        admin = user_collection.find_one({'username': 'admin'})
+        if admin is not None and not isinstance(admin.get('password'), (bytes, bytearray)):
+            pwd = _os.getenv('DOORMAN_ADMIN_PASSWORD')
+            if not pwd:
+                raise RuntimeError('DOORMAN_ADMIN_PASSWORD must be set in environment')
+            user_collection.update_one({'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}})
+    except Exception:
+        pass
     return {'version': payload.get('version', 1), 'created_at': payload.get('created_at')}
 
 def find_latest_dump_path(path_hint: Optional[str] = None) -> Optional[str]:

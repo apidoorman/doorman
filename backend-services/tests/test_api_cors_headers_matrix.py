@@ -1,6 +1,5 @@
 import pytest
 
-
 async def _setup_api_and_endpoint(client, name, ver, api_overrides=None, method='GET', uri='/status'):
     payload = {
         'api_name': name,
@@ -25,7 +24,6 @@ async def _setup_api_and_endpoint(client, name, ver, api_overrides=None, method=
     })
     assert r2.status_code in (200, 201), r2.text
 
-
 @pytest.mark.asyncio
 async def test_api_cors_allow_origins_exact_match_allowed(authed_client):
     name, ver = 'corsm1', 'v1'
@@ -42,7 +40,6 @@ async def test_api_cors_allow_origins_exact_match_allowed(authed_client):
     assert r.headers.get('Access-Control-Allow-Origin') == 'http://ok.example'
     assert r.headers.get('Vary') == 'Origin'
 
-
 @pytest.mark.asyncio
 async def test_api_cors_allow_origins_wildcard_allowed(authed_client):
     name, ver = 'corsm2', 'v1'
@@ -57,7 +54,6 @@ async def test_api_cors_allow_origins_wildcard_allowed(authed_client):
     )
     assert r.status_code == 204
     assert r.headers.get('Access-Control-Allow-Origin') == 'http://any.example'
-
 
 @pytest.mark.asyncio
 async def test_api_cors_allow_methods_contains_options_appended(authed_client):
@@ -75,7 +71,6 @@ async def test_api_cors_allow_methods_contains_options_appended(authed_client):
     methods = [m.strip().upper() for m in (r.headers.get('Access-Control-Allow-Methods') or '').split(',') if m.strip()]
     assert 'OPTIONS' in methods
 
-
 @pytest.mark.asyncio
 async def test_api_cors_allow_headers_asterisk_allows_any(authed_client):
     name, ver = 'corsm4', 'v1'
@@ -91,7 +86,6 @@ async def test_api_cors_allow_headers_asterisk_allows_any(authed_client):
     assert r.status_code == 204
     ach = r.headers.get('Access-Control-Allow-Headers') or ''
     assert '*' in ach
-
 
 @pytest.mark.asyncio
 async def test_api_cors_allow_headers_specific_disallows_others(authed_client):
@@ -109,7 +103,6 @@ async def test_api_cors_allow_headers_specific_disallows_others(authed_client):
     ach = r.headers.get('Access-Control-Allow-Headers') or ''
     assert 'Content-Type' in ach and 'X-Other' not in ach
 
-
 @pytest.mark.asyncio
 async def test_api_cors_allow_credentials_true_sets_header(authed_client):
     name, ver = 'corsm6', 'v1'
@@ -125,7 +118,6 @@ async def test_api_cors_allow_credentials_true_sets_header(authed_client):
     )
     assert r.status_code == 204
     assert r.headers.get('Access-Control-Allow-Credentials') == 'true'
-
 
 @pytest.mark.asyncio
 async def test_api_cors_expose_headers_propagated(authed_client):

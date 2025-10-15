@@ -1,6 +1,5 @@
 import pytest
 
-
 async def _setup_api(client, name, ver, retry=0):
     payload = {
         'api_name': name,
@@ -25,7 +24,6 @@ async def _setup_api(client, name, ver, retry=0):
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 def _fake_pb2_module(method_name='M'):
     class Req:
         pass
@@ -39,7 +37,6 @@ def _fake_pb2_module(method_name='M'):
     setattr(Req, '__name__', f'{method_name}Request')
     setattr(Reply, '__name__', f'{method_name}Reply')
     return Req, Reply
-
 
 def _make_import_module_recorder(record, pb2_map):
     def _imp(name):
@@ -68,9 +65,7 @@ def _make_import_module_recorder(record, pb2_map):
         raise ImportError(name)
     return _imp
 
-
 def _make_fake_grpc_unary(sequence_codes, grpc_mod):
-    # Returns a fake grpc module with aio.insecure_channel that yields sequence of codes then success/None
     counter = {'i': 0}
     class Chan:
         def unary_unary(self, method, request_serializer=None, response_deserializer=None):
@@ -92,7 +87,6 @@ def _make_fake_grpc_unary(sequence_codes, grpc_mod):
         def insecure_channel(url):
             return Chan()
     return type('G', (), {'aio': aio, 'StatusCode': grpc_mod.StatusCode, 'RpcError': Exception})
-
 
 @pytest.mark.asyncio
 async def test_grpc_status_mappings_basic(monkeypatch, authed_client):
@@ -120,7 +114,6 @@ async def test_grpc_status_mappings_basic(monkeypatch, authed_client):
         )
         assert r.status_code == expect
 
-
 @pytest.mark.asyncio
 async def test_grpc_unavailable_with_retry_still_fails_maps_503(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -135,9 +128,7 @@ async def test_grpc_unavailable_with_retry_still_fails_maps_503(monkeypatch, aut
     r = await authed_client.post(
         f'/api/grpc/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json={'method': 'Svc.M', 'message': {}}
     )
-    # Persistent UNAVAILABLE should map to 503 now that retry is in-frame
     assert r.status_code == 503
-
 
 @pytest.mark.asyncio
 async def test_grpc_alt_method_fallback_succeeds(monkeypatch, authed_client):
@@ -149,7 +140,6 @@ async def test_grpc_alt_method_fallback_succeeds(monkeypatch, authed_client):
     req_cls, rep_cls = _fake_pb2_module('M')
     default_pkg = f'{name}_{ver}'.replace('-', '_') + '_pb2'
     monkeypatch.setattr(gs.importlib, 'import_module', _make_import_module_recorder(rec, {default_pkg: (req_cls, rep_cls)}))
-    # First call raises (e.g., ABORTED), alt path returns success
     fake = _make_fake_grpc_unary([gs.grpc.StatusCode.ABORTED, None], gs.grpc)
     monkeypatch.setattr(gs, 'grpc', fake)
     r = await authed_client.post(
@@ -157,17 +147,15 @@ async def test_grpc_alt_method_fallback_succeeds(monkeypatch, authed_client):
     )
     assert r.status_code == 200
 
-
 @pytest.mark.asyncio
 async def test_grpc_non_retryable_error_returns_500_no_retry(monkeypatch, authed_client):
     import services.gateway_service as gs
     name, ver = 'gnr', 'v1'
-    await _setup_api(authed_client, name, ver, retry=2)  # even with retry configured
+    await _setup_api(authed_client, name, ver, retry=2)
     rec = []
     req_cls, rep_cls = _fake_pb2_module('M')
     default_pkg = f'{name}_{ver}'.replace('-', '_') + '_pb2'
     monkeypatch.setattr(gs.importlib, 'import_module', _make_import_module_recorder(rec, {default_pkg: (req_cls, rep_cls)}))
-    # Both primary and alt calls raise INVALID_ARGUMENT (not in retry set) → 400
     fake = _make_fake_grpc_unary([gs.grpc.StatusCode.INVALID_ARGUMENT, gs.grpc.StatusCode.INVALID_ARGUMENT], gs.grpc)
     monkeypatch.setattr(gs, 'grpc', fake)
     r = await authed_client.post(
@@ -175,7 +163,6 @@ async def test_grpc_non_retryable_error_returns_500_no_retry(monkeypatch, authed
     )
     assert r.status_code == 400
     assert r.json().get('error_code') == 'GTW006'
-
 
 @pytest.mark.asyncio
 async def test_grpc_deadline_exceeded_maps_to_504(monkeypatch, authed_client):
@@ -193,7 +180,6 @@ async def test_grpc_deadline_exceeded_maps_to_504(monkeypatch, authed_client):
     )
     assert r.status_code == 504
     assert r.json().get('error_code') == 'GTW006'
-
 
 @pytest.mark.asyncio
 async def test_grpc_unavailable_then_unimplemented_then_success(monkeypatch, authed_client):

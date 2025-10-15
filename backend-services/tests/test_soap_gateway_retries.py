@@ -1,6 +1,5 @@
 import pytest
 
-
 class _Resp:
     def __init__(self, status_code=200, body='<ok/>', headers=None):
         self.status_code = status_code
@@ -10,7 +9,6 @@ class _Resp:
             base.update(headers)
         self.headers = base
         self.content = (self.text or '').encode('utf-8')
-
 
 def _mk_retry_xml_client(sequence, seen):
     counter = {'i': 0}
@@ -22,14 +20,48 @@ def _mk_retry_xml_client(sequence, seen):
             return self
         async def __aexit__(self, exc_type, exc, tb):
             return False
-        async def post(self, url, content=None, params=None, headers=None):
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _Resp(405)
+        async def post(self, url, content=None, params=None, headers=None, **kwargs):
             seen.append({'url': url, 'params': dict(params or {}), 'headers': dict(headers or {}), 'content': content})
             idx = min(counter['i'], len(sequence) - 1)
             code = sequence[idx]
             counter['i'] = counter['i'] + 1
             return _Resp(code)
+        async def get(self, url, **kwargs):
+            seen.append({'url': url, 'params': {}, 'headers': {}})
+            idx = min(counter['i'], len(sequence) - 1)
+            code = sequence[idx]
+            counter['i'] = counter['i'] + 1
+            return _Resp(code)
+        async def put(self, url, **kwargs):
+            seen.append({'url': url, 'params': {}, 'headers': {}})
+            idx = min(counter['i'], len(sequence) - 1)
+            code = sequence[idx]
+            counter['i'] = counter['i'] + 1
+            return _Resp(code)
+        async def delete(self, url, **kwargs):
+            seen.append({'url': url, 'params': {}, 'headers': {}})
+            idx = min(counter['i'], len(sequence) - 1)
+            code = sequence[idx]
+            counter['i'] = counter['i'] + 1
+            return _Resp(code)
     return _Client
-
 
 async def _setup_soap(client, name, ver, retry_count=0):
     payload = {
@@ -55,7 +87,6 @@ async def _setup_soap(client, name, ver, retry_count=0):
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 @pytest.mark.asyncio
 async def test_soap_retry_on_500_then_success(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -68,7 +99,6 @@ async def test_soap_retry_on_500_then_success(monkeypatch, authed_client):
     )
     assert r.status_code == 200
     assert len(seen) == 2
-
 
 @pytest.mark.asyncio
 async def test_soap_retry_on_502_then_success(monkeypatch, authed_client):
@@ -83,7 +113,6 @@ async def test_soap_retry_on_502_then_success(monkeypatch, authed_client):
     assert r.status_code == 200
     assert len(seen) == 2
 
-
 @pytest.mark.asyncio
 async def test_soap_retry_on_503_then_success(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -97,7 +126,6 @@ async def test_soap_retry_on_503_then_success(monkeypatch, authed_client):
     assert r.status_code == 200
     assert len(seen) == 2
 
-
 @pytest.mark.asyncio
 async def test_soap_retry_on_504_then_success(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -110,7 +138,6 @@ async def test_soap_retry_on_504_then_success(monkeypatch, authed_client):
     )
     assert r.status_code == 200
     assert len(seen) == 2
-
 
 @pytest.mark.asyncio
 async def test_soap_no_retry_when_retry_count_zero(monkeypatch, authed_client):

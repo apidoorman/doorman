@@ -1,32 +1,25 @@
-# External imports
 import pytest
-
 
 @pytest.mark.asyncio
 async def test_metrics_persist_and_restore(tmp_path, authed_client):
-    # Exercise metrics via lightweight /api route that metrics middleware observes
     r1 = await authed_client.get('/api/status')
     r2 = await authed_client.get('/api/status')
     assert r1.status_code == 200 and r2.status_code == 200
 
-    # Capture current in-memory metrics snapshot
     from utils.metrics_util import metrics_store
     before = metrics_store.to_dict()
     assert before.get('total_requests', 0) >= 1
 
-    # Persist to file
     path = tmp_path / 'metrics.json'
     metrics_store.save_to_file(str(path))
     assert path.exists() and path.stat().st_size > 0
 
-    # Reset in-memory metrics and verify cleared
     metrics_store.load_dict({})
     zeroed = metrics_store.to_dict()
     assert zeroed.get('total_requests', 0) == 0
     assert zeroed.get('total_bytes_in', 0) == 0
     assert zeroed.get('total_bytes_out', 0) == 0
 
-    # Reload from file and verify equality with saved snapshot
     metrics_store.load_from_file(str(path))
     after = metrics_store.to_dict()
 

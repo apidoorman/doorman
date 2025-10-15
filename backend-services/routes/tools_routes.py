@@ -2,7 +2,6 @@
 Tools and diagnostics routes (e.g., CORS checker).
 """
 
-# External imports
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -11,11 +10,11 @@ import uuid
 import time
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.response_util import process_response
 from utils.auth_util import auth_required
 from utils.role_util import platform_role_required_bool
+from utils import chaos_util
 
 tools_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
@@ -176,6 +175,85 @@ async def cors_check(request: Request, body: CorsCheckRequest):
             response=response_payload
         ).dict(), 'rest')
 
+    except Exception as e:
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={'request_id': request_id},
+            error_code='TLS999',
+            error_message='An unexpected error occurred'
+        ).dict(), 'rest')
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+class ChaosToggleRequest(BaseModel):
+    backend: str = Field(..., description='Backend to toggle (redis|mongo)')
+    enabled: bool = Field(..., description='Enable or disable outage simulation')
+    duration_ms: Optional[int] = Field(default=None, description='Optional duration for outage before auto-disable')
+
+@tools_router.post('/chaos/toggle', description='Toggle simulated backend outages (redis|mongo)', response_model=ResponseModel)
+async def chaos_toggle(request: Request, body: ChaosToggleRequest):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        if not await platform_role_required_bool(username, 'manage_gateway'):
+            return process_response(ResponseModel(
+                status_code=403,
+                response_headers={'request_id': request_id},
+                error_code='TLS001',
+                error_message='You do not have permission to use tools'
+            ).dict(), 'rest')
+        backend = (body.backend or '').strip().lower()
+        if backend not in ('redis', 'mongo'):
+            return process_response(ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='TLS002',
+                error_message='backend must be redis or mongo'
+            ).dict(), 'rest')
+        if body.duration_ms and int(body.duration_ms) > 0:
+            chaos_util.enable_for(backend, int(body.duration_ms))
+        else:
+            chaos_util.enable(backend, bool(body.enabled))
+        return process_response(ResponseModel(
+            status_code=200,
+            response_headers={'request_id': request_id},
+            response={'backend': backend, 'enabled': chaos_util.should_fail(backend)}
+        ).dict(), 'rest')
+    except Exception as e:
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={'request_id': request_id},
+            error_code='TLS999',
+            error_message='An unexpected error occurred'
+        ).dict(), 'rest')
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+@tools_router.get('/chaos/stats', description='Get chaos simulation stats', response_model=ResponseModel)
+async def chaos_stats(request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        if not await platform_role_required_bool(username, 'manage_gateway'):
+            return process_response(ResponseModel(
+                status_code=403,
+                response_headers={'request_id': request_id},
+                error_code='TLS001',
+                error_message='You do not have permission to use tools'
+            ).dict(), 'rest')
+        return process_response(ResponseModel(
+            status_code=200,
+            response_headers={'request_id': request_id},
+            response=chaos_util.stats()
+        ).dict(), 'rest')
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(

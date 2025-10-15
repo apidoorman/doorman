@@ -38,6 +38,7 @@ const menuItems: MenuItem[] = [
 ]
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const DEBUG = process.env.NODE_ENV !== 'production'
   const [theme, setTheme] = useState('light')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
@@ -46,7 +47,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   useEffect(() => {
     if (pathname !== '/login' && (!isAuthenticated || !hasUIAccess)) {
-      console.log('Layout - Redirecting to login:', { pathname, isAuthenticated, hasUIAccess })
+      if (DEBUG) console.log('Layout - Redirecting to login:', { pathname, isAuthenticated, hasUIAccess })
       router.push('/login')
     }
   }, [pathname, isAuthenticated, hasUIAccess, router])

@@ -1,8 +1,6 @@
 import pytest
 
-
 async def _login_new_client(email: str, password: str):
-    # Create a fresh client and authenticate it
     from doorman import doorman
     from httpx import AsyncClient
     import os
@@ -20,9 +18,7 @@ async def _login_new_client(email: str, password: str):
         pass
     return client
 
-
 async def _provision_limited_user(authed_client, role_name: str, username: str, email: str, password: str):
-    # Create a role with no permissions
     role_payload = {
         'role_name': role_name,
         'role_description': 'Limited role (no permissions)',
@@ -42,7 +38,6 @@ async def _provision_limited_user(authed_client, role_name: str, username: str, 
     }
     await authed_client.post('/platform/role', json=role_payload)
 
-    # Create user with that role
     user_payload = {
         'username': username,
         'email': email,
@@ -54,9 +49,7 @@ async def _provision_limited_user(authed_client, role_name: str, username: str, 
     }
     r = await authed_client.post('/platform/user', json=user_payload)
     assert r.status_code in (200, 201), r.text
-    # Return an authenticated client for this limited user
     return await _login_new_client(email, password)
-
 
 @pytest.mark.asyncio
 async def test_manage_users_required_for_user_crud(authed_client):
@@ -68,17 +61,15 @@ async def test_manage_users_required_for_user_crud(authed_client):
         password='StrongPassword123!!',
     )
 
-    # Admin creates a target user to operate on
     target_payload = {
         'username': 'target_user1',
         'email': 'target_user1@doorman.dev',
         'password': 'AnotherStrongPwd123!!',
-        'role': 'admin',  # role exists; not admin user, but that's fine
+        'role': 'admin',
         'groups': ['ALL'],
     }
     await authed_client.post('/platform/user', json=target_payload)
 
-    # Limited user attempts to create another user -> 403
     r_create = await limited.post('/platform/user', json={
         'username': 'should_forbid',
         'email': 'should_forbid@doorman.dev',
@@ -88,14 +79,11 @@ async def test_manage_users_required_for_user_crud(authed_client):
     })
     assert r_create.status_code == 403
 
-    # Limited user attempts to update someone else -> 403
     r_update = await limited.put('/platform/user/target_user1', json={'ui_access': True})
     assert r_update.status_code == 403
 
-    # Limited user attempts to delete someone else -> 403
     r_delete = await limited.delete('/platform/user/target_user1')
     assert r_delete.status_code == 403
-
 
 @pytest.mark.asyncio
 async def test_manage_apis_required_for_api_crud(authed_client):
@@ -107,7 +95,6 @@ async def test_manage_apis_required_for_api_crud(authed_client):
         password='StrongPassword123!!',
     )
 
-    # Limited user attempts to create an API -> 403
     r_create = await limited.post('/platform/api', json={
         'api_name': 'negapi',
         'api_version': 'v1',
@@ -120,7 +107,6 @@ async def test_manage_apis_required_for_api_crud(authed_client):
     })
     assert r_create.status_code == 403
 
-    # Admin creates API; limited attempts to update -> 403
     await authed_client.post('/platform/api', json={
         'api_name': 'negapi',
         'api_version': 'v1',
@@ -134,7 +120,6 @@ async def test_manage_apis_required_for_api_crud(authed_client):
     r_update = await limited.put('/platform/api/negapi/v1', json={'api_description': 'should not update'})
     assert r_update.status_code == 403
 
-
 @pytest.mark.asyncio
 async def test_manage_endpoints_required_for_endpoint_crud(authed_client):
     limited = await _provision_limited_user(
@@ -145,7 +130,6 @@ async def test_manage_endpoints_required_for_endpoint_crud(authed_client):
         password='StrongPassword123!!',
     )
 
-    # Prepare API and an existing endpoint as admin
     await authed_client.post('/platform/api', json={
         'api_name': 'negep',
         'api_version': 'v1',
@@ -164,7 +148,6 @@ async def test_manage_endpoints_required_for_endpoint_crud(authed_client):
         'endpoint_description': 'status',
     })
 
-    # Limited user attempts to create endpoint -> 403
     r_create = await limited.post('/platform/endpoint', json={
         'api_name': 'negep',
         'api_version': 'v1',
@@ -174,14 +157,11 @@ async def test_manage_endpoints_required_for_endpoint_crud(authed_client):
     })
     assert r_create.status_code == 403
 
-    # Limited user attempts to update endpoint -> 403
     r_update = await limited.put('/platform/endpoint/GET/negep/v1/s', json={'endpoint_description': 'nope'})
     assert r_update.status_code == 403
 
-    # Limited user attempts to delete endpoint -> 403
     r_delete = await limited.delete('/platform/endpoint/GET/negep/v1/s')
     assert r_delete.status_code == 403
-
 
 @pytest.mark.asyncio
 async def test_manage_gateway_required_for_cache_clear(authed_client):
@@ -196,7 +176,6 @@ async def test_manage_gateway_required_for_cache_clear(authed_client):
     r = await limited.delete('/api/caches')
     assert r.status_code == 403
 
-
 @pytest.mark.asyncio
 async def test_view_logs_required_for_log_export(authed_client):
     limited = await _provision_limited_user(
@@ -207,11 +186,9 @@ async def test_view_logs_required_for_log_export(authed_client):
         password='StrongPassword123!!',
     )
 
-    # Without view_logs permission -> 403 on list
     r_logs = await limited.get('/platform/logging/logs')
     assert r_logs.status_code == 403
 
-    # Without export_logs permission -> 403 on export
     r_export = await limited.get('/platform/logging/logs/export')
     assert r_export.status_code == 403
 

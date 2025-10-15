@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from jose import JWTError
 import uuid
@@ -12,7 +11,6 @@ import time
 import logging
 import os
 
-# Internal imports
 from models.response_model import ResponseModel
 from services.user_service import UserService
 from utils.response_util import respond_rest
@@ -21,6 +19,7 @@ from utils.auth_blacklist import TimedHeap, jwt_blacklist, revoke_all_for_user, 
 from utils.role_util import platform_role_required_bool
 from utils.role_util import is_admin_user
 from models.update_user_model import UpdateUserModel
+from utils.limit_throttle_util import limit_by_ip
 
 authorization_router = APIRouter()
 
@@ -56,9 +55,21 @@ async def authorization(request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
+        login_limit = int(os.getenv('LOGIN_IP_RATE_LIMIT', '5'))
+        login_window = int(os.getenv('LOGIN_IP_RATE_WINDOW', '300'))
+        rate_limit_info = await limit_by_ip(request, limit=login_limit, window=login_window)
+
         logger.info(f'{request_id} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        data = await request.json()
+        try:
+            data = await request.json()
+        except Exception:
+            return respond_rest(ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='AUTH004',
+                error_message='Invalid JSON payload'
+            ))
         email = data.get('email')
         password = data.get('password')
         if not email or not password:
@@ -100,12 +111,22 @@ async def authorization(request: Request):
             },
             response={'access_token': access_token}
         ))
+
+        if rate_limit_info:
+            response.headers['X-RateLimit-Limit'] = str(rate_limit_info['limit'])
+            response.headers['X-RateLimit-Remaining'] = str(rate_limit_info['remaining'])
+            response.headers['X-RateLimit-Reset'] = str(rate_limit_info['reset'])
+
         response.delete_cookie('access_token_cookie')
 
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
 
-        _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+        _secure_env = os.getenv('COOKIE_SECURE')
+        if _secure_env is not None:
+            _secure = str(_secure_env).lower() == 'true'
+        else:
+            _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
         _domain = os.getenv('COOKIE_DOMAIN', None)
         _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
@@ -160,6 +181,18 @@ async def authorization(request: Request):
         )
         return response
     except HTTPException as e:
+        if getattr(e, 'status_code', None) == 429:
+            headers = getattr(e, 'headers', {}) or {}
+            detail = e.detail if isinstance(e.detail, dict) else {}
+            return respond_rest(ResponseModel(
+                status_code=429,
+                response_headers={
+                    'request_id': request_id,
+                    **headers
+                },
+                error_code=str(detail.get('error_code') or 'IP_RATE_LIMIT'),
+                error_message=str(detail.get('message') or 'Too many requests')
+            ))
         return respond_rest(ResponseModel(
             status_code=401,
             response_headers={
@@ -182,7 +215,6 @@ async def authorization(request: Request):
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-# Admin endpoints for revoking tokens and disabling/enabling users
 """
 Endpoint
 
@@ -219,8 +251,8 @@ async def admin_revoke_user_tokens(username: str, request: Request):
                     response_headers={'request_id': request_id},
                     error_message='User not found'
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
         revoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
@@ -275,8 +307,8 @@ async def admin_unrevoke_user_tokens(username: str, request: Request):
                     response_headers={'request_id': request_id},
                     error_message='User not found'
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
         unrevoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
@@ -331,8 +363,8 @@ async def admin_disable_user(username: str, request: Request):
                     response_headers={'request_id': request_id},
                     error_message='User not found'
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
 
         await UserService.update_user(username, UpdateUserModel(active=False), request_id)
 
@@ -390,8 +422,8 @@ async def admin_enable_user(username: str, request: Request):
                     response_headers={'request_id': request_id},
                     error_message='User not found'
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
         await UserService.update_user(username, UpdateUserModel(active=True), request_id)
 
         return respond_rest(ResponseModel(
@@ -447,8 +479,8 @@ async def admin_user_status(username: str, request: Request):
                     response_headers={'request_id': request_id},
                     error_message='User not found'
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
         user = await UserService.get_user_by_username_helper(username)
         status = {
             'active': bool(user.get('active', False)),
@@ -527,18 +559,47 @@ async def extended_authorization(request: Request):
         import uuid as _uuid
         csrf_token = str(_uuid.uuid4())
 
-        _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+        _secure_env = os.getenv('COOKIE_SECURE')
+        if _secure_env is not None:
+            _secure = str(_secure_env).lower() == 'true'
+        else:
+            _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
         _domain = os.getenv('COOKIE_DOMAIN', None)
         _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
             _samesite = 'strict'
         host = request.url.hostname or (request.client.host if request.client else None)
-        safe_domain = _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
+
+        if _domain and host and (host == _domain or host.endswith('.' + _domain)):
+            safe_domain = _domain
+        else:
+            safe_domain = None
 
         response.set_cookie(
             key='csrf_token',
             value=csrf_token,
             httponly=False,
+            secure=_secure,
+            samesite=_samesite,
+            path='/',
+            domain=safe_domain,
+            max_age=604800
+        )
+
+        response.set_cookie(
+            key='csrf_token',
+            value=csrf_token,
+            httponly=False,
+            secure=_secure,
+            samesite=_samesite,
+            path='/',
+            max_age=604800
+        )
+
+        response.set_cookie(
+            key='access_token_cookie',
+            value=refresh_token,
+            httponly=True,
             secure=_secure,
             samesite=_samesite,
             path='/',
@@ -553,7 +614,6 @@ async def extended_authorization(request: Request):
             secure=_secure,
             samesite=_samesite,
             path='/',
-            domain=safe_domain,
             max_age=604800
         )
         return response
@@ -688,7 +748,6 @@ async def authorization_invalidate(response: Response, request: Request):
         username = payload.get('sub')
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        # Add this token's JTI to durable revocation with TTL until expiry
         try:
             import time as _t
             exp = payload.get('exp')
@@ -696,8 +755,8 @@ async def authorization_invalidate(response: Response, request: Request):
             if isinstance(exp, (int, float)):
                 ttl = max(1, int(exp - _t.time()))
             add_revoked_jti(username, payload.get('jti'), ttl)
-        except Exception:
-            # Fallback to in-memory TimedHeap (back-compat)
+        except Exception as e:
+            logger.warning(f'{request_id} | Token revocation failed, using fallback: {str(e)}')
             if username not in jwt_blacklist:
                 jwt_blacklist[username] = TimedHeap()
             jwt_blacklist[username].push(payload.get('jti'))

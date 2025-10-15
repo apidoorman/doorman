@@ -9,7 +9,6 @@ import logging
 import re
 import sys
 
-
 class _RedactFilter(logging.Filter):
     PATTERNS = [
         re.compile(r'(?i)(authorization\s*[:=]\s*)([^;\r\n]+)'),
@@ -32,24 +31,19 @@ class _RedactFilter(logging.Filter):
             pass
         return True
 
-
 def _ensure_logger(name: str):
     logger = logging.getLogger(name)
-    # If the logger already has a handler with a filter, leave it alone
     for h in logger.handlers:
         if h.filters:
             return
-    # Attach a lightweight stream handler with the redaction filter
     h = logging.StreamHandler(stream=sys.stdout)
     h.setLevel(logging.INFO)
     h.addFilter(_RedactFilter())
     logger.addHandler(h)
 
-
 try:
     _ensure_logger('doorman.gateway')
     _ensure_logger('doorman.logging')
 except Exception:
-    # Never block interpreter startup due to logging decoration
     pass
 

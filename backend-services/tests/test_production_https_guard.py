@@ -1,19 +1,16 @@
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_production_without_https_flags_fails_startup(monkeypatch):
     monkeypatch.setenv('ENV', 'production')
     monkeypatch.setenv('HTTPS_ONLY', 'false')
     monkeypatch.setenv('HTTPS_ENABLED', 'false')
 
-    # Directly exercise the lifespan to assert it raises
     from doorman import app_lifespan, doorman
     import pytest as _pytest
     with _pytest.raises(RuntimeError):
         async with app_lifespan(doorman):
             pass
-
 
 @pytest.mark.asyncio
 async def test_production_with_https_only_succeeds(monkeypatch):

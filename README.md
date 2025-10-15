@@ -39,8 +39,9 @@ Install requirements (backend)
 Set environment variables in a .env file (see backend-services/.env.example)
 ```bash
 # Startup admin should be used for setup only
-STARTUP_ADMIN_EMAIL=admin@localhost.com
-STARTUP_ADMIN_PASSWORD=SecPassword!12345
+# IMPORTANT: Use strong, unique credentials. Never commit real credentials to version control.
+DOORMAN_ADMIN_EMAIL=<your-admin-email>
+DOORMAN_ADMIN_PASSWORD=<strong-password-12+chars>
 
 # Cache/database mode (unified flag)
 # MEM for in-memory cache + in-memory DB; REDIS to use Redis-backed cache (DB can still be memory-only)
@@ -58,8 +59,8 @@ REDIS_DB=0
 
 # Memory Dump Config (memory-only mode)
 # Base path/stem for encrypted in-memory database dumps (.bin). Timestamp is appended.
-# Example produces files like generated/memory_dump-YYYYMMDDTHHMMSSZ.bin
-MEM_DUMP_PATH=generated/memory_dump.bin
+# Example produces files like backend-services/generated/memory_dump-YYYYMMDDTHHMMSSZ.bin
+MEM_DUMP_PATH=backend-services/generated/memory_dump.bin
 
 # Authorization Config
 JWT_SECRET_KEY=please-change-me # REQUIRED: app will fail to start without this
@@ -114,6 +115,19 @@ cp .env.local.example .env.local
 npm ci
 npm run dev OR npm run build
 ```
+
+## Docker (Production)
+Use Docker for production. Env variables are required.
+
+- Build: `docker build -t doorman:latest .`
+- Provide env (pick one):
+  - Env folder: create `./env/production.env`, run with `-v "$(pwd)/env:/env:ro"`
+  - Single file: `--env-file "$(pwd)/backend-services/.env"`
+  - Platform-injected: set env vars in DigitalOcean/AWS/Kubernetes (no files)
+- Start: `docker run --rm --name doorman -p 5001:5001 -p 3000:3000 -v "$(pwd)/env:/env:ro" doorman:latest`
+- Stop: `docker stop doorman`
+
+Required vars (set in your env or platform): `DOORMAN_ADMIN_EMAIL`, `DOORMAN_ADMIN_PASSWORD`, `JWT_SECRET_KEY`, `PORT`, `MEM_OR_EXTERNAL` (and Redis vars if using REDIS).
 
 ## License Information
 The contents of this repository are property of Doorman Dev, LLC.

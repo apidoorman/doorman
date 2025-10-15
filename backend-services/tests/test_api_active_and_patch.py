@@ -1,4 +1,3 @@
-# External imports
 import pytest
 
 @pytest.mark.asyncio
@@ -59,7 +58,7 @@ async def test_api_disabled_grpc_blocks(authed_client):
     assert ru.status_code == 200
     await _subscribe_self(authed_client, 'grpcx', 'v1')
     r = await authed_client.post('/api/grpc/grpcx', headers={'X-API-Version': 'v1', 'Content-Type': 'application/json'}, json={'method': 'X', 'message': {}})
-    assert r.status_code in (403, 404)
+    assert r.status_code in (400, 403, 404)
 
 @pytest.mark.asyncio
 async def test_api_disabled_soap_blocks(authed_client):

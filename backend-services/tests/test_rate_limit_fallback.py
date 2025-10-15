@@ -1,7 +1,5 @@
-# External imports
 import asyncio
 
-# Internal imports
 from utils.limit_throttle_util import InMemoryWindowCounter
 
 async def _inc(counter: InMemoryWindowCounter, key: str, times: int, ttl: int):

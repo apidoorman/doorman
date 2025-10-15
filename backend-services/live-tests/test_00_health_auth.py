@@ -1,7 +1,7 @@
 import pytest
 
 def test_status_ok(client):
-    r = client.get('/api/status')
+    r = client.get('/api/health')
     assert r.status_code == 200
     j = r.json()
     data = j.get('response') if isinstance(j, dict) else None

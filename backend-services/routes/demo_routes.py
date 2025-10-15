@@ -3,14 +3,12 @@ Protected demo seeding routes for populating the running server with dummy data.
 Only available to users with 'manage_gateway' OR 'manage_credits'.
 """
 
-# External imports
 from fastapi import APIRouter, Request
 from typing import Optional
 import uuid
 import time
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.response_util import respond_rest
 from utils.role_util import platform_role_required_bool, is_admin_user

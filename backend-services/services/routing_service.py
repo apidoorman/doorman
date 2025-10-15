@@ -4,17 +4,17 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from pymongo.errors import DuplicateKeyError
 import uuid
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from models.create_routing_model import CreateRoutingModel
 from models.update_routing_model import UpdateRoutingModel
 from utils.database import routing_collection
 from utils.doorman_cache_util import doorman_cache
+from utils.paging_util import validate_page_params
+from utils.constants import ErrorCodes, Messages
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -192,6 +192,14 @@ class RoutingService:
         Get all routings.
         """
         logger.info(request_id + ' | Getting routings: Page=' + str(page) + ' Page Size=' + str(page_size))
+        try:
+            page, page_size = validate_page_params(page, page_size)
+        except Exception as e:
+            return ResponseModel(
+                status_code=400,
+                error_code=ErrorCodes.PAGE_SIZE,
+                error_message=(Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING)
+            ).dict()
         skip = (page - 1) * page_size
         cursor = routing_collection.find().sort('client_key', 1).skip(skip).limit(page_size)
         routings = cursor.to_list(length=None)

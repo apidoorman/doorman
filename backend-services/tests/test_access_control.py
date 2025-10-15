@@ -1,4 +1,3 @@
-# External imports
 import os
 import pytest
 import pytest_asyncio
@@ -151,7 +150,27 @@ async def test_group_and_subscription_enforcement(login_client, authed_client, m
     class _FakeAsyncClient:
         async def __aenter__(self): return self
         async def __aexit__(self, exc_type, exc, tb): return False
-        async def get(self, url, params=None, headers=None): return _FakeHTTPResponse(200)
+        async def request(self, method, url, **kwargs):
+            """Generic request method used by http_client.request_with_resilience"""
+            method = method.upper()
+            if method == 'GET':
+                return await self.get(url, **kwargs)
+            elif method == 'POST':
+                return await self.post(url, **kwargs)
+            elif method == 'PUT':
+                return await self.put(url, **kwargs)
+            elif method == 'DELETE':
+                return await self.delete(url, **kwargs)
+            elif method == 'HEAD':
+                return await self.get(url, **kwargs)
+            elif method == 'PATCH':
+                return await self.put(url, **kwargs)
+            else:
+                return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
+        async def get(self, url, params=None, headers=None, **kwargs): return _FakeHTTPResponse(200)
+        async def post(self, url, **kwargs): return _FakeHTTPResponse(200)
+        async def put(self, url, **kwargs): return _FakeHTTPResponse(200)
+        async def delete(self, url, **kwargs): return _FakeHTTPResponse(200)
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     import routes.gateway_routes as gr
     async def _no_limit(req): return None

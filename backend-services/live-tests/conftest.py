@@ -4,7 +4,6 @@ import time
 import pytest
 import requests
 
-# Ensure backend packages are importable when running from live-tests dir
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from config import BASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD, require_env, STRICT_HEALTH
@@ -22,7 +21,7 @@ def client(base_url) -> LiveClient:
     last_err = None
     while time.time() < deadline:
         try:
-            r = c.get('/api/status')
+            r = c.get('/api/health')
             if r.status_code == 200:
                 if STRICT_HEALTH:
                     try:
@@ -43,7 +42,7 @@ def client(base_url) -> LiveClient:
             last_err = str(e)
         time.sleep(1)
     else:
-        pytest.fail(f'Doorman backend not healthy at {base_url}/api/status: {last_err}')
+        pytest.fail(f'Doorman backend not healthy at {base_url}/api/health: {last_err}')
 
     auth = c.login(ADMIN_EMAIL, ADMIN_PASSWORD)
     assert 'access_token' in auth.get('response', auth), 'login did not return access_token'

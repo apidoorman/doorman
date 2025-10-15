@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 from utils.ip_policy_util import _ip_in_list, _get_client_ip, enforce_api_ip_policy
 
-# Override autouse integration fixture with a no-op so we don't require a live backend
 @pytest.fixture(autouse=True, scope='session')
 def ensure_session_and_relaxed_limits():
     yield

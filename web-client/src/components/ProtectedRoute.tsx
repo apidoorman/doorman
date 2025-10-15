@@ -15,6 +15,7 @@ export function ProtectedRoute({
   requiredPermission,
   fallback
 }: ProtectedRouteProps) {
+  const DEBUG = process.env.NODE_ENV !== 'production'
   const { isAuthenticated, hasUIAccess, canAccessPage } = useAuth()
   const router = useRouter()
   const [redirecting, setRedirecting] = useState(false)
@@ -24,7 +25,7 @@ export function ProtectedRoute({
 
     if (!isAuthenticated || !hasUIAccess) {
       setRedirecting(true);
-      console.log('ProtectedRoute - Redirecting to login:', { isAuthenticated, hasUIAccess })
+      if (DEBUG) console.log('ProtectedRoute - Redirecting to login:', { isAuthenticated, hasUIAccess })
       router.push('/login')
       return
     }
