@@ -1,0 +1,17 @@
+
+syntax = "proto3";
+package grpcdemo1760495360_v1;
+service Resource {
+  rpc Create (CreateRequest) returns (CreateReply) {}
+  rpc Read (ReadRequest) returns (ReadReply) {}
+  rpc Update (UpdateRequest) returns (UpdateReply) {}
+  rpc Delete (DeleteRequest) returns (DeleteReply) {}
+}
+message CreateRequest { string name = 1; }
+message CreateReply { string message = 1; }
+message ReadRequest { int32 id = 1; }
+message ReadReply { string message = 1; }
+message UpdateRequest { int32 id = 1; string name = 2; }
+message UpdateReply { string message = 1; }
+message DeleteRequest { int32 id = 1; }
+message DeleteReply { bool ok = 1; }

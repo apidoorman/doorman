@@ -1,0 +1,16 @@
+
+syntax = "proto3";
+
+package grpcdemo1760495364_v1;
+
+service Greeter {
+  rpc Hello (HelloRequest) returns (HelloReply) {}
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}
