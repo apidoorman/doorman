@@ -3,23 +3,49 @@ set -euo pipefail
 
 # Load environment variables from common .env files if they exist.
 # Order: /env/*.env -> repo root .env -> backend-services/.env -> web-client/.env -> production variants
+_apply_env_file_no_override() {
+  # Read KEY=VALUE lines and export only if KEY is not already set in the environment.
+  # Supports simple quoted values. Skips comments and blank lines.
+  local file="$1"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      ''|'#'*) continue ;;
+    esac
+    # Strip export if present
+    line=${line#export }
+    # Only simple KEY=VALUE pairs
+    if printf '%s' "$line" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*='; then
+      key="${line%%=*}"
+      val="${line#*=}"
+      # Trim surrounding quotes
+      if [ "${val#\"}" != "$val" ] && [ "${val%\"}" != "$val" ]; then
+        val="${val#\"}"; val="${val%\"}"
+      elif [ "${val#\'}" != "$val" ] && [ "${val%\'}" != "$val" ]; then
+        val="${val#\'}"; val="${val%\'}"
+      fi
+      # Only set if not already defined
+      if [ -z "${!key+x}" ]; then
+        export "$key"="$val"
+      fi
+    fi
+  done < "$file"
+}
+
 load_env_files() {
-  # Load any *.env* style files found in common locations. Later files override earlier ones.
-  # Examples supported out-of-the-box: .env, .env.production, production.env, .env.local, etc.
+  # Load env files without overriding already-set variables.
+  # Precedence: platform/injected env > /env files > repo .env files (backend/web/app)
   set +u
-  set -a
-  for dir in /env /app /app/backend-services /app/web-client; do
+  for dir in /env /app/backend-services /app/web-client /app; do
     if [ -d "$dir" ]; then
       for f in "$dir"/.env* "$dir"/*.env; do
-        if [ -f "$f" ]; then
+        # Skip non-existent and example templates
+        if [ -f "$f" ] && ! printf '%s' "$f" | grep -qE '\.example$'; then
           echo "[entrypoint] Loading env file: $f"
-          # shellcheck disable=SC1090
-          . "$f"
+          _apply_env_file_no_override "$f"
         fi
       done
     fi
   done
-  set +a
   set -u
 }
 
@@ -48,6 +74,18 @@ echo "[entrypoint] Starting Doorman backend..."
   # Ensure required directories
   mkdir -p proto generated logs
   python doorman.py start
+  # Wait for PID file and keep a watcher process alive for wait -n
+  for i in {1..60}; do
+    if [ -f doorman.pid ]; then break; fi; sleep 0.2; done
+  if [ -f doorman.pid ]; then
+    DOORMAN_PID=$(cat doorman.pid || true)
+    # Keep this subshell alive while backend is running
+    while [ -n "${DOORMAN_PID}" ] && kill -0 "$DOORMAN_PID" 2>/dev/null; do
+      sleep 1
+    done
+  else
+    echo "[entrypoint] Warning: doorman.pid not found; backend watcher will exit"
+  fi
 ) &
 BACK_PID=$!
 
@@ -55,8 +93,8 @@ BACK_PID=$!
 echo "[entrypoint] Starting web client..."
 (
   cd /app/web-client
-  # Next.js start on port 3000 by default; override via env if needed.
-  npm run start
+  # Start Next.js on WEB_PORT, bind to 0.0.0.0 for container networking
+  PORT="${WEB_PORT:-3000}" npm run start -- -H 0.0.0.0 -p "${WEB_PORT:-3000}"
 ) &
 WEB_PID=$!
 
