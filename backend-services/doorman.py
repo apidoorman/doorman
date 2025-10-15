@@ -90,11 +90,6 @@ from utils.ip_policy_util import _get_client_ip as _policy_get_client_ip, _ip_in
 
 load_dotenv()
 
-try:
-    _migrate_generated_directory()
-except Exception:
-    pass
-
 PID_FILE = 'doorman.pid'
 
 def _migrate_generated_directory() -> None:
@@ -1152,6 +1147,13 @@ def configure_logger(logger_name):
 
 gateway_logger = configure_logger('doorman.gateway')
 logging_logger = configure_logger('doorman.logging')
+
+# Now that logging is configured, attempt to migrate any legacy 'generated/' dir
+try:
+    _migrate_generated_directory()
+except Exception:
+    # Non-fatal: migration best-effort only
+    pass
 
 audit_logger = logging.getLogger('doorman.audit')
 audit_logger.setLevel(logging.INFO)
