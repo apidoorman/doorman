@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 # Configurable envs (can override on CLI or set in backend-services/.env)
-BASE_URL ?= http://localhost:5001
+BASE_URL ?= http://localhost:3001
 ADMIN_EMAIL ?= $(shell grep '^DOORMAN_ADMIN_EMAIL=' backend-services/.env 2>/dev/null | cut -d'=' -f2)
 ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' backend-services/.env 2>/dev/null | cut -d'=' -f2)
 
@@ -61,3 +61,23 @@ coverage-html:
 coverage-all:
 	BASE_URL=$(BASE_URL) DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
 	 bash scripts/coverage_all.sh
+
+.PHONY: clean clean-deep
+
+# Remove common local build/test artifacts without touching dependencies
+clean:
+	@echo "Cleaning caches and runtime artifacts..."
+	@find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
+	@find . -type d -name ".pytest_cache" -prune -exec rm -rf {} + || true
+	@find . -type f -name "*.py[co]" -delete || true
+	@find . -type f -name ".DS_Store" -delete || true
+	@rm -rf backend-services/platform-logs/*.log backend-services/doorman.pid doorman.pid uvicorn.pid || true
+	@rm -rf web-client/.next || true
+	@rm -f pytest_backend_verbose.log || true
+	@echo "Done."
+
+# Deeper cleanup that also removes generated dev artifacts
+clean-deep: clean
+	@echo "Removing generated dev artifacts..."
+	@rm -rf generated backend-services/generated || true
+	@echo "Done."

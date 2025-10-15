@@ -557,18 +557,18 @@ ALLOW_CREDENTIALS=True
 Doorman includes comprehensive security test coverage:
 
 **Test suites:**
-- `tests/test_auth_csrf_https.py` - CSRF validation
-- `tests/test_production_https_guard.py` - HTTPS enforcement
-- `tests/test_ip_policy_allow_deny_cidr.py` - IP filtering
-- `tests/test_security.py` - General security features
-- `tests/test_request_id_and_logging_redaction.py` - Audit trail
+- `backend-services/tests/test_auth_csrf_https.py` - CSRF validation
+- `backend-services/tests/test_production_https_guard.py` - HTTPS enforcement
+- `backend-services/tests/test_ip_policy_allow_deny_cidr.py` - IP filtering
+- `backend-services/tests/test_security.py` - General security features
+- `backend-services/tests/test_request_id_and_logging_redaction.py` - Audit trail
 
 **Run security tests:**
 ```bash
 cd backend-services
-pytest tests/test_auth_csrf_https.py -v
-pytest tests/test_production_https_guard.py -v
-pytest tests/test_ip_policy_allow_deny_cidr.py -v
+pytest backend-services/tests/test_auth_csrf_https.py -v
+pytest backend-services/tests/test_production_https_guard.py -v
+pytest backend-services/tests/test_ip_policy_allow_deny_cidr.py -v
 ```
 
 ---
