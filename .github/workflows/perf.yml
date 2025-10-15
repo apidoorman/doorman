@@ -1,5 +1,8 @@
 name: Performance Non-Regression
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -67,4 +70,3 @@ jobs:
         if: always()
         run: |
           python backend-services/doorman.py stop || true
-

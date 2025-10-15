@@ -299,7 +299,7 @@ class ValidationUtil:
             return tag.split('}', 1)[1]
         return tag
 
-    def _xml_to_dict(self, element: ET.Element) -> Dict[str, Any]:
+    def _xml_to_dict(self, element: Any) -> Dict[str, Any]:
         result = {}
         for child in element:
             key = self._strip_ns(child.tag)
