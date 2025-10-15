@@ -116,6 +116,19 @@ npm ci
 npm run dev OR npm run build
 ```
 
+## Docker (Production)
+Use Docker for production. Env variables are required.
+
+- Build: `docker build -t doorman:latest .`
+- Provide env (pick one):
+  - Env folder: create `./env/production.env`, run with `-v "$(pwd)/env:/env:ro"`
+  - Single file: `--env-file "$(pwd)/backend-services/.env"`
+  - Platform-injected: set env vars in DigitalOcean/AWS/Kubernetes (no files)
+- Start: `docker run --rm --name doorman -p 5001:5001 -p 3000:3000 -v "$(pwd)/env:/env:ro" doorman:latest`
+- Stop: `docker stop doorman`
+
+Required vars (set in your env or platform): `DOORMAN_ADMIN_EMAIL`, `DOORMAN_ADMIN_PASSWORD`, `JWT_SECRET_KEY`, `PORT`, `MEM_OR_EXTERNAL` (and Redis vars if using REDIS).
+
 ## License Information
 The contents of this repository are property of Doorman Dev, LLC.
 
