@@ -24,7 +24,7 @@ def test_exception_handling_patterns():
             'location': 'routes/authorization_routes.py (5 locations)',
             'pattern': 'Fixed: Admin check exceptions',
             'code': '''except Exception as e:
-    logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
+    logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)''',
             'security': 'IMPROVED',
             'reason': 'Now logs errors instead of silent pass'
         },
@@ -32,7 +32,7 @@ def test_exception_handling_patterns():
             'location': 'routes/authorization_routes.py:756-758',
             'pattern': 'Fixed: Token revocation fallback',
             'code': '''except Exception as e:
-    logger.warning(f'{request_id} | Token revocation failed, using fallback: {str(e)}')
+    logger.warning(f'{request_id} | Token revocation failed, using fallback: {str(e)}')''',
             'security': 'IMPROVED',
             'reason': 'Logs revocation failures for monitoring'
         },
