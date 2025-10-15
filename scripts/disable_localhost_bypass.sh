@@ -3,11 +3,11 @@ set -euo pipefail
 
 # One-time helper to force-clear stored allow_localhost_bypass=false via REST API.
 # Env vars:
-# - BASE_URL (default http://localhost:5001)
+# - BASE_URL (default http://localhost:3001)
 # - DOORMAN_ADMIN_EMAIL (required, no default)
 # - DOORMAN_ADMIN_PASSWORD (required, no default)
 
-BASE_URL="${BASE_URL:-http://localhost:5001}"
+BASE_URL="${BASE_URL:-http://localhost:3001}"
 EMAIL="${DOORMAN_ADMIN_EMAIL:-}"
 PASSWORD="${DOORMAN_ADMIN_PASSWORD:-}"
 

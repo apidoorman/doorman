@@ -25,7 +25,7 @@ docker compose up --build
 ```
 
 **Services will be available at:**
-- Backend API: `http://localhost:5001`
+- Backend API: `http://localhost:3001`
 - Web UI: `http://localhost:3000`
 
 ### 2. Configure Environment Variables
@@ -110,7 +110,7 @@ cd web-client
 cp .env.local.example .env.local
 
 # Edit .env.local and set:
-# NEXT_PUBLIC_SERVER_URL=http://localhost:5001
+# NEXT_PUBLIC_SERVER_URL=http://localhost:3001
 
 npm ci
 npm run dev  # Development mode
@@ -131,11 +131,11 @@ export DOORMAN_ADMIN_PASSWORD="YourStrongPassword123!"
 curl -s -c /tmp/doorman.cookies \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$DOORMAN_ADMIN_EMAIL\",\"password\":\"$DOORMAN_ADMIN_PASSWORD\"}" \
-  http://localhost:5001/platform/authorization
+  http://localhost:3001/platform/authorization
 
 # Check authentication status
 curl -s -b /tmp/doorman.cookies \
-  http://localhost:5001/platform/authorization/status
+  http://localhost:3001/platform/authorization/status
 ```
 
 ### Via Web UI
@@ -153,7 +153,7 @@ Let's publish a simple REST API backed by httpbin for testing.
 ```bash
 curl -s -b /tmp/doorman.cookies \
   -H 'Content-Type: application/json' \
-  -X POST http://localhost:5001/platform/credit \
+  -X POST http://localhost:3001/platform/credit \
   -d '{
     "api_credit_group": "demo-api",
     "api_key": "demo-secret-key-123",
@@ -175,7 +175,7 @@ curl -s -b /tmp/doorman.cookies \
 ```bash
 curl -s -b /tmp/doorman.cookies \
   -H 'Content-Type: application/json' \
-  -X POST http://localhost:5001/platform/api \
+  -X POST http://localhost:3001/platform/api \
   -d '{
     "api_name": "demo",
     "api_version": "v1",
@@ -197,7 +197,7 @@ curl -s -b /tmp/doorman.cookies \
 # GET endpoint
 curl -s -b /tmp/doorman.cookies \
   -H 'Content-Type: application/json' \
-  -X POST http://localhost:5001/platform/endpoint \
+  -X POST http://localhost:3001/platform/endpoint \
   -d '{
     "api_name": "demo",
     "api_version": "v1",
@@ -209,7 +209,7 @@ curl -s -b /tmp/doorman.cookies \
 # POST endpoint
 curl -s -b /tmp/doorman.cookies \
   -H 'Content-Type: application/json' \
-  -X POST http://localhost:5001/platform/endpoint \
+  -X POST http://localhost:3001/platform/endpoint \
   -d '{
     "api_name": "demo",
     "api_version": "v1",
@@ -224,7 +224,7 @@ curl -s -b /tmp/doorman.cookies \
 ```bash
 curl -s -b /tmp/doorman.cookies \
   -H 'Content-Type: application/json' \
-  -X POST http://localhost:5001/platform/subscription/subscribe \
+  -X POST http://localhost:3001/platform/subscription/subscribe \
   -d '{
     "username": "admin",
     "api_name": "demo",
@@ -237,13 +237,13 @@ curl -s -b /tmp/doorman.cookies \
 ```bash
 # GET request
 curl -s -b /tmp/doorman.cookies \
-  "http://localhost:5001/api/rest/demo/v1/get?test=123"
+  "http://localhost:3001/api/rest/demo/v1/get?test=123"
 
 # POST request
 curl -s -b /tmp/doorman.cookies \
   -H 'Content-Type: application/json' \
   -d '{"message": "Hello Doorman!"}' \
-  http://localhost:5001/api/rest/demo/v1/post
+  http://localhost:3001/api/rest/demo/v1/post
 ```
 
 Doorman will automatically inject the `x-api-key` header to the upstream service!

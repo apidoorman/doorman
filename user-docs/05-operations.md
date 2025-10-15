@@ -836,11 +836,11 @@ Import and tune thresholds to match your SLOs.
 
 ## Load Testing with k6
 
-Use `k6/load.test.js` to validate performance and SLOs in CI:
+Use `load-tests/k6/load.test.js` to validate performance and SLOs in CI:
 
 ```bash
-k6 run k6/load.test.js \
-  -e BASE_URL=http://localhost:5001 \
+k6 run load-tests/k6/load.test.js \
+  -e BASE_URL=http://localhost:3001 \
   -e RPS=50 \
   -e DURATION=2m \
   -e REST_PATHS='["/api/rest/health"]' \

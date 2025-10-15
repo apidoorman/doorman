@@ -76,5 +76,5 @@ jobs:
       - name: Build web client
         working-directory: web-client
         env:
-          NEXT_PUBLIC_SERVER_URL: http://localhost:5001
+          NEXT_PUBLIC_SERVER_URL: http://localhost:3001
         run: npm run build

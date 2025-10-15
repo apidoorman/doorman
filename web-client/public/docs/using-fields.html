@@ -37,7 +37,7 @@
     <pre>
 # Example curl
 curl -H "Authorization: Bearer ..." \
-     http://localhost:5001/api/rest/users/v1/list
+     http://localhost:3001/api/rest/users/v1/list
     </pre>
 
     <h3 id="servers">Servers</h3>
@@ -94,14 +94,14 @@ curl -H "Authorization: Bearer ..." \
 # REST call through Doorman
 curl -H "Authorization: Bearer &lt;token&gt;" \
      -H "client-key: demo-client" \
-     http://localhost:5001/api/rest/users/v1/items/42
+     http://localhost:3001/api/rest/users/v1/items/42
 
 # GraphQL
 curl -H "Authorization: Bearer &lt;token&gt;" \
      -H "X-API-Version: v1" \
      -H "Content-Type: application/json" \
      -d '{"query":"{ hello }"}' \
-     http://localhost:5001/api/graphql/example
+     http://localhost:3001/api/graphql/example
     </pre>
   </main>
 </body>

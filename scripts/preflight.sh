@@ -7,13 +7,13 @@ set -euo pipefail
 # - Optionally smokes REST/SOAP/GraphQL gateway if SMOKE_* upstream URLs are provided
 #
 # Env:
-#   BASE_URL (default http://localhost:5001)
+#   BASE_URL (default http://localhost:3001)
 #   DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD (required)
 #   SMOKE_REST_UPSTREAM (optional, e.g., http://httpbin.org)
 #   SMOKE_SOAP_UPSTREAM (optional)
 #   SMOKE_GQL_UPSTREAM  (optional)
 
-BASE_URL="${BASE_URL:-http://localhost:5001}"
+BASE_URL="${BASE_URL:-http://localhost:3001}"
 EMAIL="${DOORMAN_ADMIN_EMAIL:-}"
 PASSWORD="${DOORMAN_ADMIN_PASSWORD:-}"
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Runs k6 load-tests/k6-load-test.js, captures CPU/loop-lag stats while running,
+# Runs k6 load-tests/k6/load.test.js, captures CPU/loop-lag stats while running,
 # and compares results against a baseline summary via scripts/compare_perf.py.
 
 BASE_URL=${BASE_URL:-http://localhost:8000}
@@ -36,7 +36,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "Running k6 load test..."
-K6_CMD=(k6 run load-tests/k6-load-test.js --env BASE_URL="${BASE_URL}")
+K6_CMD=(k6 run load-tests/k6/load.test.js --env BASE_URL="${BASE_URL}")
 "${K6_CMD[@]}"
 
 echo
@@ -52,4 +52,3 @@ fi
 echo
 echo "Comparing current vs baseline..."
 python3 scripts/compare_perf.py "${CURRENT_JSON}" "${BASELINE_JSON}"
-
