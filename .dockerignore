@@ -1,18 +1,30 @@
 venv
+# Ignore all node_modules everywhere to keep context slim
 node_modules
+**/node_modules
+
 **/__pycache__
 **/.pytest_cache
-**/.next/cache
 **/.DS_Store
 *.pyc
 *.pyo
 *.pyd
 *.log
+
+# Ignore all Next.js build artifacts entirely
+.next
+**/.next
+web-client/.next
+web-client/.next/cache
+web-client/.next/trace
+
+# PIDs and generated artifacts
 uvicorn.pid
 doorman.pid
 backend-services/doorman.pid
 backend-services/generated
 backend-services/logs
-web-client/.next/cache
-web-client/.next/trace
+
+# Local env and production env files
 web-client/.env.local
+.env

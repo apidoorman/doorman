@@ -7,8 +7,6 @@ __pycache__/
 # Local env files (keep examples tracked separately if needed)
 .env
 **/.env
-.env.*
-**/.env.*
 
 # Node/Next.js local configs
 .env.local
@@ -74,3 +72,4 @@ backend-services/generated/
 backend-services/proto/*.bin
 **/*memory_dump*.bin
 **/*.bin
+.production.env
