@@ -11,6 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        nodejs npm curl ca-certificates git \
+    && npm i -g npm@^10 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -25,8 +26,20 @@ COPY . /app
 
 # Build web client (Next.js)
 WORKDIR /app/web-client
-RUN npm ci \
-    && npm run build
+# Build-time args for frontend env (baked into Next.js bundle)
+ARG NEXT_PUBLIC_SERVER_URL=http://localhost:3001
+ARG NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_SERVER_URL}
+ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
+ARG NEXT_PUBLIC_PROTECTED_USERS=
+ENV NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL} \
+    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} \
+    NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS} \
+    NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+RUN npm ci --include=dev \
+    && npm run build \
+    && npm prune --omit=dev
 
 # Runtime configuration
 WORKDIR /app
@@ -35,6 +48,6 @@ WORKDIR /app
 COPY docker/entrypoint.sh /app/docker/entrypoint.sh
 RUN chmod +x /app/docker/entrypoint.sh
 
-EXPOSE 5001 3000
+EXPOSE 3001 3000
 
 CMD ["/app/docker/entrypoint.sh"]
