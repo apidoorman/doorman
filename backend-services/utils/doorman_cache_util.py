@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import redis
 import json
 import os
@@ -19,27 +18,22 @@ class MemoryCache:
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
         self._maxsize = maxsize
-        self._access_order = []  # Track access order for LRU eviction
+        self._access_order = []
 
     def setex(self, key: str, ttl: int, value: str):
         with self._lock:
-            # Clean up expired entries first
             self._cleanup_expired()
 
-            # Check if we need to evict entries to stay under maxsize
             if key not in self._cache and len(self._cache) >= self._maxsize:
-                # Evict least recently used entry
                 if self._access_order:
                     lru_key = self._access_order.pop(0)
                     self._cache.pop(lru_key, None)
 
-            # Set the new entry
             self._cache[key] = {
                 'value': value,
                 'expires_at': self._get_current_time() + ttl
             }
 
-            # Update access order (move to end = most recently used)
             if key in self._access_order:
                 self._access_order.remove(key)
             self._access_order.append(key)
@@ -49,7 +43,6 @@ class MemoryCache:
             if key in self._cache:
                 cache_entry = self._cache[key]
                 if self._get_current_time() < cache_entry['expires_at']:
-                    # Update access order (move to end = most recently used)
                     if key in self._access_order:
                         self._access_order.remove(key)
                     self._access_order.append(key)
@@ -118,7 +111,6 @@ class DoormanCacheManager:
             cache_flag = os.getenv('MEM_OR_REDIS', 'MEM')
         self.cache_type = str(cache_flag).upper()
         if self.cache_type == 'MEM':
-            # Configure cache maxsize from environment
             maxsize = int(os.getenv('CACHE_MAX_SIZE', 10000))
             self.cache = MemoryCache(maxsize=maxsize)
             self.is_redis = False
@@ -189,11 +181,9 @@ class DoormanCacheManager:
             raise redis.ConnectionError('chaos: simulated redis outage')
         if self.is_redis:
             try:
-                # Avoid blocking loop if called from async context
                 loop = asyncio.get_running_loop()
                 return loop.run_in_executor(None, self.cache.setex, cache_key, ttl, json.dumps(value))
             except RuntimeError:
-                # Not in an event loop
                 self.cache.setex(cache_key, ttl, json.dumps(value))
                 return None
         else:
@@ -308,5 +298,4 @@ class DoormanCacheManager:
             self.delete_cache(cache_name, key)
             raise
 
-# Initialize the cache manager
 doorman_cache = DoormanCacheManager()

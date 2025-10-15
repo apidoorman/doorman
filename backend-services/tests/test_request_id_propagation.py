@@ -1,10 +1,8 @@
 import httpx
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_request_id_propagates_to_upstream_and_response(monkeypatch, authed_client):
-    # Prepare a mock upstream that captures X-Request-ID and echoes it back
     captured = {'xrid': None}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -14,18 +12,14 @@ async def test_request_id_propagates_to_upstream_and_response(monkeypatch, authe
     transport = httpx.MockTransport(handler)
     mock_client = httpx.AsyncClient(transport=transport)
 
-    # Monkeypatch gateway's HTTP client factory to use our mock client
     from services import gateway_service
 
     async def _get_client():
         return mock_client
 
-    # Patch classmethod to return our instance
     monkeypatch.setattr(gateway_service.GatewayService, 'get_http_client', classmethod(lambda cls: mock_client))
 
-    # Create an API + endpoint that allows forwarding back X-Upstream-Request-ID
     api_name, api_version = 'ridtest', 'v1'
-    # Allow the upstream echoed header to pass through to response
     payload = {
         'api_name': api_name,
         'api_version': api_version,
@@ -49,20 +43,15 @@ async def test_request_id_propagates_to_upstream_and_response(monkeypatch, authe
     })
     assert r2.status_code in (200, 201), r2.text
 
-    # Subscribe the caller to the API to satisfy gateway subscription requirements
     sub = await authed_client.post('/platform/subscription/subscribe', json={'username': 'admin', 'api_name': api_name, 'api_version': api_version})
     assert sub.status_code in (200, 201), sub.text
 
-    # Make gateway request
     resp = await authed_client.get(f'/api/rest/{api_name}/{api_version}/echo')
     assert resp.status_code == 200, resp.text
 
-    # Response must include X-Request-ID (set by middleware)
     rid = resp.headers.get('X-Request-ID')
     assert rid, 'Missing X-Request-ID in response'
 
-    # Upstream must have received same X-Request-ID
     assert captured['xrid'] == rid
 
-    # Response should expose upstream echoed header through allowed headers
     assert resp.headers.get('X-Upstream-Request-ID') == rid

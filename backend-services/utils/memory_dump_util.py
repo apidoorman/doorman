@@ -2,7 +2,6 @@
 Utilities to dump and restore in-memory database state with encryption.
 """
 
-# External imports
 import os
 from pathlib import Path
 import json
@@ -13,11 +12,9 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-# Internal imports
 from .database import database
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-# Normalize dump path to the backend-services generated directory unless overridden
 DEFAULT_DUMP_PATH = os.getenv('MEM_DUMP_PATH', str(_PROJECT_ROOT / 'generated' / 'memory_dump.bin'))
 
 def _derive_key(key_material: str, salt: bytes) -> bytes:

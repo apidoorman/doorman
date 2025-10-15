@@ -1,6 +1,5 @@
 import pytest
 
-
 class _Resp:
     def __init__(self, status_code=200, json_body=None, headers=None):
         self.status_code = status_code
@@ -12,7 +11,6 @@ class _Resp:
         self.text = ''
     def json(self):
         return self._json_body
-
 
 def _mk_client_capture(seen):
     class _Client:
@@ -57,7 +55,6 @@ def _mk_client_capture(seen):
             return _Resp(200, json_body=payload, headers={'X-Upstream': 'yes'})
     return _Client
 
-
 async def _setup_api(client, name, ver, swap_header, allowed_headers=None):
     payload = {
         'api_name': name,
@@ -85,7 +82,6 @@ async def _setup_api(client, name, ver, swap_header, allowed_headers=None):
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 @pytest.mark.asyncio
 async def test_auth_swap_injects_authorization_from_custom_header(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -104,7 +100,6 @@ async def test_auth_swap_injects_authorization_from_custom_header(monkeypatch, a
     auth_val = forwarded.get('Authorization') or forwarded.get('authorization')
     assert auth_val == 'Bearer backend-token'
 
-
 @pytest.mark.asyncio
 async def test_auth_swap_missing_source_header_no_crash(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -119,9 +114,7 @@ async def test_auth_swap_missing_source_header_no_crash(monkeypatch, authed_clie
     )
     assert r.status_code == 200
     fwd = (r.json() or {}).get('headers') or {}
-    # Authorization should not be injected if source header is missing
     assert not (('Authorization' in fwd) or ('authorization' in fwd))
-
 
 @pytest.mark.asyncio
 async def test_auth_swap_with_empty_value_does_not_override(monkeypatch, authed_client):
@@ -131,7 +124,6 @@ async def test_auth_swap_with_empty_value_does_not_override(monkeypatch, authed_
     await _setup_api(authed_client, name, ver, swap_from, allowed_headers=['Content-Type', swap_from, 'Authorization'])
     seen = []
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _mk_client_capture(seen))
-    # Provide normal Authorization but empty backend header; should keep existing Authorization
     r = await authed_client.get(
         f'/api/rest/{name}/{ver}/p',
         headers={swap_from: '', 'Authorization': 'Bearer existing'}

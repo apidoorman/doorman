@@ -1,13 +1,10 @@
 import os
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_login_ip_rate_limit_returns_429_and_headers(monkeypatch, client):
-    # Tighten limits for test determinism
     monkeypatch.setenv('LOGIN_IP_RATE_LIMIT', '2')
     monkeypatch.setenv('LOGIN_IP_RATE_WINDOW', '60')
-    # Ensure limiter is enabled for this test
     monkeypatch.setenv('LOGIN_IP_RATE_DISABLED', 'false')
 
     creds = {
@@ -15,7 +12,6 @@ async def test_login_ip_rate_limit_returns_429_and_headers(monkeypatch, client):
         'password': os.environ.get('DOORMAN_ADMIN_PASSWORD', 'Password123!Password')
     }
 
-    # Two successful attempts (or 200/400 depending on creds), third should hit 429
     r1 = await client.post('/platform/authorization', json=creds)
     assert r1.status_code in (200, 400, 401)
 
@@ -25,13 +21,11 @@ async def test_login_ip_rate_limit_returns_429_and_headers(monkeypatch, client):
     r3 = await client.post('/platform/authorization', json=creds)
     assert r3.status_code == 429
 
-    # Headers should include Retry-After and X-RateLimit-* fields
     assert 'Retry-After' in r3.headers
     assert 'X-RateLimit-Limit' in r3.headers
     assert 'X-RateLimit-Remaining' in r3.headers
     assert 'X-RateLimit-Reset' in r3.headers
 
-    # Body should be JSON envelope with error fields
     body = r3.json()
     payload = body.get('response', body)
     assert isinstance(payload, dict)

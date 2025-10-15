@@ -4,10 +4,8 @@ import asyncio
 import logging
 from io import StringIO
 
-
 @pytest.mark.asyncio
 async def test_graceful_shutdown_allows_inflight_completion(monkeypatch):
-    # Slow down the login path to simulate a long-running request (300ms)
     from services.user_service import UserService
     original = UserService.check_password_return_user
 
@@ -17,7 +15,6 @@ async def test_graceful_shutdown_allows_inflight_completion(monkeypatch):
 
     monkeypatch.setattr(UserService, 'check_password_return_user', _slow_check)
 
-    # Capture gateway logs to assert graceful shutdown messages
     logger = logging.getLogger('doorman.gateway')
     stream = StringIO()
     handler = logging.StreamHandler(stream)
@@ -27,7 +24,6 @@ async def test_graceful_shutdown_allows_inflight_completion(monkeypatch):
         from doorman import doorman, app_lifespan
         from httpx import AsyncClient
 
-        # Run the app within its lifespan; start a request and then trigger shutdown
         async with app_lifespan(doorman):
             client = AsyncClient(app=doorman, base_url='http://testserver')
             creds = {
@@ -35,12 +31,10 @@ async def test_graceful_shutdown_allows_inflight_completion(monkeypatch):
                 'password': os.environ.get('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
             }
             req_task = asyncio.create_task(client.post('/platform/authorization', json=creds))
-            # Ensure the request has started
             await asyncio.sleep(0.05)
 
-        # Exiting lifespan triggers graceful shutdown; in-flight request must complete within grace window
         resp = await req_task
-        assert resp.status_code in (200, 400), resp.text  # allow for env/pw variance
+        assert resp.status_code in (200, 400), resp.text
 
         logs = stream.getvalue()
         assert 'Starting graceful shutdown' in logs

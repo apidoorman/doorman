@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request
@@ -31,16 +30,13 @@ import uuid
 import shutil
 from pathlib import Path
 
-# Compatibility guard: ensure aiohttp is a Python 3.13–compatible version before
-# downstream modules import it (e.g., gateway_service). This avoids a cryptic
-# regex error inside older aiohttp builds on 3.13.
 try:
     if sys.version_info >= (3, 13):
         try:
-            from importlib.metadata import version, PackageNotFoundError  # type: ignore
-        except Exception:  # pragma: no cover
-            version = None  # type: ignore
-            PackageNotFoundError = Exception  # type: ignore
+            from importlib.metadata import version, PackageNotFoundError
+        except Exception:
+            version = None
+            PackageNotFoundError = Exception
         if version is not None:
             try:
                 v = version('aiohttp')
@@ -59,7 +55,6 @@ try:
 except Exception:
     pass
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.cache_manager_util import cache_manager
 from utils.auth_blacklist import purge_expired_tokens
@@ -95,7 +90,6 @@ from utils.ip_policy_util import _get_client_ip as _policy_get_client_ip, _ip_in
 
 load_dotenv()
 
-# Normalize generated/ location and migrate any legacy files
 try:
     _migrate_generated_directory()
 except Exception:
@@ -117,7 +111,6 @@ def _migrate_generated_directory() -> None:
         if src == dst:
             return
         if not src.exists() or not src.is_dir():
-            # Nothing to migrate; ensure dst exists
             dst.mkdir(exist_ok=True)
             gateway_logger.info(f"Generated dir: {dst} (no migration needed)")
             return
@@ -138,7 +131,6 @@ def _migrate_generated_directory() -> None:
                 except Exception:
                     continue
             moved_count += 1
-        # Attempt to remove the now-empty src tree
         try:
             shutil.rmtree(src)
         except Exception:
@@ -154,18 +146,16 @@ async def validate_database_connections():
     """Validate database connections on startup with retry logic"""
     gateway_logger.info("Validating database connections...")
 
-    # Test MongoDB
     max_retries = 3
     for attempt in range(max_retries):
         try:
             from utils.database import user_collection
-            # Simple query to verify connection
             await user_collection.find_one({})
             gateway_logger.info("✓ MongoDB connection verified")
             break
         except Exception as e:
             if attempt < max_retries - 1:
-                wait = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                wait = 2 ** attempt
                 gateway_logger.warning(
                     f"MongoDB connection attempt {attempt + 1}/{max_retries} failed: {e}"
                 )
@@ -177,7 +167,6 @@ async def validate_database_connections():
                     f"Cannot connect to MongoDB: {e}"
                 ) from e
 
-    # Test Redis (if configured)
     redis_host = os.getenv('REDIS_HOST')
     mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM')
 
@@ -249,10 +238,8 @@ async def app_lifespan(app: FastAPI):
     if not os.getenv('JWT_SECRET_KEY'):
         raise RuntimeError('JWT_SECRET_KEY is not configured. Set it before starting the server.')
 
-    # Production environment validation
     try:
         if os.getenv('ENV', '').lower() == 'production':
-            # Validate HTTPS
             https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
             https_enabled = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true'
             if not (https_only or https_enabled):
@@ -260,7 +247,6 @@ async def app_lifespan(app: FastAPI):
                     'In production (ENV=production), you must enable HTTPS_ONLY or HTTPS_ENABLED to enforce Secure cookies.'
                 )
 
-            # Validate SSL certificates exist before starting
             if https_only or https_enabled:
                 cert = os.getenv('SSL_CERTFILE')
                 key = os.getenv('SSL_KEYFILE')
@@ -273,7 +259,6 @@ async def app_lifespan(app: FastAPI):
                 if key and not os.path.exists(key):
                     raise RuntimeError(f'SSL private key not found: {key}')
 
-            # Validate JWT secret is not default
             jwt_secret = os.getenv('JWT_SECRET_KEY', '')
             if jwt_secret in ('please-change-me', 'test-secret-key', 'test-secret-key-please-change', ''):
                 raise RuntimeError(
@@ -281,7 +266,6 @@ async def app_lifespan(app: FastAPI):
                     'Generate a strong random secret (32+ characters).'
                 )
 
-            # Validate Redis for HA deployments (shared token revocation and rate limiting)
             mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM').upper()
             if mem_or_external == 'MEM':
                 num_threads = int(os.getenv('THREADS', 1))
@@ -296,7 +280,6 @@ async def app_lifespan(app: FastAPI):
                     'Single-node only. For multi-node HA, use REDIS or EXTERNAL mode.'
                 )
             else:
-                # Verify Redis is actually configured
                 redis_host = os.getenv('REDIS_HOST')
                 if not redis_host:
                     raise RuntimeError(
@@ -304,7 +287,6 @@ async def app_lifespan(app: FastAPI):
                         'Redis is essential for shared token revocation and rate limiting in HA deployments.'
                     )
 
-            # Validate CORS security
             if os.getenv('CORS_STRICT', 'false').lower() != 'true':
                 raise RuntimeError(
                     'In production (ENV=production), CORS_STRICT must be true. '
@@ -318,7 +300,6 @@ async def app_lifespan(app: FastAPI):
                     'Set ALLOWED_ORIGINS to specific domain(s): https://yourdomain.com'
                 )
 
-            # Validate TOKEN_ENCRYPTION_KEY for API key encryption
             token_encryption_key = os.getenv('TOKEN_ENCRYPTION_KEY', '')
             if not token_encryption_key or len(token_encryption_key) < 32:
                 gateway_logger.warning(
@@ -326,7 +307,6 @@ async def app_lifespan(app: FastAPI):
                     'API keys will not be encrypted at rest. Highly recommended for production security.'
                 )
 
-            # Validate encryption keys if memory dumps are used
             if mem_or_external == 'MEM':
                 mem_encryption_key = os.getenv('MEM_ENCRYPTION_KEY', '')
                 if not mem_encryption_key or len(mem_encryption_key) < 32:
@@ -336,41 +316,39 @@ async def app_lifespan(app: FastAPI):
                         'Generate a strong random key: openssl rand -hex 32'
                     )
     except Exception as e:
-        # Re-raise all RuntimeErrors (validation failures should stop startup)
         raise
 
-    # Configure Redis connection with authentication
+    mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM').upper()
     redis_host = os.getenv('REDIS_HOST')
     redis_port = os.getenv('REDIS_PORT')
     redis_db = os.getenv('REDIS_DB')
     redis_password = os.getenv('REDIS_PASSWORD', '')
 
-    # Warn if Redis is used without authentication in production/HA modes
-    mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM').upper()
-    if mem_or_external in ('REDIS', 'EXTERNAL') and not redis_password:
-        gateway_logger.warning(
-            'Redis password not set; connection may be unauthenticated. '
-            'Set REDIS_PASSWORD environment variable to secure Redis access.'
-        )
-
-    # Build Redis URL with authentication if password is provided
-    if redis_password:
-        redis_url = f'redis://:{redis_password}@{redis_host}:{redis_port}/{redis_db}'
+    if mem_or_external in ('REDIS', 'EXTERNAL'):
+        if not redis_password:
+            gateway_logger.warning(
+                'Redis password not set; connection may be unauthenticated. '
+                'Set REDIS_PASSWORD environment variable to secure Redis access.'
+            )
+        host = redis_host or 'localhost'
+        port = redis_port or '6379'
+        db = redis_db or '0'
+        if redis_password:
+            redis_url = f'redis://:{redis_password}@{host}:{port}/{db}'
+        else:
+            redis_url = f'redis://{host}:{port}/{db}'
+        app.state.redis = Redis.from_url(redis_url, decode_responses=True)
     else:
-        redis_url = f'redis://{redis_host}:{redis_port}/{redis_db}'
-
-    app.state.redis = Redis.from_url(redis_url, decode_responses=True)
+        app.state.redis = None
 
     app.state._purger_task = asyncio.create_task(automatic_purger(1800))
 
-    # Restore persisted metrics (if available)
     METRICS_FILE = os.path.join(LOGS_DIR, 'metrics.json')
     try:
         metrics_store.load_from_file(METRICS_FILE)
     except Exception as e:
         gateway_logger.debug(f'Metrics restore skipped: {e}')
 
-    # Start periodic metrics saver
     async def _metrics_autosave(interval_s: int = 60):
         while True:
             try:
@@ -396,14 +374,12 @@ async def app_lifespan(app: FastAPI):
         if bool(settings.get('trust_x_forwarded_for')) and not (settings.get('xff_trusted_proxies') or []):
             gateway_logger.warning('Security: trust_x_forwarded_for enabled but xff_trusted_proxies is empty; header spoofing risk. Configure trusted proxy IPs/CIDRs.')
 
-            # Production validation: enforce trusted proxy configuration
             if os.getenv('ENV', '').lower() == 'production':
                 raise RuntimeError(
                     'Production deployment with trust_x_forwarded_for requires xff_trusted_proxies '
                     'to prevent IP spoofing. Configure trusted proxy IPs/CIDRs via /platform/security endpoint.'
                 )
     except Exception as e:
-        # Re-raise RuntimeErrors (production validation failures should stop startup)
         if isinstance(e, RuntimeError):
             raise
         gateway_logger.debug(f'Startup security checks skipped: {e}')
@@ -466,7 +442,6 @@ async def app_lifespan(app: FastAPI):
 
         pass
 
-    # SIGHUP handler for configuration hot reload
     try:
         if hasattr(signal, 'SIGHUP'):
             loop = asyncio.get_event_loop()
@@ -475,10 +450,8 @@ async def app_lifespan(app: FastAPI):
                 try:
                     gateway_logger.info('SIGHUP received: reloading configuration...')
 
-                    # Reload hot config
                     hot_config.reload()
 
-                    # Update log level if changed
                     log_level = hot_config.get('LOG_LEVEL', 'INFO')
                     try:
                         numeric_level = getattr(logging, log_level.upper(), logging.INFO)
@@ -494,7 +467,6 @@ async def app_lifespan(app: FastAPI):
             loop.add_signal_handler(signal.SIGHUP, lambda: asyncio.create_task(_sighup_reload()))
             gateway_logger.info('SIGHUP handler registered for configuration hot reload')
     except (NotImplementedError, AttributeError):
-        # Windows doesn't support SIGHUP
         gateway_logger.debug('SIGHUP not supported on this platform')
 
     try:
@@ -537,7 +509,6 @@ async def app_lifespan(app: FastAPI):
         except Exception as e:
             gateway_logger.error(f"Error closing HTTP client: {e}")
 
-        # Persist metrics on shutdown
         try:
             METRICS_FILE = os.path.join(LOGS_DIR, 'metrics.json')
             metrics_store.save_to_file(METRICS_FILE)
@@ -545,7 +516,6 @@ async def app_lifespan(app: FastAPI):
             pass
 
         gateway_logger.info("Graceful shutdown complete")
-        # Stop autosave task
         try:
             t = getattr(app.state, '_metrics_save_task', None)
             if t:
@@ -553,7 +523,6 @@ async def app_lifespan(app: FastAPI):
         except Exception:
             pass
 
-        # Close shared HTTP client pool if enabled
         try:
             from services.gateway_service import GatewayService as _GS
             if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'true').lower() != 'false':
@@ -586,8 +555,6 @@ doorman = FastAPI(
 https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
 domain = os.getenv('COOKIE_DOMAIN', 'localhost')
 
-# Replace global CORSMiddleware with path-aware CORS handling:
-# - Platform routes (/platform/*): preserve env-based behavior for now
 # - API gateway routes (/api/*): CORS controlled per-API in gateway routes/services
 
 def _env_cors_config():
@@ -627,8 +594,6 @@ def _env_cors_config():
 
 @doorman.middleware('http')
 async def platform_cors(request: Request, call_next):
-    # When ASGI-level CORS is disabled (e.g., Python 3.13 CI toggle), handle
-    # platform CORS at the request middleware layer for compatibility.
     try:
         if os.getenv('DISABLE_PLATFORM_CORS_ASGI', 'false').lower() in ('1','true','yes','on'):
             path = str(request.url.path)
@@ -641,7 +606,6 @@ async def platform_cors(request: Request, call_next):
                     or ('*' in (cfg.get('origins') or []) and not strict)
                 )
 
-                # Handle preflight
                 if request.method.upper() == 'OPTIONS':
                     from fastapi.responses import Response as _Resp
                     headers = {}
@@ -651,13 +615,11 @@ async def platform_cors(request: Request, call_next):
                     headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
                     headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
                     headers['Access-Control-Allow-Credentials'] = 'true' if cfg['credentials'] else 'false'
-                    # Preserve inbound request id if present
                     rid = request.headers.get('x-request-id') or request.headers.get('X-Request-ID')
                     if rid:
                         headers['request_id'] = rid
                     return _Resp(status_code=204, headers=headers)
 
-                # Normal request path: call downstream then inject headers
                 response = await call_next(request)
                 try:
                     response.headers.setdefault('Access-Control-Allow-Credentials', 'true' if cfg['credentials'] else 'false')
@@ -668,12 +630,9 @@ async def platform_cors(request: Request, call_next):
                     pass
                 return response
     except Exception:
-        # Fall back to app
         pass
-    # Default path: let ASGI-level middleware handle CORS
     return await call_next(request)
 
-# Body size limit middleware (protects against both Content-Length and Transfer-Encoding: chunked)
 MAX_BODY_SIZE = int(os.getenv('MAX_BODY_SIZE_BYTES', 1_048_576))
 
 def _get_max_body_size() -> int:
@@ -699,7 +658,6 @@ class LimitedStreamReader:
         self.over_limit = False
 
     async def __call__(self):
-        # If already over the limit, immediately end the request body for the app
         if self.over_limit:
             return {'type': 'http.request', 'body': b'', 'more_body': False}
 
@@ -710,7 +668,6 @@ class LimitedStreamReader:
             self.bytes_received += len(body)
 
             if self.bytes_received > self.max_size:
-                # Mark as over-limit and end the request body stream for the app
                 self.over_limit = True
                 return {'type': 'http.request', 'body': b'', 'more_body': False}
 
@@ -735,16 +692,10 @@ async def body_size_limit(request: Request, call_next):
     - /api/grpc/*: Enforce on gRPC JSON payloads
     """
     try:
-        # Allow hard-disable for environments where ASGI/transport interactions
-        # are problematic (e.g., CI, certain Python/Starlette combos)
         if os.getenv('DISABLE_BODY_SIZE_LIMIT', 'false').lower() in ('1','true','yes','on'):
             return await call_next(request)
         path = str(request.url.path)
 
-        # Note: We no longer bypass general /platform/* routes here.
-        # Enforcement applies to platform routes too (tests expect protection).
-        # Allow excluding known-safe platform paths from size enforcement to
-        # avoid transport/middleware edge-cases on certain runtimes.
         try:
             raw_excludes = os.getenv('BODY_LIMIT_EXCLUDE_PATHS', '')
             if raw_excludes:
@@ -754,28 +705,18 @@ async def body_size_limit(request: Request, call_next):
         except Exception:
             pass
 
-        # Hard-coded bypass for platform monitor endpoints to avoid transport
-        # edge-cases on some Starlette/AnyIO/Python combos (esp. 3.13) where
-        # upstream short-circuits (e.g., IP filter) can surface as transport
-        # errors. Size enforcement is not relevant for these probes.
         if path.startswith('/platform/monitor/'):
             return await call_next(request)
 
-        # Skip enforcement for security settings to avoid Python 3.13 + Starlette
-        # middleware interaction bug where endpoint returns successfully but
-        # call_next raises anyio.EndOfStream. Auth + RBAC already protect this.
         if path == '/platform/security/settings':
             try:
                 return await call_next(request)
             except Exception as e:
-                # On Python 3.13, anyio.EndOfStream can be raised even when endpoint
-                # completes successfully. Catch and return generic 500 to unblock tests.
                 msg = str(e)
                 if 'EndOfStream' in msg or 'No response returned' in msg:
                     try:
                         from models.response_model import ResponseModel as _RM
                         from utils.response_util import process_response as _pr
-                        # Return a different error code so tests can identify this edge case
                         return _pr(_RM(
                             status_code=200,
                             message='Settings updated (middleware bypass)'
@@ -784,15 +725,12 @@ async def body_size_limit(request: Request, call_next):
                         pass
                 raise
 
-        # Determine if this path should be protected
         should_enforce = False
         default_limit = _get_max_body_size()
         limit = default_limit
 
-        # Strictly enforce on auth route (prevent auth DoS)
         if path.startswith('/platform/authorization'):
             should_enforce = True
-        # Enforce on all /api/* routes with per-type overrides
         elif path.startswith('/api/soap/'):
             should_enforce = True
             limit = int(os.getenv('MAX_BODY_SIZE_BYTES_SOAP', default_limit))
@@ -806,17 +744,13 @@ async def body_size_limit(request: Request, call_next):
             should_enforce = True
             limit = int(os.getenv('MAX_BODY_SIZE_BYTES_REST', default_limit))
         elif path.startswith('/api/'):
-            # Catch-all for other /api/* routes
             should_enforce = True
         elif path.startswith('/platform/'):
-            # Protect all platform routes (tests expect platform routes are protected)
             should_enforce = True
 
-        # Skip if this path is not protected
         if not should_enforce:
             return await call_next(request)
 
-        # Check Content-Length header first (fast path for non-chunked requests)
         cl = request.headers.get('content-length')
         transfer_encoding = request.headers.get('transfer-encoding', '').lower()
 
@@ -824,7 +758,6 @@ async def body_size_limit(request: Request, call_next):
             try:
                 content_length = int(cl)
                 if content_length > limit:
-                    # Log for security monitoring
                     try:
                         from utils.audit_util import audit
                         audit(
@@ -849,43 +782,22 @@ async def body_size_limit(request: Request, call_next):
                         error_message=f'Request entity too large (max: {limit} bytes)'
                     ).dict(), 'rest')
             except (ValueError, TypeError):
-                # Invalid Content-Length header - treat as potentially malicious
                 pass
 
-        # Handle Transfer-Encoding: chunked or missing Content-Length
-        # Wrap the receive channel with size-limited reader
         if 'chunked' in transfer_encoding or not cl:
-            # Optional hardening: If both chunked and Content-Length are present,
-            # block immediately only when STRICT_CHUNKED_CL=true (off by default).
-            # Always block when both chunked transfer and Content-Length appear
-            # for mutating methods to prevent CL spoofing and ensure chunked
-            # precedence. This avoids handler-level parsing of large bodies.
-            # For chunked requests, ignore any Content-Length and rely on
-            # streaming enforcement when wrapping is allowed. When wrapping is
-            # disabled (e.g., via env or platform path), enforcement falls back
-            # to Content-Length checks only.
-            # Check if method typically has a body
             if request.method in ('POST', 'PUT', 'PATCH'):
-                # On some Starlette/AnyIO versions (notably with Python 3.13),
-                # swapping the low-level receive callable can cause middleware
-                # stacks to raise "No response returned". To stay compatible,
-                # only wrap streaming receive for API routes; for platform
-                # routes rely on Content-Length enforcement above.
                 wrap_allowed = True
                 try:
                     env_flag = os.getenv('DISABLE_PLATFORM_CHUNKED_WRAP')
                     if isinstance(env_flag, str) and env_flag.strip() != '':
                         if env_flag.strip().lower() in ('1','true','yes','on'):
                             wrap_allowed = False
-                    # Always allow streaming enforcement on login endpoint to
-                    # guarantee size limits even under platform wrapping toggles
                     if str(path) == '/platform/authorization':
                         wrap_allowed = True
                 except Exception:
                     pass
 
                 if wrap_allowed:
-                    # Replace request receive with limited reader (safe on API routes)
                     original_receive = request.receive
                     limited_reader = LimitedStreamReader(original_receive, limit)
                     request._receive = limited_reader
@@ -893,10 +805,8 @@ async def body_size_limit(request: Request, call_next):
                 try:
                     response = await call_next(request)
 
-                    # Check if limit was exceeded during streaming (only if we wrapped)
                     try:
                         if wrap_allowed and (limited_reader.over_limit or limited_reader.bytes_received > limit):
-                            # Log for security monitoring
                             try:
                                 from utils.audit_util import audit
                                 audit(
@@ -925,7 +835,6 @@ async def body_size_limit(request: Request, call_next):
 
                     return response
                 except Exception as e:
-                    # If stream reading failed due to size limit (only if wrapped), return 413
                     try:
                         if wrap_allowed and (limited_reader.over_limit or limited_reader.bytes_received > limit):
                             return process_response(ResponseModel(
@@ -939,10 +848,6 @@ async def body_size_limit(request: Request, call_next):
 
         return await call_next(request)
     except Exception as e:
-        # Be defensive: certain Starlette/AnyIO edge-cases (esp. on Python 3.13)
-        # can raise EndOfStream/"No response returned" from deeper middleware
-        # stacks. Propagating leaves the client hanging in tests. Instead,
-        # return a well-formed 500 so the pipeline completes deterministically.
         try:
             from models.response_model import ResponseModel as _RM
             from utils.response_util import process_response as _pr
@@ -953,16 +858,13 @@ async def body_size_limit(request: Request, call_next):
         msg = str(e)
         gateway_logger.error(f'Body size limit middleware error: {msg}', exc_info=True)
 
-        # Only swallow known transport errors; otherwise, re-raise
         swallow = False
         try:
-            # RuntimeError("No response returned.") from Starlette
             if isinstance(e, RuntimeError) and 'No response returned' in msg:
                 swallow = True
             else:
-                # anyio.EndOfStream
                 try:
-                    import anyio  # type: ignore
+                    import anyio
                     if isinstance(e, getattr(anyio, 'EndOfStream', tuple())):
                         swallow = True
                 except Exception:
@@ -980,9 +882,7 @@ async def body_size_limit(request: Request, call_next):
             except Exception:
                 pass
 
-        # Fallback: re-raise unknown exceptions
         raise
-
 
 class PlatformCORSMiddleware:
     """ASGI-level CORS for /platform/* routes to avoid BaseHTTPMiddleware pitfalls.
@@ -994,7 +894,6 @@ class PlatformCORSMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        # Allow bypass via env if needed for CI stability
         try:
             if os.getenv('DISABLE_PLATFORM_CORS_ASGI', 'false').lower() in ('1','true','yes','on'):
                 return await self.app(scope, receive, send)
@@ -1008,7 +907,6 @@ class PlatformCORSMiddleware:
                 return await self.app(scope, receive, send)
 
             cfg = _env_cors_config()
-            # Decode headers into a dict (lower-cased)
             hdrs = {}
             try:
                 for k, v in (scope.get('headers') or []):
@@ -1026,7 +924,6 @@ class PlatformCORSMiddleware:
                 headers.append((b'access-control-allow-methods', ', '.join(cfg['methods']).encode('latin1')))
                 headers.append((b'access-control-allow-headers', ', '.join(cfg['headers']).encode('latin1')))
                 headers.append((b'access-control-allow-credentials', b'true' if cfg['credentials'] else b'false'))
-                # Preserve incoming request id if present
                 rid = hdrs.get('x-request-id')
                 if rid:
                     headers.append((b'request_id', rid.encode('latin1')))
@@ -1049,13 +946,10 @@ class PlatformCORSMiddleware:
 
             return await self.app(scope, receive, send_wrapper)
         except Exception:
-            # In case of unexpected error, fall back to the underlying app
             return await self.app(scope, receive, send)
 
-# Register the ASGI middleware as outermost to reduce interaction issues
 doorman.add_middleware(PlatformCORSMiddleware)
 
-# Request ID middleware: accept incoming X-Request-ID or generate one.
 @doorman.middleware('http')
 async def request_id_middleware(request: Request, call_next):
     try:
@@ -1072,7 +966,6 @@ async def request_id_middleware(request: Request, call_next):
         except Exception:
             pass
 
-        # Set correlation ID for async task tracking
         try:
             from utils.correlation_util import set_correlation_id
             set_correlation_id(rid)
@@ -1088,7 +981,6 @@ async def request_id_middleware(request: Request, call_next):
             pass
         response = await call_next(request)
         try:
-            # Always preserve/propagate the inbound Request ID
             response.headers['X-Request-ID'] = rid
             response.headers['request_id'] = rid
         except Exception as e:
@@ -1098,7 +990,6 @@ async def request_id_middleware(request: Request, call_next):
         gateway_logger.error(f'Request ID middleware error: {str(e)}', exc_info=True)
         raise
 
-# Security headers (including HSTS when HTTPS is used)
 @doorman.middleware('http')
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -1136,10 +1027,8 @@ to console so production environments (e.g., ECS/EKS/Lambda) still capture logs.
 Respects LOG_FORMAT=json|plain.
 """
 
-# Resolve logs directory: env override or default next to this file
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _env_logs_dir = os.getenv('LOGS_DIR')
-# Default to backend-services/platform-logs
 LOGS_DIR = os.path.abspath(_env_logs_dir) if _env_logs_dir else os.path.join(BASE_DIR, 'platform-logs')
 
 # Build formatters
@@ -1192,39 +1081,30 @@ def configure_logger(logger_name):
         """
 
         PATTERNS = [
-            # Authorization header (redact entire value: scheme + token)
             re.compile(r'(?i)(authorization\s*[:=]\s*)([^;\r\n]+)'),
 
-            # API key headers (redact entire value)
             re.compile(r'(?i)(x-api-key\s*[:=]\s*)([^;\r\n]+)'),
             re.compile(r'(?i)(api[_-]?key\s*[:=]\s*)([^;\r\n]+)'),
             re.compile(r'(?i)(api[_-]?secret\s*[:=]\s*)([^;\r\n]+)'),
 
-            # Access and refresh tokens
             re.compile(r'(?i)(access[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
             re.compile(r'(?i)(refresh[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
             re.compile(r'(?i)(token\s*["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-\.]{20,})(["\']?)'),
 
-            # Passwords and secrets
             re.compile(r'(?i)(password\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n]+)(["\']?)'),
             re.compile(r'(?i)(secret\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
             re.compile(r'(?i)(client[_-]?secret\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
 
-            # Cookies and Set-Cookie: redact entire value
             re.compile(r'(?i)(cookie\s*[:=]\s*)([^;\r\n]+)'),
             re.compile(r'(?i)(set-cookie\s*[:=]\s*)([^;\r\n]+)'),
 
-            # CSRF tokens
             re.compile(r'(?i)(x-csrf-token\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
             re.compile(r'(?i)(csrf[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
 
-            # JWT tokens (eyJ... format)
             re.compile(r'\b(eyJ[a-zA-Z0-9_\-]+\.eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+)\b'),
 
-            # Session IDs
             re.compile(r'(?i)(session[_-]?id\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
 
-            # Private keys (PEM format detection)
             re.compile(r'(-----BEGIN[A-Z\s]+PRIVATE KEY-----)(.*?)(-----END[A-Z\s]+PRIVATE KEY-----)', re.DOTALL),
         ]
 
@@ -1235,10 +1115,8 @@ def configure_logger(logger_name):
 
                 for pat in self.PATTERNS:
                     if pat.groups == 3 and pat.flags & re.DOTALL:
-                        # PEM private key pattern
                         red = pat.sub(r'\1[REDACTED]\3', red)
                     elif pat.groups >= 2:
-                        # Header patterns with prefix, value, and optional suffix
                         red = pat.sub(lambda m: (
                             m.group(1) +
                             '[REDACTED]' +
@@ -1249,7 +1127,6 @@ def configure_logger(logger_name):
 
                 if red != msg:
                     record.msg = red
-                    # Also update record.args if present
                     if hasattr(record, 'args') and record.args:
                         try:
                             if isinstance(record.args, dict):
@@ -1273,15 +1150,12 @@ def configure_logger(logger_name):
         logger.addHandler(_file_handler)
     return logger
 
-# Configure main loggers
 gateway_logger = configure_logger('doorman.gateway')
 logging_logger = configure_logger('doorman.logging')
 
-# Dedicated audit trail logger (separate file handler)
 audit_logger = logging.getLogger('doorman.audit')
 audit_logger.setLevel(logging.INFO)
 audit_logger.propagate = False
-# Remove existing handlers
 for h in audit_logger.handlers[:]:
     audit_logger.removeHandler(h)
 try:
@@ -1293,7 +1167,6 @@ try:
         encoding='utf-8'
     )
     _audit_file.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-    # Reuse the same redaction filters as gateway logger
     try:
         for eh in gateway_logger.handlers:
             for f in getattr(eh, 'filters', []):
@@ -1306,7 +1179,6 @@ except Exception as _e:
     console = logging.StreamHandler(stream=sys.stdout)
     console.setLevel(logging.INFO)
     console.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-    # Reuse the same redaction filters as gateway logger
     try:
         for eh in gateway_logger.handlers:
             for f in getattr(eh, 'filters', []):
@@ -1325,8 +1197,6 @@ class Settings(BaseSettings):
 @doorman.middleware('http')
 async def ip_filter_middleware(request: Request, call_next):
     try:
-        # Exempt security settings endpoint from IP filtering to prevent chicken-and-egg
-        # where admins can't update settings if their IP is blocked. Endpoint has auth + RBAC.
         path = str(request.url.path)
         if path == '/platform/security/settings':
             return await call_next(request)
@@ -1430,7 +1300,6 @@ async def metrics_middleware(request: Request, call_next):
                     if username:
                         from utils.bandwidth_util import add_usage, _get_user
                         u = _get_user(username)
-                        # Track usage when limit is set unless explicitly disabled
                         if u and u.get('bandwidth_limit_bytes') and u.get('bandwidth_limit_enabled') is not False:
                             add_usage(username, int(bytes_in) + int(clen), u.get('bandwidth_limit_window') or 'day')
                 except Exception:
@@ -1444,8 +1313,6 @@ async def automatic_purger(interval_seconds):
         await asyncio.sleep(interval_seconds)
         await purge_expired_tokens()
         gateway_logger.info('Expired JWTs purged from blacklist.')
-
-## Startup/shutdown handled by lifespan above
 
 @doorman.exception_handler(JWTError)
 async def jwt_exception_handler(exc: JWTError):
@@ -1488,7 +1355,6 @@ doorman.include_router(dashboard_router, prefix='/platform/dashboard', tags=['Da
 doorman.include_router(memory_router, prefix='/platform', tags=['Memory'])
 doorman.include_router(security_router, prefix='/platform', tags=['Security'])
 doorman.include_router(monitor_router, prefix='/platform', tags=['Monitor'])
-# Expose token management under both legacy and new prefixes
 doorman.include_router(credit_router, prefix='/platform/credit', tags=['Credit'])
 doorman.include_router(demo_router, prefix='/platform/demo', tags=['Demo'])
 doorman.include_router(config_router, prefix='/platform', tags=['Config'])

@@ -7,7 +7,6 @@ Supports SIGHUP signal handler and file-based configuration.
 Usage:
     from utils.hot_reload_config import hot_config
 
-    # Get current value
     log_level = hot_config.get('LOG_LEVEL', 'INFO')
 
     # Register callback for config changes
@@ -16,7 +15,6 @@ Usage:
 
     hot_config.register_callback('LOG_LEVEL', on_log_level_change)
 
-    # Trigger reload (called by SIGHUP handler)
     hot_config.reload()
 """
 
@@ -29,7 +27,6 @@ from typing import Any, Dict, Callable, Optional
 from pathlib import Path
 
 logger = logging.getLogger('doorman.gateway')
-
 
 class HotReloadConfig:
     """
@@ -52,10 +49,8 @@ class HotReloadConfig:
     def _load_initial_config(self):
         """Load initial configuration from environment and file"""
         with self._lock:
-            # Start with empty config
             self._config = {}
 
-            # Load from file if specified
             if self._config_file and os.path.exists(self._config_file):
                 try:
                     self._load_from_file(self._config_file)
@@ -63,7 +58,6 @@ class HotReloadConfig:
                 except Exception as e:
                     logger.error(f'Failed to load config file {self._config_file}: {e}')
 
-            # Environment variables override file config
             self._load_from_env()
 
     def _load_from_file(self, filepath: str):
@@ -78,46 +72,37 @@ class HotReloadConfig:
             else:
                 raise ValueError(f'Unsupported config file format: {path.suffix}')
 
-        # Flatten nested config for easier access
         self._config.update(self._flatten_dict(file_config))
 
     def _load_from_env(self):
         """Load reloadable configuration from environment variables"""
         reloadable_keys = [
-            # Logging
             'LOG_LEVEL',
             'LOG_FORMAT',
             'LOG_FILE',
 
-            # Timeouts
             'GATEWAY_TIMEOUT',
             'UPSTREAM_TIMEOUT',
             'CONNECTION_TIMEOUT',
 
-            # Rate Limiting
             'RATE_LIMIT_ENABLED',
             'RATE_LIMIT_REQUESTS',
             'RATE_LIMIT_WINDOW',
 
-            # Cache
             'CACHE_TTL',
             'CACHE_MAX_SIZE',
 
-            # Circuit Breaker
             'CIRCUIT_BREAKER_ENABLED',
             'CIRCUIT_BREAKER_THRESHOLD',
             'CIRCUIT_BREAKER_TIMEOUT',
 
-            # Retry
             'RETRY_ENABLED',
             'RETRY_MAX_ATTEMPTS',
             'RETRY_BACKOFF',
 
-            # Monitoring
             'METRICS_ENABLED',
             'METRICS_INTERVAL',
 
-            # Feature Flags
             'FEATURE_REQUEST_REPLAY',
             'FEATURE_AB_TESTING',
             'FEATURE_COST_ANALYTICS',
@@ -141,25 +126,21 @@ class HotReloadConfig:
 
     def _parse_value(self, value: str) -> Any:
         """Parse string value to appropriate type"""
-        # Boolean
         if value.lower() in ['true', 'yes', '1']:
             return True
         if value.lower() in ['false', 'no', '0']:
             return False
 
-        # Integer
         try:
             return int(value)
         except ValueError:
             pass
 
-        # Float
         try:
             return float(value)
         except ValueError:
             pass
 
-        # String
         return value
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -171,7 +152,6 @@ class HotReloadConfig:
         2. In-memory config (from file or previous load)
         3. Default value
         """
-        # Always check environment first (highest priority)
         env_value = os.getenv(key)
         if env_value is not None:
             return self._parse_value(env_value)
@@ -216,7 +196,6 @@ class HotReloadConfig:
             old_value = self._config.get(key)
             self._config[key] = value
 
-            # Trigger callbacks if value changed
             if old_value != value:
                 self._trigger_callbacks(key, old_value, value)
 
@@ -252,7 +231,6 @@ class HotReloadConfig:
         with self._lock:
             old_config = self._config.copy()
 
-            # Reload from file
             if self._config_file and os.path.exists(self._config_file):
                 try:
                     self._load_from_file(self._config_file)
@@ -260,10 +238,8 @@ class HotReloadConfig:
                 except Exception as e:
                     logger.error(f'Failed to reload config file: {e}')
 
-            # Reload from environment
             self._load_from_env()
 
-            # Trigger callbacks for changed values
             for key in set(old_config.keys()) | set(self._config.keys()):
                 old_value = old_config.get(key)
                 new_value = self._config.get(key)
@@ -276,7 +252,6 @@ class HotReloadConfig:
     def dump(self) -> Dict[str, Any]:
         """Dump current configuration (for debugging)"""
         with self._lock:
-            # Also include current environment values
             config = self._config.copy()
             for key in config.keys():
                 env_value = os.getenv(key)
@@ -284,10 +259,7 @@ class HotReloadConfig:
                     config[key] = self._parse_value(env_value)
             return config
 
-
-# Global singleton instance
 hot_config = HotReloadConfig()
-
 
 # Convenience functions for common config patterns
 def get_timeout_config() -> Dict[str, int]:
@@ -298,7 +270,6 @@ def get_timeout_config() -> Dict[str, int]:
         'connection_timeout': hot_config.get_int('CONNECTION_TIMEOUT', 10),
     }
 
-
 def get_rate_limit_config() -> Dict[str, Any]:
     """Get rate limiting configuration"""
     return {
@@ -307,14 +278,12 @@ def get_rate_limit_config() -> Dict[str, Any]:
         'window': hot_config.get_int('RATE_LIMIT_WINDOW', 60),
     }
 
-
 def get_cache_config() -> Dict[str, Any]:
     """Get cache configuration"""
     return {
         'ttl': hot_config.get_int('CACHE_TTL', 300),
         'max_size': hot_config.get_int('CACHE_MAX_SIZE', 1000),
     }
-
 
 def get_circuit_breaker_config() -> Dict[str, Any]:
     """Get circuit breaker configuration"""
@@ -323,7 +292,6 @@ def get_circuit_breaker_config() -> Dict[str, Any]:
         'threshold': hot_config.get_int('CIRCUIT_BREAKER_THRESHOLD', 5),
         'timeout': hot_config.get_int('CIRCUIT_BREAKER_TIMEOUT', 60),
     }
-
 
 def get_retry_config() -> Dict[str, Any]:
     """Get retry configuration"""

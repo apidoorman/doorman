@@ -10,7 +10,6 @@ from fastapi import Request, HTTPException
 from utils.doorman_cache_util import doorman_cache
 from utils import api_util
 
-
 def parse_graphql_grpc_path(path: str, request: Request) -> Tuple[str, str, str]:
     """Parse GraphQL/gRPC path to extract API name and version.
 
@@ -27,21 +26,17 @@ def parse_graphql_grpc_path(path: str, request: Request) -> Tuple[str, str, str]
     Raises:
         HTTPException: If X-API-Version header is missing
     """
-    # Extract API name from path (last segment)
     api_name = re.sub(r'^.*/', '', path).strip()
     if not api_name:
         raise HTTPException(status_code=400, detail='Invalid API path')
 
-    # Get version from header (required)
     api_version = request.headers.get('X-API-Version')
     if not api_version:
         raise HTTPException(status_code=400, detail='X-API-Version header is required')
 
-    # Build cache lookup path
     api_path = f'{api_name}/{api_version}'
 
     return api_name, api_version, api_path
-
 
 async def resolve_api(api_name: str, api_version: str) -> Optional[dict]:
     """Resolve API from cache or database.
@@ -56,7 +51,6 @@ async def resolve_api(api_name: str, api_version: str) -> Optional[dict]:
     api_path = f'{api_name}/{api_version}'
     api_key = doorman_cache.get_cache('api_id_cache', api_path)
     return await api_util.get_api(api_key, api_path)
-
 
 async def resolve_api_from_request(path: str, request: Request) -> Tuple[Optional[dict], str, str, str]:
     """Parse path, extract API name/version, and resolve API in one call.

@@ -25,7 +25,6 @@ def test_exception_handling_patterns():
             'pattern': 'Fixed: Admin check exceptions',
             'code': '''except Exception as e:
     logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
-    # Continue anyway - permission check failure shouldn't block operation''',
             'security': 'IMPROVED',
             'reason': 'Now logs errors instead of silent pass'
         },
@@ -34,7 +33,6 @@ def test_exception_handling_patterns():
             'pattern': 'Fixed: Token revocation fallback',
             'code': '''except Exception as e:
     logger.warning(f'{request_id} | Token revocation failed, using fallback: {str(e)}')
-    # Fallback to in-memory TimedHeap''',
             'security': 'IMPROVED',
             'reason': 'Logs revocation failures for monitoring'
         },

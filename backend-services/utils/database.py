@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 from pymongo import MongoClient, IndexModel, ASCENDING
 from dotenv import load_dotenv
 import os
@@ -16,7 +15,6 @@ import secrets
 import string as _string
 import logging
 
-# Internal imports
 from utils import password_util
 from utils import chaos_util
 
@@ -65,7 +63,6 @@ class Database:
         mongo_user = os.getenv('MONGO_DB_USER')
         mongo_pass = os.getenv('MONGO_DB_PASSWORD')
 
-        # Validate MongoDB credentials when not in memory-only mode
         if not mongo_user or not mongo_pass:
             raise RuntimeError(
                 'MONGO_DB_USER and MONGO_DB_PASSWORD are required when MEM_OR_EXTERNAL != MEM. '
@@ -75,7 +72,6 @@ class Database:
         host_list = [host.strip() for host in mongo_hosts.split(',') if host.strip()]
         self.db_existed = True
 
-        # Build connection URI with authentication
         if len(host_list) > 1 and replica_set_name:
             connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
         else:
@@ -194,7 +190,6 @@ class Database:
                 self.db.users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
         except Exception:
             pass
-        # If admin exists but lacks a password (legacy state), set from env if available
         try:
             adm2 = self.db.users.find_one({'username': 'admin'})
             if adm2 and not adm2.get('password'):
@@ -337,7 +332,7 @@ class InMemoryCollection:
     def __init__(self, name):
         self.name = name
         self._docs = []
-        self._lock = threading.RLock()  # Thread-safe lock for concurrent access
+        self._lock = threading.RLock()
 
     def _match(self, doc, query):
         if not query:
@@ -462,7 +457,6 @@ class InMemoryDB:
         self.user_credits = InMemoryCollection('user_credits')
         self.endpoint_validations = InMemoryCollection('endpoint_validations')
         self.settings = InMemoryCollection('settings')
-        # New durable in-memory store for token revocations
         self.revocations = InMemoryCollection('revocations')
 
     def list_collection_names(self):

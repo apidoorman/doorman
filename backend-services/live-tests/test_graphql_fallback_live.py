@@ -1,11 +1,9 @@
 import os
 import pytest
 
-# Enable by running with DOORMAN_RUN_LIVE=1
 _RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
 if not _RUN_LIVE:
     pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
-
 
 async def _setup(client, name='gllive', ver='v1'):
     await client.post('/platform/api', json={
@@ -27,7 +25,6 @@ async def _setup(client, name='gllive', ver='v1'):
         'endpoint_description': 'gql'
     })
     return name, ver
-
 
 @pytest.mark.asyncio
 async def test_graphql_client_fallback_to_httpx_live(monkeypatch, authed_client):
@@ -54,7 +51,6 @@ async def test_graphql_client_fallback_to_httpx_live(monkeypatch, authed_client)
     r = await authed_client.post(f'/api/graphql/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json={'query': '{ ping }', 'variables': {}})
     assert r.status_code == 200 and r.json().get('ok') is True
 
-
 @pytest.mark.asyncio
 async def test_graphql_errors_live_strict_and_loose(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -77,11 +73,9 @@ async def test_graphql_errors_live_strict_and_loose(monkeypatch, authed_client):
             return FakeHTTPResp({'errors': [{'message': 'boom'}]})
     monkeypatch.setattr(gs, 'Client', Dummy)
     monkeypatch.setattr(gs.httpx, 'AsyncClient', H)
-    # Loose
     monkeypatch.delenv('STRICT_RESPONSE_ENVELOPE', raising=False)
     r1 = await authed_client.post(f'/api/graphql/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json={'query': '{ err }', 'variables': {}})
     assert r1.status_code == 200 and isinstance(r1.json().get('errors'), list)
-    # Strict
     monkeypatch.setenv('STRICT_RESPONSE_ENVELOPE', 'true')
     r2 = await authed_client.post(f'/api/graphql/{name}', headers={'X-API-Version': ver, 'Content-Type': 'application/json'}, json={'query': '{ err }', 'variables': {}})
     assert r2.status_code == 200 and r2.json().get('status_code') == 200

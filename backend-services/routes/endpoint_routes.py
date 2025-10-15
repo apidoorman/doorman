@@ -4,14 +4,12 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from typing import List
 from fastapi import APIRouter, Depends, Request, HTTPException
 import uuid
 import time
 import logging
 
-# Internal imports
 from models.create_endpoint_validation_model import CreateEndpointValidationModel
 from models.endpoint_model_response import EndpointModelResponse
 from models.endpoint_validation_model_response import EndpointValidationModelResponse

@@ -4,11 +4,9 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 import uuid
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from models.update_api_model import UpdateApiModel
 from utils.database_async import api_collection

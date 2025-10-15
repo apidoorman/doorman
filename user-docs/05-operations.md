@@ -534,7 +534,7 @@ LOG_LEVEL=INFO
 ```bash
 MEM_OR_EXTERNAL=MEM
 MEM_ENCRYPTION_KEY=<32-char-secret>
-MEM_DUMP_PATH=generated/memory_dump.bin
+MEM_DUMP_PATH=backend-services/generated/memory_dump.bin
 THREADS=1  # REQUIRED - only 1 worker in memory mode
 ```
 
@@ -910,7 +910,7 @@ PUT /platform/security/settings
 - Location: `$MEM_DUMP_PATH-YYYYMMDDTHHMMSSZ.bin`
 
 **Restore:**
-- Place latest dump in `generated/` directory
+- Place latest dump in `backend-services/generated/` directory
 - Rename to match `MEM_DUMP_PATH` without timestamp
 - Start gateway (auto-loads dump)
 

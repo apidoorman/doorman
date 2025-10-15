@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Capture CPU and event-loop lag statistics for a running Doorman process.
 
@@ -22,10 +21,9 @@ import time
 from pathlib import Path
 
 try:
-    import psutil  # type: ignore
+    import psutil
 except Exception:
-    psutil = None  # type: ignore
-
+    psutil = None
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
@@ -42,7 +40,6 @@ def parse_args() -> argparse.Namespace:
                     help="Optional timeout seconds; 0 = until process exits or SIGTERM")
     return ap.parse_args()
 
-
 def read_pid(pid: int | None, pidfile: str) -> int | None:
     if pid:
         return pid
@@ -52,9 +49,7 @@ def read_pid(pid: int | None, pidfile: str) -> int | None:
     except Exception:
         return None
 
-
 async def sample_cpu(proc: "psutil.Process", interval: float, stop: asyncio.Event, samples: list[float]):
-    # Prime cpu_percent() baseline
     try:
         proc.cpu_percent(None)
     except Exception:
@@ -67,18 +62,15 @@ async def sample_cpu(proc: "psutil.Process", interval: float, stop: asyncio.Even
             await asyncio.sleep(interval)
             continue
 
-
 async def sample_loop_lag(interval: float, stop: asyncio.Event, lags_ms: list[float]):
-    # Measure scheduling delay over requested interval
     next_ts = time.perf_counter() + interval
     while not stop.is_set():
         await asyncio.sleep(max(0.0, next_ts - time.perf_counter()))
         now = time.perf_counter()
         expected = next_ts
-        lag = max(0.0, (now - expected) * 1000.0)  # ms
+        lag = max(0.0, (now - expected) * 1000.0)
         lags_ms.append(lag)
         next_ts = expected + interval
-
 
 def percentile(values: list[float], p: float) -> float:
     if not values:
@@ -86,7 +78,6 @@ def percentile(values: list[float], p: float) -> float:
     values = sorted(values)
     k = int(max(0, min(len(values) - 1, round((p / 100.0) * (len(values) - 1)))))
     return float(values[k])
-
 
 async def main() -> int:
     if psutil is None:
@@ -127,7 +118,6 @@ async def main() -> int:
     start = time.time()
     try:
         while not stop.is_set():
-            # Exit if target process is gone
             if not proc.is_running():
                 break
             if args.timeout > 0 and (time.time() - start) >= args.timeout:
@@ -160,7 +150,6 @@ async def main() -> int:
         return 4
 
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))

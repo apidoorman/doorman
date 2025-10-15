@@ -1,4 +1,3 @@
-# External imports
 import json as _json
 from types import SimpleNamespace
 import pytest

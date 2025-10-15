@@ -5,7 +5,6 @@ _RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
 if not _RUN_LIVE:
     pytestmark = pytest.mark.skip(reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable')
 
-
 @pytest.mark.asyncio
 async def test_soap_content_types_matrix(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
@@ -33,7 +32,6 @@ async def test_soap_content_types_matrix(monkeypatch, authed_client):
     for ct in ['application/xml', 'text/xml']:
         r = await authed_client.post(f'/api/soap/{name}/{ver}/s', headers={'Content-Type': ct}, content='<a/>')
         assert r.status_code == 200
-
 
 @pytest.mark.asyncio
 async def test_soap_retries_then_success(monkeypatch, authed_client):

@@ -1,4 +1,3 @@
-# External imports
 import pytest
 
 @pytest.mark.asyncio
@@ -10,7 +9,6 @@ async def test_public_health_probe_ok(client):
 
 @pytest.mark.asyncio
 async def test_status_requires_auth(client):
-    # Ensure no leftover auth cookies from previous tests
     try:
         client.cookies.clear()
     except Exception:

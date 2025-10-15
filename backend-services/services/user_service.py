@@ -4,13 +4,11 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from typing import List
 from fastapi import HTTPException
 import logging
 import asyncio
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils import password_util
 from utils.database_async import user_collection, subscriptions_collection, api_collection

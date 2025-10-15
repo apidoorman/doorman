@@ -35,7 +35,6 @@ from typing import Optional
 from locust import HttpUser, task, tag, between, events
 from locust.contrib.fasthttp import FastHttpUser
 
-
 class DoormanUser(FastHttpUser):
     """
     Simulated user for Doorman API Gateway load testing.
@@ -43,13 +42,10 @@ class DoormanUser(FastHttpUser):
     Uses FastHttpUser for better performance (gevent-based).
     """
 
-    # Wait 1-3 seconds between tasks to simulate realistic user behavior
     wait_time = between(1, 3)
 
-    # Authentication token
     auth_token: Optional[str] = None
 
-    # Test credentials (read from env for safety; defaults for dev only)
     import os
     username = os.getenv("TEST_USERNAME", "admin")
     password = os.getenv("TEST_PASSWORD", "change-me")
@@ -70,7 +66,6 @@ class DoormanUser(FastHttpUser):
         )
 
         if response.status_code == 200:
-            # Extract token from cookie
             cookies = response.cookies.get_dict()
             self.auth_token = cookies.get("access_token_cookie")
 
@@ -176,7 +171,6 @@ class DoormanUser(FastHttpUser):
     @tag('gateway', 'load', 'stress')
     def test_rest_gateway(self):
         """Test REST gateway (25% of traffic)"""
-        # Simulate API call through gateway
         api_paths = [
             "/myapi/v1/users",
             "/myapi/v1/products",
@@ -193,8 +187,6 @@ class DoormanUser(FastHttpUser):
             catch_response=True,
             name="/gateway/rest [proxy]",
         ) as response:
-            # Gateway may return various status codes depending on upstream
-            # Consider 200, 404 (API not found), 401 (auth required) as valid
             if response.status_code in [200, 401, 404]:
                 response.success()
             else:
@@ -214,7 +206,6 @@ class DoormanUser(FastHttpUser):
             else:
                 response.failure(f"Health check failed: {response.status_code}")
 
-
 class StressTestUser(FastHttpUser):
     """
     Stress test user - rapid-fire requests without delays.
@@ -222,7 +213,7 @@ class StressTestUser(FastHttpUser):
     Use this class for stress testing scenarios.
     """
 
-    wait_time = between(0.1, 0.5)  # Minimal wait time
+    wait_time = between(0.1, 0.5)
     auth_token: Optional[str] = None
     username = "admin"
     password = "admin123"
@@ -243,7 +234,6 @@ class StressTestUser(FastHttpUser):
         """Rapid-fire requests to stress test the system"""
         headers = {"Cookie": f"access_token_cookie={self.auth_token}"} if self.auth_token else {}
 
-        # Batch of rapid requests
         endpoints = [
             "/api/apis",
             "/user/users",
@@ -254,12 +244,9 @@ class StressTestUser(FastHttpUser):
         for endpoint in endpoints:
             self.client.get(endpoint, headers=headers, name=f"{endpoint} [stress]")
 
-
-# Custom performance metrics tracking
 latency_p50 = []
 latency_p95 = []
 latency_p99 = []
-
 
 @events.request.add_listener
 def on_request(request_type, name, response_time, response_length, exception, **kwargs):
@@ -268,7 +255,6 @@ def on_request(request_type, name, response_time, response_length, exception, **
         latency_p50.append(response_time)
         latency_p95.append(response_time)
         latency_p99.append(response_time)
-
 
 @events.test_stop.add_listener
 def on_test_stop(environment, **kwargs):
@@ -291,10 +277,7 @@ def on_test_stop(environment, **kwargs):
         print(f"  p99: {p99:.2f}ms")
         print("\n" + "=" * 60 + "\n")
 
-
-# Load test shapes (custom load patterns)
 from locust import LoadTestShape
-
 
 class StepLoadShape(LoadTestShape):
     """
@@ -303,10 +286,10 @@ class StepLoadShape(LoadTestShape):
     Use with: locust -f locust-load-test.py --shape StepLoadShape
     """
 
-    step_time = 60  # seconds per step
-    step_load = 10  # users to add per step
-    spawn_rate = 5  # users per second
-    time_limit = 600  # total test duration (10 minutes)
+    step_time = 60
+    step_load = 10
+    spawn_rate = 5
+    time_limit = 600
 
     def tick(self):
         run_time = self.get_run_time()
@@ -316,7 +299,6 @@ class StepLoadShape(LoadTestShape):
 
         current_step = run_time // self.step_time
         return (current_step * self.step_load, self.spawn_rate)
-
 
 class SpikeLoadShape(LoadTestShape):
     """
@@ -329,18 +311,13 @@ class SpikeLoadShape(LoadTestShape):
         run_time = self.get_run_time()
 
         if run_time < 60:
-            # Normal load: 10 users
             return (10, 5)
         elif run_time < 120:
-            # Spike: 200 users
             return (200, 50)
         elif run_time < 180:
-            # Recovery: back to 10 users
             return (10, 10)
         else:
-            # End test
             return None
-
 
 class WaveLoadShape(LoadTestShape):
     """
@@ -352,13 +329,12 @@ class WaveLoadShape(LoadTestShape):
     def tick(self):
         run_time = self.get_run_time()
 
-        if run_time > 600:  # 10 minutes
+        if run_time > 600:
             return None
 
-        # Create wave pattern using sine function
         import math
         amplitude = 50
-        period = 120  # 2-minute waves
+        period = 120
         baseline = 25
 
         users = int(baseline + amplitude * math.sin(2 * math.pi * run_time / period))

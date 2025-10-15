@@ -1,6 +1,5 @@
 import pytest
 
-
 class _FakeXMLResponse:
     def __init__(self, status_code=200, text='<ok/>', headers=None):
         self.status_code = status_code
@@ -10,7 +9,6 @@ class _FakeXMLResponse:
             base.update(headers)
         self.headers = base
         self.content = self.text.encode('utf-8')
-
 
 def _mk_xml_client(captured):
     class _FakeXMLClient:
@@ -48,7 +46,6 @@ def _mk_xml_client(captured):
             return _FakeXMLResponse(200, '<ok/>', {'X-Upstream': 'yes', 'Content-Type': 'text/xml'})
     return _FakeXMLClient
 
-
 async def _setup_api(client, name, ver):
     r = await client.post('/platform/api', json={
         'api_name': name,
@@ -74,7 +71,6 @@ async def _setup_api(client, name, ver):
     rs = await client.post('/platform/subscription/subscribe', json={'username': username, 'api_name': name, 'api_version': ver})
     assert rs.status_code in (200, 201)
 
-
 @pytest.mark.asyncio
 async def test_soap_incoming_application_xml_sets_text_xml_outgoing(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -93,7 +89,6 @@ async def test_soap_incoming_application_xml_sets_text_xml_outgoing(monkeypatch,
     h = captured[0]['headers']
     assert h.get('Content-Type') == 'text/xml; charset=utf-8'
 
-
 @pytest.mark.asyncio
 async def test_soap_incoming_text_xml_passes_through(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -110,7 +105,6 @@ async def test_soap_incoming_text_xml_passes_through(monkeypatch, authed_client)
     assert r.status_code == 200
     h = captured[0]['headers']
     assert h.get('Content-Type') == 'text/xml'
-
 
 @pytest.mark.asyncio
 async def test_soap_incoming_application_soap_xml_passes_through(monkeypatch, authed_client):
@@ -129,7 +123,6 @@ async def test_soap_incoming_application_soap_xml_passes_through(monkeypatch, au
     h = captured[0]['headers']
     assert h.get('Content-Type') == 'application/soap+xml'
 
-
 @pytest.mark.asyncio
 async def test_soap_adds_default_soapaction_when_missing(monkeypatch, authed_client):
     import services.gateway_service as gs
@@ -146,7 +139,6 @@ async def test_soap_adds_default_soapaction_when_missing(monkeypatch, authed_cli
     assert r.status_code == 200
     h = captured[0]['headers']
     assert 'SOAPAction' in h and h['SOAPAction'] == '""'
-
 
 @pytest.mark.asyncio
 async def test_soap_parses_xml_response_success(monkeypatch, authed_client):

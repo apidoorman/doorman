@@ -4,10 +4,8 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import logging
 
-# Internal imports
 from models.response_model import ResponseModel
 from utils.database import subscriptions_collection, api_collection
 from utils.cache_manager_util import cache_manager

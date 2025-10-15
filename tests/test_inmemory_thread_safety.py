@@ -161,9 +161,8 @@ def simulate_race_condition():
 
         def increment(self):
             with self.lock:
-                # Read-modify-write operation (atomic with lock)
                 temp = self.value
-                time.sleep(0.0001)  # Simulate processing
+                time.sleep(0.0001)
                 self.value = temp + 1
 
     counter = ThreadSafeCounter()
@@ -173,13 +172,11 @@ def simulate_race_condition():
         for _ in range(100):
             counter.increment()
 
-    # Start 10 threads
     for _ in range(10):
         t = threading.Thread(target=worker)
         threads.append(t)
         t.start()
 
-    # Wait for all threads
     for t in threads:
         t.join()
 

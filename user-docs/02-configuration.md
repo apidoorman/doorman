@@ -60,7 +60,7 @@ All configuration is managed through environment variables, typically stored in 
 - **Description:** 32+ character secret for encrypting memory dumps. Required for dump/restore functionality.
 
 #### `MEM_DUMP_PATH`
-- **Default:** `generated/memory_dump.bin`
+- **Default:** `backend-services/generated/memory_dump.bin`
 - **Description:** Base path for encrypted memory dumps. Timestamp is appended to filename.
 
 ### Redis Settings

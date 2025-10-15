@@ -6,18 +6,15 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-# External imports
 import redis.asyncio as aioredis
 import json
 import os
 from typing import Dict, Any, Optional
 import logging
 
-# Internal imports - reuse MemoryCache from sync version
 from utils.doorman_cache_util import MemoryCache
 
 logger = logging.getLogger('doorman.gateway')
-
 
 class AsyncDoormanCacheManager:
     """Async cache manager supporting both Redis (async) and in-memory modes."""
@@ -29,13 +26,11 @@ class AsyncDoormanCacheManager:
         self.cache_type = str(cache_flag).upper()
 
         if self.cache_type == 'MEM':
-            # In-memory mode: use sync MemoryCache (it's thread-safe with RLock)
             maxsize = int(os.getenv('CACHE_MAX_SIZE', 10000))
             self.cache = MemoryCache(maxsize=maxsize)
             self.is_redis = False
             self._redis_pool = None
         else:
-            # Redis async mode: defer connection to lazy init
             self.cache = None
             self.is_redis = True
             self._redis_pool = None
@@ -84,7 +79,6 @@ class AsyncDoormanCacheManager:
             return
 
         if self._init_lock:
-            # Already initializing, wait
             import asyncio
             while self._init_lock:
                 await asyncio.sleep(0.01)
@@ -96,7 +90,6 @@ class AsyncDoormanCacheManager:
             redis_port = int(os.getenv('REDIS_PORT', 6379))
             redis_db = int(os.getenv('REDIS_DB', 0))
 
-            # Create async Redis connection pool
             self._redis_pool = aioredis.ConnectionPool(
                 host=redis_host,
                 port=redis_port,
@@ -106,7 +99,6 @@ class AsyncDoormanCacheManager:
             )
             self.cache = aioredis.Redis(connection_pool=self._redis_pool)
 
-            # Test connection
             await self.cache.ping()
             logger.info(f'Async Redis connected: {redis_host}:{redis_port}')
 
@@ -134,7 +126,6 @@ class AsyncDoormanCacheManager:
         if self.is_redis:
             await self.cache.setex(cache_key, ttl, json.dumps(value))
         else:
-            # Sync MemoryCache (thread-safe)
             self.cache.setex(cache_key, ttl, json.dumps(value))
 
     async def get_cache(self, cache_name: str, key: str) -> Optional[Any]:
@@ -147,7 +138,6 @@ class AsyncDoormanCacheManager:
         if self.is_redis:
             value = await self.cache.get(cache_key)
         else:
-            # Sync MemoryCache (thread-safe)
             value = self.cache.get(cache_key)
 
         if value:
@@ -167,7 +157,6 @@ class AsyncDoormanCacheManager:
         if self.is_redis:
             await self.cache.delete(cache_key)
         else:
-            # Sync MemoryCache (thread-safe)
             self.cache.delete(cache_key)
 
     async def clear_cache(self, cache_name: str):
@@ -182,7 +171,6 @@ class AsyncDoormanCacheManager:
             if keys:
                 await self.cache.delete(*keys)
         else:
-            # Sync MemoryCache (thread-safe)
             keys = self.cache.keys(pattern)
             if keys:
                 self.cache.delete(*keys)
@@ -248,14 +236,12 @@ class AsyncDoormanCacheManager:
             operation: Lambda returning db operation result or coroutine
         """
         try:
-            # Check if operation is a coroutine
             import inspect
             if inspect.iscoroutine(operation):
                 result = await operation
             else:
                 result = operation()
 
-            # Invalidate cache if modification occurred
             if hasattr(result, 'modified_count') and result.modified_count > 0:
                 await self.delete_cache(cache_name, key)
             elif hasattr(result, 'deleted_count') and result.deleted_count > 0:
@@ -274,10 +260,7 @@ class AsyncDoormanCacheManager:
                 await self._redis_pool.disconnect()
             logger.info("Async Redis connections closed")
 
-
-# Initialize async cache manager
 async_doorman_cache = AsyncDoormanCacheManager()
-
 
 async def close_async_cache_connections():
     """Close all async cache connections for graceful shutdown."""

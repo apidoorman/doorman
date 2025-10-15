@@ -4,12 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from pymongo.errors import PyMongoError
 import logging
 from typing import Optional
 
-# Internal imports
 from models.response_model import ResponseModel
 from models.credit_model import CreditModel
 from models.user_credits_model import UserCreditModel

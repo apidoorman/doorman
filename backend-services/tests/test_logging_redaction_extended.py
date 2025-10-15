@@ -1,4 +1,3 @@
-# External imports
 import logging
 
 def test_redaction_handles_cookies_csrf_and_mixed_cases():

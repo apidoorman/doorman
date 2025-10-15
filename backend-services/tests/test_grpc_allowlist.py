@@ -1,6 +1,5 @@
 import pytest
 
-
 async def _setup_api_with_allowlist(client, name, ver, allowed_pkgs=None, allowed_svcs=None, allowed_methods=None):
     payload = {
         'api_name': name,
@@ -31,12 +30,10 @@ async def _setup_api_with_allowlist(client, name, ver, allowed_pkgs=None, allowe
     from conftest import subscribe_self
     await subscribe_self(client, name, ver)
 
-
 @pytest.mark.asyncio
 async def test_grpc_service_not_in_allowlist_returns_403(authed_client):
     name, ver = 'gallow1', 'v1'
     await _setup_api_with_allowlist(authed_client, name, ver, allowed_svcs=['Greeter'])
-    # Request uses a service not allowed
     r = await authed_client.post(
         f'/api/grpc/{name}',
         headers={'X-API-Version': ver, 'Content-Type': 'application/json'},
@@ -45,7 +42,6 @@ async def test_grpc_service_not_in_allowlist_returns_403(authed_client):
     assert r.status_code == 403
     body = r.json()
     assert body.get('error_code') == 'GTW013'
-
 
 @pytest.mark.asyncio
 async def test_grpc_method_not_in_allowlist_returns_403(authed_client):
@@ -60,13 +56,10 @@ async def test_grpc_method_not_in_allowlist_returns_403(authed_client):
     body = r.json()
     assert body.get('error_code') == 'GTW013'
 
-
 @pytest.mark.asyncio
 async def test_grpc_package_not_in_allowlist_returns_403(authed_client):
     name, ver = 'gallow3', 'v1'
-    # Only allow module base 'goodpkg'
     await _setup_api_with_allowlist(authed_client, name, ver, allowed_pkgs=['goodpkg'])
-    # Request overrides with different package (valid identifier but not allow-listed)
     r = await authed_client.post(
         f'/api/grpc/{name}',
         headers={'X-API-Version': ver, 'Content-Type': 'application/json'},
@@ -76,12 +69,10 @@ async def test_grpc_package_not_in_allowlist_returns_403(authed_client):
     body = r.json()
     assert body.get('error_code') == 'GTW013'
 
-
 @pytest.mark.asyncio
 async def test_grpc_invalid_traversal_rejected_400(authed_client):
     name, ver = 'gallow4', 'v1'
     await _setup_api_with_allowlist(authed_client, name, ver)
-    # Invalid method format should be rejected as 400 by validation
     r = await authed_client.post(
         f'/api/grpc/{name}',
         headers={'X-API-Version': ver, 'Content-Type': 'application/json'},

@@ -4,7 +4,6 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-# External imports
 from fastapi import APIRouter, Request, Depends, HTTPException, Response
 from jose import JWTError
 import uuid
@@ -12,7 +11,6 @@ import time
 import logging
 import os
 
-# Internal imports
 from models.response_model import ResponseModel
 from services.user_service import UserService
 from utils.response_util import respond_rest
@@ -57,15 +55,12 @@ async def authorization(request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-        # IP-based rate limiting to prevent brute force attacks (5 attempts per 5 minutes)
-        # Can be overridden via environment variables for testing
         login_limit = int(os.getenv('LOGIN_IP_RATE_LIMIT', '5'))
         login_window = int(os.getenv('LOGIN_IP_RATE_WINDOW', '300'))
         rate_limit_info = await limit_by_ip(request, limit=login_limit, window=login_window)
 
         logger.info(f'{request_id} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        # Parse JSON body safely; invalid JSON should not 500
         try:
             data = await request.json()
         except Exception:
@@ -117,7 +112,6 @@ async def authorization(request: Request):
             response={'access_token': access_token}
         ))
 
-        # Add rate limit headers
         if rate_limit_info:
             response.headers['X-RateLimit-Limit'] = str(rate_limit_info['limit'])
             response.headers['X-RateLimit-Remaining'] = str(rate_limit_info['remaining'])
@@ -144,24 +138,6 @@ async def authorization(request: Request):
         else:
             safe_domain = None
 
-        # Cookie Duplication Strategy:
-        # Cookies are set twice for maximum compatibility across deployment configurations:
-        # 1. WITH domain attribute (if COOKIE_DOMAIN is set and matches request host)
-        #    - Enables subdomain sharing (e.g., *.example.com)
-        #    - Required for SSO and multi-subdomain setups
-        # 2. WITHOUT domain attribute
-        #    - Exact domain match only (no subdomain sharing)
-        #    - Ensures cookies work even if domain validation fails
-        #
-        # Configuration:
-        # - COOKIE_DOMAIN: Base domain for subdomain sharing (e.g., "example.com")
-        # - For SSO: Set to SSO provider's domain scope
-        # - For reverse proxy: Set to base domain (not subdomain like "api.example.com")
-        # - Leave unset for single-domain deployments
-        #
-        # Impact: Doubles cookie size; consider for large JWTs behind proxies
-
-        # Set CSRF token with domain attribute (for subdomain sharing)
         response.set_cookie(
             key='csrf_token',
             value=csrf_token,
@@ -173,7 +149,6 @@ async def authorization(request: Request):
             max_age=1800
         )
 
-        # Set CSRF token without domain attribute (exact domain only)
         response.set_cookie(
             key='csrf_token',
             value=csrf_token,
@@ -184,7 +159,6 @@ async def authorization(request: Request):
             max_age=1800
         )
 
-        # Set access token with domain attribute (for subdomain sharing)
         response.set_cookie(
             key='access_token_cookie',
             value=access_token,
@@ -196,7 +170,6 @@ async def authorization(request: Request):
             max_age=1800
         )
 
-        # Set access token without domain attribute (exact domain only)
         response.set_cookie(
             key='access_token_cookie',
             value=access_token,
@@ -208,7 +181,6 @@ async def authorization(request: Request):
         )
         return response
     except HTTPException as e:
-        # Preserve IP rate limit semantics (429 + Retry-After headers)
         if getattr(e, 'status_code', None) == 429:
             headers = getattr(e, 'headers', {}) or {}
             detail = e.detail if isinstance(e.detail, dict) else {}
@@ -221,7 +193,6 @@ async def authorization(request: Request):
                 error_code=str(detail.get('error_code') or 'IP_RATE_LIMIT'),
                 error_message=str(detail.get('message') or 'Too many requests')
             ))
-        # Default mapping for auth failures
         return respond_rest(ResponseModel(
             status_code=401,
             response_headers={
@@ -244,7 +215,6 @@ async def authorization(request: Request):
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
-# Admin endpoints for revoking tokens and disabling/enabling users
 """
 Endpoint
 
@@ -283,7 +253,6 @@ async def admin_revoke_user_tokens(username: str, request: Request):
                 ))
         except Exception as e:
             logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
-            # Continue anyway - permission check failure shouldn't block operation
         revoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
@@ -340,7 +309,6 @@ async def admin_unrevoke_user_tokens(username: str, request: Request):
                 ))
         except Exception as e:
             logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
-            # Continue anyway - permission check failure shouldn't block operation
         unrevoke_all_for_user(username)
         return respond_rest(ResponseModel(
             status_code=200,
@@ -397,7 +365,6 @@ async def admin_disable_user(username: str, request: Request):
                 ))
         except Exception as e:
             logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
-            # Continue anyway - permission check failure shouldn't block operation
 
         await UserService.update_user(username, UpdateUserModel(active=False), request_id)
 
@@ -457,7 +424,6 @@ async def admin_enable_user(username: str, request: Request):
                 ))
         except Exception as e:
             logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
-            # Continue anyway - permission check failure shouldn't block operation
         await UserService.update_user(username, UpdateUserModel(active=True), request_id)
 
         return respond_rest(ResponseModel(
@@ -515,7 +481,6 @@ async def admin_user_status(username: str, request: Request):
                 ))
         except Exception as e:
             logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
-            # Continue anyway - permission check failure shouldn't block operation
         user = await UserService.get_user_by_username_helper(username)
         status = {
             'active': bool(user.get('active', False)),
@@ -610,13 +575,6 @@ async def extended_authorization(request: Request):
         else:
             safe_domain = None
 
-        # Cookie Duplication Strategy (see login endpoint for full documentation)
-        # Cookies set twice: WITH domain for subdomain sharing, WITHOUT domain for exact match
-
-        # Set CSRF token with domain attribute (for subdomain sharing)
-        # lgtm [py/insecure-cookie]
-        # codeql[py/insecure-cookie]
-        # Intentionally not HttpOnly: double-submit CSRF token accessible to client JS; access token cookie is HttpOnly.
         response.set_cookie(
             key='csrf_token',
             value=csrf_token,
@@ -628,10 +586,6 @@ async def extended_authorization(request: Request):
             max_age=604800
         )
 
-        # Set CSRF token without domain attribute (exact domain only)
-        # lgtm [py/insecure-cookie]
-        # codeql[py/insecure-cookie]
-        # Intentionally not HttpOnly: double-submit CSRF token accessible to client JS; access token cookie is HttpOnly.
         response.set_cookie(
             key='csrf_token',
             value=csrf_token,
@@ -642,7 +596,6 @@ async def extended_authorization(request: Request):
             max_age=604800
         )
 
-        # Set refresh token with domain attribute (for subdomain sharing)
         response.set_cookie(
             key='access_token_cookie',
             value=refresh_token,
@@ -654,7 +607,6 @@ async def extended_authorization(request: Request):
             max_age=604800
         )
 
-        # Set refresh token without domain attribute (exact domain only)
         response.set_cookie(
             key='access_token_cookie',
             value=refresh_token,
@@ -796,7 +748,6 @@ async def authorization_invalidate(response: Response, request: Request):
         username = payload.get('sub')
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        # Add this token's JTI to durable revocation with TTL until expiry
         try:
             import time as _t
             exp = payload.get('exp')
@@ -805,7 +756,6 @@ async def authorization_invalidate(response: Response, request: Request):
                 ttl = max(1, int(exp - _t.time()))
             add_revoked_jti(username, payload.get('jti'), ttl)
         except Exception as e:
-            # Fallback to in-memory TimedHeap (back-compat)
             logger.warning(f'{request_id} | Token revocation failed, using fallback: {str(e)}')
             if username not in jwt_blacklist:
                 jwt_blacklist[username] = TimedHeap()

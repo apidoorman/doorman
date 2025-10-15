@@ -1,4 +1,3 @@
-# External imports
 import asyncio
 import time
 import pytest

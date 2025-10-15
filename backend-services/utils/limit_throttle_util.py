@@ -1,11 +1,9 @@
-# External imports
 from fastapi import Request, HTTPException
 import asyncio
 import time
 import logging
 import os
 
-# Internal imports
 from utils.auth_util import auth_required
 from utils.database_async import user_collection
 from utils.async_db import db_find_one
@@ -95,36 +93,29 @@ async def limit_and_throttle(request: Request):
     """
     payload = await auth_required(request)
     username = payload.get('sub')
-    # Prefer async Redis client (shared across workers) over in-memory fallback
     redis_client = getattr(request.app.state, 'redis', None)
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
         user = await db_find_one(user_collection, {'username': username})
     now_ms = int(time.time() * 1000)
-    # Rate limiting (enabled if explicitly set true, or legacy values exist)
     rate_enabled = (user.get('rate_limit_enabled') is True) or bool(user.get('rate_limit_duration'))
     if rate_enabled:
-        # Use user-set values; if explicitly enabled but missing values, fall back to sensible defaults
         rate = int(user.get('rate_limit_duration') or 60)
         duration = user.get('rate_limit_duration_type') or 'minute'
         window = duration_to_seconds(duration)
         key = f'rate_limit:{username}:{now_ms // (window * 1000)}'
         try:
-            # Use async Redis client if available, otherwise fall back to in-memory
             client = redis_client or _fallback_counter
             count = await client.incr(key)
             if count == 1:
                 await client.expire(key, window)
         except Exception:
-            # Redis failure: fall back to in-memory (logged in production startup validation)
             count = await _fallback_counter.incr(key)
             if count == 1:
                 await _fallback_counter.expire(key, window)
         if count > rate:
             raise HTTPException(status_code=429, detail='Rate limit exceeded')
 
-    # Throttling (enabled if explicitly set true, or legacy values exist)
-    # Enable throttling if explicitly enabled, or if duration/queue limit fields are configured
     throttle_enabled = (
         (user.get('throttle_enabled') is True)
         or bool(user.get('throttle_duration'))
@@ -134,15 +125,11 @@ async def limit_and_throttle(request: Request):
         throttle_limit = int(user.get('throttle_duration') or 10)
         throttle_duration = user.get('throttle_duration_type') or 'second'
         throttle_window = duration_to_seconds(throttle_duration)
-        # Derive a stable window index; in test mode, apply a small boundary
-        # grace so two back-to-back requests that straddle a 1s boundary are
-        # still counted in the same window to avoid nondeterministic flakes.
         window_ms = max(1, throttle_window * 1000)
         window_index = now_ms // window_ms
         try:
             if os.getenv('DOORMAN_TEST_MODE', 'false').lower() == 'true':
                 remainder = now_ms % window_ms
-                # Use up to 300ms or 20% of window as grace near the boundary
                 grace = min(300, window_ms // 5)
                 if remainder < grace and window_index > 0:
                     window_index -= 1
@@ -174,9 +161,6 @@ async def limit_and_throttle(request: Request):
             dynamic_wait = throttle_wait * (throttle_count - throttle_limit)
             try:
                 import sys as _sys, os as _os
-                # In test mode on Python 3.13+, event loop scheduling may skew
-                # baseline timings. Ensure a noticeable wait so relative latency
-                # assertions remain stable across environments.
                 if _os.getenv('DOORMAN_TEST_MODE', 'false').lower() == 'true' and _sys.version_info >= (3, 13):
                     dynamic_wait = max(dynamic_wait, 0.2)
             except Exception:
@@ -222,7 +206,6 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
         Dict with rate limit info for response headers
 
     Example:
-        # Limit login to 5 attempts per 5 minutes per IP
         await limit_by_ip(request, limit=5, window=300)
     """
     try:

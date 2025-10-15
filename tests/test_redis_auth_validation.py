@@ -42,7 +42,6 @@ def test_redis_auth_url_building():
         redis_db = test['db']
         redis_password = test['password']
 
-        # Logic from doorman.py
         if redis_password:
             redis_url = f'redis://:{redis_password}@{redis_host}:{redis_port}/{redis_db}'
         else:
@@ -54,10 +53,9 @@ def test_redis_auth_url_building():
         print(f"   Password set: {bool(redis_password)}")
         # Avoid printing clear-text secrets; mask password in URL display
         def _mask(url: str) -> str:
-            # Replace ':password@' with ':***@' if present
             return re.sub(r":([^@]+)@", ":***@", url)
 
-        import re  # local import for test-only masking
+        import re
         print(f"   URL: {_mask(redis_url)}")
         if redis_url != test['expected_url']:
             print(f"   Expected: {_mask(test['expected_url'])}")
