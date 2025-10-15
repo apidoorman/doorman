@@ -40,7 +40,6 @@ defusedxml>=0.7.1  # Safer XML parsing for SOAP validation
 # Additional dependencies
 python-multipart>=0.0.9  # For file uploads
 typing-extensions>=4.9.0  # For type hints
-werkzeug>=3.0.1  # Latest stable version
 zeep>=4.2.1  # Latest stable version
 xmltodict>=0.13.0  # For XML handling
 python-jose[cryptography]>=3.3.0  # For JWT handling
