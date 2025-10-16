@@ -91,7 +91,11 @@ class EndpointService:
                 generated_dir = project_root / 'generated'
                 proto_dir.mkdir(exist_ok=True)
                 generated_dir.mkdir(exist_ok=True)
-                proto_path = proto_dir / f'{module_base}.proto'
+                proto_path = (proto_dir / f'{module_base}.proto').resolve()
+                # Validate path stays within proto directory
+                if not str(proto_path).startswith(str(proto_dir.resolve())):
+                    logger.error(f'{request_id} | Invalid proto path: {proto_path}')
+                    raise ValueError('Proto path must be within proto directory')
                 if not proto_path.exists():
                     proto_content = (
                         'syntax = "proto3";\n'
