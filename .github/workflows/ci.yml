@@ -41,7 +41,7 @@ jobs:
           ALLOWED_ORIGINS: http://localhost:3000
         working-directory: backend-services
         run: pytest -q tests
-      - name: Run root-level integration tests
+      - name: Run backend-services live-tests
         env:
           MEM_OR_EXTERNAL: MEM
           HTTPS_ONLY: 'false'
@@ -55,7 +55,8 @@ jobs:
           ALLOW_HEADERS: '*'
           ALLOW_METHODS: '*'
           ALLOWED_ORIGINS: http://localhost:3000
-        run: pytest -q tests
+        working-directory: backend-services
+        run: pytest -q live-tests
 
   frontend-build:
     runs-on: ubuntu-latest
