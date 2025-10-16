@@ -68,9 +68,9 @@ jobs:
           done
       - name: Run backend-services live-tests
         env:
-          LIVE_BASE_URL: http://localhost:3001
-          LIVE_ADMIN_EMAIL: admin@doorman.dev
-          LIVE_ADMIN_PASSWORD: test-only-password-12chars
+          DOORMAN_BASE_URL: http://localhost:3001
+          DOORMAN_ADMIN_EMAIL: admin@doorman.dev
+          DOORMAN_ADMIN_PASSWORD: test-only-password-12chars
         working-directory: backend-services
         run: pytest -q live-tests
       - name: Stop Doorman server
