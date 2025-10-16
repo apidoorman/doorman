@@ -111,7 +111,7 @@ class LoggingService:
 
         except Exception as e:
             logger.error(f'Error retrieving logs: {str(e)}', exc_info=True)
-            raise HTTPException(status_code=500, detail=f'Failed to retrieve logs: {str(e)}')
+            raise HTTPException(status_code=500, detail='Failed to retrieve logs')
 
     def get_available_log_files(self) -> List[str]:
         """

@@ -127,6 +127,11 @@ async def authorization(request: Request):
             _secure = str(_secure_env).lower() == 'true'
         else:
             _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+
+        # Security warning: cookies should be secure in production
+        if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
+            logger.warning(f'{request_id} | SECURITY WARNING: Secure cookies disabled in production environment')
+
         _domain = os.getenv('COOKIE_DOMAIN', None)
         _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
@@ -564,6 +569,11 @@ async def extended_authorization(request: Request):
             _secure = str(_secure_env).lower() == 'true'
         else:
             _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+
+        # Security warning: cookies should be secure in production
+        if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
+            logger.warning(f'{request_id} | SECURITY WARNING: Secure cookies disabled in production environment')
+
         _domain = os.getenv('COOKIE_DOMAIN', None)
         _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
