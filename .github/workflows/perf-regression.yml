@@ -116,12 +116,13 @@ jobs:
 
       - name: Download baseline artifact from default branch
         if: ${{ inputs.bless_baseline != true }}
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v6
         with:
           name: perf-baseline
           path: baseline
           workflow: perf-regression.yml
           branch: ${{ github.event.repository.default_branch }}
+          allow_forks: false
           if_no_artifact_found: warn
 
       - name: Setup Python

@@ -1067,9 +1067,12 @@ class GatewayService:
                 proto_filename = f'{proto_rel.name}.proto'
                 project_root = GatewayService._PROJECT_ROOT
                 proto_dir = project_root / 'proto'
-                proto_path = proto_dir / proto_rel.with_suffix('.proto')
+                proto_path = (proto_dir / proto_rel.with_suffix('.proto')).resolve()
+                # Validate resolved path stays within project bounds
                 if not GatewayService._validate_under_base(project_root, proto_path):
                     return GatewayService.error_response(request_id, 'GTW012', 'Invalid path for proto resolution', status=400)
+                if not GatewayService._validate_under_base(proto_dir, proto_path):
+                    return GatewayService.error_response(request_id, 'GTW012', 'Proto path must be within proto directory', status=400)
 
                 generated_dir = project_root / 'generated'
                 gen_dir_str = str(generated_dir)
@@ -1126,7 +1129,9 @@ class GatewayService:
                     try:
                         proto_dir.mkdir(exist_ok=True)
                         try:
-                            logger.info(f"{request_id} | gRPC generated check: proto_path={proto_path} exists={proto_path.exists()} generated_dir={generated_dir} pb2={module_base}_pb2.py={ (generated_dir / (module_base + '_pb2.py')).exists() }")
+                            pb2_check_path = (generated_dir / (module_base + '_pb2.py')).resolve()
+                            if GatewayService._validate_under_base(generated_dir, pb2_check_path):
+                                logger.info(f"{request_id} | gRPC generated check: proto_path={proto_path} exists={proto_path.exists()} generated_dir={generated_dir} pb2={module_base}_pb2.py={pb2_check_path.exists()}")
                         except Exception:
                             pass
                         method_fq = body.get('method', '')
@@ -1153,6 +1158,9 @@ class GatewayService:
                             'message DeleteRequest { int32 id = 1; }\n'
                             'message DeleteReply { bool ok = 1; }\n'
                         )
+                        # Validate proto_path again before writing
+                        if not GatewayService._validate_under_base(proto_dir, proto_path):
+                            raise ValueError('Proto path validation failed before write')
                         proto_path.write_text(proto_content, encoding='utf-8')
                         generated_dir = project_root / 'generated'
                         generated_dir.mkdir(exist_ok=True)
@@ -1335,8 +1343,12 @@ class GatewayService:
                             logger.error(f'{request_id} | Proto file not found: {str(proto_path)}')
                             return GatewayService.error_response(request_id, 'GTW012', f'Proto file not found for API: {api_path}', status=404)
                 if not use_imported:
-                    pb2_path = package_dir / f"{parts[-1]}_pb2.py"
-                    pb2_grpc_path = package_dir / f"{parts[-1]}_pb2_grpc.py"
+                    pb2_path = (package_dir / f"{parts[-1]}_pb2.py").resolve()
+                    pb2_grpc_path = (package_dir / f"{parts[-1]}_pb2_grpc.py").resolve()
+                    # Validate paths before checking existence
+                    if not GatewayService._validate_under_base(generated_dir, pb2_path) or not GatewayService._validate_under_base(generated_dir, pb2_grpc_path):
+                        logger.error(f"{request_id} | Invalid path for generated modules: pb2={pb2_path} pb2_grpc={pb2_grpc_path}")
+                        return GatewayService.error_response(request_id, 'GTW012', 'Invalid generated module path', status=400)
                     if not (pb2_path.is_file() and pb2_grpc_path.is_file()):
                         logger.error(f"{request_id} | Generated modules not found for '{module_name}' pb2={pb2_path} exists={pb2_path.is_file()} pb2_grpc={pb2_grpc_path} exists={pb2_grpc_path.is_file()}")
                         if isinstance(url, str) and url.startswith(('http://', 'https://')):
