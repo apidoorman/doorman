@@ -25,7 +25,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend-services/requirements.txt
-      - name: Run backend-services tests
+      - name: Run backend-services unit tests
         env:
           MEM_OR_EXTERNAL: MEM
           HTTPS_ONLY: 'false'
@@ -41,8 +41,11 @@ jobs:
           ALLOWED_ORIGINS: http://localhost:3000
         working-directory: backend-services
         run: pytest -q tests
-      - name: Run backend-services live-tests
+      - name: Start Doorman server for live-tests
         env:
+          PORT: '3001'
+          THREADS: '1'
+          ENV: 'development'
           MEM_OR_EXTERNAL: MEM
           HTTPS_ONLY: 'false'
           HTTPS_ENABLED: 'false'
@@ -55,8 +58,27 @@ jobs:
           ALLOW_HEADERS: '*'
           ALLOW_METHODS: '*'
           ALLOWED_ORIGINS: http://localhost:3000
+        run: |
+          python backend-services/doorman.py start
+          for i in {1..60}; do
+            if curl -fsS http://localhost:3001/platform/monitor/liveness > /dev/null 2>&1; then
+              echo "Doorman is live"; break
+            fi
+            sleep 1
+          done
+      - name: Run backend-services live-tests
+        env:
+          LIVE_BASE_URL: http://localhost:3001
+          LIVE_ADMIN_EMAIL: admin@doorman.dev
+          LIVE_ADMIN_PASSWORD: test-only-password-12chars
         working-directory: backend-services
         run: pytest -q live-tests
+      - name: Stop Doorman server
+        if: always()
+        run: |
+          if [ -f backend-services/doorman.pid ]; then
+            kill $(cat backend-services/doorman.pid) || true
+          fi
 
   frontend-build:
     runs-on: ubuntu-latest
