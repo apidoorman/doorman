@@ -221,7 +221,11 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                 raise ValueError('Invalid grpc file path')
             if pb2_grpc_file.exists():
                 content = pb2_grpc_file.read_text()
-                import_pattern = rf'^import {safe_api_name}_{safe_api_version}_pb2 as (.+)$'
+                # Double-check sanitized values contain only safe characters before using in regex
+                if not re.match(r'^[a-zA-Z0-9_\-\.]+$', safe_api_name) or not re.match(r'^[a-zA-Z0-9_\-\.]+$', safe_api_version):
+                    raise ValueError('Invalid characters in sanitized API name or version')
+                escaped_mod = re.escape(f'{safe_api_name}_{safe_api_version}_pb2')
+                import_pattern = rf'^import {escaped_mod} as (.+)$'
                 logger.info(f'{request_id} | Applying import fix with pattern: {import_pattern}')
                 lines = content.split('\n')[:10]
                 for i, line in enumerate(lines, 1):
@@ -232,8 +236,10 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                     logger.info(f'{request_id} | Import fix applied successfully')
                     pb2_grpc_file.write_text(new_content)
                     logger.info(f"{request_id} | Wrote fixed pb2_grpc at {pb2_grpc_file}")
-                    pycache_dir = generated_dir / '__pycache__'
-                    if pycache_dir.exists():
+                    pycache_dir = (generated_dir / '__pycache__').resolve()
+                    if not validate_path(generated_dir, pycache_dir):
+                        logger.warning(f'{request_id} | Unsafe pycache path detected. Skipping cache cleanup.')
+                    elif pycache_dir.exists():
                         for pyc_file in pycache_dir.glob(f'{safe_api_name}_{safe_api_version}*.pyc'):
                             try:
                                 pyc_file.unlink()
@@ -252,7 +258,8 @@ async def upload_proto_file(api_name: str, api_version: str, file: UploadFile = 
                 else:
                     logger.warning(f'{request_id} | Import fix pattern did not match - no changes made')
                 try:
-                    rel_pattern = rf'^from \\. import {safe_api_name}_{safe_api_version}_pb2 as (.+)$'
+                    # Reuse escaped_mod which was already validated above
+                    rel_pattern = rf'^from \\. import {escaped_mod} as (.+)$'
                     content2 = pb2_grpc_file.read_text()
                     new2 = re.sub(rel_pattern, rf'from generated import {safe_api_name}_{safe_api_version}_pb2 as \\1', content2, flags=re.MULTILINE)
                     if new2 != content2:

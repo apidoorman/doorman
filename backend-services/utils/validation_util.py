@@ -51,6 +51,11 @@ class ValidationUtil:
         # When defusedxml is unavailable, apply a basic pre-parse guard against DOCTYPE/ENTITY.
 
     def _reject_unsafe_xml(self, xml_text: str) -> None:
+        """
+        Reject XML with DOCTYPE/ENTITY declarations to prevent XXE attacks.
+        This is a fallback when defusedxml is not available.
+        When defusedxml is available (_DEFUSED=True), it handles XXE protection automatically.
+        """
         if _DEFUSED:
             return
         lowered = xml_text.lower()
