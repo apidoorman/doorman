@@ -58,6 +58,8 @@ jobs:
           ALLOW_HEADERS: '*'
           ALLOW_METHODS: '*'
           ALLOWED_ORIGINS: http://localhost:3000
+          LOGIN_IP_RATE_LIMIT: '1000000'
+          LOGIN_IP_RATE_WINDOW: '60'
         run: |
           python backend-services/doorman.py start
           for i in {1..60}; do
