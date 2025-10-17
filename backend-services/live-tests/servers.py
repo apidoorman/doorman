@@ -16,13 +16,13 @@ def _get_host_from_container() -> str:
     import os
     import platform
 
-    # Check if we're running against a dockerized doorman (localhost:3001)
+    # Check if we're running against a dockerized doorman
     base_url = os.getenv('DOORMAN_BASE_URL', 'http://localhost:3001')
-    if 'localhost' not in base_url and '127.0.0.1' not in base_url:
-        # Not running against local Docker, use localhost
+    if 'localhost' in base_url or '127.0.0.1' in base_url:
+        # Doorman is running on the host (not in Docker), use localhost
         return '127.0.0.1'
 
-    # Running against Docker - need to use host reference
+    # Running against remote/Docker - need to use host reference
     system = platform.system()
     if system == 'Darwin' or system == 'Windows':
         # Docker Desktop on Mac/Windows
