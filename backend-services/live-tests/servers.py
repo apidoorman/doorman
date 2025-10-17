@@ -6,17 +6,40 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 def _find_free_port() -> int:
     s = socket.socket()
-    s.bind(('127.0.0.1', 0))
+    s.bind(('0.0.0.0', 0))
     port = s.getsockname()[1]
     s.close()
     return port
 
+def _get_host_from_container() -> str:
+    """Get the hostname to use when referring to the host machine from a Docker container."""
+    import os
+    import platform
+
+    # Check if we're running against a dockerized doorman (localhost:3001)
+    base_url = os.getenv('DOORMAN_BASE_URL', 'http://localhost:3001')
+    if 'localhost' not in base_url and '127.0.0.1' not in base_url:
+        # Not running against local Docker, use localhost
+        return '127.0.0.1'
+
+    # Running against Docker - need to use host reference
+    system = platform.system()
+    if system == 'Darwin' or system == 'Windows':
+        # Docker Desktop on Mac/Windows
+        return 'host.docker.internal'
+    else:
+        # Linux - use host's IP on docker0 bridge (usually 172.17.0.1)
+        # Or we can use the gateway IP
+        return '172.17.0.1'
+
 class _ThreadedHTTPServer:
-    def __init__(self, handler_cls, host='127.0.0.1', port=None):
-        self.host = host
+    def __init__(self, handler_cls, host='0.0.0.0', port=None):
+        self.bind_host = host
         self.port = port or _find_free_port()
-        self._server = HTTPServer((self.host, self.port), handler_cls)
+        self._server = HTTPServer((self.bind_host, self.port), handler_cls)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        # For the URL, use the host reference that Docker can reach
+        self.host = _get_host_from_container()
 
     def start(self):
         self._thread.start()
