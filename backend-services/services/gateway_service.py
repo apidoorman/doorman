@@ -888,7 +888,7 @@ class GatewayService:
                 if not server:
                     logger.error(f'{request_id} | No upstream servers configured for {api_path}')
                     return GatewayService.error_response(request_id, 'GTW001', 'No upstream servers configured')
-                url = server.rstrip('/')
+                url = server.rstrip('/') + '/graphql'
                 client = GatewayService.get_http_client()
                 try:
                     http_resp = await request_with_resilience(
