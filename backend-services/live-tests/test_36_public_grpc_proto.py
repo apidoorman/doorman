@@ -7,10 +7,30 @@ from config import ENABLE_GRPC
 
 def _find_port() -> int:
     s = socket.socket()
-    s.bind(('127.0.0.1', 0))
+    s.bind(('0.0.0.0', 0))
     p = s.getsockname()[1]
     s.close()
     return p
+
+def _get_host_from_container() -> str:
+    """Get the hostname to use when referring to the host machine from a Docker container."""
+    import os
+    import platform
+
+    # Check if we're running against a dockerized doorman (localhost:3001)
+    base_url = os.getenv('DOORMAN_BASE_URL', 'http://localhost:3001')
+    if 'localhost' not in base_url and '127.0.0.1' not in base_url:
+        # Not running against local Docker, use localhost
+        return '127.0.0.1'
+
+    # Running against Docker - need to use host reference
+    system = platform.system()
+    if system == 'Darwin' or system == 'Windows':
+        # Docker Desktop on Mac/Windows
+        return 'host.docker.internal'
+    else:
+        # Linux - use host's IP on docker0 bridge (usually 172.17.0.1)
+        return '172.17.0.1'
 
 @pytest.mark.skipif(not ENABLE_GRPC, reason='gRPC disabled')
 def test_public_grpc_with_proto_upload(client):
@@ -74,12 +94,13 @@ message DeleteReply { bool ok = 1; }
 
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
         pb2_grpc.add_ResourceServicer_to_server(Resource(), server)
-        s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()
-        server.add_insecure_port(f'127.0.0.1:{port}')
+        port = _find_port()
+        server.add_insecure_port(f'0.0.0.0:{port}')
         server.start()
         time.sleep(0.2)
 
         try:
+            host_ref = _get_host_from_container()
             files = {'file': ('svc.proto', PROTO.replace('{pkg}', pkg), 'application/octet-stream')}
             r_up = client.post(f'/platform/proto/{api_name}/{api_version}', files=files)
             assert r_up.status_code in (200, 201), r_up.text
@@ -90,7 +111,7 @@ message DeleteReply { bool ok = 1; }
                 'api_description': 'public grpc with uploaded proto',
                 'api_allowed_roles': [],
                 'api_allowed_groups': [],
-                'api_servers': [f'grpc://127.0.0.1:{port}'],
+                'api_servers': [f'grpc://{host_ref}:{port}'],
                 'api_type': 'REST',
                 'active': True,
                 'api_public': True,
