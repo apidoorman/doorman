@@ -12,25 +12,31 @@ def _find_free_port() -> int:
     return port
 
 def _get_host_from_container() -> str:
-    """Get the hostname to use when referring to the host machine from a Docker container."""
+    """Get the hostname to use when referring to the host machine from a Docker container.
+
+    Returns the appropriate hostname for test servers to use in URLs that Doorman will connect to:
+    - If Doorman is running natively (local mode): returns 127.0.0.1
+    - If Doorman is running in Docker: returns host.docker.internal (Mac/Win) or 172.17.0.1 (Linux)
+
+    Set DOORMAN_IN_DOCKER=1 to explicitly indicate Doorman is running in Docker containers.
+    """
     import os
     import platform
 
-    # Check if we're running against a dockerized doorman
-    base_url = os.getenv('DOORMAN_BASE_URL', 'http://localhost:3001')
-    if 'localhost' in base_url or '127.0.0.1' in base_url:
-        # Doorman is running on the host (not in Docker), use localhost
-        return '127.0.0.1'
+    # Check if Doorman is running in Docker (explicit override)
+    docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
 
-    # Running against remote/Docker - need to use host reference
-    system = platform.system()
-    if system == 'Darwin' or system == 'Windows':
-        # Docker Desktop on Mac/Windows
-        return 'host.docker.internal'
-    else:
-        # Linux - use host's IP on docker0 bridge (usually 172.17.0.1)
-        # Or we can use the gateway IP
-        return '172.17.0.1'
+    if docker_env in ('1', 'true', 'yes'):
+        # Explicitly told Doorman IS in Docker
+        system = platform.system()
+        if system == 'Darwin' or system == 'Windows':
+            return 'host.docker.internal'
+        else:
+            return '172.17.0.1'
+
+    # Default: assume Doorman is running natively (not in Docker)
+    # This is the most common development setup
+    return '127.0.0.1'
 
 class _ThreadedHTTPServer:
     def __init__(self, handler_cls, host='0.0.0.0', port=None):
