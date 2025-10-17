@@ -14,7 +14,14 @@ def _mk_user(client, role_name: str):
         'password': pwd,
         'role': role_name,
         'groups': ['ALL'],
-        'ui_access': True
+        'ui_access': True,
+        'rate_limit_duration': 1000000,
+        'rate_limit_duration_type': 'second',
+        'throttle_duration': 1000000,
+        'throttle_duration_type': 'second',
+        'throttle_queue_limit': 1000000,
+        'throttle_wait_duration': 0,
+        'throttle_wait_duration_type': 'second'
     })
     assert r.status_code in (200, 201), r.text
     return uname, email, pwd
