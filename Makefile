@@ -4,8 +4,10 @@ SHELL := /bin/bash
 BASE_URL ?= http://localhost:3001
 ADMIN_EMAIL ?= $(shell grep '^DOORMAN_ADMIN_EMAIL=' backend-services/.env 2>/dev/null | cut -d'=' -f2)
 ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' backend-services/.env 2>/dev/null | cut -d'=' -f2)
+# Set to 1 when running tests against Doorman in Docker (affects test server host references)
+DOORMAN_IN_DOCKER ?= 0
 
-.PHONY: unit unitq live liveq smoke soak preflight
+.PHONY: unit unitq live liveq live-docker liveq-docker smoke soak preflight
 
 unit:
 	cd backend-services && pytest
@@ -18,6 +20,7 @@ live:
 	  DOORMAN_BASE_URL=$(BASE_URL) \
 	  DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
 	  DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
+	  DOORMAN_IN_DOCKER=$(DOORMAN_IN_DOCKER) \
 	  pytest
 
 liveq:
@@ -25,6 +28,24 @@ liveq:
 	  DOORMAN_BASE_URL=$(BASE_URL) \
 	  DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
 	  DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
+	  DOORMAN_IN_DOCKER=$(DOORMAN_IN_DOCKER) \
+	  pytest -q
+
+# Run live tests against Doorman running in Docker
+live-docker:
+	cd backend-services/live-tests && \
+	  DOORMAN_BASE_URL=$(BASE_URL) \
+	  DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
+	  DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
+	  DOORMAN_IN_DOCKER=1 \
+	  pytest
+
+liveq-docker:
+	cd backend-services/live-tests && \
+	  DOORMAN_BASE_URL=$(BASE_URL) \
+	  DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
+	  DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
+	  DOORMAN_IN_DOCKER=1 \
 	  pytest -q
 
 # Lightweight readiness + platform smoke (optionally gateway if SMOKE_UPSTREAM_URL provided)
