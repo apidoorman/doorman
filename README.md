@@ -33,6 +33,22 @@ Doorman supports user management, authentication, authorizaiton, dynamic routing
 ## Launch With Docker
 Ensure an env file exists at the repo root: `./.env` (use `./backend-services/.env.example` as a reference). Keep this file outside the image and pass it at runtime. Note - this is set for development, update variables and hosts to reflect a production environment.
 
+### Testing Against Docker
+When running tests from your **host machine** against Doorman running **inside Docker**, use the Docker-specific make targets:
+
+```bash
+# Run live tests against Doorman in Docker (verbose)
+make live-docker
+
+# Run live tests against Doorman in Docker (quiet)
+make liveq-docker
+
+# Or set the environment variable manually
+DOORMAN_IN_DOCKER=1 make live
+```
+
+This ensures test servers use `host.docker.internal` (Mac/Win) or `172.17.0.1` (Linux) so Doorman can reach them from inside the container.
+
 ### Quickstart
 See commands below.
 
