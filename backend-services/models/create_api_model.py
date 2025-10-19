@@ -9,7 +9,7 @@ from typing import List, Optional
 
 class CreateApiModel(BaseModel):
 
-    api_name: str = Field(..., min_length=1, max_length=25, description='Name of the API', example='customer')
+    api_name: str = Field(..., min_length=1, max_length=64, description='Name of the API', example='customer')
     api_version: str = Field(..., min_length=1, max_length=8, description='Version of the API', example='v1')
     api_description: Optional[str] = Field(None, max_length=127, description='Description of the API', example='New customer onboarding API')
     api_allowed_roles: List[str] = Field(default_factory=list, description='Allowed user roles for the API', example=['admin', 'user'])

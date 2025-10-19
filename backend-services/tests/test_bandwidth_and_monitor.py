@@ -72,7 +72,9 @@ async def test_bandwidth_enforcement_and_usage_tracking(monkeypatch, authed_clie
     r2 = await authed_client.post(f'/api/rest/{name}/{ver}/p', json=payload)
     assert r2.status_code == 429
 
-    u = await authed_client.get('/platform/user/admin')
+    # Use self-lookup to retrieve current user metrics; the bootstrap
+    # admin user is intentionally hidden from direct by-username lookups.
+    u = await authed_client.get('/platform/user/me')
     assert u.status_code == 200
     data = u.json().get('response') or u.json()
     assert int(data.get('bandwidth_usage_bytes', 0)) > 0

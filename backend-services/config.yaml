@@ -79,3 +79,8 @@ audit_log_responses: false  # May be verbose
 # Performance Tuning
 async_workers: 4
 connection_pool_recycle: 3600  # Recycle connections after 1 hour
+
+# Response Compression
+compression_enabled: true  # Enable gzip compression for responses
+compression_minimum_size: 500  # Only compress responses larger than this (bytes)
+compression_level: 1  # Compression level 1-9 (1 = best efficiency, 9 = overkill)

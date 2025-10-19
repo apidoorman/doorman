@@ -4,7 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from typing import List
 import logging
 import uuid
@@ -268,6 +268,14 @@ async def get_all_apis(request: Request, page: int = Defaults.PAGE, page_size: i
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await ApiService.get_apis(page, page_size, request_id))
+    except HTTPException as e:
+        # Surface 401/403 properly for tests that probe unauthorized access
+        return respond_rest(ResponseModel(
+            status_code=e.status_code,
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code='API_AUTH',
+            error_message=e.detail
+        ))
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(ResponseModel(
@@ -281,3 +289,34 @@ async def get_all_apis(request: Request, page: int = Defaults.PAGE, page_size: i
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+@api_router.get('',
+    description='Get all APIs (base path)',
+    response_model=List[ApiModelResponse]
+)
+async def get_all_apis_base(request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE):
+    """Convenience alias for GET /platform/api/all to support tests and clients
+    that expect listing at the base collection path.
+    """
+    # Explicitly forward through the same auth/error handling as get_all_apis
+    request_id = str(uuid.uuid4())
+    try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        return respond_rest(await ApiService.get_apis(page, page_size, request_id))
+    except HTTPException as e:
+        return respond_rest(ResponseModel(
+            status_code=e.status_code,
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code='API_AUTH',
+            error_message=e.detail
+        ))
+    except Exception as e:
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        return process_response(ResponseModel(
+            status_code=500,
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.UNEXPECTED,
+            error_message=Messages.UNEXPECTED
+        ).dict(), 'rest')
