@@ -112,6 +112,7 @@ class AsyncDatabase:
                     'custom_attributes': {'custom_key': 'custom_value'},
                     'active': True,
                     'throttle_queue_limit': 1,
+                    'throttle_enabled': None,
                     'ui_access': True
                 })
 
