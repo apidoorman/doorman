@@ -55,6 +55,8 @@ All configuration is managed through environment variables, typically stored in 
 
 ### Memory Mode Settings
 
+Important: Memory-only mode requires a single worker process. Set `THREADS=1` when `MEM_OR_EXTERNAL=MEM`. Startup fails with a clear error if more than one worker is configured.
+
 #### `MEM_ENCRYPTION_KEY`
 - **Required:** Yes (when using memory dumps)
 - **Description:** 32+ character secret for encrypting memory dumps. Required for dump/restore functionality.

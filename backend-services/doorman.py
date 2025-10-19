@@ -1500,12 +1500,15 @@ def run():
     max_threads = multiprocessing.cpu_count()
     env_threads = int(os.getenv('THREADS', max_threads))
     num_threads = min(env_threads, max_threads)
-    try:
-        if database.memory_only and num_threads != 1:
-            gateway_logger.info('Memory-only mode detected; forcing single worker to avoid divergent state')
-            num_threads = 1
-    except Exception:
-        pass
+
+    # Hard validation: memory-only mode requires a single worker.
+    # Start-up should fail fast with a clear error instead of silently
+    # modifying the configured worker count.
+    if database.memory_only and env_threads != 1:
+        raise RuntimeError(
+            'MEM_OR_EXTERNAL=MEM requires THREADS=1. '
+            'Set THREADS=1 for single-process memory mode or switch to MEM_OR_EXTERNAL=REDIS for multi-worker.'
+        )
     gateway_logger.info(f'Started doorman with {num_threads} threads on port {server_port}')
     uvicorn.run(
         'doorman:doorman',
