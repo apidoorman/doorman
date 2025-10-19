@@ -17,8 +17,8 @@ A lightweight, Python-based API gateway for managing REST, SOAP, GraphQL, gRPC, 
 
 - **Multi-Protocol Support**: REST, SOAP, GraphQL, gRPC, and AI APIs
 - **Security**: User management, authentication, authorization, roles & groups
-- **Traffic Control**: Rate limiting, throttling, dynamic routing
-- **Caching & Storage**: Redis caching, MongoDB integration, or all in memory
+- **Traffic Control**: Rate limiting, throttling, dynamic routing, credits
+- **Caching & Storage**: Redis caching, MongoDB integration, or in memory
 - **Validation**: Request payload validation and logging
 
 ## Quick Start
