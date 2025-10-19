@@ -33,13 +33,26 @@ def test_graphql_gateway_basic_flow(client):
 
     def _find_port():
         s = socket.socket()
-        s.bind(('127.0.0.1', 0))
+        s.bind(('0.0.0.0', 0))
         p = s.getsockname()[1]
         s.close()
         return p
 
+    def _get_host_from_container():
+        """Get the hostname to use when referring to the host machine from a Docker container."""
+        import platform
+        docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
+        if docker_env in ('1', 'true', 'yes'):
+            system = platform.system()
+            if system == 'Darwin' or system == 'Windows':
+                return 'host.docker.internal'
+            else:
+                return '172.17.0.1'
+        return '127.0.0.1'
+
     port = _find_port()
-    config = uvicorn.Config(app, host='127.0.0.1', port=port, log_level='warning')
+    host = _get_host_from_container()
+    config = uvicorn.Config(app, host='0.0.0.0', port=port, log_level='warning')
     server = uvicorn.Server(config)
     t = threading.Thread(target=server.run, daemon=True)
     t.start()
@@ -55,7 +68,7 @@ def test_graphql_gateway_basic_flow(client):
         'api_description': 'GraphQL demo',
         'api_allowed_roles': ['admin'],
         'api_allowed_groups': ['ALL'],
-        'api_servers': [f'http://127.0.0.1:{port}'],
+        'api_servers': [f'http://{host}:{port}'],
         'api_type': 'REST',
         'api_allowed_retry_count': 0,
         'active': True

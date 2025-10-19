@@ -3,16 +3,29 @@ import threading
 import socket
 import requests
 import pytest
+import os
+import platform
 
 from servers import start_rest_echo_server, start_soap_echo_server
 from config import ENABLE_GRAPHQL, ENABLE_GRPC
 
 def _find_port():
     s = socket.socket()
-    s.bind(('127.0.0.1', 0))
+    s.bind(('0.0.0.0', 0))
     p = s.getsockname()[1]
     s.close()
     return p
+
+def _get_host_from_container():
+    """Get the hostname to use when referring to the host machine from a Docker container."""
+    docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
+    if docker_env in ('1', 'true', 'yes'):
+        system = platform.system()
+        if system == 'Darwin' or system == 'Windows':
+            return 'host.docker.internal'
+        else:
+            return '172.17.0.1'
+    return '127.0.0.1'
 
 def test_bulk_public_rest_crud(client):
     srv = start_rest_echo_server()
@@ -140,7 +153,7 @@ def test_bulk_public_graphql_crud(client):
         schema = make_executable_schema(type_defs, [query, mutation])
         app = GraphQL(schema, debug=True)
         port = _find_port()
-        config = uvicorn.Config(app, host='127.0.0.1', port=port, log_level='warning')
+        config = uvicorn.Config(app, host='0.0.0.0', port=port, log_level='warning')
         server = uvicorn.Server(config)
         t = threading.Thread(target=server.run, daemon=True)
         t.start()
@@ -148,6 +161,7 @@ def test_bulk_public_graphql_crud(client):
         return port, server
 
     base = client.base_url.rstrip('/')
+    host = _get_host_from_container()
     ts = int(time.time())
     for i in range(3):
         port, server = start_gql_server()
@@ -160,7 +174,7 @@ def test_bulk_public_graphql_crud(client):
                 'api_description': 'public gql',
                 'api_allowed_roles': [],
                 'api_allowed_groups': [],
-                'api_servers': [f'http://127.0.0.1:{port}'],
+                'api_servers': [f'http://{host}:{port}'],
                 'api_type': 'REST',
                 'active': True,
                 'api_public': True
