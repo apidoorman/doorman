@@ -136,6 +136,14 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
         auth_username = payload.get('sub')
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        # Block any modifications to bootstrap admin user
+        if username == 'admin':
+            return respond_rest(
+                ResponseModel(
+                    status_code=403,
+                    error_code='USR020',
+                    error_message='Super admin user cannot be modified'
+                ))
         if not auth_username == username and not await platform_role_required_bool(auth_username, Roles.MANAGE_USERS):
             return respond_rest(
                 ResponseModel(
@@ -210,6 +218,14 @@ async def delete_user(username: str, request: Request):
         auth_username = payload.get('sub')
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        # Block any deletion of bootstrap admin user
+        if username == 'admin':
+            return respond_rest(
+                ResponseModel(
+                    status_code=403,
+                    error_code='USR021',
+                    error_message='Super admin user cannot be deleted'
+                ))
         if not auth_username == username and not await platform_role_required_bool(auth_username, Roles.MANAGE_USERS):
             return respond_rest(
                 ResponseModel(
@@ -273,6 +289,16 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
         auth_username = payload.get('sub')
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        # Block any password changes to bootstrap admin user
+        if username == 'admin':
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={
+                    Headers.REQUEST_ID: request_id
+                },
+                error_code='USR022',
+                error_message='Super admin password cannot be changed via UI'
+            ))
         if not auth_username == username and not await platform_role_required_bool(auth_username, Roles.MANAGE_USERS):
             return respond_rest(ResponseModel(
                 status_code=403,
@@ -366,11 +392,15 @@ async def get_all_users(request: Request, page: int = Defaults.PAGE, page_size: 
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         data = await UserService.get_all_users(page, page_size, request_id)
-        if data.get('status_code') == 200 and isinstance(data.get('response'), dict) and not await _safe_is_admin_user(username):
+        if data.get('status_code') == 200 and isinstance(data.get('response'), dict):
             users = data['response'].get('users') or []
             filtered = []
             for u in users:
-                if await _safe_is_admin_role(u.get('role')):
+                # Hide bootstrap admin (username='admin') from ALL users in UI
+                if u.get('username') == 'admin':
+                    continue
+                # Hide other admin role users from non-admin users
+                if not await _safe_is_admin_user(username) and await _safe_is_admin_role(u.get('role')):
                     continue
                 filtered.append(u)
             data = dict(data)
@@ -421,6 +451,13 @@ async def get_user_by_username(username: str, request: Request):
         auth_username = payload.get('sub')
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        # Block access to bootstrap admin user for ALL users
+        if username == 'admin':
+            return process_response(ResponseModel(
+                status_code=404,
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_message='User not found'
+            ).dict(), 'rest')
         if not auth_username == username and not await platform_role_required_bool(auth_username, 'manage_users'):
             return process_response(
                 ResponseModel(
@@ -472,9 +509,17 @@ async def get_user_by_email(email: str, request: Request):
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         data = await UserService.get_user_by_email(username, email, request_id)
-        if data.get('status_code') == 200 and isinstance(data.get('response'), dict) and not await _safe_is_admin_user(username):
+        if data.get('status_code') == 200 and isinstance(data.get('response'), dict):
             u = data.get('response')
-            if await _safe_is_admin_role(u.get('role')):
+            # Block access to bootstrap admin user for ALL users
+            if u.get('username') == 'admin':
+                return process_response(ResponseModel(
+                    status_code=404,
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_message='User not found'
+                ).dict(), 'rest')
+            # Block access to other admin users for non-admin users
+            if not await _safe_is_admin_user(username) and await _safe_is_admin_role(u.get('role')):
                 return process_response(ResponseModel(
                     status_code=404,
                     response_headers={Headers.REQUEST_ID: request_id},
