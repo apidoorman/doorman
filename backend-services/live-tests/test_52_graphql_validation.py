@@ -23,11 +23,22 @@ def test_graphql_validation_blocks_invalid_variables(client):
         return f"Hello, {name}!"
 
     schema = make_executable_schema(type_defs, query)
-    import threading, socket, uvicorn
+    import threading, socket, uvicorn, platform
     def _free_port():
-        s = socket.socket(); s.bind(('127.0.0.1', 0)); p = s.getsockname()[1]; s.close(); return p
+        s = socket.socket(); s.bind(('0.0.0.0', 0)); p = s.getsockname()[1]; s.close(); return p
+    def _get_host_from_container():
+        import os
+        docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
+        if docker_env in ('1', 'true', 'yes'):
+            system = platform.system()
+            if system == 'Darwin' or system == 'Windows':
+                return 'host.docker.internal'
+            else:
+                return '172.17.0.1'
+        return '127.0.0.1'
     port = _free_port()
-    server = uvicorn.Server(uvicorn.Config(GraphQL(schema), host='127.0.0.1', port=port, log_level='warning'))
+    host = _get_host_from_container()
+    server = uvicorn.Server(uvicorn.Config(GraphQL(schema), host='0.0.0.0', port=port, log_level='warning'))
     t = threading.Thread(target=server.run, daemon=True); t.start()
     time.sleep(0.4)
 
@@ -36,7 +47,7 @@ def test_graphql_validation_blocks_invalid_variables(client):
     client.post('/platform/api', json={
         'api_name': api_name, 'api_version': api_version,
         'api_description': 'gql val', 'api_allowed_roles': ['admin'], 'api_allowed_groups': ['ALL'],
-        'api_servers': [f'http://127.0.0.1:{port}'], 'api_type': 'REST', 'active': True
+        'api_servers': [f'http://{host}:{port}'], 'api_type': 'REST', 'active': True
     })
     client.post('/platform/endpoint', json={
         'api_name': api_name, 'api_version': api_version,
