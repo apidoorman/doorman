@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from jose import jwt, JWTError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import Response
 from contextlib import asynccontextmanager
 from redis.asyncio import Redis
@@ -1147,6 +1148,35 @@ def configure_logger(logger_name):
 
 gateway_logger = configure_logger('doorman.gateway')
 logging_logger = configure_logger('doorman.logging')
+
+# Add GZip compression middleware (configurable via environment variables)
+# This should be added early in the middleware stack so it compresses final responses
+try:
+    compression_enabled = os.getenv('COMPRESSION_ENABLED', 'true').lower() == 'true'
+    if compression_enabled:
+        compression_level = int(os.getenv('COMPRESSION_LEVEL', '1'))
+        compression_minimum_size = int(os.getenv('COMPRESSION_MINIMUM_SIZE', '500'))
+
+        # Validate compression level (1-9)
+        if not 1 <= compression_level <= 9:
+            gateway_logger.warning(
+                f'Invalid COMPRESSION_LEVEL={compression_level}. Must be 1-9. Using default: 1'
+            )
+            compression_level = 1
+
+        doorman.add_middleware(
+            GZipMiddleware,
+            minimum_size=compression_minimum_size,
+            compresslevel=compression_level
+        )
+        gateway_logger.info(
+            f'Response compression enabled: level={compression_level}, '
+            f'minimum_size={compression_minimum_size} bytes'
+        )
+    else:
+        gateway_logger.info('Response compression disabled (COMPRESSION_ENABLED=false)')
+except Exception as e:
+    gateway_logger.warning(f'Failed to configure response compression: {e}. Compression disabled.')
 
 # Now that logging is configured, attempt to migrate any legacy 'generated/' dir
 try:
