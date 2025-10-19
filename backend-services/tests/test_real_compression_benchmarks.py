@@ -14,6 +14,7 @@ import json
 import io
 import os
 import time
+import asyncio
 
 
 @pytest.mark.asyncio
@@ -220,7 +221,6 @@ async def test_large_list_response_compression(client):
             api_names.append(api_payload['api_name'])
 
     # Cleanup
-    import asyncio
     for api_name in api_names:
         try:
             await client.delete(f'/platform/api/{api_name}/v1')
@@ -339,5 +339,4 @@ async def test_compression_cpu_overhead_estimate(client):
         print(f"    Throughput:      ~{1000/avg_time_ms:.0f} compressions/sec (single core)")
 
 
-import asyncio
 pytestmark = [pytest.mark.benchmark]

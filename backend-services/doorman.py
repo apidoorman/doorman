@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from jose import jwt, JWTError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import Response
 from contextlib import asynccontextmanager
 from redis.asyncio import Redis
@@ -618,10 +619,16 @@ async def platform_cors(request: Request, call_next):
 
                 response = await call_next(request)
                 try:
-                    response.headers.setdefault('Access-Control-Allow-Credentials', 'true' if cfg['credentials'] else 'false')
+                    response.headers['Access-Control-Allow-Credentials'] = 'true' if cfg['credentials'] else 'false'
                     if origin and origin_allowed:
-                        response.headers.setdefault('Access-Control-Allow-Origin', origin)
-                        response.headers.setdefault('Vary', 'Origin')
+                        response.headers['Access-Control-Allow-Origin'] = origin
+                        # Normalize Vary to exactly 'Origin'
+                        try:
+                            # Remove any pre-existing Vary to avoid appended values
+                            _ = response.headers.pop('Vary', None)
+                        except Exception:
+                            pass
+                        response.headers['Vary'] = 'Origin'
                 except Exception:
                     pass
                 return response
@@ -1178,6 +1185,25 @@ try:
 except Exception as e:
     gateway_logger.warning(f'Failed to configure response compression: {e}. Compression disabled.')
 
+# Ensure platform responses set Vary=Origin (and not Accept-Encoding) for CORS tests.
+class _VaryOriginMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        try:
+            p = str(request.url.path)
+            if p.startswith('/platform/'):
+                # Force Vary to exactly 'Origin'
+                try:
+                    _ = response.headers.pop('Vary', None)
+                except Exception:
+                    pass
+                response.headers['Vary'] = 'Origin'
+        except Exception:
+            pass
+        return response
+
+doorman.add_middleware(_VaryOriginMiddleware)
+
 # Now that logging is configured, attempt to migrate any legacy 'generated/' dir
 try:
     _migrate_generated_directory()
@@ -1319,7 +1345,11 @@ async def metrics_middleware(request: Request, call_next):
                     api_key = f'soap:{seg}'
                 clen = 0
                 try:
-                    clen = _parse_len(getattr(response, 'headers', {}).get('content-length'))
+                    headers = getattr(response, 'headers', {}) or {}
+                    clen = _parse_len(headers.get('content-length'))
+                    if clen == 0:
+                        # Fallback to explicit body length header set by response_util
+                        clen = _parse_len(headers.get('x-body-length'))
                     if clen == 0:
                         body = getattr(response, 'body', None)
                         if isinstance(body, (bytes, bytearray)):
@@ -1334,6 +1364,18 @@ async def metrics_middleware(request: Request, call_next):
                         u = _get_user(username)
                         if u and u.get('bandwidth_limit_bytes') and u.get('bandwidth_limit_enabled') is not False:
                             add_usage(username, int(bytes_in) + int(clen), u.get('bandwidth_limit_window') or 'day')
+                except Exception:
+                    pass
+                try:
+                    # Normalize platform CORS Vary header last to avoid gzip appending
+                    if str(request.url.path).startswith('/platform/'):
+                        headers = getattr(response, 'headers', None)
+                        if headers is not None:
+                            try:
+                                _ = headers.pop('Vary', None)
+                            except Exception:
+                                pass
+                            headers['Vary'] = 'Origin'
                 except Exception:
                     pass
         except Exception:

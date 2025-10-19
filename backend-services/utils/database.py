@@ -34,6 +34,7 @@ def _build_admin_seed_doc(email: str, pwd_hash: str) -> dict:
         'role': 'admin',
         'groups': ['ALL', 'admin'],
         'ui_access': True,
+        # Admin seed defaults for rate/throttle as canonical values
         'rate_limit_duration': 1,
         'rate_limit_duration_type': 'second',
         'throttle_duration': 1,
@@ -41,6 +42,7 @@ def _build_admin_seed_doc(email: str, pwd_hash: str) -> dict:
         'throttle_wait_duration': 0,
         'throttle_wait_duration_type': 'second',
         'throttle_queue_limit': 1,
+        'throttle_enabled': None,
         'custom_attributes': {'custom_key': 'custom_value'},
         'active': True,
     }

@@ -345,3 +345,12 @@ async def get_role(role_name: str, request: Request):
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+@role_router.get('',
+    description='Get all roles (base path)',
+    response_model=List[RoleModelResponse]
+)
+async def get_roles_base(request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE):
+    """Convenience alias for GET /platform/role/all to support clients/tests
+    that expect listing at the base collection path.
+    """
+    return await get_roles(request, page, page_size)

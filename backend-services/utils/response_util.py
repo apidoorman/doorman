@@ -51,18 +51,32 @@ def process_rest_response(response):
     try:
         strict = os.getenv('STRICT_RESPONSE_ENVELOPE', 'false').lower() == 'true'
 
-        if 200 <= int(response.status_code) < 300:
+        ok = 200 <= int(response.status_code) < 300
+        if ok:
             if getattr(response, 'response', None) is not None:
                 if not strict:
                     content = response.response
+                    http_status = response.status_code
                 else:
                     content = _envelope({'response': response.response}, response.status_code)
                     _add_token_compat(content, response.response)
+                    http_status = 200
             elif response.message:
                 content = {'message': response.message} if not strict else _envelope({'message': response.message}, response.status_code)
+                http_status = response.status_code if not strict else 200
             else:
                 content = {} if not strict else _envelope({}, response.status_code)
-            return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
+                http_status = response.status_code if not strict else 200
+            resp = JSONResponse(content=content, status_code=http_status, headers=_normalize_headers(response.response_headers))
+            try:
+                # Ensure Content-Length is set for downstream metrics/bandwidth accounting
+                blen = len(getattr(resp, 'body', b'') or b'')
+                if blen > 0:
+                    resp.headers['Content-Length'] = str(blen)
+                    resp.headers['X-Body-Length'] = str(blen)
+            except Exception:
+                pass
+            return resp
 
         err_payload = {}
         if getattr(response, 'error_code', None):
@@ -77,7 +91,16 @@ def process_rest_response(response):
             err_payload = {'error_message': 'Request failed'}
 
         content = err_payload if not strict else _envelope(err_payload, response.status_code)
-        return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
+        http_status = response.status_code if not strict else 200
+        resp = JSONResponse(content=content, status_code=http_status, headers=_normalize_headers(response.response_headers))
+        try:
+            blen = len(getattr(resp, 'body', b'') or b'')
+            if blen > 0:
+                resp.headers['Content-Length'] = str(blen)
+                resp.headers['X-Body-Length'] = str(blen)
+        except Exception:
+            pass
+        return resp
     except Exception as e:
         logger.error(f'An error occurred while processing the response: {e}')
         return JSONResponse(content={'error_message': 'Unable to process response'}, status_code=500)
@@ -124,12 +147,30 @@ def process_response(response, type):
             strict = os.getenv('STRICT_RESPONSE_ENVELOPE', 'false').lower() == 'true'
             if response.status_code == 200:
                 content = response.response if not strict else _envelope({'response': response.response}, response.status_code)
-                return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
+                code = response.status_code if not strict else 200
+                resp = JSONResponse(content=content, status_code=code, headers=_normalize_headers(response.response_headers))
+                try:
+                    blen = len(getattr(resp, 'body', b'') or b'')
+                    if blen > 0:
+                        resp.headers['Content-Length'] = str(blen)
+                        resp.headers['X-Body-Length'] = str(blen)
+                except Exception:
+                    pass
+                return resp
             else:
                 content = {'error_code': response.error_code, 'error_message': response.error_message}
                 if strict:
                     content = _envelope(content, response.status_code)
-                return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
+                code = response.status_code if not strict else 200
+                resp = JSONResponse(content=content, status_code=code, headers=_normalize_headers(response.response_headers))
+                try:
+                    blen = len(getattr(resp, 'body', b'') or b'')
+                    if blen > 0:
+                        resp.headers['Content-Length'] = str(blen)
+                        resp.headers['X-Body-Length'] = str(blen)
+                except Exception:
+                    pass
+                return resp
         except Exception as e:
             logger.error(f'An error occurred while processing the GraphQL response: {e}')
             return JSONResponse(content={'error': 'Unable to process GraphQL response'}, status_code=500)
@@ -138,12 +179,14 @@ def process_response(response, type):
             strict = os.getenv('STRICT_RESPONSE_ENVELOPE', 'false').lower() == 'true'
             if response.status_code == 200:
                 content = response.response if not strict else _envelope({'response': response.response}, response.status_code)
-                return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
+                code = response.status_code if not strict else 200
+                return JSONResponse(content=content, status_code=code, headers=_normalize_headers(response.response_headers))
             else:
                 content = {'error_code': response.error_code, 'error_message': response.error_message}
                 if strict:
                     content = _envelope(content, response.status_code)
-                return JSONResponse(content=content, status_code=response.status_code, headers=_normalize_headers(response.response_headers))
+                code = response.status_code if not strict else 200
+                return JSONResponse(content=content, status_code=code, headers=_normalize_headers(response.response_headers))
         except Exception as e:
             logger.error(f'An error occurred while processing the gRPC response: {e}')
             return JSONResponse(content={'error': 'Unable to process gRPC response'}, status_code=500)
