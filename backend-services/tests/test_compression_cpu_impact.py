@@ -303,8 +303,8 @@ async def test_two_vcpu_capacity_analysis():
 
         # Transfer limits
         avg_transfer_per_request = (total_bytes_uncompressed + total_bytes_compressed) / 2  # In + Out
-        monthly_requests_at_500gb = (500 * 1024 * 1024 * 1024) / avg_transfer_per_request
-        monthly_rps_limit = monthly_requests_at_500gb / (30 * 24 * 60 * 60)
+        monthly_requests_at_1tb = (1000 * 1024 * 1024 * 1024) / avg_transfer_per_request
+        monthly_rps_limit = monthly_requests_at_1tb / (30 * 24 * 60 * 60)
 
         compression_ratio = (1 - total_bytes_compressed / total_bytes_uncompressed) * 100
 
@@ -314,7 +314,7 @@ async def test_two_vcpu_capacity_analysis():
         print(f"  Compression ratio:          {compression_ratio:.1f}%")
         print(f"  Transfer per request:       {avg_transfer_per_request:.0f} bytes (req+resp)")
         print(f"  Max RPS (transfer-limited): {monthly_rps_limit:.1f} RPS")
-        print(f"  Monthly capacity (500GB):   {monthly_requests_at_500gb/1_000_000:.1f}M requests")
+        print(f"  Monthly capacity (1TB):   {monthly_requests_at_1tb/1_000_000:.1f}M requests")
 
         if monthly_rps_limit < realistic_rps:
             print(f"  ⚠️  BOTTLENECK: Transfer (CPU can handle {realistic_rps:.1f} RPS)")
