@@ -20,8 +20,18 @@ Local development uses convenient defaults that are **not secure for production*
 git clone https://github.com/apidoorman/doorman.git
 cd doorman
 
-# Start with Docker Compose
-docker compose up --build
+# Build the image
+docker build -t doorman:latest .
+
+# First-time env: copy and edit secrets
+cp .env.example .env
+# Edit .env and set DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
+
+# Run the container (backend 3001, web 3000)
+docker run --rm --name doorman \
+  -p 3001:3001 -p 3000:3000 \
+  --env-file .env \
+  doorman:latest
 ```
 
 **Services will be available at:**
@@ -30,7 +40,7 @@ docker compose up --build
 
 ### 2. Configure Environment Variables
 
-Create a `.env` file in the `backend-services/` directory:
+Create or edit the `.env` at the repo root (used by the Docker image and backend):
 
 ```bash
 # Admin credentials (REQUIRED - change these!)
@@ -68,7 +78,7 @@ HTTPS_ONLY=False  # Set to True in production
 COOKIE_DOMAIN=localhost
 
 # Application settings
-PORT=5001
+PORT=3001
 THREADS=4
 DEV_RELOAD=False
 SSL_CERTFILE=./certs/localhost.crt

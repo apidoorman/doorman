@@ -25,7 +25,7 @@ A lightweight, Python-based API gateway for managing REST, SOAP, GraphQL, gRPC, 
 
 ### Prerequisites
 - Docker installed
-- Environment file (`.env`) at repo root (use `./backend-services/.env.example` as template)
+- Environment file (`.env`) at repo root (use `./.env.example` as template)
 
 ### Run with Docker
 
@@ -33,7 +33,12 @@ A lightweight, Python-based API gateway for managing REST, SOAP, GraphQL, gRPC, 
 # Build the image
 docker build -t doorman:latest .
 
-# Run the container
+# Prepare env (first time)
+cp .env.example .env
+# Edit .env and set at least: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
+# The example defaults backend PORT to 3001 to match the image.
+
+# Run the container (backend:3001, web:3000)
 docker run --rm --name doorman \
   -p 3001:3001 -p 3000:3000 \
   --env-file .env \
@@ -65,12 +70,13 @@ docker stop doorman
 ### Required Environment Variables
 - `DOORMAN_ADMIN_EMAIL`: Admin user email
 - `DOORMAN_ADMIN_PASSWORD`: Admin password
-- `JWT_SECRET_KEY`: Secret key for JWT tokens
+- `JWT_SECRET_KEY`: Secret key for JWT tokens (32+ chars)
 
 ### High Availability Setup
 For production/HA environments:
 - Set `MEM_OR_EXTERNAL=REDIS`
 - Configure Redis connection details in `.env`
+- Use MongoDB replica set for persistence (`MONGO_DB_HOSTS`, `MONGO_REPLICA_SET_NAME`)
 
 ### Custom Ports
 
@@ -114,6 +120,17 @@ DOORMAN_IN_DOCKER=1 make live
 ```
 
 This configures test servers to use `host.docker.internal` (Mac/Windows) or `172.17.0.1` (Linux).
+
+## Documentation
+
+- User docs live in `user-docs/` with:
+  - `01-getting-started.md` for setup and first API
+  - `02-configuration.md` for environment variables
+  - `03-security.md` for hardening
+  - `04-api-workflows.md` for end-to-end examples
+  - `05-operations.md` for production ops and runbooks
+  - `06-tools.md` for diagnostics and the CORS checker
+
 
 ## Repository Structure
 
