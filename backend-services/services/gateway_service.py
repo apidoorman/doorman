@@ -138,6 +138,26 @@ class GatewayService:
                 origin_allowed = True
             elif origin and origin in allow_origins:
                 origin_allowed = True
+            else:
+                # Support simple wildcard subdomain patterns: https://*.example.com
+                for entry in allow_origins:
+                    e = (entry or '').strip()
+                    if e.startswith('http://*.') or e.startswith('https://*.'):
+                        try:
+                            scheme, rest = e.split('://', 1)
+                            host_suffix = rest[1:]  # drop the leading '*'
+                            if '://' in origin:
+                                o_scheme, o_host = origin.split('://', 1)
+                            else:
+                                o_scheme, o_host = 'https', origin
+                            if o_scheme != scheme:
+                                continue
+                            # Ensure at least one additional subdomain label exists
+                            if o_host.endswith(host_suffix) and o_host.count('.') >= host_suffix.count('.') + 1:
+                                origin_allowed = True
+                                break
+                        except Exception:
+                            continue
 
             method_allowed = True if not req_method else (req_method in allow_methods)
 

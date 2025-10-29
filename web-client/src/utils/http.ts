@@ -7,6 +7,7 @@ export function getCookie(name: string): string | null {
 export async function fetchJson<T = any>(url: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
     ...(init.headers as any)
   }
   const csrf = getCookie('csrf_token')

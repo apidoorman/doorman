@@ -589,6 +589,57 @@ def _env_cors_config():
         'headers': headers,
     }
 
+def _origin_matches_allowed(origin: str | None, cfg: dict) -> bool:
+    """Return True if the Origin matches configured allowed origins.
+
+    Supports:
+    - Exact matches (e.g., https://app.example.com)
+    - Subdomain globs using a single leading wildcard (e.g., https://*.example.com)
+    - When CORS_STRICT=false and '*' is present, allow any origin (development only)
+    """
+    try:
+        if not origin:
+            return False
+
+        strict = os.getenv('CORS_STRICT', 'false').lower() == 'true'
+        allowed = cfg.get('origins') or []
+        safe = cfg.get('safe_origins') or []
+
+        # Development convenience: wildcard allowed only when not strict
+        if not strict and any(o.strip() == '*' for o in allowed):
+            return True
+
+        # Exact allow list (preferred)
+        if origin in safe or origin in allowed:
+            return True
+
+        # Simple wildcard subdomain support: https://*.example.com
+        # We only support a single leading '*' before a dot.
+        # Convert pattern to suffix check.
+        for entry in allowed:
+            e = (entry or '').strip()
+            if not e:
+                continue
+            if e.startswith('http://*.') or e.startswith('https://*.'):
+                # Split scheme and host suffix
+                try:
+                    scheme, rest = e.split('://', 1)
+                    host_suffix = rest[1:]  # drop the leading '*'
+                    if '://' in origin:
+                        o_scheme, o_host = origin.split('://', 1)
+                    else:
+                        # Fallback: assume https
+                        o_scheme, o_host = 'https', origin
+                    if o_scheme != scheme:
+                        continue
+                    if o_host.endswith(host_suffix) and o_host.count('.') >= host_suffix.count('.') + 1:
+                        return True
+                except Exception:
+                    continue
+        return False
+    except Exception:
+        return False
+
 @doorman.middleware('http')
 async def platform_cors(request: Request, call_next):
     try:
@@ -597,11 +648,7 @@ async def platform_cors(request: Request, call_next):
             if path.startswith('/platform/'):
                 cfg = _env_cors_config()
                 origin = request.headers.get('origin') or request.headers.get('Origin')
-                strict = os.getenv('CORS_STRICT', 'false').lower() == 'true'
-                origin_allowed = bool(origin) and (
-                    origin in (cfg.get('safe_origins') or [])
-                    or ('*' in (cfg.get('origins') or []) and not strict)
-                )
+                origin_allowed = _origin_matches_allowed(origin, cfg)
 
                 if request.method.upper() == 'OPTIONS':
                     from fastapi.responses import Response as _Resp
@@ -917,7 +964,7 @@ class PlatformCORSMiddleware:
             except Exception:
                 pass
             origin = hdrs.get('origin')
-            origin_allowed = bool(origin) and (origin in cfg['safe_origins'] or ('*' in cfg['origins'] and not (os.getenv('CORS_STRICT', 'false').lower() == 'true')))
+            origin_allowed = _origin_matches_allowed(origin, cfg)
 
             if str(scope.get('method', '')).upper() == 'OPTIONS':
                 headers = []
