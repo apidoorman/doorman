@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { SERVER_URL } from '@/utils/config'
-import { postJson } from '@/utils/api'
+import { postJson, getJson } from '@/utils/api'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -41,16 +41,21 @@ const LoginPage = () => {
         return
       }
       try {
-        const me = await fetch(`${SERVER_URL}/platform/user/me`, { credentials: 'include' })
-        const meJson = await me.json().catch(() => ({}))
-        const meData = meJson && meJson.response ? meJson.response : meJson
-        if (!me.ok || !meData || meData.ui_access !== true) {
+        const meData: any = await getJson(`${SERVER_URL}/platform/user/me`)
+        const isSuperAdmin = meData && (meData.username === 'admin' || meData.role === 'admin')
+        if (!meData || (!isSuperAdmin && meData.ui_access !== true)) {
           setErrorMessage('Your account does not have UI access. Contact an administrator.')
           try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
           setIsLoading(false)
           return
         }
-      } catch {}
+      } catch (e: any) {
+        // If we cannot fetch account details, surface a clearer error
+        setErrorMessage(e?.message || 'Unable to verify account access. Please try again.')
+        try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
+        setIsLoading(false)
+        return
+      }
       await checkAuth()
       router.push('/dashboard')
     } catch (error) {
