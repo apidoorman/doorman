@@ -1,15 +1,36 @@
 venv
+
+# VCS and meta
+.git
+.github
+.claude
+
 # Ignore all node_modules everywhere to keep context slim
 node_modules
 **/node_modules
 
+# Python caches and test artifacts
 **/__pycache__
 **/.pytest_cache
-**/.DS_Store
 *.pyc
 *.pyo
 *.pyd
+
+# Logs
 *.log
+backend-services/*.log
+backend-services/platform-logs
+
+# Large/unnecessary backend dirs
+backend-services/generated
+backend-services/live-tests
+backend-services/tests
+backend-services/venv
+
+# macOS and editor junk
+**/.DS_Store
+.idea
+.vscode
 
 # Ignore all Next.js build artifacts entirely
 .next
@@ -17,14 +38,25 @@ node_modules
 web-client/.next
 web-client/.next/cache
 web-client/.next/trace
+web-client/.turbo
+web-client/.vercel
+web-client/.cache
+web-client/dist
+web-client/out
 
 # PIDs and generated artifacts
 uvicorn.pid
 doorman.pid
 backend-services/doorman.pid
-backend-services/generated
 backend-services/logs
+
+# Docs and ops not needed in image
+user-docs
+load-tests
+ops
 
 # Local env and production env files
 web-client/.env.local
 .env
+.env.*
+!.env.example

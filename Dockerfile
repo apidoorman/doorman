@@ -21,11 +21,20 @@ COPY backend-services/requirements.txt /app/backend-services/requirements.txt
 RUN python -m pip install --upgrade pip \
     && pip install -r /app/backend-services/requirements.txt
 
-# Copy full repo
-COPY . /app
+# Prepare web client dependencies separately for better caching
+WORKDIR /app/web-client
+COPY web-client/package*.json ./
+RUN npm ci --include=dev
+
+# Copy backend source only (avoid copying entire repo)
+WORKDIR /app
+COPY backend-services /app/backend-services
+
+# Copy web client sources (excluding node_modules via .dockerignore)
+WORKDIR /app/web-client
+COPY web-client/ .
 
 # Build web client (Next.js)
-WORKDIR /app/web-client
 # Build-time args for frontend env (baked into Next.js bundle)
 ARG NEXT_PUBLIC_SERVER_URL=http://localhost:3001
 ARG NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_SERVER_URL}
@@ -37,8 +46,7 @@ ENV NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL} \
     NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS} \
     NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
-RUN npm ci --include=dev \
-    && npm run build \
+RUN npm run build \
     && npm prune --omit=dev
 
 # Runtime configuration
