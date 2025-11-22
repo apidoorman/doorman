@@ -490,6 +490,9 @@ class GatewayService:
             allowed_headers = api.get('api_allowed_headers') or [] if api else []
             headers = await get_headers(request, allowed_headers)
             headers['X-Request-ID'] = request_id
+            if username:
+                headers['X-User-Email'] = str(username)
+                headers['X-Doorman-User'] = str(username)
             if api and api.get('api_credits_enabled'):
                 ai_token_headers = await credit_util.get_credit_api_header(api.get('api_credit_group'))
                 if ai_token_headers:

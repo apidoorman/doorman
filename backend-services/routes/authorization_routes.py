@@ -19,6 +19,7 @@ from utils.auth_blacklist import TimedHeap, jwt_blacklist, revoke_all_for_user, 
 from utils.role_util import platform_role_required_bool
 from utils.role_util import is_admin_user
 from models.update_user_model import UpdateUserModel
+from models.create_user_model import CreateUserModel
 from utils.limit_throttle_util import limit_by_ip
 
 authorization_router = APIRouter()
@@ -216,6 +217,92 @@ async def authorization(request: Request):
             error_code='GTW999',
             error_message='An unexpected error occurred'
             ))
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+"""
+Register new user
+
+Request:
+{}
+Response:
+{}
+"""
+
+@authorization_router.post('/authorization/register',
+    description='Register new user',
+    response_model=ResponseModel,
+    responses={
+        200: {
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'message': 'User created successfully'
+                    }
+                }
+            }
+        }
+    }
+)
+
+async def register(request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        # Rate limit registration to prevent abuse
+        reg_limit = int(os.getenv('REGISTER_IP_RATE_LIMIT', '5'))
+        reg_window = int(os.getenv('REGISTER_IP_RATE_WINDOW', '3600'))
+        rate_limit_info = await limit_by_ip(request, limit=reg_limit, window=reg_window)
+
+        logger.info(f'{request_id} | Register request from: {request.client.host}:{request.client.port}')
+        
+        try:
+            data = await request.json()
+        except Exception:
+            return respond_rest(ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='AUTH004',
+                error_message='Invalid JSON payload'
+            ))
+            
+        # Validate required fields
+        if not data.get('email') or not data.get('password'):
+            return respond_rest(ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='AUTH001',
+                error_message='Missing email or password'
+            ))
+
+        # Create user model
+        # Default to 'user' role and active=True
+        user_data = CreateUserModel(
+            username=data.get('email').split('@')[0], # Simple username derivation
+            email=data.get('email'),
+            password=data.get('password'),
+            role='user',
+            active=True
+        )
+
+        # Check if user exists (UserService.create_user handles this but we want clean error)
+        # Actually UserService.create_user will return error if exists.
+        
+        result = await UserService.create_user(user_data, request_id)
+        
+        # If successful, we could auto-login, but for now just return success
+        return respond_rest(result)
+
+    except Exception as e:
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={'request_id': request_id},
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
+        ))
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')

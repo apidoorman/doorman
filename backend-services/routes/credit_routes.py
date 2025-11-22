@@ -424,3 +424,71 @@ async def get_credits(username: str, request: Request):
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+"""
+Rotate API key for a user
+
+Request:
+{}
+Response:
+{}
+"""
+
+@credit_router.post('/rotate-key',
+    description='Rotate API key for the authenticated user',
+    response_model=ResponseModel,
+    responses={
+        200: {
+            'description': 'Successful Response',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'api_key': '******************'
+                    }
+                }
+            }
+        }
+    }
+)
+
+async def rotate_key(request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        
+        # Get group from body
+        try:
+            body = await request.json()
+            group = body.get('api_credit_group')
+        except Exception:
+            group = None
+
+        if not group:
+            return respond_rest(ResponseModel(
+                status_code=400,
+                error_code='CRD020',
+                error_message='api_credit_group is required'
+            ))
+
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        
+        # No special role required, just authentication
+        
+        return respond_rest(await CreditService.rotate_api_key(username, group, request_id))
+        
+    except Exception as e:
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={
+                'request_id': request_id
+            },
+            error_code='GTW999',
+            error_message='An unexpected error occurred'
+            ))
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
