@@ -169,7 +169,7 @@ class Database:
                 pass
             logger.info('Memory-only mode: Core data initialized (admin user/role/groups)')
             return
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings', 'revocations']
+        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings', 'revocations', 'vault_entries']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
@@ -270,6 +270,10 @@ class Database:
         ])
         self.db.endpoint_validations.create_indexes([
             IndexModel([('endpoint_id', ASCENDING)], unique=True)
+        ])
+        self.db.vault_entries.create_indexes([
+            IndexModel([('username', ASCENDING), ('key_name', ASCENDING)], unique=True),
+            IndexModel([('username', ASCENDING)])
         ])
 
     def is_memory_only(self) -> bool:
@@ -460,12 +464,13 @@ class InMemoryDB:
         self.endpoint_validations = InMemoryCollection('endpoint_validations')
         self.settings = InMemoryCollection('settings')
         self.revocations = InMemoryCollection('revocations')
+        self.vault_entries = InMemoryCollection('vault_entries')
 
     def list_collection_names(self):
         return [
             'users', 'apis', 'endpoints', 'groups', 'roles',
             'subscriptions', 'routings', 'credit_defs', 'user_credits',
-            'endpoint_validations', 'settings', 'revocations'
+            'endpoint_validations', 'settings', 'revocations', 'vault_entries'
         ]
 
     def create_collection(self, name):
@@ -493,6 +498,7 @@ class InMemoryDB:
             'endpoint_validations': coll_docs(self.endpoint_validations),
             'settings': coll_docs(self.settings),
             'revocations': coll_docs(self.revocations),
+            'vault_entries': coll_docs(self.vault_entries),
         }
 
     def load_data(self, data: dict):
@@ -511,6 +517,7 @@ class InMemoryDB:
         load_coll(self.endpoint_validations, data.get('endpoint_validations', []))
         load_coll(self.settings, data.get('settings', []))
         load_coll(self.revocations, data.get('revocations', []))
+        load_coll(self.vault_entries, data.get('vault_entries', []))
 
 database = Database()
 database.initialize_collections()
@@ -530,6 +537,7 @@ if database.memory_only:
     user_credit_collection = db.user_credits
     endpoint_validation_collection = db.endpoint_validations
     revocations_collection = db.revocations
+    vault_entries_collection = db.vault_entries
 else:
     db = database.db
     mongodb_client = database.client
@@ -547,6 +555,10 @@ else:
         revocations_collection = db.revocations
     except Exception:
         revocations_collection = None
+    try:
+        vault_entries_collection = db.vault_entries
+    except Exception:
+        vault_entries_collection = None
 
 def close_database_connections():
     """

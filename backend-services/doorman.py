@@ -82,6 +82,7 @@ from routes.monitor_routes import monitor_router
 from routes.config_routes import config_router
 from routes.tools_routes import tools_router
 from routes.config_hot_reload_routes import config_hot_reload_router
+from routes.vault_routes import vault_router
 from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
 from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
 from utils.metrics_util import metrics_store
@@ -1481,6 +1482,7 @@ doorman.include_router(demo_router, prefix='/platform/demo', tags=['Demo'])
 doorman.include_router(config_router, prefix='/platform', tags=['Config'])
 doorman.include_router(tools_router, prefix='/platform/tools', tags=['Tools'])
 doorman.include_router(config_hot_reload_router, prefix='/platform', tags=['Config Hot Reload'])
+doorman.include_router(vault_router, prefix='/platform/vault', tags=['Vault'])
 
 def start():
     if os.path.exists(PID_FILE):
