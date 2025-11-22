@@ -80,3 +80,4 @@ backend-services/routes/proto/*
 .production.env
 .coverage
 coverage_html/
+doorman.code-workspace

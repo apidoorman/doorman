@@ -7,6 +7,7 @@ See https://github.com/apidoorman/doorman for more information
 from pymongo.errors import PyMongoError
 import logging
 from typing import Optional
+import secrets
 
 from models.response_model import ResponseModel
 from models.credit_model import CreditModel
@@ -299,3 +300,43 @@ class CreditService:
         except PyMongoError as e:
             logger.error(request_id + f' | Get user credits failed with database error: {str(e)}')
             return ResponseModel(status_code=500, error_code='CRD018', error_message='Database error occurred while retrieving user credits').dict()
+
+    @staticmethod
+    async def rotate_api_key(username: str, group: str, request_id):
+        logger.info(request_id + f' | Rotating API key for user: {username}, group: {group}')
+        try:
+            doc = await db_find_one(user_credit_collection, {'username': username})
+            if not doc:
+                # Create if not exists? Or error?
+                # For rotation, we expect it to exist, or at least the user to exist.
+                # But maybe we can create the credit entry if it's missing.
+                # Let's error if not found for now, or create empty.
+                doc = {'username': username, 'users_credits': {}}
+            
+            users_credits = doc.get('users_credits') or {}
+            group_credits = users_credits.get(group) or {}
+            
+            # Generate new key
+            new_key = secrets.token_urlsafe(32)
+            encrypted_key = encrypt_value(new_key)
+            
+            # Update group credits
+            # Preserve other fields in group_credits (like available_credits)
+            if isinstance(group_credits, dict):
+                group_credits['user_api_key'] = encrypted_key
+            else:
+                # Should be a dict, but if it was somehow not, reset it
+                group_credits = {'user_api_key': encrypted_key, 'available_credits': 0, 'tier_name': 'default'}
+
+            users_credits[group] = group_credits
+            
+            if doc.get('_id'):
+                await db_update_one(user_credit_collection, {'username': username}, {'$set': {'users_credits': users_credits}})
+            else:
+                await db_insert_one(user_credit_collection, {'username': username, 'users_credits': users_credits})
+                
+            return ResponseModel(status_code=200, response={'api_key': new_key}).dict()
+            
+        except PyMongoError as e:
+            logger.error(request_id + f' | Rotate key failed with database error: {str(e)}')
+            return ResponseModel(status_code=500, error_code='CRD019', error_message='Database error occurred while rotating API key').dict()
