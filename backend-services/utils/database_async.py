@@ -78,7 +78,7 @@ class AsyncDatabase:
         collections = [
             'users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions',
             'routings', 'credit_defs', 'user_credits', 'endpoint_validations',
-            'settings', 'revocations'
+            'settings', 'revocations', 'vault_entries'
         ]
 
         existing_collections = await self.db.list_collection_names()
@@ -224,6 +224,11 @@ class AsyncDatabase:
             IndexModel([('endpoint_id', ASCENDING)], unique=True)
         ])
 
+        await self.db.vault_entries.create_indexes([
+            IndexModel([('username', ASCENDING), ('key_name', ASCENDING)], unique=True),
+            IndexModel([('username', ASCENDING)])
+        ])
+
     def is_memory_only(self) -> bool:
         """Check if running in memory-only mode."""
         return self.memory_only
@@ -266,6 +271,7 @@ if async_database.memory_only:
     user_credit_collection = db.user_credits
     endpoint_validation_collection = db.endpoint_validations
     revocations_collection = db.revocations
+    vault_entries_collection = db.vault_entries
 else:
     db = async_database.db
     mongodb_client = async_database.client
@@ -283,6 +289,10 @@ else:
         revocations_collection = db.revocations
     except Exception:
         revocations_collection = None
+    try:
+        vault_entries_collection = db.vault_entries
+    except Exception:
+        vault_entries_collection = None
 
 async def close_async_database_connections():
     """Close all async database connections for graceful shutdown."""
