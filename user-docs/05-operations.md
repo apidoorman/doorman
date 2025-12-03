@@ -23,14 +23,9 @@ This guide covers:
 # Environment
 ENV=production
 
-# HTTPS (REQUIRED - at least one must be true)
-HTTPS_ONLY=true          # Doorman terminates TLS
-# OR
-HTTPS_ENABLED=true       # TLS terminated at reverse proxy
-
-# SSL certificates (if HTTPS_ONLY=true)
-SSL_CERTFILE=/certs/fullchain.pem
-SSL_KEYFILE=/certs/privkey.pem
+# HTTPS (REQUIRED)
+# TLS terminated at reverse proxy (Nginx, Traefik, ALB, etc.)
+HTTPS_ONLY=true
 
 # Secrets (REQUIRED - use strong random values)
 JWT_SECRET_KEY=<strong-random-secret-32chars+>
@@ -71,8 +66,7 @@ LOCAL_HOST_IP_BYPASS=false         # Disable localhost bypass
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| `HTTPS_ONLY` | `true` | Set `Secure` flag on cookies |
-| `HTTPS_ENABLED` | `true` | Enforce CSRF double-submit |
+| `HTTPS_ONLY` | `true` | Set `Secure` flag on cookies and enforce CSRF |
 | `CORS_STRICT` | `true` | Disallow wildcard origins with credentials |
 | `LOG_FORMAT` | `json` | JSON log output for log pipelines |
 | `MAX_BODY_SIZE_BYTES` | `1048576` | Reject requests above 1MB |
@@ -119,8 +113,6 @@ services:
     environment:
       ENV: production
       HTTPS_ONLY: "true"
-      SSL_CERTFILE: /certs/fullchain.pem
-      SSL_KEYFILE: /certs/privkey.pem
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY}
@@ -223,7 +215,7 @@ server {
 
 ```bash
 # Backend listens on HTTP but enforces secure behavior
-HTTPS_ENABLED=true  # NOT HTTPS_ONLY
+HTTPS_ONLY=true
 PORT=5001
 
 # Trust proxy headers
@@ -733,8 +725,7 @@ THREADS=4  # Can use multiple workers
 1. **Verify HTTPS config:**
    ```bash
    echo $HTTPS_ONLY
-   echo $HTTPS_ENABLED
-   # At least one must be true for CSRF
+   # Must be true for CSRF
    ```
 
 2. **Check client implementation:**
@@ -963,7 +954,7 @@ MAX_MULTIPART_SIZE_BYTES=10485760   # 10MB for file uploads
 Before going live:
 
 - [ ] `ENV=production` set
-- [ ] HTTPS enabled (`HTTPS_ONLY` or `HTTPS_ENABLED`)
+- [ ] HTTPS enabled (`HTTPS_ONLY=true`)
 - [ ] Valid TLS certificates configured
 - [ ] Strong `JWT_SECRET_KEY` set
 - [ ] `TOKEN_ENCRYPTION_KEY` and `MEM_ENCRYPTION_KEY` configured

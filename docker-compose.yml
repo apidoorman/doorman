@@ -1,0 +1,79 @@
+# Doorman API Gateway - Docker Compose
+#
+# Quick Start:
+#   1. Copy .env.example to .env and configure secrets
+#   2. Run: docker compose up
+#
+# With Redis/MongoDB (production):
+#   1. Set MEM_OR_EXTERNAL=REDIS in .env
+#   2. Run: docker compose --profile production up
+
+version: '3.8'
+
+services:
+  doorman:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PORT: ${PORT:-3001}
+        WEB_PORT: ${WEB_PORT:-3000}
+        HTTPS_ONLY: ${HTTPS_ONLY:-false}
+    image: doorman:latest
+    container_name: doorman
+    ports:
+      - "3001:3001"  # Backend API
+      - "3000:3000"  # Web UI
+    env_file:
+      - .env
+    volumes:
+      - ./generated:/app/backend-services/generated
+      - ./logs:/app/backend-services/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f $([ \"$${HTTPS_ONLY:-false}\" = \"true\" ] && echo https || echo http)://localhost:$${PORT:-3001}/platform/monitor/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis - Enable with: docker compose --profile production up
+  redis:
+    image: redis:7-alpine
+    container_name: doorman-redis
+    profiles: ["production"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # MongoDB - Enable with: docker compose --profile production up
+  mongo:
+    image: mongo:7
+    container_name: doorman-mongo
+    profiles: ["production"]
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_DB_USER:-doorman_admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_DB_PASSWORD:-changeme}
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+    command: --replSet rs0 --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  redis-data:
+  mongo-data:

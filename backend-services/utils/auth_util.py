@@ -88,8 +88,8 @@ async def auth_required(request: Request) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail='Unauthorized')
 
-    https_enabled = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
-    if https_enabled:
+    https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+    if https_only:
         csrf_header = request.headers.get('X-CSRF-Token')
         csrf_cookie = request.cookies.get('csrf_token')
         if not await validate_csrf_double_submit(csrf_header, csrf_cookie):

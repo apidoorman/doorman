@@ -1,50 +1,28 @@
 # API Workflows
 
-Real-world examples and end-to-end workflows for publishing and managing APIs through Doorman Gateway.
+End-to-end examples for common API gateway scenarios.
 
-## Overview
-
-This guide walks through common scenarios:
-- Publishing REST APIs with API key injection
-- Client-specific routing
-- Per-user token management
-- GraphQL gateway setup
-- SOAP API configuration
-- Common errors and troubleshooting
-
-Throughout this guide, the **platform API** lives under `/platform/*` and the **runtime gateway** under `/api/*`.
-
-## Conventions
+## Setup
 
 ```bash
-BASE=http://localhost:3001        # Backend URL
-COOKIE=/tmp/doorman.cookies       # Cookie jar path
-```
-
-**Login and check status:**
-```bash
-# Ensure credentials are set in environment
+export BASE=http://localhost:3001
+export COOKIE=/tmp/doorman.cookies
 export DOORMAN_ADMIN_EMAIL="admin@example.com"
 export DOORMAN_ADMIN_PASSWORD="YourStrongPassword123!"
 
-# Login
-curl -s -c "$COOKIE" -H 'Content-Type: application/json' \
+# Login once
+curl -sc "$COOKIE" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$DOORMAN_ADMIN_EMAIL\",\"password\":\"$DOORMAN_ADMIN_PASSWORD\"}" \
   "$BASE/platform/authorization"
-
-# Check status
-curl -s -b "$COOKIE" "$BASE/platform/authorization/status"
 ```
 
 ---
 
-## Workflow 1: Publish a REST API with API Key Injection
+## Workflow 1: REST API with API Key Injection
 
-**Scenario:** Publish `/api/rest/customers/v1/*` backed by `http://httpbin.org`, inject `x-api-key` on outbound calls, and validate request payloads.
+**Goal:** Publish `/api/rest/customers/v1/*` → `http://httpbin.org` with automatic API key injection.
 
-### Step 1: Define a Token Group
-
-Token groups manage API keys for upstream services and credit limits.
+### 1. Create Token Group
 
 ```bash
 curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
@@ -64,13 +42,7 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
   }'
 ```
 
-**What this does:**
-- Creates a credit group called `demo-customers`
-- Stores the upstream API key `demo-secret-123`
-- Configures Doorman to inject this key as `x-api-key` header
-- Provides 999,999 credits that reset monthly
-
-### Step 2: Create the API
+### 2. Create API
 
 ```bash
 curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
@@ -89,15 +61,7 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
   }'
 ```
 
-**Key parameters:**
-- `api_name` + `api_version`: Unique identifier for the API
-- `api_servers`: Upstream server pool
-- `api_allowed_headers`: Restrict headers sent to upstream (security)
-- `api_credits_enabled` + `api_credit_group`: Enable credit tracking and API key injection
-
-### Step 3: Add Endpoints
-
-Only endpoints you explicitly add will be accessible through the gateway.
+### 3. Add Endpoints
 
 ```bash
 # GET endpoint
@@ -121,35 +85,7 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
   }'
 ```
 
-### Step 4: Add Request Validation (Optional)
-
-Attach JSON schema validation to endpoints to reject invalid requests before they hit the upstream.
-
-```bash
-# First, get the endpoint_id (via UI or endpoint listing)
-# Then attach validation schema
-
-curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
-  "$BASE/platform/endpoint/endpoint/validation" -d '{
-    "endpoint_id": "<endpoint_id>",
-    "validation_enabled": true,
-    "validation_schema": {
-      "validation_schema": {
-        "user.name": {"required": true, "type": "string", "min": 2},
-        "user.email": {"required": true, "type": "string", "format": "email"}
-      }
-    }
-  }'
-```
-
-**Benefits:**
-- Validation failures return HTTP 400 without hitting upstream
-- Reduces load on backend services
-- Provides consistent error messages
-
-### Step 5: Subscribe Your User
-
-Users must subscribe to an API before they can call it.
+### 4. Subscribe User
 
 ```bash
 curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
@@ -160,41 +96,19 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
   }'
 ```
 
-### Step 6: Call the Gateway
-
-Doorman automatically injects the `x-api-key` header to the upstream service.
+### 5. Test
 
 ```bash
-# GET request
-curl -s -b "$COOKIE" "$BASE/api/rest/customers/v1/get?demo=1"
-
-# POST request (with validation)
-curl -s -b "$COOKIE" -H 'Content-Type: application/json' \
-  -d '{"user": {"name": "Alice", "email": "alice@example.com"}}' \
-  "$BASE/api/rest/customers/v1/post"
+curl -sb "$COOKIE" "$BASE/api/rest/customers/v1/get?demo=1"
 ```
-
-**What happens:**
-1. Doorman validates authentication (cookie)
-2. Checks user subscription to `customers/v1`
-3. Validates request payload against schema (if enabled)
-4. Injects `x-api-key: demo-secret-123` header
-5. Proxies request to `http://httpbin.org/post`
-6. Returns response to client
 
 ---
 
 ## Workflow 2: Client-Specific Routing
 
-**Scenario:** Route different clients to different upstream server pools using a `client-key` header.
+**Goal:** Route clients to different upstream pools via `client-key` header.
 
-**Use cases:**
-- Blue/green deployments
-- Premium tier routing
-- Multi-tenant backends
-- A/B testing
-
-### Step 1: Create Routing Entries
+### 1. Create Routing Entries
 
 ```bash
 # Enterprise client routing
@@ -216,39 +130,23 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
   }'
 ```
 
-### Step 2: Call Gateway with Client Key
+### 2. Test
 
 ```bash
-# Enterprise client (routed to premium pool)
-curl -s -b "$COOKIE" -H 'client-key: enterprise-A' \
-  "$BASE/api/rest/customers/v1/get"
+# Enterprise tier
+curl -sb "$COOKIE" -H 'client-key: enterprise-A' "$BASE/api/rest/customers/v1/get"
 
-# Free tier client (routed to shared pool)
-curl -s -b "$COOKIE" -H 'client-key: free-tier' \
-  "$BASE/api/rest/customers/v1/get"
-
-# No client key (uses default API servers)
-curl -s -b "$COOKIE" \
-  "$BASE/api/rest/customers/v1/get"
+# Free tier
+curl -sb "$COOKIE" -H 'client-key: free-tier' "$BASE/api/rest/customers/v1/get"
 ```
-
-**Server selection precedence:**
-1. **Routing** (client-specific) - Highest priority
-2. **Endpoint-level servers** - Medium priority
-3. **API-level servers** - Fallback
 
 ---
 
 ## Workflow 3: Per-User Token Management
 
-**Scenario:** Track per-user credits for paid APIs and inject user-specific API keys.
+**Goal:** Track per-user credits and inject user-specific API keys.
 
-**Use cases:**
-- SaaS with usage-based billing
-- Freemium models with credit limits
-- Per-customer API key management
-
-### Step 1: Define Token Group
+### 1. Create Token Group
 
 ```bash
 curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
@@ -655,7 +553,7 @@ curl -s -b "$COOKIE" -H 'Content-Type: application/json' -X POST \
 **Solutions:**
 ```bash
 # Ensure HTTPS is enabled
-HTTPS_ONLY=true  # or HTTPS_ENABLED=true
+HTTPS_ONLY=true
 
 # Include CSRF token in request
 curl -s -b "$COOKIE" \

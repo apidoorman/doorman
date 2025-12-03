@@ -127,7 +127,7 @@ async def authorization(request: Request):
         if _secure_env is not None:
             _secure = str(_secure_env).lower() == 'true'
         else:
-            _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+            _secure = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
 
         # Security warning: cookies should be secure in production
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
@@ -655,7 +655,7 @@ async def extended_authorization(request: Request):
         if _secure_env is not None:
             _secure = str(_secure_env).lower() == 'true'
         else:
-            _secure = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true' or os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+            _secure = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
 
         # Security warning: cookies should be secure in production
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):

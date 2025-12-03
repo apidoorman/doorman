@@ -36,18 +36,23 @@ COPY web-client/ .
 
 # Build web client (Next.js)
 # Build-time args for frontend env (baked into Next.js bundle)
-ARG NEXT_PUBLIC_SERVER_URL=http://localhost:3001
-ARG NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_SERVER_URL}
-ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
+# URLs are constructed from PORT, WEB_PORT, and HTTPS_ONLY
+ARG PORT=3001
+ARG WEB_PORT=3000
+ARG HTTPS_ONLY=false
 ARG NEXT_PUBLIC_PROTECTED_USERS=
-ENV NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL} \
-    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
-    NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} \
-    NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS} \
-    NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1
-RUN npm run build \
-    && npm prune --omit=dev
+
+# Construct URLs based on protocol and ports
+RUN PROTOCOL=$([ "$HTTPS_ONLY" = "true" ] && echo "https" || echo "http") && \
+    echo "export NEXT_PUBLIC_SERVER_URL=${PROTOCOL}://localhost:${PORT}" > /tmp/build-env.sh && \
+    echo "export NEXT_PUBLIC_API_URL=${PROTOCOL}://localhost:${PORT}" >> /tmp/build-env.sh && \
+    echo "export NEXT_PUBLIC_APP_URL=${PROTOCOL}://localhost:${WEB_PORT}" >> /tmp/build-env.sh && \
+    echo "export NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS}" >> /tmp/build-env.sh && \
+    echo "export NODE_ENV=production" >> /tmp/build-env.sh && \
+    echo "export NEXT_TELEMETRY_DISABLED=1" >> /tmp/build-env.sh && \
+    . /tmp/build-env.sh && \
+    npm run build && \
+    npm prune --omit=dev
 
 # Runtime configuration
 WORKDIR /app

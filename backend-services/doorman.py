@@ -239,23 +239,11 @@ async def app_lifespan(app: FastAPI):
     try:
         if os.getenv('ENV', '').lower() == 'production':
             https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
-            https_enabled = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true'
-            if not (https_only or https_enabled):
+            if not https_only:
                 raise RuntimeError(
-                    'In production (ENV=production), you must enable HTTPS_ONLY or HTTPS_ENABLED to enforce Secure cookies.'
+                    'In production (ENV=production), you must enable HTTPS_ONLY to enforce Secure cookies and CSRF validation. '
+                    'TLS should be terminated at reverse proxy (Nginx, Traefik, ALB, etc.).'
                 )
-
-            if https_only or https_enabled:
-                cert = os.getenv('SSL_CERTFILE')
-                key = os.getenv('SSL_KEYFILE')
-                if https_only and (not cert or not key):
-                    raise RuntimeError(
-                        'SSL_CERTFILE and SSL_KEYFILE required when HTTPS_ONLY=true'
-                    )
-                if cert and not os.path.exists(cert):
-                    raise RuntimeError(f'SSL certificate not found: {cert}')
-                if key and not os.path.exists(key):
-                    raise RuntimeError(f'SSL private key not found: {key}')
 
             jwt_secret = os.getenv('JWT_SECRET_KEY', '')
             if jwt_secret in ('please-change-me', 'test-secret-key', 'test-secret-key-please-change', ''):
@@ -285,18 +273,7 @@ async def app_lifespan(app: FastAPI):
                         'Redis is essential for shared token revocation and rate limiting in HA deployments.'
                     )
 
-            if os.getenv('CORS_STRICT', 'false').lower() != 'true':
-                raise RuntimeError(
-                    'In production (ENV=production), CORS_STRICT must be true. '
-                    'This prevents wildcard origins with credentials, which is a critical security risk.'
-                )
-
-            allowed_origins = os.getenv('ALLOWED_ORIGINS', '')
-            if '*' in allowed_origins:
-                raise RuntimeError(
-                    'In production (ENV=production), wildcard CORS origins (*) are not allowed. '
-                    'Set ALLOWED_ORIGINS to specific domain(s): https://yourdomain.com'
-                )
+            # Platform CORS removed - CORS is enforced at the API level
 
             token_encryption_key = os.getenv('TOKEN_ENCRYPTION_KEY', '')
             if not token_encryption_key or len(token_encryption_key) < 32:
@@ -555,111 +532,34 @@ domain = os.getenv('COOKIE_DOMAIN', 'localhost')
 
 # - API gateway routes (/api/*): CORS controlled per-API in gateway routes/services
 
-def _env_cors_config():
-    origins_env = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000')
-    if not (origins_env or '').strip():
-        origins_env = 'http://localhost:3000'
-    origins = [o.strip() for o in origins_env.split(',') if o.strip()]
-    credentials = os.getenv('ALLOW_CREDENTIALS', 'true').lower() == 'true'
-    methods_env = os.getenv('ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD')
-    if not (methods_env or '').strip():
-        methods_env = 'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD'
-    methods = [m.strip().upper() for m in methods_env.split(',') if m.strip()]
-    if 'OPTIONS' not in methods:
-        methods.append('OPTIONS')
-    headers_env = os.getenv('ALLOW_HEADERS', '*')
-    if not (headers_env or '').strip():
-        headers_env = '*'
-    raw_headers = [h.strip() for h in headers_env.split(',') if h.strip()]
-    if any(h == '*' for h in raw_headers):
-        headers = ['Accept', 'Content-Type', 'X-CSRF-Token', 'Authorization']
-    else:
-        headers = raw_headers
-    def _safe(origins, credentials):
-        if credentials and any(o.strip() == '*' for o in origins):
-            return ['http://localhost', 'http://localhost:3000']
-        if os.getenv('CORS_STRICT', 'false').lower() == 'true':
-            safe = [o for o in origins if o.strip() != '*']
-            return safe if safe else ['http://localhost', 'http://localhost:3000']
-        return origins
+def _platform_cors_config():
+    """Platform CORS accepts all origins - API-level CORS is enforced in gateway routes."""
     return {
-        'origins': origins,
-        'safe_origins': _safe(origins, credentials),
-        'credentials': credentials,
-        'methods': methods,
-        'headers': headers,
+        'credentials': True,
+        'methods': ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+        'headers': ['Accept', 'Content-Type', 'X-CSRF-Token', 'Authorization', 'X-Request-ID', 'X-Requested-With'],
     }
 
-def _origin_matches_allowed(origin: str | None, cfg: dict) -> bool:
-    """Return True if the Origin matches configured allowed origins.
-
-    Supports:
-    - Exact matches (e.g., https://app.example.com)
-    - Subdomain globs using a single leading wildcard (e.g., https://*.example.com)
-    - When CORS_STRICT=false and '*' is present, allow any origin (development only)
-    """
-    try:
-        if not origin:
-            return False
-
-        strict = os.getenv('CORS_STRICT', 'false').lower() == 'true'
-        allowed = cfg.get('origins') or []
-        safe = cfg.get('safe_origins') or []
-
-        # Development convenience: wildcard allowed only when not strict
-        if not strict and any(o.strip() == '*' for o in allowed):
-            return True
-
-        # Exact allow list (preferred)
-        if origin in safe or origin in allowed:
-            return True
-
-        # Simple wildcard subdomain support: https://*.example.com
-        # We only support a single leading '*' before a dot.
-        # Convert pattern to suffix check.
-        for entry in allowed:
-            e = (entry or '').strip()
-            if not e:
-                continue
-            if e.startswith('http://*.') or e.startswith('https://*.'):
-                # Split scheme and host suffix
-                try:
-                    scheme, rest = e.split('://', 1)
-                    host_suffix = rest[1:]  # drop the leading '*'
-                    if '://' in origin:
-                        o_scheme, o_host = origin.split('://', 1)
-                    else:
-                        # Fallback: assume https
-                        o_scheme, o_host = 'https', origin
-                    if o_scheme != scheme:
-                        continue
-                    if o_host.endswith(host_suffix) and o_host.count('.') >= host_suffix.count('.') + 1:
-                        return True
-                except Exception:
-                    continue
-        return False
-    except Exception:
-        return False
 
 @doorman.middleware('http')
 async def platform_cors(request: Request, call_next):
+    """Platform CORS middleware - accepts all origins (API-level CORS enforced in gateway)."""
     try:
         if os.getenv('DISABLE_PLATFORM_CORS_ASGI', 'false').lower() in ('1','true','yes','on'):
             path = str(request.url.path)
             if path.startswith('/platform/'):
-                cfg = _env_cors_config()
+                cfg = _platform_cors_config()
                 origin = request.headers.get('origin') or request.headers.get('Origin')
-                origin_allowed = _origin_matches_allowed(origin, cfg)
 
                 if request.method.upper() == 'OPTIONS':
                     from fastapi.responses import Response as _Resp
                     headers = {}
-                    if origin and origin_allowed:
+                    if origin:
                         headers['Access-Control-Allow-Origin'] = origin
                         headers['Vary'] = 'Origin'
                     headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
                     headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
-                    headers['Access-Control-Allow-Credentials'] = 'true' if cfg['credentials'] else 'false'
+                    headers['Access-Control-Allow-Credentials'] = 'true'
                     rid = request.headers.get('x-request-id') or request.headers.get('X-Request-ID')
                     if rid:
                         headers['request_id'] = rid
@@ -667,12 +567,10 @@ async def platform_cors(request: Request, call_next):
 
                 response = await call_next(request)
                 try:
-                    response.headers['Access-Control-Allow-Credentials'] = 'true' if cfg['credentials'] else 'false'
-                    if origin and origin_allowed:
+                    response.headers['Access-Control-Allow-Credentials'] = 'true'
+                    if origin:
                         response.headers['Access-Control-Allow-Origin'] = origin
-                        # Normalize Vary to exactly 'Origin'
                         try:
-                            # Remove any pre-existing Vary to avoid appended values
                             _ = response.headers.pop('Vary', None)
                         except Exception:
                             pass
@@ -936,10 +834,9 @@ async def body_size_limit(request: Request, call_next):
         raise
 
 class PlatformCORSMiddleware:
-    """ASGI-level CORS for /platform/* routes to avoid BaseHTTPMiddleware pitfalls.
-
-    - Handles OPTIONS preflight directly
-    - Injects CORS headers on response start for matching origins
+    """ASGI-level CORS for /platform/* routes - accepts all origins.
+    
+    API-level CORS is enforced in gateway routes.
     """
     def __init__(self, app):
         self.app = app
@@ -954,10 +851,10 @@ class PlatformCORSMiddleware:
             if scope.get('type') != 'http':
                 return await self.app(scope, receive, send)
             path = scope.get('path') or ''
-            if not str(path).startswith('/platform/'):
+            if not (str(path).startswith('/platform/') or str(path).startswith('/api/')):
                 return await self.app(scope, receive, send)
 
-            cfg = _env_cors_config()
+            cfg = _platform_cors_config()
             hdrs = {}
             try:
                 for k, v in (scope.get('headers') or []):
@@ -965,16 +862,15 @@ class PlatformCORSMiddleware:
             except Exception:
                 pass
             origin = hdrs.get('origin')
-            origin_allowed = _origin_matches_allowed(origin, cfg)
 
             if str(scope.get('method', '')).upper() == 'OPTIONS':
                 headers = []
-                if origin and origin_allowed:
+                if origin:
                     headers.append((b'access-control-allow-origin', origin.encode('latin1')))
                     headers.append((b'vary', b'Origin'))
                 headers.append((b'access-control-allow-methods', ', '.join(cfg['methods']).encode('latin1')))
                 headers.append((b'access-control-allow-headers', ', '.join(cfg['headers']).encode('latin1')))
-                headers.append((b'access-control-allow-credentials', b'true' if cfg['credentials'] else b'false'))
+                headers.append((b'access-control-allow-credentials', b'true'))
                 rid = hdrs.get('x-request-id')
                 if rid:
                     headers.append((b'request_id', rid.encode('latin1')))
@@ -986,8 +882,8 @@ class PlatformCORSMiddleware:
                 if message.get('type') == 'http.response.start':
                     headers = list(message.get('headers') or [])
                     try:
-                        headers.append((b'access-control-allow-credentials', b'true' if cfg['credentials'] else b'false'))
-                        if origin and origin_allowed:
+                        headers.append((b'access-control-allow-credentials', b'true'))
+                        if origin:
                             headers.append((b'access-control-allow-origin', origin.encode('latin1')))
                             headers.append((b'vary', b'Origin'))
                     except Exception:
@@ -1559,6 +1455,7 @@ def run():
             'Set THREADS=1 for single-process memory mode or switch to MEM_OR_EXTERNAL=REDIS for multi-worker.'
         )
     gateway_logger.info(f'Started doorman with {num_threads} threads on port {server_port}')
+    gateway_logger.info('TLS termination should be handled at reverse proxy (Nginx, Traefik, ALB, etc.)')
     uvicorn.run(
         'doorman:doorman',
         host='0.0.0.0',
@@ -1566,9 +1463,7 @@ def run():
         reload=os.getenv('DEV_RELOAD', 'false').lower() == 'true',
         reload_excludes=['venv/*', 'logs/*'],
         workers=num_threads,
-        log_level='info',
-        ssl_certfile=os.getenv('SSL_CERTFILE') if os.getenv('HTTPS_ONLY', 'false').lower() == 'true' else None,
-        ssl_keyfile=os.getenv('SSL_KEYFILE') if os.getenv('HTTPS_ONLY', 'false').lower() == 'true' else None
+        log_level='info'
     )
 
 def main():
@@ -1585,6 +1480,51 @@ def main():
         gateway_logger.error(f'Failed to start server: {str(e)}')
         raise
 
+def seed_command():
+    """Run the demo seeder from command line"""
+    import argparse
+    from utils.demo_seed_util import run_seed
+    
+    parser = argparse.ArgumentParser(description='Seed the database with demo data')
+    parser.add_argument('--users', type=int, default=60, help='Number of users to create (default: 60)')
+    parser.add_argument('--apis', type=int, default=20, help='Number of APIs to create (default: 20)')
+    parser.add_argument('--endpoints', type=int, default=6, help='Number of endpoints per API (default: 6)')
+    parser.add_argument('--groups', type=int, default=10, help='Number of groups to create (default: 10)')
+    parser.add_argument('--protos', type=int, default=6, help='Number of proto files to create (default: 6)')
+    parser.add_argument('--logs', type=int, default=2000, help='Number of log entries to create (default: 2000)')
+    parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducibility (optional)')
+    
+    args = parser.parse_args(sys.argv[2:])  # Skip 'doorman.py' and 'seed'
+    
+    print(f"Starting demo seed with:")
+    print(f"  Users: {args.users}")
+    print(f"  APIs: {args.apis}")
+    print(f"  Endpoints per API: {args.endpoints}")
+    print(f"  Groups: {args.groups}")
+    print(f"  Protos: {args.protos}")
+    print(f"  Logs: {args.logs}")
+    if args.seed is not None:
+        print(f"  Random Seed: {args.seed}")
+    print()
+    
+    try:
+        result = run_seed(
+            users=args.users,
+            apis=args.apis,
+            endpoints=args.endpoints,
+            groups=args.groups,
+            protos=args.protos,
+            logs=args.logs,
+            seed=args.seed
+        )
+        print("\n✓ Seeding completed successfully!")
+        print(f"Result: {result}")
+    except Exception as e:
+        print(f"\n✗ Seeding failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'stop':
         stop()
@@ -1594,5 +1534,7 @@ if __name__ == '__main__':
         restart()
     elif len(sys.argv) > 1 and sys.argv[1] == 'run':
         run()
+    elif len(sys.argv) > 1 and sys.argv[1] == 'seed':
+        seed_command()
     else:
         main()

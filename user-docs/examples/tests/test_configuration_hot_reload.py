@@ -417,7 +417,6 @@ def test_configuration_hot_reload():
     print("  Not Hot-Reloadable:")
     print("    ✗ Database connection strings (MONGO_URI, REDIS_HOST)")
     print("    ✗ JWT secret key (JWT_SECRET_KEY)")
-    print("    ✗ SSL certificates (SSL_CERTFILE, SSL_KEYFILE)")
     print("    ✗ Worker count (THREADS)")
     print("    ✗ Core security settings (HTTPS_ONLY)")
     print()

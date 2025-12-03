@@ -4,7 +4,6 @@ import pytest
 async def test_production_guard_causes_startup_failure_direct(monkeypatch):
     monkeypatch.setenv('ENV', 'production')
     monkeypatch.setenv('HTTPS_ONLY', 'false')
-    monkeypatch.setenv('HTTPS_ENABLED', 'false')
     from doorman import app_lifespan, doorman
     import pytest as _pytest
     with _pytest.raises(RuntimeError):
@@ -15,7 +14,6 @@ async def test_production_guard_causes_startup_failure_direct(monkeypatch):
 async def test_lifespan_failure_raises_with_fresh_app_testclient(monkeypatch):
     monkeypatch.setenv('ENV', 'production')
     monkeypatch.setenv('HTTPS_ONLY', 'false')
-    monkeypatch.setenv('HTTPS_ENABLED', 'false')
 
     from fastapi import FastAPI
     from doorman import app_lifespan
