@@ -95,10 +95,9 @@ const ApiDetailPage = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const toast = useToast()
-  const [useProtobuf, setUseProtobufState] = useState<boolean>(false)
 
-  type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean }
-  const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false })
+  type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean; enabled?: boolean }
+  const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false, enabled: true })
 
   const fetchWithCsrf = async (input: RequestInfo, init: RequestInit = {}) => {
     const csrf = getCookie('csrf_token')
@@ -169,10 +168,6 @@ const ApiDetailPage = () => {
       try {
         const parsedApi = JSON.parse(apiData)
         setApi(parsedApi)
-        try {
-          const { getUseProtobuf } = require('@/utils/proto')
-          setUseProtobufState(getUseProtobuf(parsedApi.api_name, parsedApi.api_version))
-        } catch {}
         setEditData({
           api_name: parsedApi.api_name,
           api_version: parsedApi.api_version,
@@ -209,10 +204,6 @@ const ApiDetailPage = () => {
           const found = (list as any[]).find((a: any) => String(a.api_id) === String(apiId))
           if (found) {
             setApi(found)
-            try {
-              const { getUseProtobuf } = require('@/utils/proto')
-              setUseProtobufState(getUseProtobuf(found.api_name, found.api_version))
-            } catch {}
             setEditData({
               api_name: found.api_name,
               api_version: found.api_version,
@@ -288,6 +279,12 @@ const ApiDetailPage = () => {
       }
     }
     loadEndpoints()
+  }, [api])
+
+  useEffect(() => {
+    if (api) {
+      checkProto()
+    }
   }, [api])
 
   const handleBack = () => {
@@ -371,10 +368,6 @@ const ApiDetailPage = () => {
         setApi(merged as any)
         sessionStorage.setItem('selectedApi', JSON.stringify(merged))
       }
-      try {
-        const { setUseProtobuf } = await import('@/utils/proto')
-        setUseProtobuf(targetName, targetVersion, useProtobuf)
-      } catch {}
       setIsEditing(false)
       setSuccess('API updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -946,37 +939,6 @@ const ApiDetailPage = () => {
                     <p className="text-gray-900 dark:text-white">{api.api_authorization_field_swap || 'None'}</p>
                   )}
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Use Protobuf
-                    <InfoTooltip text="Frontend preference; enables proto-aware UI only. Does not change gateway behavior." />
-                  </label>
-                  {isEditing ? (
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={useProtobuf}
-                        onChange={async (e) => {
-                          const next = e.target.checked
-                          setUseProtobufState(next)
-                          try {
-                            const { setUseProtobuf } = await import('@/utils/proto')
-                            setUseProtobuf(api?.api_name, api?.api_version, next)
-                          } catch {}
-                        }}
-                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                      />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                        Enable proto-based features for this API
-                      </label>
-                    </div>
-                  ) : (
-                    <span className={`badge ${useProtobuf ? 'badge-success' : 'badge-gray'}`}>
-                      {useProtobuf ? 'Enabled' : 'Disabled'}
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
 
@@ -1075,51 +1037,162 @@ const ApiDetailPage = () => {
               </div>
             </div>
 
-            {useProtobuf ? (
-              <div className="card">
-                <div className="card-header">
-                  <h3 className="card-title">Proto</h3>
-                </div>
-                <div className="p-6 space-y-4">
-                  {proto.error && (
-                    <div className="rounded bg-error-50 border border-error-200 p-2 text-error-700 text-sm">{proto.error}</div>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <button className="btn btn-secondary" onClick={checkProto} disabled={proto.loading}> {proto.loading ? 'Checking...' : 'Check Status'} </button>
-                    {proto.exists === true && <span className="text-success-700 dark:text-success-400">Present</span>}
-                    {proto.exists === false && <span className="text-error-700 dark:text-error-400">Missing</span>}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label className="btn btn-secondary">
-                      Upload
-                      <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
-                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'create'); e.currentTarget.value = '' } }} />
-                    </label>
-                    <label className="btn btn-secondary">
-                      Replace
-                      <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
-                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'update'); e.currentTarget.value = '' } }} />
-                    </label>
-                    <button className="btn btn-error" onClick={deleteProto} disabled={proto.working || proto.exists !== true}>Delete</button>
-                    <button className="btn btn-ghost" onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} disabled={!proto.content}>{proto.show ? 'Hide' : 'View'}</button>
-                  </div>
-                  {proto.show && proto.content && (
-                    <pre className="text-xs whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 p-3 rounded max-h-64 overflow-auto">{proto.content}</pre>
-                  )}
-                </div>
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">gRPC Proto Configuration</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage Protocol Buffer definitions for gRPC APIs</p>
               </div>
-            ) : (
-              <div className="card">
-                <div className="card-header">
-                  <h3 className="card-title">Proto</h3>
-                </div>
-                <div className="p-6 space-y-4">
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Protobuf features are disabled for this API. Enable "Use Protobuf" in the Configuration section to upload or manage proto files.
+              <div className="p-6 space-y-4">
+                {/* Enable/Disable Proto - Edit Mode Only */}
+                {isEditing && (
+                  <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <input
+                      type="checkbox"
+                      id="proto_enabled"
+                      checked={proto.enabled ?? true}
+                      onChange={(e) => setProto(prev => ({ ...prev, enabled: e.target.checked }))}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="proto_enabled" className="flex-1 cursor-pointer">
+                      <p className="font-medium text-gray-900 dark:text-white">Enable Proto Support</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Allow gRPC Protocol Buffer file management for this API
+                      </p>
+                    </label>
                   </div>
+                )}
+
+                {/* Status Display - View Mode */}
+                {!isEditing && (
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${proto.exists === true ? 'bg-success-500' : 'bg-gray-400'}`}></div>
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white">Proto File Status</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {proto.loading ? 'Checking...' : proto.exists === true ? 'Proto file is active' : 'No proto file uploaded'}
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      onClick={checkProto} 
+                      disabled={proto.loading}
+                    >
+                      <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Refresh
+                    </button>
+                  </div>
+                )}
+
+                {proto.error && (
+                  <div className="rounded-lg bg-error-50 border border-error-200 p-3 text-error-700 dark:bg-error-900/20 dark:border-error-800 dark:text-error-300">
+                    <div className="flex items-start gap-2">
+                      <svg className="h-5 w-5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-sm">{proto.error}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Proto Actions */}
+                {proto.enabled && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Proto File Management</label>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="btn btn-primary">
+                      <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      {proto.exists ? 'Replace Proto' : 'Upload Proto'}
+                      <input 
+                        type="file" 
+                        accept=".proto,text/plain" 
+                        style={{ display: 'none' }} 
+                        disabled={proto.working}
+                        onChange={async (e) => { 
+                          const f = e.target.files?.[0]; 
+                          if (f) { 
+                            await uploadOrUpdateProto(f, proto.exists ? 'update' : 'create'); 
+                            e.currentTarget.value = '' 
+                          } 
+                        }} 
+                      />
+                    </label>
+                    
+                    {proto.exists && (
+                      <>
+                        <button 
+                          className="btn btn-secondary" 
+                          onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} 
+                          disabled={!proto.content}
+                        >
+                          <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          {proto.show ? 'Hide Content' : 'View Content'}
+                        </button>
+                        
+                        <button 
+                          className="btn btn-error" 
+                          onClick={deleteProto} 
+                          disabled={proto.working}
+                        >
+                          <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete Proto
+                        </button>
+                      </>
+                    )}
+                    
+                    {proto.working && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="spinner"></div>
+                        <span>Processing...</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Upload a .proto file to enable gRPC support for this API. The file will be compiled and validated automatically.
+                  </p>
                 </div>
+                )}
+
+                {!proto.enabled && (
+                  <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-center">
+                    <svg className="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Proto support is currently disabled for this API.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Enable the toggle above to manage proto files.</p>
+                  </div>
+                )}
+
+                {/* Proto Content Viewer */}
+                {proto.show && proto.content && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Proto File Content</label>
+                      <button 
+                        className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        onClick={() => {
+                          navigator.clipboard.writeText(proto.content || '')
+                          toast.success('Proto content copied to clipboard')
+                        }}
+                      >
+                        Copy to clipboard
+                      </button>
+                    </div>
+                    <pre className="text-xs whitespace-pre-wrap bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg max-h-96 overflow-auto border border-gray-700 font-mono">{proto.content}</pre>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             <div className="card">
               <div className="card-header">

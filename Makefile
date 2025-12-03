@@ -1,9 +1,15 @@
 SHELL := /bin/bash
 
-# Configurable envs (can override on CLI or set in backend-services/.env)
-BASE_URL ?= http://localhost:3001
-ADMIN_EMAIL ?= $(shell grep '^DOORMAN_ADMIN_EMAIL=' backend-services/.env 2>/dev/null | cut -d'=' -f2)
-ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' backend-services/.env 2>/dev/null | cut -d'=' -f2)
+# Read configuration from .env files
+PORT ?= $(shell grep '^PORT=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^PORT=' .env 2>/dev/null | cut -d'=' -f2 || echo 3001)
+HTTPS_ONLY ?= $(shell grep '^HTTPS_ONLY=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^HTTPS_ONLY=' .env 2>/dev/null | cut -d'=' -f2 || echo false)
+ADMIN_EMAIL ?= $(shell grep '^DOORMAN_ADMIN_EMAIL=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^DOORMAN_ADMIN_EMAIL=' .env 2>/dev/null | cut -d'=' -f2)
+ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^DOORMAN_ADMIN_PASSWORD=' .env 2>/dev/null | cut -d'=' -f2)
+
+# Construct BASE_URL from PORT and HTTPS_ONLY (can still override on CLI)
+PROTOCOL := $(shell [ "$(HTTPS_ONLY)" = "true" ] && echo "https" || echo "http")
+BASE_URL ?= $(PROTOCOL)://localhost:$(PORT)
+
 # Set to 1 when running tests against Doorman in Docker (affects test server host references)
 DOORMAN_IN_DOCKER ?= 0
 

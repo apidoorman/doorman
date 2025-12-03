@@ -122,7 +122,7 @@ Response:
 {}
 """
 
-@gateway_router.api_route('/caches', methods=['DELETE'],
+@gateway_router.api_route('/caches', methods=['DELETE', 'OPTIONS'],
     description='Clear all caches',
     response_model=ResponseModel,
     dependencies=[

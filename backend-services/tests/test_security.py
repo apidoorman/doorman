@@ -13,7 +13,7 @@ async def test_jwt_tamper_rejected(client):
 @pytest.mark.asyncio
 async def test_csrf_required_when_https(monkeypatch, authed_client):
 
-    monkeypatch.setenv('HTTPS_ENABLED', 'true')
+    monkeypatch.setenv('HTTPS_ONLY', 'true')
     r = await authed_client.get('/platform/user/me')
     assert r.status_code in (401, 500)
 

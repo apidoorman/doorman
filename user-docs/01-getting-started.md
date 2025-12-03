@@ -1,169 +1,70 @@
-# Getting Started with Doorman
-
-This guide walks you through installing and setting up Doorman API Gateway, from local development to your first API configuration.
+# Getting Started
 
 ## Prerequisites
 
-- **Docker and Docker Compose** OR **Python 3.11+ and Node 20+**
-- A domain you control (for production)
-- TLS certificate and key (self-signed for dev, real cert for production)
-- Optional: Redis and MongoDB (recommended for production)
+- Docker and Docker Compose OR Python 3.11+ and Node 20+
+- Optional: Redis and MongoDB (production)
 
-## Quick Local Start (Development)
-
-Local development uses convenient defaults that are **not secure for production**.
-
-### 1. Clone and Start Services
+## Quick Start
 
 ```bash
 # Clone the repository
 git clone https://github.com/apidoorman/doorman.git
 cd doorman
 
-# Build the image
-docker build -t doorman:latest .
-
-# First-time env: copy and edit secrets
+# Copy and edit .env
 cp .env.example .env
-# Edit .env and set DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
+# Set: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
 
-# Run the container (backend 3001, web 3000)
-docker run --rm --name doorman \
-  -p 3001:3001 -p 3000:3000 \
-  --env-file .env \
-  doorman:latest
+# Start
+docker compose up
 ```
 
-**Services will be available at:**
-- Backend API: `http://localhost:3001`
-- Web UI: `http://localhost:3000`
+**Access:** Backend `http://localhost:3001`, Web UI `http://localhost:3000`
 
-### 2. Configure Environment Variables
+## Environment Variables
 
-Create or edit the `.env` at the repo root (used by the Docker image and backend):
+Minimal `.env` configuration:
 
 ```bash
-# Admin credentials (REQUIRED - change these!)
+# Required
 DOORMAN_ADMIN_EMAIL=admin@example.com
 DOORMAN_ADMIN_PASSWORD=YourStrongPassword123!
-
-# Cache/database mode
-MEM_OR_EXTERNAL=MEM  # Use MEM for development, REDIS for production
-
-# Memory encryption key (required for dumps)
-MEM_ENCRYPTION_KEY=your-32-char-secret-for-encryption-here
-
-# MongoDB configuration (optional in memory mode)
-MONGO_DB_HOSTS=localhost:27017
-MONGO_REPLICA_SET_NAME=rs0
-
-# Redis configuration (when using MEM_OR_EXTERNAL=REDIS)
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DB=0
-
-# Memory dump path (memory mode only)
-MEM_DUMP_PATH=backend-services/generated/memory_dump.bin
-
-# JWT secrets (REQUIRED - change these!)
 JWT_SECRET_KEY=change-this-to-a-strong-secret-key
-TOKEN_ENCRYPTION_KEY=optional-secret-for-api-key-encryption
 
-# HTTP/CORS configuration
-ALLOWED_ORIGINS=http://localhost:3000
-ALLOW_CREDENTIALS=True
-ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD
-ALLOW_HEADERS=*
-HTTPS_ONLY=False  # Set to True in production
-COOKIE_DOMAIN=localhost
+# Mode
+MEM_OR_EXTERNAL=MEM  # MEM for dev, REDIS for production
+THREADS=1  # Must be 1 in MEM mode
 
-# Application settings
-PORT=3001
-THREADS=4
-DEV_RELOAD=False
-SSL_CERTFILE=./certs/localhost.crt
-SSL_KEYFILE=./certs/localhost.key
-PID_FILE=doorman.pid
+# Optional (production)
+HTTPS_ONLY=true
+REDIS_HOST=localhost
+MONGO_DB_HOSTS=localhost:27017
 ```
 
-### 3. Create Required Directories
-
-```bash
-cd backend-services
-mkdir -p proto generated certs
-chmod 755 proto generated
-```
-
-### 4. Start Backend Service
-
-**Option A: Background process**
-```bash
-cd backend-services
-python doorman.py start
-```
-
-**Option B: Console mode (for debugging)**
-```bash
-cd backend-services
-python doorman.py run
-```
-
-**Stop the background process:**
-```bash
-python doorman.py stop
-```
-
-### 5. Start Web Client
-
-```bash
-cd web-client
-cp .env.local.example .env.local
-
-# Edit .env.local and set:
-# NEXT_PUBLIC_SERVER_URL=http://localhost:3001
-
-npm ci
-npm run dev  # Development mode
-# OR
-npm run build && npm start  # Production build
-```
+See [Configuration Reference](./02-configuration.md) for all options.
 
 ## First Login
 
-### Via cURL
-
 ```bash
-# Set your credentials
-export DOORMAN_ADMIN_EMAIL="admin@example.com"
-export DOORMAN_ADMIN_PASSWORD="YourStrongPassword123!"
+export BASE=http://localhost:3001
+export COOKIE=/tmp/doorman.cookies
 
-# Login and save cookies
-curl -s -c /tmp/doorman.cookies \
-  -H 'Content-Type: application/json' \
+# Login
+curl -sc "$COOKIE" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$DOORMAN_ADMIN_EMAIL\",\"password\":\"$DOORMAN_ADMIN_PASSWORD\"}" \
-  http://localhost:3001/platform/authorization
-
-# Check authentication status
-curl -s -b /tmp/doorman.cookies \
-  http://localhost:3001/platform/authorization/status
+  "$BASE/platform/authorization"
 ```
 
-### Via Web UI
-
-1. Navigate to `http://localhost:3000`
-2. Login with your admin credentials
-3. You'll be redirected to the dashboard
+Or use Web UI at `http://localhost:3000`
 
 ## Your First API
 
-Let's publish a simple REST API backed by httpbin for testing.
-
-### 1. Create a Token Group (for API key injection)
+### 1. Create Token Group
 
 ```bash
-curl -s -b /tmp/doorman.cookies \
-  -H 'Content-Type: application/json' \
-  -X POST http://localhost:3001/platform/credit \
+curl -sb "$COOKIE" -H 'Content-Type: application/json' -X POST \
+  "$BASE/platform/credit" \
   -d '{
     "api_credit_group": "demo-api",
     "api_key": "demo-secret-key-123",
@@ -180,12 +81,11 @@ curl -s -b /tmp/doorman.cookies \
   }'
 ```
 
-### 2. Create the API
+### 2. Create API
 
 ```bash
-curl -s -b /tmp/doorman.cookies \
-  -H 'Content-Type: application/json' \
-  -X POST http://localhost:3001/platform/api \
+curl -sb "$COOKIE" -H 'Content-Type: application/json' -X POST \
+  "$BASE/platform/api" \
   -d '{
     "api_name": "demo",
     "api_version": "v1",
@@ -204,10 +104,8 @@ curl -s -b /tmp/doorman.cookies \
 ### 3. Add Endpoints
 
 ```bash
-# GET endpoint
-curl -s -b /tmp/doorman.cookies \
-  -H 'Content-Type: application/json' \
-  -X POST http://localhost:3001/platform/endpoint \
+curl -sb "$COOKIE" -H 'Content-Type: application/json' -X POST \
+  "$BASE/platform/endpoint" \
   -d '{
     "api_name": "demo",
     "api_version": "v1",
@@ -216,10 +114,8 @@ curl -s -b /tmp/doorman.cookies \
     "endpoint_description": "Echo GET request"
   }'
 
-# POST endpoint
-curl -s -b /tmp/doorman.cookies \
-  -H 'Content-Type: application/json' \
-  -X POST http://localhost:3001/platform/endpoint \
+curl -sb "$COOKIE" -H 'Content-Type: application/json' -X POST \
+  "$BASE/platform/endpoint" \
   -d '{
     "api_name": "demo",
     "api_version": "v1",
@@ -229,12 +125,11 @@ curl -s -b /tmp/doorman.cookies \
   }'
 ```
 
-### 4. Subscribe Your User
+### 4. Subscribe User
 
 ```bash
-curl -s -b /tmp/doorman.cookies \
-  -H 'Content-Type: application/json' \
-  -X POST http://localhost:3001/platform/subscription/subscribe \
+curl -sb "$COOKIE" -H 'Content-Type: application/json' -X POST \
+  "$BASE/platform/subscription/subscribe" \
   -d '{
     "username": "admin",
     "api_name": "demo",
@@ -242,285 +137,56 @@ curl -s -b /tmp/doorman.cookies \
   }'
 ```
 
-### 5. Test Your API
+### 5. Test
 
 ```bash
-# GET request
-curl -s -b /tmp/doorman.cookies \
-  "http://localhost:3001/api/rest/demo/v1/get?test=123"
-
-# POST request
-curl -s -b /tmp/doorman.cookies \
-  -H 'Content-Type: application/json' \
-  -d '{"message": "Hello Doorman!"}' \
-  http://localhost:3001/api/rest/demo/v1/post
+curl -sb "$COOKIE" "$BASE/api/rest/demo/v1/get?test=123"
 ```
-
-Doorman will automatically inject the `x-api-key` header to the upstream service!
-
-## Alternative: Manual Installation (Without Docker)
-
-### Backend Setup
-
-```bash
-cd backend-services
-pip install -r requirements.txt
-
-# Create directories
-mkdir -p proto generated certs
-
-# Configure .env (see step 2 above)
-
-# Start the service
-python doorman.py start
-```
-
-### Frontend Setup
-
-```bash
-cd web-client
-npm ci
-cp .env.local.example .env.local
-
-# Edit .env.local and configure NEXT_PUBLIC_SERVER_URL
-
-npm run dev
-```
-
-## Generate Self-Signed Certificate (Development)
-
-```bash
-cd backend-services/certs
-
-openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
-  -keyout localhost.key -out localhost.crt \
-  -subj "/CN=localhost" \
-  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-```
-
-## User Custom Attributes Limit
-
-Each user can have a maximum of **10 custom attribute key/value pairs**:
-
-- API requests exceeding this limit return **HTTP 400** with error code `USR016`
-- UI prevents adding more than 10 attributes with a helper message
-- Use short, stable keys like `dept`, `tier`, `region` to stay within limits
 
 ## Next Steps
 
-- **Production Setup**: See [Getting Started - Secure Production](./01-getting-started.md#secure-production-setup) below
-- **Configuration**: Review the [Configuration Reference](./02-configuration.md)
-- **Security**: Read the [Security Guide](./03-security.md) for hardening
-- **Workflows**: Explore [API Workflows](./04-api-workflows.md) for real-world examples
+- [Configuration Reference](./02-configuration.md) - All environment variables
+- [Security Guide](./03-security.md) - Production hardening
+- [API Workflows](./04-api-workflows.md) - Real-world examples
 
 ---
 
-## Secure Production Setup
+## Production Setup
 
-Production requires explicit, strong secrets and HTTPS enforcement. Doorman **refuses to start** if `ENV=production` and neither `HTTPS_ONLY` nor `HTTPS_ENABLED` are true.
-
-### 1. Required Production Secrets
+### .env Configuration
 
 ```bash
-# Environment
 ENV=production
+HTTPS_ONLY=true
+MEM_OR_EXTERNAL=REDIS
 
-# HTTPS (REQUIRED - at least one must be true)
-HTTPS_ONLY=true          # Doorman terminates TLS
-# OR
-HTTPS_ENABLED=true       # TLS terminated at reverse proxy
+# Strong secrets (required)
+JWT_SECRET_KEY=<strong-random-secret-32-chars>
+TOKEN_ENCRYPTION_KEY=<strong-random-secret>
+MEM_ENCRYPTION_KEY=<strong-random-secret>
 
-# SSL certificates (if HTTPS_ONLY=true)
-SSL_CERTFILE=/certs/fullchain.pem
-SSL_KEYFILE=/certs/privkey.pem
-
-# JWT and encryption (REQUIRED - use strong random values!)
-JWT_SECRET_KEY=use-a-strong-random-secret-at-least-32-chars
-TOKEN_ENCRYPTION_KEY=another-strong-secret-for-api-key-encryption
-MEM_ENCRYPTION_KEY=yet-another-strong-secret-for-memory-dumps
-
-# CORS (restrict origins, no wildcards)
-ALLOWED_ORIGINS=https://admin.yourdomain.com,https://api.yourdomain.com
+# CORS
+ALLOWED_ORIGINS=https://yourdomain.com
 CORS_STRICT=true
 COOKIE_DOMAIN=yourdomain.com
-ALLOW_CREDENTIALS=True
 
-# Cache and Database
-MEM_OR_EXTERNAL=REDIS    # Use Redis in production
+# Redis/MongoDB
 REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_DB=0
 MONGO_DB_HOSTS=mongo:27017
-MONGO_REPLICA_SET_NAME=rs0
-
-# Logging
-LOG_FORMAT=json          # Structured logs for SIEM ingestion
-
-# Request limits
-MAX_BODY_SIZE_BYTES=1048576  # 1MB default
 ```
 
-### 2. Production Docker Compose Example
-
-```yaml
-services:
-  backend:
-    build: ./backend-services
-    environment:
-      ENV: production
-      HTTPS_ONLY: "true"
-      SSL_CERTFILE: /certs/fullchain.pem
-      SSL_KEYFILE: /certs/privkey.pem
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
-      MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY}
-      ALLOWED_ORIGINS: https://admin.yourdomain.com
-      CORS_STRICT: "true"
-      COOKIE_DOMAIN: yourdomain.com
-      LOG_FORMAT: json
-      MEM_OR_EXTERNAL: REDIS
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      MONGO_DB_HOSTS: mongo:27017
-      MONGO_REPLICA_SET_NAME: rs0
-    volumes:
-      - ./certs:/certs:ro
-    depends_on:
-      - redis
-      - mongo
-    ports:
-      - "5001:5001"
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis-data:/data
-
-  mongo:
-    image: mongo:7
-    command: --replSet rs0 --bind_ip_all
-    volumes:
-      - mongo-data:/data/db
-
-volumes:
-  redis-data:
-  mongo-data:
-```
-
-### 3. TLS Certificate Options
-
-**Option A: Doorman terminates TLS**
-- Mount certificates into container
-- Set `HTTPS_ONLY=true`
-- Configure `SSL_CERTFILE` and `SSL_KEYFILE`
-
-**Option B: Reverse proxy terminates TLS**
-- Run backend over HTTP
-- Set `HTTPS_ENABLED=true`
-- Ensure proxy forwards `X-Forwarded-Proto: https`
-- Only expose HTTPS to clients
-
-### 4. Production Hardening Checklist
-
-- [ ] Set `ENV=production`
-- [ ] Enable `HTTPS_ONLY=true` or `HTTPS_ENABLED=true`
-- [ ] Use real TLS certificates (not self-signed)
-- [ ] Change all default secrets (`JWT_SECRET_KEY`, etc.)
-- [ ] Set `CORS_STRICT=true` with explicit `ALLOWED_ORIGINS`
-- [ ] Configure `COOKIE_DOMAIN` to match your domain
-- [ ] Use `LOG_FORMAT=json` for structured logging
-- [ ] Enable Redis for distributed rate limiting
-- [ ] Enable MongoDB for persistence
-- [ ] Remove default admin password immediately after first login
-- [ ] Configure IP whitelisting if needed
-- [ ] Set `MAX_BODY_SIZE_BYTES` appropriate for your use case
-- [ ] Run containers as non-root (already configured in Dockerfile)
-- [ ] Place backend on private network
-- [ ] Only expose reverse proxy to public internet
-
-### 5. First Production Login
+### Start with Redis/MongoDB
 
 ```bash
-# Login with your production admin credentials
-BASE=https://api.yourdomain.com
-COOKIE=/tmp/doorman-prod.cookies
-
-curl -s -c "$COOKIE" \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@yourdomain.com","password":"<strong-password>"}' \
-  "$BASE/platform/authorization"
-
-# Immediately change the admin password via the UI
-# Create least-privilege users for day-to-day operations
+docker compose --profile production up -d
 ```
 
-### 6. IP Access Control (Production)
+### Checklist
 
-If running behind a reverse proxy or load balancer, configure IP trust settings:
+- [ ] `ENV=production` and `HTTPS_ONLY=true`
+- [ ] Change all default secrets
+- [ ] Set `CORS_STRICT=true` with explicit origins
+- [ ] TLS at reverse proxy (Nginx/Traefik/ALB)
+- [ ] Change admin password after first login
 
-```bash
-# Platform-wide IP settings (via UI or API)
-{
-  "ip_whitelist": ["10.0.0.0/8", "192.168.1.0/24"],  # Optional
-  "ip_blacklist": ["1.2.3.4"],                        # Optional
-  "trust_x_forwarded_for": true,                      # Trust proxy headers
-  "xff_trusted_proxies": ["10.0.1.10", "10.0.1.11"]   # REQUIRED when trust=true
-}
-```
-
-**Important:** Set `LOCAL_HOST_IP_BYPASS=false` in production to prevent localhost bypass.
-
-### 7. Monitoring and Health Checks
-
-Configure your load balancer to use these endpoints:
-
-```bash
-# Liveness probe (basic health)
-GET https://api.yourdomain.com/platform/monitor/liveness
-
-# Readiness probe (checks Redis/MongoDB)
-GET https://api.yourdomain.com/platform/monitor/readiness
-
-# Metrics (requires authentication + manage_gateway permission)
-GET https://api.yourdomain.com/platform/monitor/metrics?range=24h
-```
-
-## Troubleshooting
-
-### Server Won't Start
-
-**Error:** "HTTPS is required in production"
-- Set `HTTPS_ONLY=true` or `HTTPS_ENABLED=true`
-
-**Error:** "JWT_SECRET_KEY not set"
-- Configure `JWT_SECRET_KEY` in `.env`
-
-### Cannot Login
-
-**401 Unauthorized**
-- Verify admin email/password in `.env`
-- Check that admin user was created (memory mode auto-creates on startup)
-
-### CORS Errors
-
-**Preflight request fails**
-- Add your origin to `ALLOWED_ORIGINS`
-- Set `ALLOW_CREDENTIALS=True` if using cookies
-- Ensure `CORS_STRICT=true` in production
-
-### API Gateway Returns 404
-
-**GTW001: API not found**
-- Verify `api_name` and `api_version` are correct
-- Check API was created successfully
-
-**GTW003: Endpoint not found**
-- Verify endpoint method and URI match exactly
-- Check endpoint was added to the API
-
-## Need Help?
-
-- [Configuration Reference](./02-configuration.md) - All environment variables
-- [Security Guide](./03-security.md) - Hardening and best practices
-- [API Workflows](./04-api-workflows.md) - Real-world examples
-- [Operations Guide](./05-operations.md) - Production runbooks
+See [Security Guide](./03-security.md) for full hardening details

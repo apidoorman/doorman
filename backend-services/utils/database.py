@@ -116,7 +116,8 @@ class Database:
                     'manage_auth': True,
                     'manage_security': True,
                     'view_logs': True,
-                    'export_logs': True
+                    'export_logs': True,
+                    'ui_access': True
                 })
 
             if not groups.find_one({'group_name': 'admin'}):
