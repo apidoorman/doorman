@@ -14,11 +14,11 @@ from pydantic import BaseModel
 from models.rate_limit_models import QuotaType, TierLimits
 from services.tier_service import TierService, get_tier_service
 from utils.quota_tracker import QuotaTracker, get_quota_tracker
-from utils.database import get_database
+from utils.database_async import async_database
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/platform/quota", tags=["quota"])
+quota_router = APIRouter()
 
 
 # ============================================================================
@@ -70,7 +70,7 @@ async def get_quota_tracker_dep() -> QuotaTracker:
 
 async def get_tier_service_dep() -> TierService:
     """Dependency to get tier service"""
-    db = await get_database()
+    db = async_database.db
     return get_tier_service(db)
 
 
@@ -89,7 +89,7 @@ def get_current_user_id() -> str:
 # QUOTA STATUS ENDPOINTS
 # ============================================================================
 
-@router.get("/status", response_model=QuotaDashboardResponse)
+@quota_router.get("/status", response_model=QuotaDashboardResponse)
 async def get_quota_status(
     user_id: str = Depends(get_current_user_id),
     quota_tracker: QuotaTracker = Depends(get_quota_tracker_dep),
@@ -221,7 +221,7 @@ async def get_quota_status(
         )
 
 
-@router.get("/status/{quota_type}")
+@quota_router.get("/status/{quota_type}")
 async def get_specific_quota_status(
     quota_type: str,
     user_id: str = Depends(get_current_user_id),
@@ -290,7 +290,7 @@ async def get_specific_quota_status(
         )
 
 
-@router.get("/usage/history")
+@quota_router.get("/usage/history")
 async def get_usage_history(
     user_id: str = Depends(get_current_user_id),
     quota_tracker: QuotaTracker = Depends(get_quota_tracker_dep)
@@ -322,7 +322,7 @@ async def get_usage_history(
         )
 
 
-@router.post("/usage/export")
+@quota_router.post("/usage/export")
 async def export_usage_data(
     format: str = 'json',
     user_id: str = Depends(get_current_user_id),
@@ -416,7 +416,7 @@ async def export_usage_data(
         )
 
 
-@router.get("/tier/info")
+@quota_router.get("/tier/info")
 async def get_tier_info(
     user_id: str = Depends(get_current_user_id),
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -473,7 +473,7 @@ async def get_tier_info(
         )
 
 
-@router.get("/burst/status")
+@quota_router.get("/burst/status")
 async def get_burst_status(
     user_id: str = Depends(get_current_user_id),
     tier_service: TierService = Depends(get_tier_service_dep)

@@ -11,12 +11,11 @@ from pydantic import BaseModel, Field
 
 from models.rate_limit_models import RateLimitRule, RuleType, TimeWindow
 from services.rate_limit_rule_service import RateLimitRuleService, get_rate_limit_rule_service
-from utils.database import get_database
+from utils.database_async import async_database
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/platform/rate-limits", tags=["rate-limits"])
-rules_router = APIRouter(prefix="/rules", tags=["rate-limit-rules"])
+rate_limit_rule_router = APIRouter()
 
 
 # ============================================================================
@@ -77,15 +76,14 @@ class RuleResponse(BaseModel):
 
 async def get_rule_service_dep() -> RateLimitRuleService:
     """Dependency to get rule service"""
-    db = await get_database()
-    return get_rate_limit_rule_service(db)
+    return get_rate_limit_rule_service(async_database.db)
 
 
 # ============================================================================
 # RULE CRUD ENDPOINTS
 # ============================================================================
 
-@rules_router.post("/", response_model=RuleResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit_rule_router.post("/", response_model=RuleResponse, status_code=status.HTTP_201_CREATED)
 async def create_rule(
     request: RuleCreateRequest,
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -120,7 +118,7 @@ async def create_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create rule")
 
 
-@router.get("/", response_model=List[RuleResponse])
+@rate_limit_rule_router.get("/", response_model=List[RuleResponse])
 async def list_rules(
     rule_type: Optional[str] = Query(None, description="Filter by rule type"),
     enabled_only: bool = Query(False, description="Only return enabled rules"),
@@ -145,7 +143,7 @@ async def list_rules(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list rules")
 
 
-@router.get("/search")
+@rate_limit_rule_router.get("/search")
 async def search_rules(
     q: str = Query(..., description="Search term"),
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -160,7 +158,7 @@ async def search_rules(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to search rules")
 
 
-@router.get("/{rule_id}", response_model=RuleResponse)
+@rate_limit_rule_router.get("/{rule_id}", response_model=RuleResponse)
 async def get_rule(
     rule_id: str,
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -181,7 +179,7 @@ async def get_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get rule")
 
 
-@router.put("/{rule_id}", response_model=RuleResponse)
+@rate_limit_rule_router.put("/{rule_id}", response_model=RuleResponse)
 async def update_rule(
     rule_id: str,
     request: RuleUpdateRequest,
@@ -205,7 +203,7 @@ async def update_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update rule")
 
 
-@router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+@rate_limit_rule_router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_rule(
     rule_id: str,
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -224,7 +222,7 @@ async def delete_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete rule")
 
 
-@router.post("/{rule_id}/enable", response_model=RuleResponse)
+@rate_limit_rule_router.post("/{rule_id}/enable", response_model=RuleResponse)
 async def enable_rule(
     rule_id: str,
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -245,7 +243,7 @@ async def enable_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to enable rule")
 
 
-@router.post("/{rule_id}/disable", response_model=RuleResponse)
+@rate_limit_rule_router.post("/{rule_id}/disable", response_model=RuleResponse)
 async def disable_rule(
     rule_id: str,
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -270,7 +268,7 @@ async def disable_rule(
 # BULK OPERATIONS
 # ============================================================================
 
-@router.post("/bulk/delete")
+@rate_limit_rule_router.post("/bulk/delete")
 async def bulk_delete_rules(
     request: BulkRuleRequest,
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -285,7 +283,7 @@ async def bulk_delete_rules(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete rules")
 
 
-@router.post("/bulk/enable")
+@rate_limit_rule_router.post("/bulk/enable")
 async def bulk_enable_rules(
     request: BulkRuleRequest,
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -300,7 +298,7 @@ async def bulk_enable_rules(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to enable rules")
 
 
-@router.post("/bulk/disable")
+@rate_limit_rule_router.post("/bulk/disable")
 async def bulk_disable_rules(
     request: BulkRuleRequest,
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
@@ -319,7 +317,7 @@ async def bulk_disable_rules(
 # RULE DUPLICATION
 # ============================================================================
 
-@router.post("/{rule_id}/duplicate", response_model=RuleResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit_rule_router.post("/{rule_id}/duplicate", response_model=RuleResponse, status_code=status.HTTP_201_CREATED)
 async def duplicate_rule(
     rule_id: str,
     request: RuleDuplicateRequest,
@@ -341,7 +339,7 @@ async def duplicate_rule(
 # STATISTICS
 # ============================================================================
 
-@rules_router.get("/statistics/summary")
+@rate_limit_rule_router.get("/statistics/summary")
 async def get_rule_statistics(
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
 ):
@@ -359,7 +357,7 @@ async def get_rule_statistics(
 # RATE LIMIT STATUS ENDPOINT (User-facing)
 # ============================================================================
 
-@router.get("/status")
+@rate_limit_rule_router.get("/status")
 async def get_rate_limit_status(
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
 ):
@@ -402,6 +400,3 @@ async def get_rate_limit_status(
             detail="Failed to get rate limit status"
         )
 
-
-# Include rules router
-router.include_router(rules_router)

@@ -20,6 +20,11 @@ interface CreateRoleData {
   manage_gateway: boolean
   manage_subscriptions: boolean
   manage_security: boolean
+  manage_tiers: boolean
+  manage_rate_limits: boolean
+  manage_credits: boolean
+  manage_auth: boolean
+  view_analytics: boolean
   view_logs: boolean
   export_logs: boolean
 }
@@ -40,6 +45,11 @@ const AddRolePage = () => {
     manage_gateway: false,
     manage_subscriptions: false,
     manage_security: false,
+    manage_tiers: false,
+    manage_rate_limits: false,
+    manage_credits: false,
+    manage_auth: false,
+    view_analytics: false,
     view_logs: false,
     export_logs: false
   })
@@ -81,11 +91,14 @@ const AddRolePage = () => {
     { key: 'manage_groups', label: 'Manage Groups', description: 'Create, edit, and delete user groups' },
     { key: 'manage_roles', label: 'Manage Roles', description: 'Create, edit, and delete user roles' },
     { key: 'manage_routings', label: 'Manage Routings', description: 'Configure API routing and load balancing' },
+    { key: 'manage_tiers', label: 'Manage Tiers', description: 'Create and manage pricing tiers and rate limit plans' },
+    { key: 'manage_rate_limits', label: 'Manage Rate Limits', description: 'Configure rate limiting rules and IP restrictions' },
     { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
     { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
     { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' },
     { key: 'manage_credits', label: 'Manage Credits', description: 'Manage API credits and user credit balances' },
     { key: 'manage_auth', label: 'Manage Auth', description: 'Revoke tokens and enable/disable users' },
+    { key: 'view_analytics', label: 'View Analytics', description: 'View analytics dashboard and usage metrics' },
     { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
     { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }
   ]

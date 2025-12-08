@@ -158,6 +158,10 @@ class TierLimits:
     daily_request_quota: Optional[int] = None
     monthly_bandwidth_quota: Optional[int] = None  # In bytes
     
+    # Throttling configuration
+    enable_throttling: bool = False  # If true, queue/delay requests; if false, hard reject (429)
+    max_queue_time_ms: int = 5000  # Maximum time to queue a request before rejecting (milliseconds)
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
@@ -171,7 +175,9 @@ class TierLimits:
             'burst_per_hour': self.burst_per_hour,
             'monthly_request_quota': self.monthly_request_quota,
             'daily_request_quota': self.daily_request_quota,
-            'monthly_bandwidth_quota': self.monthly_bandwidth_quota
+            'monthly_bandwidth_quota': self.monthly_bandwidth_quota,
+            'enable_throttling': self.enable_throttling,
+            'max_queue_time_ms': self.max_queue_time_ms
         }
     
     @classmethod

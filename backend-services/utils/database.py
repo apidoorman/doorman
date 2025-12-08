@@ -170,7 +170,7 @@ class Database:
                 pass
             logger.info('Memory-only mode: Core data initialized (admin user/role/groups)')
             return
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings', 'revocations', 'vault_entries']
+        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings', 'revocations', 'vault_entries', 'tiers', 'user_tier_assignments']
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
@@ -276,6 +276,14 @@ class Database:
             IndexModel([('username', ASCENDING), ('key_name', ASCENDING)], unique=True),
             IndexModel([('username', ASCENDING)])
         ])
+        self.db.tiers.create_indexes([
+            IndexModel([('tier_id', ASCENDING)], unique=True),
+            IndexModel([('name', ASCENDING)])
+        ])
+        self.db.user_tier_assignments.create_indexes([
+            IndexModel([('user_id', ASCENDING)], unique=True),
+            IndexModel([('tier_id', ASCENDING)])
+        ])
 
     def is_memory_only(self) -> bool:
         return self.memory_only
@@ -307,6 +315,7 @@ class InMemoryCursor:
     def __init__(self, docs):
 
         self._docs = [copy.deepcopy(d) for d in docs]
+        self._index = 0
 
     def sort(self, field, direction=1):
         reverse = direction == -1
@@ -324,6 +333,19 @@ class InMemoryCursor:
 
     def __iter__(self):
         return iter([copy.deepcopy(d) for d in self._docs])
+
+    def __aiter__(self):
+        """Async iterator support for compatibility with async/await patterns"""
+        self._index = 0
+        return self
+
+    async def __anext__(self):
+        """Async iteration - returns next document"""
+        if self._index >= len(self._docs):
+            raise StopAsyncIteration
+        doc = copy.deepcopy(self._docs[self._index])
+        self._index += 1
+        return doc
 
     def to_list(self, length=None):
         data = [copy.deepcopy(d) for d in self._docs]
@@ -345,8 +367,18 @@ class InMemoryCollection:
         if not query:
             return True
         for k, v in query.items():
-            if isinstance(v, dict):
-
+            # Handle $or operator
+            if k == '$or':
+                if not isinstance(v, list):
+                    continue
+                or_match = False
+                for or_query in v:
+                    if self._match(doc, or_query):
+                        or_match = True
+                        break
+                if not or_match:
+                    return False
+            elif isinstance(v, dict):
                 if '$in' in v:
                     if doc.get(k) not in v['$in']:
                         return False
@@ -359,6 +391,7 @@ class InMemoryCollection:
         return True
 
     def find_one(self, query=None):
+        """Find one document (synchronous)"""
         if chaos_util.should_fail('mongo'):
             chaos_util.burn_error_budget('mongo')
             raise RuntimeError('chaos: simulated mongo outage')
@@ -368,6 +401,9 @@ class InMemoryCollection:
                 if self._match(d, query):
                     return copy.deepcopy(d)
             return None
+
+    # Alias for backward compatibility
+    find_one_sync = find_one
 
     def find(self, query=None):
         if chaos_util.should_fail('mongo'):
@@ -379,6 +415,7 @@ class InMemoryCollection:
             return InMemoryCursor(matches)
 
     def insert_one(self, doc):
+        """Insert one document (synchronous)"""
         if chaos_util.should_fail('mongo'):
             chaos_util.burn_error_budget('mongo')
             raise RuntimeError('chaos: simulated mongo outage')
@@ -389,7 +426,11 @@ class InMemoryCollection:
             self._docs.append(new_doc)
             return InMemoryInsertResult(new_doc['_id'])
 
+    # Alias for backward compatibility
+    insert_one_sync = insert_one
+
     def update_one(self, query, update):
+        """Update one document (synchronous)"""
         if chaos_util.should_fail('mongo'):
             chaos_util.burn_error_budget('mongo')
             raise RuntimeError('chaos: simulated mongo outage')
@@ -427,6 +468,9 @@ class InMemoryCollection:
                     return InMemoryUpdateResult(1)
             return InMemoryUpdateResult(0)
 
+    # Alias for backward compatibility
+    update_one_sync = update_one
+
     def delete_one(self, query):
         if chaos_util.should_fail('mongo'):
             chaos_util.burn_error_budget('mongo')
@@ -446,32 +490,160 @@ class InMemoryCollection:
             query = query or {}
             return len([1 for d in self._docs if self._match(d, query)])
 
+    def replace_one(self, query, replacement):
+        """Replace entire document matching query"""
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            for i, d in enumerate(self._docs):
+                if self._match(d, query):
+                    new_doc = copy.deepcopy(replacement)
+                    # Preserve _id if not in replacement
+                    if '_id' not in new_doc and '_id' in d:
+                        new_doc['_id'] = d['_id']
+                    self._docs[i] = new_doc
+                    return InMemoryUpdateResult(1)
+            return InMemoryUpdateResult(0)
+
+    def find_one_and_update(self, query, update, return_document=False):
+        """Find and update a document, optionally returning the updated document"""
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            set_data = update.get('$set', {}) if isinstance(update, dict) else {}
+            for i, d in enumerate(self._docs):
+                if self._match(d, query):
+                    updated = copy.deepcopy(d)
+                    if set_data:
+                        for k, v in set_data.items():
+                            if isinstance(k, str) and '.' in k:
+                                parts = k.split('.')
+                                cur = updated
+                                for part in parts[:-1]:
+                                    nxt = cur.get(part)
+                                    if not isinstance(nxt, dict):
+                                        nxt = {}
+                                        cur[part] = nxt
+                                    cur = nxt
+                                cur[parts[-1]] = v
+                            else:
+                                updated[k] = v
+                    self._docs[i] = updated
+                    return copy.deepcopy(updated) if return_document else None
+            return None
+
     def create_indexes(self, *args, **kwargs):
 
         return []
 
-class InMemoryDB:
-    def __init__(self):
 
-        self.users = InMemoryCollection('users')
-        self.apis = InMemoryCollection('apis')
-        self.endpoints = InMemoryCollection('endpoints')
-        self.groups = InMemoryCollection('groups')
-        self.roles = InMemoryCollection('roles')
-        self.subscriptions = InMemoryCollection('subscriptions')
-        self.routings = InMemoryCollection('routings')
-        self.credit_defs = InMemoryCollection('credit_defs')
-        self.user_credits = InMemoryCollection('user_credits')
-        self.endpoint_validations = InMemoryCollection('endpoint_validations')
-        self.settings = InMemoryCollection('settings')
-        self.revocations = InMemoryCollection('revocations')
-        self.vault_entries = InMemoryCollection('vault_entries')
+class AsyncInMemoryCollection:
+    """Async wrapper around InMemoryCollection for async/await compatibility"""
+    
+    def __init__(self, sync_collection):
+        self._sync = sync_collection
+        self.name = sync_collection.name
+    
+    async def find_one(self, query=None):
+        """Async find_one"""
+        return self._sync.find_one(query)
+    
+    def find(self, query=None):
+        """Returns cursor (sync method, but cursor supports async iteration)"""
+        return self._sync.find(query)
+    
+    async def insert_one(self, doc):
+        """Async insert_one"""
+        return self._sync.insert_one(doc)
+    
+    async def update_one(self, query, update):
+        """Async update_one"""
+        return self._sync.update_one(query, update)
+    
+    async def delete_one(self, query):
+        """Async delete_one"""
+        return self._sync.delete_one(query)
+    
+    async def count_documents(self, query=None):
+        """Async count_documents"""
+        return self._sync.count_documents(query)
+    
+    async def replace_one(self, query, replacement):
+        """Async replace_one"""
+        return self._sync.replace_one(query, replacement)
+    
+    async def find_one_and_update(self, query, update, return_document=False):
+        """Async find_one_and_update"""
+        return self._sync.find_one_and_update(query, update, return_document)
+    
+    def create_indexes(self, *args, **kwargs):
+        return self._sync.create_indexes(*args, **kwargs)
+
+
+class InMemoryDB:
+    def __init__(self, async_mode=False):
+        self._async_mode = async_mode
+        CollectionClass = AsyncInMemoryCollection if async_mode else InMemoryCollection
+        
+        # Create base sync collections
+        self._sync_users = InMemoryCollection('users')
+        self._sync_apis = InMemoryCollection('apis')
+        self._sync_endpoints = InMemoryCollection('endpoints')
+        self._sync_groups = InMemoryCollection('groups')
+        self._sync_roles = InMemoryCollection('roles')
+        self._sync_subscriptions = InMemoryCollection('subscriptions')
+        self._sync_routings = InMemoryCollection('routings')
+        self._sync_credit_defs = InMemoryCollection('credit_defs')
+        self._sync_user_credits = InMemoryCollection('user_credits')
+        self._sync_endpoint_validations = InMemoryCollection('endpoint_validations')
+        self._sync_settings = InMemoryCollection('settings')
+        self._sync_revocations = InMemoryCollection('revocations')
+        self._sync_vault_entries = InMemoryCollection('vault_entries')
+        self._sync_tiers = InMemoryCollection('tiers')
+        self._sync_user_tier_assignments = InMemoryCollection('user_tier_assignments')
+        
+        # Expose as async or sync based on mode
+        if async_mode:
+            self.users = AsyncInMemoryCollection(self._sync_users)
+            self.apis = AsyncInMemoryCollection(self._sync_apis)
+            self.endpoints = AsyncInMemoryCollection(self._sync_endpoints)
+            self.groups = AsyncInMemoryCollection(self._sync_groups)
+            self.roles = AsyncInMemoryCollection(self._sync_roles)
+            self.subscriptions = AsyncInMemoryCollection(self._sync_subscriptions)
+            self.routings = AsyncInMemoryCollection(self._sync_routings)
+            self.credit_defs = AsyncInMemoryCollection(self._sync_credit_defs)
+            self.user_credits = AsyncInMemoryCollection(self._sync_user_credits)
+            self.endpoint_validations = AsyncInMemoryCollection(self._sync_endpoint_validations)
+            self.settings = AsyncInMemoryCollection(self._sync_settings)
+            self.revocations = AsyncInMemoryCollection(self._sync_revocations)
+            self.vault_entries = AsyncInMemoryCollection(self._sync_vault_entries)
+            self.tiers = AsyncInMemoryCollection(self._sync_tiers)
+            self.user_tier_assignments = AsyncInMemoryCollection(self._sync_user_tier_assignments)
+        else:
+            self.users = self._sync_users
+            self.apis = self._sync_apis
+            self.endpoints = self._sync_endpoints
+            self.groups = self._sync_groups
+            self.roles = self._sync_roles
+            self.subscriptions = self._sync_subscriptions
+            self.routings = self._sync_routings
+            self.credit_defs = self._sync_credit_defs
+            self.user_credits = self._sync_user_credits
+            self.endpoint_validations = self._sync_endpoint_validations
+            self.settings = self._sync_settings
+            self.revocations = self._sync_revocations
+            self.vault_entries = self._sync_vault_entries
+            self.tiers = self._sync_tiers
+            self.user_tier_assignments = self._sync_user_tier_assignments
 
     def list_collection_names(self):
         return [
             'users', 'apis', 'endpoints', 'groups', 'roles',
             'subscriptions', 'routings', 'credit_defs', 'user_credits',
-            'endpoint_validations', 'settings', 'revocations', 'vault_entries'
+            'endpoint_validations', 'settings', 'revocations', 'vault_entries',
+            'tiers', 'user_tier_assignments'
         ]
 
     def create_collection(self, name):
@@ -487,38 +659,42 @@ class InMemoryDB:
             return [copy.deepcopy(d) for d in coll._docs]
 
         return {
-            'users': coll_docs(self.users),
-            'apis': coll_docs(self.apis),
-            'endpoints': coll_docs(self.endpoints),
-            'groups': coll_docs(self.groups),
-            'roles': coll_docs(self.roles),
-            'subscriptions': coll_docs(self.subscriptions),
-            'routings': coll_docs(self.routings),
-            'credit_defs': coll_docs(self.credit_defs),
-            'user_credits': coll_docs(self.user_credits),
-            'endpoint_validations': coll_docs(self.endpoint_validations),
-            'settings': coll_docs(self.settings),
-            'revocations': coll_docs(self.revocations),
-            'vault_entries': coll_docs(self.vault_entries),
+            'users': coll_docs(self._sync_users),
+            'apis': coll_docs(self._sync_apis),
+            'endpoints': coll_docs(self._sync_endpoints),
+            'groups': coll_docs(self._sync_groups),
+            'roles': coll_docs(self._sync_roles),
+            'subscriptions': coll_docs(self._sync_subscriptions),
+            'routings': coll_docs(self._sync_routings),
+            'credit_defs': coll_docs(self._sync_credit_defs),
+            'user_credits': coll_docs(self._sync_user_credits),
+            'endpoint_validations': coll_docs(self._sync_endpoint_validations),
+            'settings': coll_docs(self._sync_settings),
+            'revocations': coll_docs(self._sync_revocations),
+            'vault_entries': coll_docs(self._sync_vault_entries),
+            'tiers': coll_docs(self._sync_tiers),
+            'user_tier_assignments': coll_docs(self._sync_user_tier_assignments),
         }
 
     def load_data(self, data: dict):
         def load_coll(coll: InMemoryCollection, docs: list):
             coll._docs = [copy.deepcopy(d) for d in (docs or [])]
 
-        load_coll(self.users, data.get('users', []))
-        load_coll(self.apis, data.get('apis', []))
-        load_coll(self.endpoints, data.get('endpoints', []))
-        load_coll(self.groups, data.get('groups', []))
-        load_coll(self.roles, data.get('roles', []))
-        load_coll(self.subscriptions, data.get('subscriptions', []))
-        load_coll(self.routings, data.get('routings', []))
-        load_coll(self.credit_defs, data.get('credit_defs', []))
-        load_coll(self.user_credits, data.get('user_credits', []))
-        load_coll(self.endpoint_validations, data.get('endpoint_validations', []))
-        load_coll(self.settings, data.get('settings', []))
-        load_coll(self.revocations, data.get('revocations', []))
-        load_coll(self.vault_entries, data.get('vault_entries', []))
+        load_coll(self._sync_users, data.get('users', []))
+        load_coll(self._sync_apis, data.get('apis', []))
+        load_coll(self._sync_endpoints, data.get('endpoints', []))
+        load_coll(self._sync_groups, data.get('groups', []))
+        load_coll(self._sync_roles, data.get('roles', []))
+        load_coll(self._sync_subscriptions, data.get('subscriptions', []))
+        load_coll(self._sync_routings, data.get('routings', []))
+        load_coll(self._sync_credit_defs, data.get('credit_defs', []))
+        load_coll(self._sync_user_credits, data.get('user_credits', []))
+        load_coll(self._sync_endpoint_validations, data.get('endpoint_validations', []))
+        load_coll(self._sync_settings, data.get('settings', []))
+        load_coll(self._sync_revocations, data.get('revocations', []))
+        load_coll(self._sync_vault_entries, data.get('vault_entries', []))
+        load_coll(self._sync_tiers, data.get('tiers', []))
+        load_coll(self._sync_user_tier_assignments, data.get('user_tier_assignments', []))
 
 database = Database()
 database.initialize_collections()

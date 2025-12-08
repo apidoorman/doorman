@@ -35,7 +35,7 @@ class AsyncDatabase:
         if self.memory_only:
             self.client = None
             self.db_existed = False
-            self.db = InMemoryDB()
+            self.db = InMemoryDB(async_mode=True)
             logger.info('Async Memory-only mode: Using in-memory collections')
             return
 

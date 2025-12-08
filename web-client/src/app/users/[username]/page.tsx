@@ -14,6 +14,7 @@ interface User {
   username: string
   email: string
   role: string
+  tier_id?: string
   groups: string[]
   rate_limit_duration: number
   rate_limit_duration_type: string
@@ -37,6 +38,7 @@ interface UpdateUserData {
   email?: string
   password?: string
   role?: string
+  tier_id?: string
   groups?: string[]
   rate_limit_duration?: number
   rate_limit_duration_type?: string
@@ -71,9 +73,26 @@ const UserDetailPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [availableTiers, setAvailableTiers] = useState<any[]>([])
+  const [currentTier, setCurrentTier] = useState<any>(null)
   const isProtected = PROTECTED_USERS.includes((username || '').toLowerCase())
   const currentCustomAttrs = (isEditing ? (editData.custom_attributes || {}) : (user?.custom_attributes || {})) as Record<string, string>
   const editCustomAttrCount = Object.keys(currentCustomAttrs).length
+
+  useEffect(() => {
+    // Fetch available tiers
+    const fetchTiers = async () => {
+      try {
+        const tiers = await fetchJson(`${SERVER_URL}/platform/tiers`)
+        // Ensure tiers is an array
+        setAvailableTiers(Array.isArray(tiers) ? tiers : [])
+      } catch (err) {
+        console.error('Failed to fetch tiers:', err)
+        setAvailableTiers([]) // Reset to empty array on error
+      }
+    }
+    fetchTiers()
+  }, [])
 
   useEffect(() => {
     const userData = sessionStorage.getItem('selectedUser')
@@ -85,6 +104,7 @@ const UserDetailPage = () => {
           username: parsedUser.username,
           email: parsedUser.email,
           role: parsedUser.role,
+          tier_id: parsedUser.tier_id,
           groups: [...parsedUser.groups],
           rate_limit_duration: parsedUser.rate_limit_duration,
           rate_limit_duration_type: parsedUser.rate_limit_duration_type,
@@ -110,12 +130,29 @@ const UserDetailPage = () => {
             sessionStorage.setItem('selectedUser', JSON.stringify(refreshed))
             setEditData(prev => ({
               ...prev,
+              tier_id: refreshed.tier_id,
               bandwidth_limit_bytes: refreshed.bandwidth_limit_bytes,
               bandwidth_limit_window: refreshed.bandwidth_limit_window,
               bandwidth_limit_enabled: Boolean((refreshed as any).bandwidth_limit_enabled),
               rate_limit_enabled: Boolean((refreshed as any).rate_limit_enabled),
               throttle_enabled: Boolean((refreshed as any).throttle_enabled),
             }))
+            // Fetch current tier if assigned
+            if (refreshed.tier_id) {
+              try {
+                const tier = await fetchJson(`${SERVER_URL}/platform/tiers/${refreshed.tier_id}`)
+                // Ensure tier is a valid object with tier_id
+                if (tier && typeof tier === 'object' && tier.tier_id) {
+                  setCurrentTier(tier)
+                } else {
+                  setCurrentTier(null)
+                }
+              } catch {
+                setCurrentTier(null)
+              }
+            } else {
+              setCurrentTier(null)
+            }
           } catch {}
         })()
       } catch (err) {
@@ -147,6 +184,7 @@ const UserDetailPage = () => {
         username: user.username,
         email: user.email,
         role: user.role,
+        tier_id: user.tier_id,
         groups: [...user.groups],
         rate_limit_duration: user.rate_limit_duration,
         rate_limit_duration_type: user.rate_limit_duration_type,
@@ -501,6 +539,35 @@ const UserDetailPage = () => {
                     />
                   ) : (
                     <span className="badge badge-primary">{user.role}</span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Tier
+                    <InfoTooltip text="Assign user to a pricing tier. Tier limits take priority over custom rate limits." />
+                  </label>
+                  {isEditing ? (
+                    <select
+                      value={editData.tier_id || ''}
+                      onChange={(e) => handleInputChange('tier_id', e.target.value || undefined)}
+                      className="input"
+                    >
+                      <option value="">No Tier (Use custom rate limits)</option>
+                      {Array.isArray(availableTiers) && availableTiers.map((tier) => (
+                        <option key={tier.tier_id} value={tier.tier_id}>
+                          {tier.display_name || tier.name} - {tier.limits?.requests_per_minute || 0} req/min
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      {currentTier ? (
+                        <span className="badge badge-success">{currentTier.display_name || currentTier.name}</span>
+                      ) : (
+                        <span className="badge badge-gray">No Tier</span>
+                      )}
+                    </>
                   )}
                 </div>
 

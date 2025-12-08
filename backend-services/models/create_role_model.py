@@ -20,8 +20,11 @@ class CreateRoleModel(BaseModel):
     manage_gateway: bool = Field(False, description='Permission to manage gateway', example=True)
     manage_subscriptions: bool = Field(False, description='Permission to manage subscriptions', example=True)
     manage_security: bool = Field(False, description='Permission to manage security settings', example=True)
+    manage_tiers: bool = Field(False, description='Permission to manage pricing tiers', example=True)
+    manage_rate_limits: bool = Field(False, description='Permission to manage rate limiting rules', example=True)
     manage_credits: bool = Field(False, description='Permission to manage credits', example=True)
     manage_auth: bool = Field(False, description='Permission to manage auth (revoke tokens/disable users)', example=True)
+    view_analytics: bool = Field(False, description='Permission to view analytics dashboard', example=True)
     view_logs: bool = Field(False, description='Permission to view logs', example=True)
     export_logs: bool = Field(False, description='Permission to export logs', example=True)
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { getJson, delJson } from '@/utils/api'
+import { SERVER_URL } from '@/utils/config'
 
 interface TierLimits {
   requests_per_second?: number
@@ -18,6 +19,8 @@ interface TierLimits {
   monthly_request_quota?: number
   daily_request_quota?: number
   monthly_bandwidth_quota?: number
+  enable_throttling: boolean
+  max_queue_time_ms: number
 }
 
 interface Tier {
@@ -49,7 +52,6 @@ export default function TiersPage() {
   const [stats, setStats] = useState<TierStats[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'list' | 'comparison'>('list')
 
   useEffect(() => {
     fetchTiers()
@@ -59,12 +61,14 @@ export default function TiersPage() {
   const fetchTiers = async () => {
     try {
       setLoading(true)
-      const data = await getJson('/platform/tiers')
-      setTiers(data)
+      const data = await getJson(`${SERVER_URL}/platform/tiers`)
+      // Ensure data is an array
+      setTiers(Array.isArray(data) ? data : [])
       setError(null)
     } catch (err) {
       console.error('Failed to fetch tiers:', err)
       setError('Failed to load tiers')
+      setTiers([]) // Reset to empty array on error
     } finally {
       setLoading(false)
     }
@@ -72,10 +76,12 @@ export default function TiersPage() {
 
   const fetchStats = async () => {
     try {
-      const data = await getJson('/platform/tiers/statistics/all')
-      setStats(data)
+      const data = await getJson(`${SERVER_URL}/platform/tiers/statistics/all`)
+      // Ensure data is an array
+      setStats(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to fetch stats:', err)
+      setStats([]) // Reset to empty array on error
     }
   }
 
@@ -83,7 +89,7 @@ export default function TiersPage() {
     if (!confirm('Are you sure you want to delete this tier?')) return
 
     try {
-      await delJson(`/platform/tiers/${tierId}`)
+      await delJson(`${SERVER_URL}/platform/tiers/${tierId}`)
       await fetchTiers()
     } catch (err: any) {
       alert(err.message || 'Failed to delete tier')
@@ -115,31 +121,15 @@ export default function TiersPage() {
                 Manage pricing tiers and rate limit plans
               </p>
             </div>
-            <div className="flex gap-3">
-              <div className="btn-group">
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`btn btn-sm ${viewMode === 'list' ? 'btn-primary' : 'btn-outline'}`}
-                >
-                  List
-                </button>
-                <button
-                  onClick={() => setViewMode('comparison')}
-                  className={`btn btn-sm ${viewMode === 'comparison' ? 'btn-primary' : 'btn-outline'}`}
-                >
-                  Compare
-                </button>
-              </div>
-              <button
-                onClick={() => router.push('/tiers/add')}
-                className="btn btn-primary"
-              >
-                <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Tier
-              </button>
-            </div>
+            <button
+              onClick={() => router.push('/tiers/add')}
+              className="btn btn-primary"
+            >
+              <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Tier
+            </button>
           </div>
 
           {loading ? (
@@ -149,10 +139,9 @@ export default function TiersPage() {
             </div>
           ) : error ? (
             <div className="card p-8 text-center text-error-600">{error}</div>
-          ) : viewMode === 'list' ? (
-            /* List View */
+          ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {tiers.map((tier) => {
+              {Array.isArray(tiers) && tiers.map((tier) => {
                 const tierStats = getTierStats(tier.tier_id)
                 return (
                   <div key={tier.tier_id} className="card p-6 hover:shadow-lg transition-shadow">
@@ -211,29 +200,22 @@ export default function TiersPage() {
                       )}
                     </div>
 
-                    {/* Features */}
-                    {tier.features.length > 0 && (
-                      <div className="mb-4">
-                        <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Features:
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {tier.features.slice(0, 3).map((feature, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-block px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                            >
-                              {feature}
-                            </span>
-                          ))}
-                          {tier.features.length > 3 && (
-                            <span className="inline-block px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-500">
-                              +{tier.features.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                    {/* Rate Limiting Status Badges */}
+                    <div className="mb-4 flex flex-wrap gap-2">
+                      {/* Check if rate limiting is disabled (all limits are 999999) */}
+                      {(tier.limits.requests_per_minute ?? 0) >= 999999 && 
+                       (tier.limits.requests_per_hour ?? 0) >= 999999 ? (
+                        <span className="inline-block px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                          ♾️ Unlimited
+                        </span>
+                      ) : null}
+                      
+                      {tier.limits.enable_throttling && (
+                        <span className="inline-block px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                          🚦 Throttling Enabled
+                        </span>
+                      )}
+                    </div>
 
                     {/* Stats */}
                     {tierStats && (
@@ -247,114 +229,45 @@ export default function TiersPage() {
                       </div>
                     )}
 
-                    {/* Actions */}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => router.push(`/tiers/${tier.tier_id}/edit`)}
-                        className="flex-1 btn btn-sm btn-outline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(tier.tier_id)}
-                        className="flex-1 btn btn-sm btn-outline text-error-600 hover:bg-error-50 dark:hover:bg-error-900/20"
-                        disabled={tier.is_default}
-                      >
-                        Delete
-                      </button>
-                    </div>
-
-                    {!tier.enabled && (
-                      <p className="mt-2 text-xs text-center text-gray-500 dark:text-gray-400">
-                        Disabled
-                      </p>
-                    )}
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => router.push(`/tiers/${tier.tier_id}/users`)}
+                      className="flex-1 btn btn-sm btn-primary"
+                      title="View assigned users"
+                    >
+                      <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                      Users ({tierStats?.total_users || 0})
+                    </button>
+                    <button
+                      onClick={() => router.push(`/tiers/${tier.tier_id}/edit`)}
+                      className="flex-1 btn btn-sm btn-outline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(tier.tier_id)}
+                      className="flex-1 btn btn-sm btn-outline text-error-600 hover:bg-error-50 dark:hover:bg-error-900/20"
+                      disabled={tier.is_default}
+                    >
+                      Delete
+                    </button>
                   </div>
-                )
-              })}
-            </div>
-          ) : (
-            /* Comparison View */
-            <div className="card overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Feature</th>
-                    {tiers.map(tier => (
-                      <th key={tier.tier_id} className="text-center">
-                        <div className="font-bold">{tier.display_name}</div>
-                        {tier.price_monthly && (
-                          <div className="text-sm font-normal text-gray-600 dark:text-gray-400">
-                            ${tier.price_monthly}/mo
-                          </div>
-                        )}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="font-medium">Requests/Minute</td>
-                    {tiers.map(tier => (
-                      <td key={tier.tier_id} className="text-center">
-                        {formatNumber(tier.limits.requests_per_minute)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Requests/Hour</td>
-                    {tiers.map(tier => (
-                      <td key={tier.tier_id} className="text-center">
-                        {formatNumber(tier.limits.requests_per_hour)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Monthly Quota</td>
-                    {tiers.map(tier => (
-                      <td key={tier.tier_id} className="text-center">
-                        {formatNumber(tier.limits.monthly_request_quota)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Burst Allowance</td>
-                    {tiers.map(tier => (
-                      <td key={tier.tier_id} className="text-center">
-                        {tier.limits.burst_per_minute || 0}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Active Users</td>
-                    {tiers.map(tier => {
-                      const tierStats = getTierStats(tier.tier_id)
-                      return (
-                        <td key={tier.tier_id} className="text-center">
-                          {tierStats?.active_users || 0}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="font-medium">Actions</td>
-                    {tiers.map(tier => (
-                      <td key={tier.tier_id} className="text-center">
-                        <button
-                          onClick={() => router.push(`/tiers/${tier.tier_id}/edit`)}
-                          className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                        >
-                          Edit
-                        </button>
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
+
+                  {!tier.enabled && (
+                    <p className="mt-2 text-xs text-center text-gray-500 dark:text-gray-400">
+                      Disabled
+                    </p>
+                  )}
+                </div>
+              )
+            })}
             </div>
           )}
-        </div>
-      </Layout>
-    </ProtectedRoute>
+      </div>
+    </Layout>
+  </ProtectedRoute>
   )
 }

@@ -252,6 +252,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """
         Default function to get applicable rules
         
+        Priority order:
+        1. If user has tier assigned → Use tier limits ONLY
+        2. If user has NO tier → Use per-user rate limit rules
+        3. Fall back to global rules
+        
         In production, this should query MongoDB for rules.
         This is a placeholder that returns default rules.
         
@@ -270,26 +275,50 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         
         rules = []
         
-        # Default per-user rule: 100 requests per minute
+        # Check if user has a tier assigned
+        user_tier = None
         if user_id:
-            rules.append(RateLimitRule(
-                rule_id='default_per_user',
-                rule_type=RuleType.PER_USER,
-                time_window=TimeWindow.MINUTE,
-                limit=100,
-                burst_allowance=20,
-                priority=10,
-                enabled=True
-            ))
+            user_tier = await self.get_user_tier_func(user_id)
         
-        # Default global rule: 1000 requests per minute
+        if user_tier:
+            # User has tier → Use tier limits ONLY (priority)
+            # Convert tier limits to rate limit rules
+            if user_tier.requests_per_minute:
+                rules.append(RateLimitRule(
+                    rule_id=f'tier_{user_id}',
+                    rule_type=RuleType.PER_USER,
+                    time_window=TimeWindow.MINUTE,
+                    limit=user_tier.requests_per_minute,
+                    burst_allowance=user_tier.burst_allowance or 0,
+                    priority=100,  # Highest priority
+                    enabled=True,
+                    description=f"Tier-based limit for {user_id}"
+                ))
+        else:
+            # User has NO tier → Use per-user rate limit rules
+            if user_id:
+                # TODO: Query MongoDB for per-user rules
+                # For now, use default per-user rule
+                rules.append(RateLimitRule(
+                    rule_id='default_per_user',
+                    rule_type=RuleType.PER_USER,
+                    time_window=TimeWindow.MINUTE,
+                    limit=100,
+                    burst_allowance=20,
+                    priority=10,
+                    enabled=True,
+                    description="Default per-user limit"
+                ))
+        
+        # Always add global rule as fallback
         rules.append(RateLimitRule(
             rule_id='default_global',
             rule_type=RuleType.GLOBAL,
             time_window=TimeWindow.MINUTE,
             limit=1000,
             priority=0,
-            enabled=True
+            enabled=True,
+            description="Global rate limit"
         ))
         
         # Sort by priority (highest first)
@@ -299,9 +328,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     async def _default_get_user_tier(self, user_id: str) -> Optional[TierLimits]:
         """
-        Default function to get user's tier limits
-        
-        In production, this should query MongoDB for user's tier.
+        Get user's tier limits from TierService
         
         Args:
             user_id: User ID
@@ -309,14 +336,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         Returns:
             TierLimits or None
         """
-        # TODO: Query MongoDB for user's tier
-        # For now, return default limits
-        
-        return TierLimits(
-            requests_per_minute=100,
-            requests_per_hour=5000,
-            monthly_request_quota=100000
-        )
+        try:
+            from services.tier_service import TierService, get_tier_service
+            from utils.database_async import async_database
+            
+            tier_service = get_tier_service(async_database.db)
+            limits = await tier_service.get_user_limits(user_id)
+            
+            return limits
+        except Exception as e:
+            logger.error(f"Error fetching user tier limits: {e}")
+            return None
     
     async def _check_quotas(
         self,
