@@ -83,6 +83,10 @@ from routes.config_routes import config_router
 from routes.tools_routes import tools_router
 from routes.config_hot_reload_routes import config_hot_reload_router
 from routes.vault_routes import vault_router
+from routes.analytics_routes import analytics_router
+from routes.tier_routes import tier_router
+from routes.rate_limit_rule_routes import rate_limit_rule_router
+from routes.quota_routes import quota_router
 from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
 from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
 from utils.metrics_util import metrics_store
@@ -897,6 +901,14 @@ class PlatformCORSMiddleware:
 
 doorman.add_middleware(PlatformCORSMiddleware)
 
+# Add tier-based rate limiting middleware
+try:
+    from middleware.tier_rate_limit_middleware import TierRateLimitMiddleware
+    doorman.add_middleware(TierRateLimitMiddleware)
+    logging.getLogger('doorman.gateway').info("Tier-based rate limiting middleware enabled")
+except Exception as e:
+    logging.getLogger('doorman.gateway').warning(f"Failed to enable tier rate limiting middleware: {e}")
+
 @doorman.middleware('http')
 async def request_id_middleware(request: Request, call_next):
     try:
@@ -1350,6 +1362,13 @@ async def internal_server_error_handler(request: Request, exc: Exception):
 
 @doorman.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # DEBUG: Log validation errors
+    import logging
+    log = logging.getLogger('doorman.gateway')
+    log.error(f"Validation error on {request.method} {request.url.path}")
+    log.error(f"Validation errors: {exc.errors()}")
+    log.error(f"Request body: {await request.body()}")
+    
     return process_response(ResponseModel(
         status_code=422,
         error_code='VAL001',
@@ -1379,6 +1398,10 @@ doorman.include_router(config_router, prefix='/platform', tags=['Config'])
 doorman.include_router(tools_router, prefix='/platform/tools', tags=['Tools'])
 doorman.include_router(config_hot_reload_router, prefix='/platform', tags=['Config Hot Reload'])
 doorman.include_router(vault_router, prefix='/platform/vault', tags=['Vault'])
+doorman.include_router(analytics_router, prefix='/platform', tags=['Analytics'])
+doorman.include_router(tier_router, prefix='/platform/tiers', tags=['Tiers'])
+doorman.include_router(rate_limit_rule_router, prefix='/platform/rate-limits', tags=['Rate Limits'])
+doorman.include_router(quota_router, prefix='/platform/quota', tags=['Quota'])
 
 def start():
     if os.path.exists(PID_FILE):

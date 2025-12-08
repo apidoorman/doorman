@@ -7,16 +7,22 @@ FastAPI routes for managing tiers, plans, and user assignments.
 import logging
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends, status, Query
+from fastapi import APIRouter, HTTPException, Depends, status, Query, Request
 from pydantic import BaseModel, Field
+import uuid
+import time
 
 from models.rate_limit_models import Tier, TierLimits, TierName, UserTierAssignment
+from models.response_model import ResponseModel
 from services.tier_service import TierService, get_tier_service
-from utils.database import get_database
+from utils.database_async import async_database
+from utils.auth_util import auth_required
+from utils.role_util import platform_role_required_bool
+from utils.response_util import respond_rest
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/platform/tiers", tags=["tiers"])
+tier_router = APIRouter()
 
 
 # ============================================================================
@@ -36,6 +42,8 @@ class TierLimitsRequest(BaseModel):
     monthly_request_quota: Optional[int] = None
     daily_request_quota: Optional[int] = None
     monthly_bandwidth_quota: Optional[int] = None
+    enable_throttling: bool = False
+    max_queue_time_ms: int = 5000
 
 
 class TierCreateRequest(BaseModel):
@@ -118,15 +126,14 @@ class TierResponse(BaseModel):
 
 async def get_tier_service_dep() -> TierService:
     """Dependency to get tier service"""
-    db = await get_database()
-    return get_tier_service(db)
+    return get_tier_service(async_database.db)
 
 
 # ============================================================================
 # TIER CRUD ENDPOINTS
 # ============================================================================
 
-@router.post("/", response_model=TierResponse, status_code=status.HTTP_201_CREATED)
+@tier_router.post("/", response_model=TierResponse, status_code=status.HTTP_201_CREATED)
 async def create_tier(
     request: TierCreateRequest,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -166,8 +173,9 @@ async def create_tier(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create tier")
 
 
-@router.get("/", response_model=List[TierResponse])
+@tier_router.get("/")
 async def list_tiers(
+    request: Request,
     enabled_only: bool = Query(False, description="Only return enabled tiers"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -178,24 +186,56 @@ async def list_tiers(
     
     Can filter by enabled status and paginate results.
     """
+    request_id = str(uuid.uuid4())
+    start_time = time.time()
+    
     try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        
+        if not await platform_role_required_bool(username, 'manage_tiers'):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={'request_id': request_id},
+                error_code='TIER001',
+                error_message='You do not have permission to manage tiers'
+            ))
+        
         tiers = await tier_service.list_tiers(enabled_only=enabled_only, skip=skip, limit=limit)
         
-        return [
+        tier_list = [
             TierResponse(
                 **tier.to_dict(),
                 created_at=tier.created_at.isoformat() if tier.created_at else None,
                 updated_at=tier.updated_at.isoformat() if tier.updated_at else None
-            )
+            ).dict()
             for tier in tiers
         ]
         
+        return respond_rest(ResponseModel(
+            status_code=200,
+            response_headers={'request_id': request_id},
+            response=tier_list
+        ))
+        
     except Exception as e:
-        logger.error(f"Error listing tiers: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list tiers")
+        logger.error(f'{request_id} | Error listing tiers: {e}', exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={'request_id': request_id},
+            error_code='TIER999',
+            error_message='Failed to list tiers'
+        ))
+    
+    finally:
+        end_time = time.time()
+        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
-@router.get("/{tier_id}", response_model=TierResponse)
+@tier_router.get("/{tier_id}", response_model=TierResponse)
 async def get_tier(
     tier_id: str,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -222,7 +262,7 @@ async def get_tier(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get tier")
 
 
-@router.put("/{tier_id}", response_model=TierResponse)
+@tier_router.put("/{tier_id}", response_model=TierResponse)
 async def update_tier(
     tier_id: str,
     request: TierUpdateRequest,
@@ -271,7 +311,7 @@ async def update_tier(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update tier")
 
 
-@router.delete("/{tier_id}", status_code=status.HTTP_204_NO_CONTENT)
+@tier_router.delete("/{tier_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tier(
     tier_id: str,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -301,7 +341,7 @@ async def delete_tier(
 # USER ASSIGNMENT ENDPOINTS
 # ============================================================================
 
-@router.post("/assignments", status_code=status.HTTP_201_CREATED)
+@tier_router.post("/assignments", status_code=status.HTTP_201_CREATED)
 async def assign_user_to_tier(
     request: UserAssignmentRequest,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -335,7 +375,7 @@ async def assign_user_to_tier(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to assign user")
 
 
-@router.get("/assignments/{user_id}")
+@tier_router.get("/assignments/{user_id}")
 async def get_user_assignment(
     user_id: str,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -358,7 +398,7 @@ async def get_user_assignment(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assignment")
 
 
-@router.get("/assignments/{user_id}/tier", response_model=TierResponse)
+@tier_router.get("/assignments/{user_id}/tier", response_model=TierResponse)
 async def get_user_tier(
     user_id: str,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -387,7 +427,7 @@ async def get_user_tier(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get user tier")
 
 
-@router.delete("/assignments/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@tier_router.delete("/assignments/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_user_assignment(
     user_id: str,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -410,7 +450,7 @@ async def remove_user_assignment(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to remove assignment")
 
 
-@router.get("/{tier_id}/users")
+@tier_router.get("/{tier_id}/users")
 async def list_users_in_tier(
     tier_id: str,
     skip: int = Query(0, ge=0),
@@ -436,7 +476,7 @@ async def list_users_in_tier(
 # TIER UPGRADE/DOWNGRADE ENDPOINTS
 # ============================================================================
 
-@router.post("/upgrade")
+@tier_router.post("/upgrade")
 async def upgrade_user_tier(
     request: TierUpgradeRequest,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -463,7 +503,7 @@ async def upgrade_user_tier(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upgrade tier")
 
 
-@router.post("/downgrade")
+@tier_router.post("/downgrade")
 async def downgrade_user_tier(
     request: TierDowngradeRequest,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -489,7 +529,7 @@ async def downgrade_user_tier(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to downgrade tier")
 
 
-@router.post("/temporary-upgrade")
+@tier_router.post("/temporary-upgrade")
 async def temporary_tier_upgrade(
     request: TemporaryUpgradeRequest,
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -519,7 +559,7 @@ async def temporary_tier_upgrade(
 # TIER COMPARISON & ANALYTICS ENDPOINTS
 # ============================================================================
 
-@router.post("/compare")
+@tier_router.post("/compare")
 async def compare_tiers(
     tier_ids: List[str],
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -536,8 +576,59 @@ async def compare_tiers(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to compare tiers")
 
 
-@router.get("/{tier_id}/statistics")
+@tier_router.get("/statistics/all")
+async def get_all_tier_statistics(
+    request: Request,
+    tier_service: TierService = Depends(get_tier_service_dep)
+):
+    """
+    Get statistics for all tiers
+    
+    Requires admin permissions.
+    """
+    request_id = str(uuid.uuid4())
+    start_time = time.time()
+    
+    try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        
+        if not await platform_role_required_bool(username, 'manage_tiers'):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={'request_id': request_id},
+                error_code='TIER001',
+                error_message='You do not have permission to manage tiers'
+            ))
+        
+        stats = await tier_service.get_all_tier_statistics()
+        
+        return respond_rest(ResponseModel(
+            status_code=200,
+            response_headers={'request_id': request_id},
+            response=stats
+        ))
+        
+    except Exception as e:
+        logger.error(f'{request_id} | Error getting all tier statistics: {e}', exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={'request_id': request_id},
+            error_code='TIER999',
+            error_message='Failed to get statistics'
+        ))
+    
+    finally:
+        end_time = time.time()
+        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+
+
+@tier_router.get("/{tier_id}/statistics")
 async def get_tier_statistics(
+    request: Request,
     tier_id: str,
     tier_service: TierService = Depends(get_tier_service_dep)
 ):
@@ -546,28 +637,41 @@ async def get_tier_statistics(
     
     Requires admin permissions.
     """
-    try:
-        stats = await tier_service.get_tier_statistics(tier_id)
-        return stats
-        
-    except Exception as e:
-        logger.error(f"Error getting tier statistics: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get statistics")
-
-
-@router.get("/statistics/all")
-async def get_all_tier_statistics(
-    tier_service: TierService = Depends(get_tier_service_dep)
-):
-    """
-    Get statistics for all tiers
+    request_id = str(uuid.uuid4())
+    start_time = time.time()
     
-    Requires admin permissions.
-    """
     try:
-        stats = await tier_service.get_all_tier_statistics()
-        return stats
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        
+        logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        
+        if not await platform_role_required_bool(username, 'manage_tiers'):
+            return respond_rest(ResponseModel(
+                status_code=403,
+                response_headers={'request_id': request_id},
+                error_code='TIER001',
+                error_message='You do not have permission to manage tiers'
+            ))
+        
+        stats = await tier_service.get_tier_statistics(tier_id)
+        
+        return respond_rest(ResponseModel(
+            status_code=200,
+            response_headers={'request_id': request_id},
+            response=stats
+        ))
         
     except Exception as e:
-        logger.error(f"Error getting all tier statistics: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get statistics")
+        logger.error(f'{request_id} | Error getting tier statistics: {e}', exc_info=True)
+        return respond_rest(ResponseModel(
+            status_code=500,
+            response_headers={'request_id': request_id},
+            error_code='TIER999',
+            error_message='Failed to get statistics'
+        ))
+    
+    finally:
+        end_time = time.time()
+        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')

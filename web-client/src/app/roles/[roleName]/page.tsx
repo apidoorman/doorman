@@ -21,6 +21,11 @@ interface Role {
   manage_gateway?: boolean
   manage_subscriptions?: boolean
   manage_security?: boolean
+  manage_tiers?: boolean
+  manage_rate_limits?: boolean
+  manage_credits?: boolean
+  manage_auth?: boolean
+  view_analytics?: boolean
   view_logs?: boolean
   export_logs?: boolean
 }
@@ -107,7 +112,28 @@ const RoleDetailPage = () => {
       setSaving(true)
       setError(null)
 
-      await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, editData)
+      // Ensure all permission values are proper booleans
+      const sanitizedData = {
+        ...editData,
+        manage_users: Boolean(editData.manage_users),
+        manage_apis: Boolean(editData.manage_apis),
+        manage_endpoints: Boolean(editData.manage_endpoints),
+        manage_groups: Boolean(editData.manage_groups),
+        manage_roles: Boolean(editData.manage_roles),
+        manage_routings: Boolean(editData.manage_routings),
+        manage_gateway: Boolean(editData.manage_gateway),
+        manage_subscriptions: Boolean(editData.manage_subscriptions),
+        manage_security: Boolean(editData.manage_security),
+        manage_tiers: Boolean(editData.manage_tiers),
+        manage_rate_limits: Boolean(editData.manage_rate_limits),
+        manage_credits: Boolean(editData.manage_credits),
+        manage_auth: Boolean(editData.manage_auth),
+        view_analytics: Boolean(editData.view_analytics),
+        view_logs: Boolean(editData.view_logs),
+        export_logs: Boolean(editData.export_logs)
+      }
+
+      await (await import('@/utils/api')).putJson(`${SERVER_URL}/platform/role/${encodeURIComponent(roleName)}`, sanitizedData)
 
       let rolePayload: any
       try {
@@ -363,11 +389,14 @@ const RoleDetailPage = () => {
                     { key: 'manage_groups', label: 'Manage Groups', description: 'Create, edit, and delete user groups' },
                     { key: 'manage_roles', label: 'Manage Roles', description: 'Create, edit, and delete user roles' },
                   { key: 'manage_routings', label: 'Manage Routings', description: 'Configure API routing and load balancing' },
+                  { key: 'manage_tiers', label: 'Manage Tiers', description: 'Create and manage pricing tiers and rate limit plans' },
+                  { key: 'manage_rate_limits', label: 'Manage Rate Limits', description: 'Configure rate limiting rules and IP restrictions' },
                   { key: 'manage_gateway', label: 'Manage Gateway', description: 'Configure gateway settings and policies' },
                   { key: 'manage_subscriptions', label: 'Manage Subscriptions', description: 'Manage API subscriptions and billing' },
                   { key: 'manage_security', label: 'Manage Security', description: 'Manage security settings and memory dump policy' },
                   { key: 'manage_credits', label: 'Manage Credits', description: 'Manage API credits and user credit balances' },
                   { key: 'manage_auth', label: 'Manage Auth', description: 'Revoke tokens and enable/disable users' },
+                  { key: 'view_analytics', label: 'View Analytics', description: 'View analytics dashboard and usage metrics' },
                   { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
                   { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }
                   ].map(({ key, label, description }) => (

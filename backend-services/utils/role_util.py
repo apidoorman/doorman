@@ -95,6 +95,10 @@ async def validate_platform_role(role_name, action):
             return True
         elif action == 'manage_security' and role.get('manage_security'):
             return True
+        elif action == 'manage_tiers' and role.get('manage_tiers'):
+            return True
+        elif action == 'manage_rate_limits' and role.get('manage_rate_limits'):
+            return True
         elif action == 'manage_credits' and role.get('manage_credits'):
             return True
         elif action == 'manage_auth' and role.get('manage_auth'):
@@ -102,6 +106,8 @@ async def validate_platform_role(role_name, action):
         elif action == 'view_logs' and role.get('view_logs'):
             return True
         elif action == 'export_logs' and role.get('export_logs'):
+            return True
+        elif action == 'view_analytics' and role.get('view_analytics'):
             return True
         return False
     except Exception as e:

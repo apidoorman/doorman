@@ -77,6 +77,14 @@ def duration_to_seconds(duration: str) -> int:
 
 async def limit_and_throttle(request: Request):
     """Enforce user-level rate limiting and throttling.
+    
+    **Rate Limiting Hierarchy:**
+    1. Tier-based limits (checked by TierRateLimitMiddleware first)
+    2. User-specific overrides (checked here)
+    
+    This function provides user-specific rate/throttle settings that override
+    or supplement tier-based limits. The TierRateLimitMiddleware runs first
+    and enforces tier limits, then this function applies user-specific rules.
 
     **Counter Backend Priority:**
     1. Redis async client (app.state.redis) - REQUIRED for multi-worker deployments

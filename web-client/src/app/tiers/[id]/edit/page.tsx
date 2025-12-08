@@ -1,15 +1,19 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useState, useEffect } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
-import { postJson } from '@/utils/api'
+import { getJson, putJson } from '@/utils/api'
 import { SERVER_URL } from '@/utils/config'
 
-export default function AddTierPage() {
+export default function EditTierPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
+  const params = useParams()
+  const tierId = params.id as string
+  
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
@@ -32,9 +36,53 @@ export default function AddTierPage() {
     max_queue_time_ms: '5000'
   })
 
+  useEffect(() => {
+    fetchTier()
+  }, [tierId])
+
+  const fetchTier = async () => {
+    try {
+      setLoading(true)
+      const tier = await getJson(`${SERVER_URL}/platform/tiers/${tierId}`)
+      
+      // Check if rate limiting is enabled (any limit is less than 999999)
+      const hasRateLimits = (
+        (tier.limits?.requests_per_minute && tier.limits.requests_per_minute < 999999) ||
+        (tier.limits?.requests_per_hour && tier.limits.requests_per_hour < 999999) ||
+        (tier.limits?.requests_per_day && tier.limits.requests_per_day < 999999) ||
+        (tier.limits?.monthly_request_quota && tier.limits.monthly_request_quota < 999999) ||
+        (tier.limits?.daily_request_quota && tier.limits.daily_request_quota < 999999)
+      )
+      
+      setFormData({
+        tier_id: tier.tier_id,
+        display_name: tier.display_name,
+        description: tier.description || '',
+        price_monthly: tier.price_monthly?.toString() || '',
+        price_yearly: tier.price_yearly?.toString() || '',
+        is_default: tier.is_default,
+        enabled: tier.enabled,
+        rate_limiting_enabled: hasRateLimits,
+        requests_per_minute: (hasRateLimits && tier.limits?.requests_per_minute && tier.limits.requests_per_minute < 999999) ? tier.limits.requests_per_minute.toString() : '',
+        requests_per_hour: (hasRateLimits && tier.limits?.requests_per_hour && tier.limits.requests_per_hour < 999999) ? tier.limits.requests_per_hour.toString() : '',
+        requests_per_day: (hasRateLimits && tier.limits?.requests_per_day && tier.limits.requests_per_day < 999999) ? tier.limits.requests_per_day.toString() : '',
+        monthly_request_quota: (hasRateLimits && tier.limits?.monthly_request_quota && tier.limits.monthly_request_quota < 999999) ? tier.limits.monthly_request_quota.toString() : '',
+        daily_request_quota: (hasRateLimits && tier.limits?.daily_request_quota && tier.limits.daily_request_quota < 999999) ? tier.limits.daily_request_quota.toString() : '',
+        enable_throttling: tier.limits?.enable_throttling || false,
+        max_queue_time_ms: tier.limits?.max_queue_time_ms?.toString() || '5000'
+      })
+      setError(null)
+    } catch (err: any) {
+      console.error('Failed to fetch tier:', err)
+      setError(err.message || 'Failed to load tier')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setSaving(true)
     setError(null)
 
     try {
@@ -43,8 +91,6 @@ export default function AddTierPage() {
       const unlimitedValue = 999999
       
       const payload = {
-        tier_id: formData.tier_id,
-        name: formData.tier_id.toLowerCase().replace(/[^a-z0-9]/g, '_'),
         display_name: formData.display_name,
         description: formData.description || undefined,
         price_monthly: formData.price_monthly ? parseFloat(formData.price_monthly) : undefined,
@@ -66,12 +112,12 @@ export default function AddTierPage() {
         }
       }
 
-      await postJson(`${SERVER_URL}/platform/tiers`, payload)
+      await putJson(`${SERVER_URL}/platform/tiers/${tierId}`, payload)
       router.push('/tiers')
     } catch (err: any) {
-      console.error('Failed to create tier:', err)
-      setError(err.message || 'Failed to create tier')
-      setLoading(false)
+      console.error('Failed to update tier:', err)
+      setError(err.message || 'Failed to update tier')
+      setSaving(false)
     }
   }
 
@@ -83,13 +129,25 @@ export default function AddTierPage() {
     }))
   }
 
+  if (loading) {
+    return (
+      <ProtectedRoute requiredPermission="manage_tiers">
+        <Layout>
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+          </div>
+        </Layout>
+      </ProtectedRoute>
+    )
+  }
+
   return (
     <ProtectedRoute requiredPermission="manage_tiers">
       <Layout>
         <div className="max-w-4xl mx-auto space-y-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Add Tier</h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">Create a new pricing tier</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Edit Tier</h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">Update tier configuration</p>
           </div>
 
           {error && (
@@ -107,19 +165,16 @@ export default function AddTierPage() {
               <div className="grid grid-cols-1 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tier ID *
+                    Tier ID
                   </label>
                   <input
                     type="text"
-                    name="tier_id"
                     value={formData.tier_id}
-                    onChange={handleChange}
-                    required
-                    className="input w-full"
-                    placeholder="e.g., pro_tier"
+                    disabled
+                    className="input w-full bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Unique identifier for this tier (lowercase, no spaces)
+                    Tier ID cannot be changed
                   </p>
                 </div>
 
@@ -383,7 +438,7 @@ export default function AddTierPage() {
                     className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                    Enable tier immediately
+                    Enable tier
                   </span>
                 </label>
               </div>
@@ -393,18 +448,18 @@ export default function AddTierPage() {
             <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => router.back()}
+                onClick={() => router.push('/tiers')}
                 className="btn btn-outline"
-                disabled={loading}
+                disabled={saving}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={loading}
+                disabled={saving}
               >
-                {loading ? 'Creating...' : 'Create Tier'}
+                {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </form>

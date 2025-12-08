@@ -125,6 +125,9 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
+        # DEBUG: Log the incoming data
+        logger.info(f'{request_id} | DEBUG: Received model data: {api_data.dict()}')
+        
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}')

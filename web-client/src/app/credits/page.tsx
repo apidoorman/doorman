@@ -60,6 +60,14 @@ export default function CreditsPage() {
   const [userWorking, setUserWorking] = useState(false)
   const [userError, setUserError] = useState<string | null>(null)
   const [userSuccess, setUserSuccess] = useState<string | null>(null)
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [assignForm, setAssignForm] = useState({
+    username: '',
+    credit_group: '',
+    tier_name: '',
+    credits: 0
+  })
+  const [assigning, setAssigning] = useState(false)
 
   type TierMeta = { credits: number; reset_frequency?: string }
   const [defs, setDefs] = useState<Record<string, { [tier: string]: TierMeta }>>({})
@@ -131,6 +139,44 @@ export default function CreditsPage() {
     }
   }
 
+  const handleAssignCredits = async () => {
+    if (!assignForm.username.trim() || !assignForm.credit_group.trim() || !assignForm.tier_name.trim()) {
+      alert('Please fill in all fields')
+      return
+    }
+
+    try {
+      setAssigning(true)
+      await postJson(`${SERVER_URL}/platform/credit/user`, {
+        username: assignForm.username.trim(),
+        api_credit_group: assignForm.credit_group.trim(),
+        tier_name: assignForm.tier_name.trim(),
+        available_credits: assignForm.credits || undefined
+      })
+      
+      setUserSuccess(`Credits assigned to ${assignForm.username}`)
+      setShowAssignModal(false)
+      setAssignForm({ username: '', credit_group: '', tier_name: '', credits: 0 })
+      await loadAllUserTokens()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to assign credits')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  const handleRemoveUserCredits = async (username: string, creditGroup: string) => {
+    if (!confirm(`Remove ${username} from credit group "${creditGroup}"?`)) return
+
+    try {
+      await delJson(`${SERVER_URL}/platform/credit/user/${encodeURIComponent(username)}/${encodeURIComponent(creditGroup)}`)
+      setUserSuccess(`Removed ${username} from ${creditGroup}`)
+      await loadAllUserTokens()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to remove user credits')
+    }
+  }
+
   useEffect(() => {
     loadAllUserTokens()
     loadDefs()
@@ -188,7 +234,18 @@ export default function CreditsPage() {
         </div>
 
         <div className="card">
-          <div className="card-header"><h3 className="card-title">User Credits</h3></div>
+          <div className="card-header flex items-center justify-between">
+            <h3 className="card-title">User Credits</h3>
+            <button
+              onClick={() => setShowAssignModal(true)}
+              className="btn btn-primary btn-sm"
+            >
+              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Assign Credits
+            </button>
+          </div>
           <div className="p-6 space-y-4">
             {userError && <div className="text-sm text-error-600">{userError}</div>}
             {userSuccess && <div className="text-sm text-success-600">{userSuccess}</div>}
@@ -199,7 +256,7 @@ export default function CreditsPage() {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="table">
-                    <thead><tr><th>Username</th><th>Groups</th><th>Total</th><th>Used</th><th>Left</th><th>Reset Freq</th><th>Reset Dates</th></tr></thead>
+                    <thead><tr><th>Username</th><th>Groups</th><th>Total</th><th>Used</th><th>Left</th><th>Reset Freq</th><th>Reset Dates</th><th>Actions</th></tr></thead>
                     <tbody>
                       {userRows.map((row, idx) => {
                         let total = 0, available = 0
@@ -215,24 +272,44 @@ export default function CreditsPage() {
                           if (rd) dates.add(String(rd))
                         }
                         const used = total > 0 ? Math.max(total - available, 0) : 0
+                        const groups = Object.keys(row.users_credits || {})
                         return (
-                          <tr
-                            key={idx}
-                            className="hover:bg-gray-50 dark:hover:bg-dark-surfaceHover cursor-pointer"
-                            onClick={() => router.push(`/credits/${encodeURIComponent(row.username)}`)}
-                          >
-                            <td className="font-medium">{row.username}</td>
-                            <td className="text-sm text-gray-600">{Object.keys(row.users_credits || {}).join(', ') || '-'}</td>
+                          <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-dark-surfaceHover">
+                            <td className="font-medium cursor-pointer" onClick={() => router.push(`/credits/${encodeURIComponent(row.username)}`)}>{row.username}</td>
+                            <td className="text-sm text-gray-600">{groups.join(', ') || '-'}</td>
                             <td className="text-sm">{total || 0}</td>
                             <td className="text-sm">{used}</td>
                             <td className="text-sm">{available || 0}</td>
                             <td className="text-sm">{freqs.size ? Array.from(freqs).join(', ') : '-'}</td>
                             <td className="text-sm">{dates.size ? Array.from(dates).join(', ') : '-'}</td>
+                            <td>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => router.push(`/credits/${encodeURIComponent(row.username)}`)}
+                                  className="btn btn-sm btn-outline"
+                                  title="View details"
+                                >
+                                  View
+                                </button>
+                                {groups.length > 0 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleRemoveUserCredits(row.username, groups[0])
+                                    }}
+                                    className="btn btn-sm btn-outline text-error-600"
+                                    title="Remove from first group"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         )
                       })}
                       {userRows.length === 0 && (
-                        <tr><td colSpan={7} className="text-gray-500 text-center py-6">No user token records</td></tr>
+                        <tr><td colSpan={8} className="text-gray-500 text-center py-6">No user token records</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -250,6 +327,127 @@ export default function CreditsPage() {
           </div>
         </div>
       </div>
+
+      {/* Assign Credits Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 bg-black/50" onClick={() => setShowAssignModal(false)} />
+            
+            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Assign Credits to User
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Username *
+                  </label>
+                  <input
+                    type="text"
+                    value={assignForm.username}
+                    onChange={(e) => setAssignForm({ ...assignForm, username: e.target.value })}
+                    className="input"
+                    placeholder="Enter username"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Credit Group *
+                  </label>
+                  <select
+                    value={assignForm.credit_group}
+                    onChange={(e) => setAssignForm({ ...assignForm, credit_group: e.target.value, tier_name: '' })}
+                    className="input"
+                  >
+                    <option value="">Select credit group</option>
+                    {Object.keys(defs).map((group) => (
+                      <option key={group} value={group}>{group}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Select from available credit definitions
+                  </p>
+                </div>
+                
+                {assignForm.credit_group && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Tier *
+                    </label>
+                    <select
+                      value={assignForm.tier_name}
+                      onChange={(e) => {
+                        const tierName = e.target.value
+                        const tierMeta = defs[assignForm.credit_group]?.[tierName]
+                        setAssignForm({ 
+                          ...assignForm, 
+                          tier_name: tierName,
+                          credits: tierMeta?.credits || 0
+                        })
+                      }}
+                      className="input"
+                    >
+                      <option value="">Select tier</option>
+                      {Object.keys(defs[assignForm.credit_group] || {}).map((tier) => {
+                        const meta = defs[assignForm.credit_group][tier]
+                        return (
+                          <option key={tier} value={tier}>
+                            {tier} ({meta.credits} credits, {meta.reset_frequency || 'no reset'})
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                )}
+                
+                {assignForm.tier_name && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Initial Credits
+                    </label>
+                    <input
+                      type="number"
+                      value={assignForm.credits}
+                      onChange={(e) => setAssignForm({ ...assignForm, credits: parseInt(e.target.value) || 0 })}
+                      className="input"
+                      min="0"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Leave as default or override initial credit amount
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={handleAssignCredits}
+                  disabled={assigning || !assignForm.username || !assignForm.credit_group || !assignForm.tier_name}
+                  className="btn btn-primary flex-1"
+                >
+                  {assigning ? (
+                    <>
+                      <div className="spinner mr-2"></div>
+                      Assigning...
+                    </>
+                  ) : (
+                    'Assign Credits'
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowAssignModal(false)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </Layout>
     </ProtectedRoute>

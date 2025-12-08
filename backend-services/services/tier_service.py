@@ -8,7 +8,6 @@ Handles tier CRUD, user assignments, upgrades, downgrades, and transitions.
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
-from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from models.rate_limit_models import (
     Tier,
@@ -33,12 +32,12 @@ class TierService:
     - Tier comparison and selection
     """
     
-    def __init__(self, db: AsyncIOMotorDatabase):
+    def __init__(self, db):
         """
         Initialize tier service
         
         Args:
-            db: MongoDB database instance
+            db: MongoDB database instance (sync) or InMemoryDB
         """
         self.db = db
         self.tiers_collection = db.tiers
@@ -602,12 +601,12 @@ class TierService:
 _tier_service: Optional[TierService] = None
 
 
-def get_tier_service(db: AsyncIOMotorDatabase) -> TierService:
+def get_tier_service(db) -> TierService:
     """
     Get or create global tier service instance
     
     Args:
-        db: MongoDB database instance
+        db: MongoDB database instance (sync) or InMemoryDB
         
     Returns:
         TierService instance
