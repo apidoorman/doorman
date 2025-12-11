@@ -1,15 +1,17 @@
-import json
 import asyncio
+import json
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_load_settings_from_file_in_memory_mode(tmp_path, monkeypatch):
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
     from utils import security_settings_util as ssu
+
     settings_path = tmp_path / 'sec_settings.json'
     monkeypatch.setattr(ssu, 'SETTINGS_FILE', str(settings_path), raising=False)
-    from utils.security_settings_util import load_settings, get_cached_settings
-    from utils.security_settings_util import _get_collection
+    from utils.security_settings_util import _get_collection, get_cached_settings, load_settings
 
     coll = _get_collection()
     try:
@@ -41,6 +43,7 @@ async def test_load_settings_from_file_in_memory_mode(tmp_path, monkeypatch):
     assert cached.get('ip_whitelist') == ['203.0.113.1']
     assert cached.get('allow_localhost_bypass') is True
 
+
 @pytest.mark.asyncio
 async def test_save_settings_writes_file_and_autosave_triggers_dump(tmp_path, monkeypatch):
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
@@ -50,20 +53,24 @@ async def test_save_settings_writes_file_and_autosave_triggers_dump(tmp_path, mo
     monkeypatch.setattr(ssu, 'SETTINGS_FILE', str(sec_file), raising=False)
 
     calls = {'count': 0, 'last_path': None}
+
     def _fake_dump(path_hint):
         calls['count'] += 1
         calls['last_path'] = path_hint
         return str(tmp_path / 'dump.bin')
+
     monkeypatch.setattr(ssu, 'dump_memory_to_file', _fake_dump)
 
     await ssu.start_auto_save_task()
     prev_task = getattr(ssu, '_AUTO_TASK', None)
 
-    result = await ssu.save_settings({
-        'enable_auto_save': True,
-        'auto_save_frequency_seconds': 90,
-        'dump_path': str(tmp_path / 'wanted_dump.bin'),
-    })
+    result = await ssu.save_settings(
+        {
+            'enable_auto_save': True,
+            'auto_save_frequency_seconds': 90,
+            'dump_path': str(tmp_path / 'wanted_dump.bin'),
+        }
+    )
 
     await asyncio.sleep(0)
 

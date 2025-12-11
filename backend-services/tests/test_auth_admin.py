@@ -1,20 +1,18 @@
 import os
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_auth_admin_endpoints(authed_client):
-
-    r = await authed_client.put(
-        '/platform/role/admin',
-        json={'manage_auth': True},
-    )
+    r = await authed_client.put('/platform/role/admin', json={'manage_auth': True})
     assert r.status_code == 200, r.text
 
     relog = await authed_client.post(
         '/platform/authorization',
         json={
             'email': os.environ.get('DOORMAN_ADMIN_EMAIL'),
-            'password': os.environ.get('DOORMAN_ADMIN_PASSWORD')
+            'password': os.environ.get('DOORMAN_ADMIN_PASSWORD'),
         },
     )
     assert relog.status_code == 200, relog.text
@@ -27,7 +25,7 @@ async def test_auth_admin_endpoints(authed_client):
             'password': 'VerySecurePassword!123',
             'role': 'admin',
             'groups': ['ALL'],
-            'active': True
+            'active': True,
         },
     )
     assert create.status_code in (200, 201), create.text

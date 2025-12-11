@@ -18,15 +18,18 @@ Usage:
     hot_config.reload()
 """
 
-import os
 import json
-import yaml
 import logging
+import os
 import threading
-from typing import Any, Dict, Callable, Optional
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 logger = logging.getLogger('doorman.gateway')
+
 
 class HotReloadConfig:
     """
@@ -39,10 +42,10 @@ class HotReloadConfig:
     - Callbacks for configuration changes
     """
 
-    def __init__(self, config_file: Optional[str] = None):
+    def __init__(self, config_file: str | None = None):
         self._lock = threading.RLock()
-        self._config: Dict[str, Any] = {}
-        self._callbacks: Dict[str, list] = {}
+        self._config: dict[str, Any] = {}
+        self._callbacks: dict[str, list] = {}
         self._config_file = config_file or os.getenv('DOORMAN_CONFIG_FILE')
         self._load_initial_config()
 
@@ -64,7 +67,7 @@ class HotReloadConfig:
         """Load configuration from YAML or JSON file"""
         path = Path(filepath)
 
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             if path.suffix in ['.yaml', '.yml']:
                 file_config = yaml.safe_load(f) or {}
             elif path.suffix == '.json':
@@ -80,29 +83,22 @@ class HotReloadConfig:
             'LOG_LEVEL',
             'LOG_FORMAT',
             'LOG_FILE',
-
             'GATEWAY_TIMEOUT',
             'UPSTREAM_TIMEOUT',
             'CONNECTION_TIMEOUT',
-
             'RATE_LIMIT_ENABLED',
             'RATE_LIMIT_REQUESTS',
             'RATE_LIMIT_WINDOW',
-
             'CACHE_TTL',
             'CACHE_MAX_SIZE',
-
             'CIRCUIT_BREAKER_ENABLED',
             'CIRCUIT_BREAKER_THRESHOLD',
             'CIRCUIT_BREAKER_TIMEOUT',
-
             'RETRY_ENABLED',
             'RETRY_MAX_ATTEMPTS',
             'RETRY_BACKOFF',
-
             'METRICS_ENABLED',
             'METRICS_INTERVAL',
-
             'FEATURE_REQUEST_REPLAY',
             'FEATURE_AB_TESTING',
             'FEATURE_COST_ANALYTICS',
@@ -249,7 +245,7 @@ class HotReloadConfig:
 
         logger.info('Configuration reload complete')
 
-    def dump(self) -> Dict[str, Any]:
+    def dump(self) -> dict[str, Any]:
         """Dump current configuration (for debugging)"""
         with self._lock:
             config = self._config.copy()
@@ -259,10 +255,12 @@ class HotReloadConfig:
                     config[key] = self._parse_value(env_value)
             return config
 
+
 hot_config = HotReloadConfig()
 
+
 # Convenience functions for common config patterns
-def get_timeout_config() -> Dict[str, int]:
+def get_timeout_config() -> dict[str, int]:
     """Get all timeout configurations"""
     return {
         'gateway_timeout': hot_config.get_int('GATEWAY_TIMEOUT', 30),
@@ -270,7 +268,8 @@ def get_timeout_config() -> Dict[str, int]:
         'connection_timeout': hot_config.get_int('CONNECTION_TIMEOUT', 10),
     }
 
-def get_rate_limit_config() -> Dict[str, Any]:
+
+def get_rate_limit_config() -> dict[str, Any]:
     """Get rate limiting configuration"""
     return {
         'enabled': hot_config.get_bool('RATE_LIMIT_ENABLED', True),
@@ -278,14 +277,16 @@ def get_rate_limit_config() -> Dict[str, Any]:
         'window': hot_config.get_int('RATE_LIMIT_WINDOW', 60),
     }
 
-def get_cache_config() -> Dict[str, Any]:
+
+def get_cache_config() -> dict[str, Any]:
     """Get cache configuration"""
     return {
         'ttl': hot_config.get_int('CACHE_TTL', 300),
         'max_size': hot_config.get_int('CACHE_MAX_SIZE', 1000),
     }
 
-def get_circuit_breaker_config() -> Dict[str, Any]:
+
+def get_circuit_breaker_config() -> dict[str, Any]:
     """Get circuit breaker configuration"""
     return {
         'enabled': hot_config.get_bool('CIRCUIT_BREAKER_ENABLED', True),
@@ -293,7 +294,8 @@ def get_circuit_breaker_config() -> Dict[str, Any]:
         'timeout': hot_config.get_int('CIRCUIT_BREAKER_TIMEOUT', 60),
     }
 
-def get_retry_config() -> Dict[str, Any]:
+
+def get_retry_config() -> dict[str, Any]:
     """Get retry configuration"""
     return {
         'enabled': hot_config.get_bool('RETRY_ENABLED', True),

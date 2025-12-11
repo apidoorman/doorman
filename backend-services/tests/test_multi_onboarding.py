@@ -1,8 +1,8 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_multi_endpoints_per_api_and_listing(authed_client):
-
     c = await authed_client.post(
         '/platform/api',
         json={
@@ -18,11 +18,7 @@ async def test_multi_endpoints_per_api_and_listing(authed_client):
     )
     assert c.status_code in (200, 201)
 
-    endpoints = [
-        ('GET', '/a'),
-        ('POST', '/b'),
-        ('PUT', '/c'),
-    ]
+    endpoints = [('GET', '/a'), ('POST', '/b'), ('PUT', '/c')]
     for method, uri in endpoints:
         ep = await authed_client.post(
             '/platform/endpoint',

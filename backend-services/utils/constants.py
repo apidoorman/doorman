@@ -1,6 +1,7 @@
 class Headers:
     REQUEST_ID = 'request_id'
 
+
 class Defaults:
     PAGE = 1
     PAGE_SIZE = 10
@@ -8,6 +9,7 @@ class Defaults:
     MAX_PAGE_SIZE_DEFAULT = 200
     MAX_MULTIPART_SIZE_BYTES_ENV = 'MAX_MULTIPART_SIZE_BYTES'
     MAX_MULTIPART_SIZE_BYTES_DEFAULT = 5_242_880
+
 
 class Roles:
     MANAGE_USERS = 'manage_users'
@@ -17,6 +19,7 @@ class Roles:
     VIEW_LOGS = 'view_logs'
     EXPORT_LOGS = 'export_logs'
     MANAGE_ROLES = 'manage_roles'
+
 
 class ErrorCodes:
     UNEXPECTED = 'GTW999'
@@ -28,6 +31,7 @@ class ErrorCodes:
     REQUEST_TOO_LARGE = 'REQ002'
     REQUEST_FILE_TYPE = 'REQ003'
     PAGE_SIZE = 'PAG001'
+
 
 class Messages:
     UNEXPECTED = 'An unexpected error occurred'

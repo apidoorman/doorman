@@ -7,11 +7,12 @@ These tests verify that:
 3. Compression settings affect the compression ratio
 """
 
-import pytest
 import gzip
+import io
 import json
 import os
-import io
+
+import pytest
 
 
 @pytest.mark.asyncio
@@ -20,7 +21,7 @@ async def test_json_compression_ratio(client):
     # Authenticate to get access to endpoints
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
@@ -44,15 +45,15 @@ async def test_json_compression_ratio(client):
     # Calculate compression ratio
     compression_ratio = (1 - (compressed_size / uncompressed_size)) * 100
 
-    print(f"\nJSON Compression Stats:")
-    print(f"  Uncompressed: {uncompressed_size} bytes")
-    print(f"  Compressed:   {compressed_size} bytes")
-    print(f"  Ratio:        {compression_ratio:.1f}% reduction")
+    print('\nJSON Compression Stats:')
+    print(f'  Uncompressed: {uncompressed_size} bytes')
+    print(f'  Compressed:   {compressed_size} bytes')
+    print(f'  Ratio:        {compression_ratio:.1f}% reduction')
 
     # JSON should compress well (typically 60-80%)
     # But only if response is large enough
     if uncompressed_size > 500:
-        assert compression_ratio > 30, f"Expected >30% compression, got {compression_ratio:.1f}%"
+        assert compression_ratio > 30, f'Expected >30% compression, got {compression_ratio:.1f}%'
 
 
 @pytest.mark.asyncio
@@ -61,7 +62,7 @@ async def test_large_list_compression(client):
     # Authenticate
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
@@ -78,11 +79,11 @@ async def test_large_list_compression(client):
             'api_allowed_groups': ['ALL'],
             'api_servers': ['http://example.com'],
             'api_type': 'REST',
-            'active': True
+            'active': True,
         }
         r = await client.post('/platform/api', json=api_payload)
         if r.status_code in (200, 201):
-            test_apis.append(f"compression-test-{i}")
+            test_apis.append(f'compression-test-{i}')
 
     # Get the full list
     r = await client.get('/platform/api')
@@ -100,10 +101,10 @@ async def test_large_list_compression(client):
 
     compression_ratio = (1 - (compressed_size / uncompressed_size)) * 100
 
-    print(f"\nLarge List Compression Stats:")
-    print(f"  Uncompressed: {uncompressed_size} bytes")
-    print(f"  Compressed:   {compressed_size} bytes")
-    print(f"  Ratio:        {compression_ratio:.1f}% reduction")
+    print('\nLarge List Compression Stats:')
+    print(f'  Uncompressed: {uncompressed_size} bytes')
+    print(f'  Compressed:   {compressed_size} bytes')
+    print(f'  Ratio:        {compression_ratio:.1f}% reduction')
 
     # Cleanup
     for api_name in test_apis:
@@ -114,7 +115,7 @@ async def test_large_list_compression(client):
 
     # Should achieve good compression on repeated data
     if uncompressed_size > 1000:
-        assert compression_ratio > 40, f"Expected >40% compression for large list"
+        assert compression_ratio > 40, 'Expected >40% compression for large list'
 
 
 @pytest.mark.asyncio
@@ -123,19 +124,14 @@ async def test_compression_bandwidth_savings(client):
     # Authenticate
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
     assert r_auth.status_code == 200
 
     # Test multiple endpoints
-    endpoints = [
-        '/platform/api',
-        '/platform/user',
-        '/platform/role',
-        '/platform/group',
-    ]
+    endpoints = ['/platform/api', '/platform/user', '/platform/role', '/platform/group']
 
     total_uncompressed = 0
     total_compressed = 0
@@ -161,14 +157,14 @@ async def test_compression_bandwidth_savings(client):
     if total_uncompressed > 0:
         overall_ratio = (1 - (total_compressed / total_uncompressed)) * 100
 
-        print(f"\nOverall Bandwidth Savings:")
-        print(f"  Total uncompressed: {total_uncompressed} bytes")
-        print(f"  Total compressed:   {total_compressed} bytes")
-        print(f"  Overall ratio:      {overall_ratio:.1f}% reduction")
-        print(f"  Bandwidth saved:    {total_uncompressed - total_compressed} bytes")
+        print('\nOverall Bandwidth Savings:')
+        print(f'  Total uncompressed: {total_uncompressed} bytes')
+        print(f'  Total compressed:   {total_compressed} bytes')
+        print(f'  Overall ratio:      {overall_ratio:.1f}% reduction')
+        print(f'  Bandwidth saved:    {total_uncompressed - total_compressed} bytes')
 
         # Should see significant savings
-        assert overall_ratio > 0, "Compression should reduce size"
+        assert overall_ratio > 0, 'Compression should reduce size'
 
 
 @pytest.mark.asyncio
@@ -177,7 +173,7 @@ async def test_compression_level_affects_ratio(client):
     # Authenticate
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
@@ -199,15 +195,12 @@ async def test_compression_level_affects_ratio(client):
             gz.write(json_str.encode('utf-8'))
         compressed_size = len(compressed_buffer.getvalue())
         ratio = (1 - (compressed_size / uncompressed_size)) * 100
-        compression_results[level] = {
-            'size': compressed_size,
-            'ratio': ratio
-        }
+        compression_results[level] = {'size': compressed_size, 'ratio': ratio}
 
-    print(f"\nCompression Level Comparison:")
-    print(f"  Uncompressed: {uncompressed_size} bytes")
+    print('\nCompression Level Comparison:')
+    print(f'  Uncompressed: {uncompressed_size} bytes')
     for level, result in compression_results.items():
-        print(f"  Level {level}: {result['size']} bytes ({result['ratio']:.1f}% reduction)")
+        print(f'  Level {level}: {result["size"]} bytes ({result["ratio"]:.1f}% reduction)')
 
     # Higher compression levels should achieve better (or equal) compression
     # Level 9 should be <= Level 6 <= Level 1 in size
@@ -226,7 +219,7 @@ async def test_minimum_size_threshold(client):
     response_content = r.content
     response_size = len(response_content)
 
-    print(f"\nSmall Response Size: {response_size} bytes")
+    print(f'\nSmall Response Size: {response_size} bytes')
 
     # If response is smaller than 500 bytes (default minimum_size),
     # compressing it may not be worth the CPU overhead
@@ -239,7 +232,7 @@ async def test_compression_transfer_savings_calculation(client):
     # Authenticate
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
@@ -269,12 +262,12 @@ async def test_compression_transfer_savings_calculation(client):
     monthly_savings_mb = monthly_savings_bytes / (1024 * 1024)
     monthly_savings_gb = monthly_savings_mb / 1024
 
-    print(f"\nTransfer Savings Estimate:")
-    print(f"  Compression ratio: {compression_ratio:.1f}%")
-    print(f"  Bytes saved per request: {bytes_saved_per_request}")
-    print(f"  Monthly requests: {requests_per_month:,}")
-    print(f"  Monthly bandwidth saved: {monthly_savings_gb:.2f} GB")
-    print(f"  Annual bandwidth saved: {monthly_savings_gb * 12:.2f} GB")
+    print('\nTransfer Savings Estimate:')
+    print(f'  Compression ratio: {compression_ratio:.1f}%')
+    print(f'  Bytes saved per request: {bytes_saved_per_request}')
+    print(f'  Monthly requests: {requests_per_month:,}')
+    print(f'  Monthly bandwidth saved: {monthly_savings_gb:.2f} GB')
+    print(f'  Annual bandwidth saved: {monthly_savings_gb * 12:.2f} GB')
 
     # Should save significant bandwidth
     assert bytes_saved_per_request >= 0

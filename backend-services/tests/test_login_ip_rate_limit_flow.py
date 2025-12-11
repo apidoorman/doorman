@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_login_ip_rate_limit_returns_429_and_headers(monkeypatch, client):
@@ -9,7 +11,7 @@ async def test_login_ip_rate_limit_returns_429_and_headers(monkeypatch, client):
 
     creds = {
         'email': os.environ.get('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.environ.get('DOORMAN_ADMIN_PASSWORD', 'Password123!Password')
+        'password': os.environ.get('DOORMAN_ADMIN_PASSWORD', 'Password123!Password'),
     }
 
     r1 = await client.post('/platform/authorization', json=creds)

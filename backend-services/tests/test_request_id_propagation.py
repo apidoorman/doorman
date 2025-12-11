@@ -1,13 +1,16 @@
 import httpx
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_request_id_propagates_to_upstream_and_response(monkeypatch, authed_client):
     captured = {'xrid': None}
 
     def handler(req: httpx.Request) -> httpx.Response:
         captured['xrid'] = req.headers.get('X-Request-ID')
-        return httpx.Response(200, json={'ok': True}, headers={'X-Upstream-Request-ID': captured['xrid'] or ''})
+        return httpx.Response(
+            200, json={'ok': True}, headers={'X-Upstream-Request-ID': captured['xrid'] or ''}
+        )
 
     transport = httpx.MockTransport(handler)
     mock_client = httpx.AsyncClient(transport=transport)
@@ -17,7 +20,9 @@ async def test_request_id_propagates_to_upstream_and_response(monkeypatch, authe
     async def _get_client():
         return mock_client
 
-    monkeypatch.setattr(gateway_service.GatewayService, 'get_http_client', classmethod(lambda cls: mock_client))
+    monkeypatch.setattr(
+        gateway_service.GatewayService, 'get_http_client', classmethod(lambda cls: mock_client)
+    )
 
     api_name, api_version = 'ridtest', 'v1'
     payload = {
@@ -34,16 +39,22 @@ async def test_request_id_propagates_to_upstream_and_response(monkeypatch, authe
     r = await authed_client.post('/platform/api', json=payload)
     assert r.status_code in (200, 201), r.text
 
-    r2 = await authed_client.post('/platform/endpoint', json={
-        'api_name': api_name,
-        'api_version': api_version,
-        'endpoint_method': 'GET',
-        'endpoint_uri': '/echo',
-        'endpoint_description': 'echo'
-    })
+    r2 = await authed_client.post(
+        '/platform/endpoint',
+        json={
+            'api_name': api_name,
+            'api_version': api_version,
+            'endpoint_method': 'GET',
+            'endpoint_uri': '/echo',
+            'endpoint_description': 'echo',
+        },
+    )
     assert r2.status_code in (200, 201), r2.text
 
-    sub = await authed_client.post('/platform/subscription/subscribe', json={'username': 'admin', 'api_name': api_name, 'api_version': api_version})
+    sub = await authed_client.post(
+        '/platform/subscription/subscribe',
+        json={'username': 'admin', 'api_name': api_name, 'api_version': api_version},
+    )
     assert sub.status_code in (200, 201), sub.text
 
     resp = await authed_client.get(f'/api/rest/{api_name}/{api_version}/echo')

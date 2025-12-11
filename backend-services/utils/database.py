@@ -4,23 +4,21 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-from pymongo import MongoClient, IndexModel, ASCENDING
-from dotenv import load_dotenv
-import os
-import uuid
 import copy
-import json
-import threading
-import secrets
-import string as _string
 import logging
+import os
+import threading
+import uuid
 
-from utils import password_util
-from utils import chaos_util
+from dotenv import load_dotenv
+from pymongo import ASCENDING, IndexModel, MongoClient
+
+from utils import chaos_util, password_util
 
 load_dotenv()
 
 logger = logging.getLogger('doorman.gateway')
+
 
 def _build_admin_seed_doc(email: str, pwd_hash: str) -> dict:
     """Canonical admin bootstrap document used for both memory and Mongo modes.
@@ -47,9 +45,9 @@ def _build_admin_seed_doc(email: str, pwd_hash: str) -> dict:
         'active': True,
     }
 
+
 class Database:
     def __init__(self):
-
         mem_flag = os.getenv('MEM_OR_EXTERNAL')
         if mem_flag is None:
             mem_flag = os.getenv('MEM_OR_REDIS', 'MEM')
@@ -75,17 +73,15 @@ class Database:
         self.db_existed = True
 
         if len(host_list) > 1 and replica_set_name:
-            connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman?replicaSet={replica_set_name}"
+            connection_uri = f'mongodb://{mongo_user}:{mongo_pass}@{",".join(host_list)}/doorman?replicaSet={replica_set_name}'
         else:
-            connection_uri = f"mongodb://{mongo_user}:{mongo_pass}@{','.join(host_list)}/doorman"
+            connection_uri = f'mongodb://{mongo_user}:{mongo_pass}@{",".join(host_list)}/doorman'
 
         self.client = MongoClient(
-            connection_uri,
-            serverSelectionTimeoutMS=5000,
-            maxPoolSize=100,
-            minPoolSize=5
+            connection_uri, serverSelectionTimeoutMS=5000, maxPoolSize=100, minPoolSize=5
         )
         self.db = self.client.get_database()
+
     def initialize_collections(self):
         if self.memory_only:
             # Resolve admin seed credentials consistently across modes (no auto-generation)
@@ -93,7 +89,9 @@ class Database:
                 email = os.getenv('DOORMAN_ADMIN_EMAIL') or 'admin@doorman.dev'
                 pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
                 if not pwd:
-                    raise RuntimeError('DOORMAN_ADMIN_PASSWORD is required for admin initialization')
+                    raise RuntimeError(
+                        'DOORMAN_ADMIN_PASSWORD is required for admin initialization'
+                    )
                 return email, password_util.hash_password(pwd)
 
             users = self.db.users
@@ -101,37 +99,43 @@ class Database:
             groups = self.db.groups
 
             if not roles.find_one({'role_name': 'admin'}):
-                roles.insert_one({
-                    'role_name': 'admin',
-                    'role_description': 'Administrator role',
-                    'manage_users': True,
-                    'manage_apis': True,
-                    'manage_endpoints': True,
-                    'manage_groups': True,
-                    'manage_roles': True,
-                    'manage_routings': True,
-                    'manage_gateway': True,
-                    'manage_subscriptions': True,
-                    'manage_credits': True,
-                    'manage_auth': True,
-                    'manage_security': True,
-                    'view_logs': True,
-                    'export_logs': True,
-                    'ui_access': True
-                })
+                roles.insert_one(
+                    {
+                        'role_name': 'admin',
+                        'role_description': 'Administrator role',
+                        'manage_users': True,
+                        'manage_apis': True,
+                        'manage_endpoints': True,
+                        'manage_groups': True,
+                        'manage_roles': True,
+                        'manage_routings': True,
+                        'manage_gateway': True,
+                        'manage_subscriptions': True,
+                        'manage_credits': True,
+                        'manage_auth': True,
+                        'manage_security': True,
+                        'view_logs': True,
+                        'export_logs': True,
+                        'ui_access': True,
+                    }
+                )
 
             if not groups.find_one({'group_name': 'admin'}):
-                groups.insert_one({
-                    'group_name': 'admin',
-                    'group_description': 'Administrator group with full access',
-                    'api_access': []
-                })
+                groups.insert_one(
+                    {
+                        'group_name': 'admin',
+                        'group_description': 'Administrator group with full access',
+                        'api_access': [],
+                    }
+                )
             if not groups.find_one({'group_name': 'ALL'}):
-                groups.insert_one({
-                    'group_name': 'ALL',
-                    'group_description': 'Default group with access to all APIs',
-                    'api_access': []
-                })
+                groups.insert_one(
+                    {
+                        'group_name': 'ALL',
+                        'group_description': 'Default group with access to all APIs',
+                        'api_access': [],
+                    }
+                )
 
             if not users.find_one({'username': 'admin'}):
                 _email, _pwd_hash = _admin_seed_creds()
@@ -150,16 +154,24 @@ class Database:
         try:
             env_pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
             if env_pwd:
-                users.update_one({'username': 'admin'}, {'$set': {'password': password_util.hash_password(env_pwd)}})
+                users.update_one(
+                    {'username': 'admin'},
+                    {'$set': {'password': password_util.hash_password(env_pwd)}},
+                )
         except Exception:
             pass
 
             try:
                 from datetime import datetime
+
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
                 env_logs = os.getenv('LOGS_DIR')
-                logs_dir = os.path.abspath(env_logs) if env_logs else os.path.join(base_dir, 'platform-logs')
+                logs_dir = (
+                    os.path.abspath(env_logs)
+                    if env_logs
+                    else os.path.join(base_dir, 'platform-logs')
+                )
                 os.makedirs(logs_dir, exist_ok=True)
                 log_path = os.path.join(logs_dir, 'doorman.log')
                 now = datetime.now()
@@ -169,7 +181,7 @@ class Database:
                     ('orders', '/orders/v1/status'),
                     ('weather', '/weather/v1/status'),
                 ]
-                for api_name, ep in samples:
+                for _api_name, ep in samples:
                     ts = now.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
                     rid = str(uuid.uuid4())
                     msg = f'{rid} | Username: admin | From: 127.0.0.1:54321 | Endpoint: GET {ep} | Total time: 42ms'
@@ -180,7 +192,23 @@ class Database:
                 pass
             logger.info('Memory-only mode: Core data initialized (admin user/role/groups)')
             return
-        collections = ['users', 'apis', 'endpoints', 'groups', 'roles', 'subscriptions', 'routings', 'credit_defs', 'user_credits', 'endpoint_validations', 'settings', 'revocations', 'vault_entries', 'tiers', 'user_tier_assignments']
+        collections = [
+            'users',
+            'apis',
+            'endpoints',
+            'groups',
+            'roles',
+            'subscriptions',
+            'routings',
+            'credit_defs',
+            'user_credits',
+            'endpoint_validations',
+            'settings',
+            'revocations',
+            'vault_entries',
+            'tiers',
+            'user_tier_assignments',
+        ]
         for collection in collections:
             if collection not in self.db.list_collection_names():
                 self.db_existed = False
@@ -193,8 +221,11 @@ class Database:
                     email = os.getenv('DOORMAN_ADMIN_EMAIL') or 'admin@doorman.dev'
                     pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
                     if not pwd:
-                        raise RuntimeError('DOORMAN_ADMIN_PASSWORD is required for admin initialization')
+                        raise RuntimeError(
+                            'DOORMAN_ADMIN_PASSWORD is required for admin initialization'
+                        )
                     return email, password_util.hash_password(pwd)
+
                 _email, _pwd_hash = _admin_seed_creds_mongo()
                 self.db.users.insert_one(_build_admin_seed_doc(_email, _pwd_hash))
         try:
@@ -210,90 +241,109 @@ class Database:
                 if env_pwd:
                     self.db.users.update_one(
                         {'username': 'admin'},
-                        {'$set': {'password': password_util.hash_password(env_pwd)}}
+                        {'$set': {'password': password_util.hash_password(env_pwd)}},
                     )
                     logger.warning('Admin user lacked password; set from DOORMAN_ADMIN_PASSWORD')
                 else:
-                    raise RuntimeError('Admin user missing password and DOORMAN_ADMIN_PASSWORD not set')
+                    raise RuntimeError(
+                        'Admin user missing password and DOORMAN_ADMIN_PASSWORD not set'
+                    )
         except Exception:
             pass
             if not self.db.roles.find_one({'role_name': 'admin'}):
-                self.db.roles.insert_one({
-                    'role_name': 'admin',
-                    'role_description': 'Administrator role',
-                    'manage_users': True,
-                    'manage_apis': True,
-                    'manage_endpoints': True,
-                    'manage_groups': True,
-                    'manage_roles': True,
-                    'manage_routings': True,
-                    'manage_gateway': True,
-                    'manage_subscriptions': True,
-                    'manage_credits': True,
-                    'manage_auth': True,
-                    'view_logs': True,
-                    'export_logs': True,
-                    'manage_security': True
-                })
+                self.db.roles.insert_one(
+                    {
+                        'role_name': 'admin',
+                        'role_description': 'Administrator role',
+                        'manage_users': True,
+                        'manage_apis': True,
+                        'manage_endpoints': True,
+                        'manage_groups': True,
+                        'manage_roles': True,
+                        'manage_routings': True,
+                        'manage_gateway': True,
+                        'manage_subscriptions': True,
+                        'manage_credits': True,
+                        'manage_auth': True,
+                        'view_logs': True,
+                        'export_logs': True,
+                        'manage_security': True,
+                    }
+                )
             if not self.db.groups.find_one({'group_name': 'admin'}):
-                self.db.groups.insert_one({
-                    'group_name': 'admin',
-                    'group_description': 'Administrator group with full access',
-                    'api_access': []
-                })
+                self.db.groups.insert_one(
+                    {
+                        'group_name': 'admin',
+                        'group_description': 'Administrator group with full access',
+                        'api_access': [],
+                    }
+                )
             if not self.db.groups.find_one({'group_name': 'ALL'}):
-                self.db.groups.insert_one({
-                    'group_name': 'ALL',
-                    'group_description': 'Default group with access to all APIs',
-                    'api_access': []
-                })
+                self.db.groups.insert_one(
+                    {
+                        'group_name': 'ALL',
+                        'group_description': 'Default group with access to all APIs',
+                        'api_access': [],
+                    }
+                )
 
     def create_indexes(self):
         if self.memory_only:
             logger.debug('Memory-only mode: Skipping MongoDB index creation')
             return
-        self.db.apis.create_indexes([
-            IndexModel([('api_id', ASCENDING)], unique=True),
-            IndexModel([('name', ASCENDING), ('version', ASCENDING)])
-        ])
-        self.db.endpoints.create_indexes([
-            IndexModel([('endpoint_method', ASCENDING), ('api_name', ASCENDING), ('api_version', ASCENDING), ('endpoint_uri', ASCENDING)], unique=True),
-        ])
-        self.db.users.create_indexes([
-            IndexModel([('username', ASCENDING)], unique=True),
-            IndexModel([('email', ASCENDING)], unique=True)
-        ])
-        self.db.groups.create_indexes([
-            IndexModel([('group_name', ASCENDING)], unique=True)
-        ])
-        self.db.roles.create_indexes([
-            IndexModel([('role_name', ASCENDING)], unique=True)
-        ])
-        self.db.subscriptions.create_indexes([
-            IndexModel([('username', ASCENDING)], unique=True)
-        ])
-        self.db.routings.create_indexes([
-            IndexModel([('client_key', ASCENDING)], unique=True)
-        ])
-        self.db.credit_defs.create_indexes([
-            IndexModel([('api_credit_group', ASCENDING)], unique=True),
-            IndexModel([('username', ASCENDING)], unique=True)
-        ])
-        self.db.endpoint_validations.create_indexes([
-            IndexModel([('endpoint_id', ASCENDING)], unique=True)
-        ])
-        self.db.vault_entries.create_indexes([
-            IndexModel([('username', ASCENDING), ('key_name', ASCENDING)], unique=True),
-            IndexModel([('username', ASCENDING)])
-        ])
-        self.db.tiers.create_indexes([
-            IndexModel([('tier_id', ASCENDING)], unique=True),
-            IndexModel([('name', ASCENDING)])
-        ])
-        self.db.user_tier_assignments.create_indexes([
-            IndexModel([('user_id', ASCENDING)], unique=True),
-            IndexModel([('tier_id', ASCENDING)])
-        ])
+        self.db.apis.create_indexes(
+            [
+                IndexModel([('api_id', ASCENDING)], unique=True),
+                IndexModel([('name', ASCENDING), ('version', ASCENDING)]),
+            ]
+        )
+        self.db.endpoints.create_indexes(
+            [
+                IndexModel(
+                    [
+                        ('endpoint_method', ASCENDING),
+                        ('api_name', ASCENDING),
+                        ('api_version', ASCENDING),
+                        ('endpoint_uri', ASCENDING),
+                    ],
+                    unique=True,
+                )
+            ]
+        )
+        self.db.users.create_indexes(
+            [
+                IndexModel([('username', ASCENDING)], unique=True),
+                IndexModel([('email', ASCENDING)], unique=True),
+            ]
+        )
+        self.db.groups.create_indexes([IndexModel([('group_name', ASCENDING)], unique=True)])
+        self.db.roles.create_indexes([IndexModel([('role_name', ASCENDING)], unique=True)])
+        self.db.subscriptions.create_indexes([IndexModel([('username', ASCENDING)], unique=True)])
+        self.db.routings.create_indexes([IndexModel([('client_key', ASCENDING)], unique=True)])
+        self.db.credit_defs.create_indexes(
+            [
+                IndexModel([('api_credit_group', ASCENDING)], unique=True),
+                IndexModel([('username', ASCENDING)], unique=True),
+            ]
+        )
+        self.db.endpoint_validations.create_indexes(
+            [IndexModel([('endpoint_id', ASCENDING)], unique=True)]
+        )
+        self.db.vault_entries.create_indexes(
+            [
+                IndexModel([('username', ASCENDING), ('key_name', ASCENDING)], unique=True),
+                IndexModel([('username', ASCENDING)]),
+            ]
+        )
+        self.db.tiers.create_indexes(
+            [IndexModel([('tier_id', ASCENDING)], unique=True), IndexModel([('name', ASCENDING)])]
+        )
+        self.db.user_tier_assignments.create_indexes(
+            [
+                IndexModel([('user_id', ASCENDING)], unique=True),
+                IndexModel([('tier_id', ASCENDING)]),
+            ]
+        )
 
     def is_memory_only(self) -> bool:
         return self.memory_only
@@ -303,27 +353,30 @@ class Database:
             'mode': 'memory_only' if self.memory_only else 'mongodb',
             'mongodb_connected': not self.memory_only and self.client is not None,
             'collections_available': not self.memory_only,
-            'cache_backend': os.getenv('MEM_OR_EXTERNAL', os.getenv('MEM_OR_REDIS', 'REDIS'))
+            'cache_backend': os.getenv('MEM_OR_EXTERNAL', os.getenv('MEM_OR_REDIS', 'REDIS')),
         }
+
 
 class InMemoryInsertResult:
     def __init__(self, inserted_id):
         self.acknowledged = True
         self.inserted_id = inserted_id
 
+
 class InMemoryUpdateResult:
     def __init__(self, modified_count):
         self.acknowledged = True
         self.modified_count = modified_count
+
 
 class InMemoryDeleteResult:
     def __init__(self, deleted_count):
         self.acknowledged = True
         self.deleted_count = deleted_count
 
+
 class InMemoryCursor:
     def __init__(self, docs):
-
         self._docs = [copy.deepcopy(d) for d in docs]
         self._index = 0
 
@@ -362,10 +415,10 @@ class InMemoryCursor:
         if length is None:
             return data
         try:
-
             return data[: int(length)]
         except Exception:
             return data
+
 
 class InMemoryCollection:
     def __init__(self, name):
@@ -453,7 +506,6 @@ class InMemoryCollection:
 
                     if set_data:
                         for k, v in set_data.items():
-
                             if isinstance(k, str) and '.' in k:
                                 parts = k.split('.')
                                 cur = updated
@@ -545,49 +597,48 @@ class InMemoryCollection:
             return None
 
     def create_indexes(self, *args, **kwargs):
-
         return []
 
 
 class AsyncInMemoryCollection:
     """Async wrapper around InMemoryCollection for async/await compatibility"""
-    
+
     def __init__(self, sync_collection):
         self._sync = sync_collection
         self.name = sync_collection.name
-    
+
     async def find_one(self, query=None):
         """Async find_one"""
         return self._sync.find_one(query)
-    
+
     def find(self, query=None):
         """Returns cursor (sync method, but cursor supports async iteration)"""
         return self._sync.find(query)
-    
+
     async def insert_one(self, doc):
         """Async insert_one"""
         return self._sync.insert_one(doc)
-    
+
     async def update_one(self, query, update):
         """Async update_one"""
         return self._sync.update_one(query, update)
-    
+
     async def delete_one(self, query):
         """Async delete_one"""
         return self._sync.delete_one(query)
-    
+
     async def count_documents(self, query=None):
         """Async count_documents"""
         return self._sync.count_documents(query)
-    
+
     async def replace_one(self, query, replacement):
         """Async replace_one"""
         return self._sync.replace_one(query, replacement)
-    
+
     async def find_one_and_update(self, query, update, return_document=False):
         """Async find_one_and_update"""
         return self._sync.find_one_and_update(query, update, return_document)
-    
+
     def create_indexes(self, *args, **kwargs):
         return self._sync.create_indexes(*args, **kwargs)
 
@@ -595,8 +646,7 @@ class AsyncInMemoryCollection:
 class InMemoryDB:
     def __init__(self, async_mode=False):
         self._async_mode = async_mode
-        CollectionClass = AsyncInMemoryCollection if async_mode else InMemoryCollection
-        
+
         # Create base sync collections
         self._sync_users = InMemoryCollection('users')
         self._sync_apis = InMemoryCollection('apis')
@@ -614,7 +664,7 @@ class InMemoryDB:
         self._sync_tiers = InMemoryCollection('tiers')
         self._sync_user_tier_assignments = InMemoryCollection('user_tier_assignments')
         self._sync_rate_limit_rules = InMemoryCollection('rate_limit_rules')
-        
+
         # Expose as async or sync based on mode
         if async_mode:
             self.users = AsyncInMemoryCollection(self._sync_users)
@@ -653,10 +703,22 @@ class InMemoryDB:
 
     def list_collection_names(self):
         return [
-            'users', 'apis', 'endpoints', 'groups', 'roles',
-            'subscriptions', 'routings', 'credit_defs', 'user_credits',
-            'endpoint_validations', 'settings', 'revocations', 'vault_entries',
-            'tiers', 'user_tier_assignments', 'rate_limit_rules'
+            'users',
+            'apis',
+            'endpoints',
+            'groups',
+            'roles',
+            'subscriptions',
+            'routings',
+            'credit_defs',
+            'user_credits',
+            'endpoint_validations',
+            'settings',
+            'revocations',
+            'vault_entries',
+            'tiers',
+            'user_tier_assignments',
+            'rate_limit_rules',
         ]
 
     def create_collection(self, name):
@@ -709,11 +771,11 @@ class InMemoryDB:
         load_coll(self._sync_tiers, data.get('tiers', []))
         load_coll(self._sync_user_tier_assignments, data.get('user_tier_assignments', []))
 
+
 database = Database()
 database.initialize_collections()
 database.create_indexes()
 if database.memory_only:
-
     db = database.db
     mongodb_client = None
     api_collection = db.apis
@@ -750,6 +812,7 @@ else:
     except Exception:
         vault_entries_collection = None
 
+
 def close_database_connections():
     """
     Close all database connections for graceful shutdown.
@@ -758,6 +821,6 @@ def close_database_connections():
     try:
         if mongodb_client:
             mongodb_client.close()
-            logger.info("MongoDB connections closed")
+            logger.info('MongoDB connections closed')
     except Exception as e:
-        logger.warning(f"Error closing MongoDB connections: {e}")
+        logger.warning(f'Error closing MongoDB connections: {e}')

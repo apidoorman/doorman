@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_admin_seed_fields_memory_mode(monkeypatch):
@@ -8,9 +10,16 @@ async def test_admin_seed_fields_memory_mode(monkeypatch):
     monkeypatch.setenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
 
     from utils import database as dbmod
+
     dbmod.database.initialize_collections()
 
-    from utils.database import user_collection, role_collection, group_collection, _build_admin_seed_doc
+    from utils.database import (
+        _build_admin_seed_doc,
+        group_collection,
+        role_collection,
+        user_collection,
+    )
+
     admin = user_collection.find_one({'username': 'admin'})
     assert admin is not None, 'Admin user should be seeded'
 
@@ -20,22 +29,37 @@ async def test_admin_seed_fields_memory_mode(monkeypatch):
     assert '_id' in doc_keys
 
     from utils import password_util
-    assert password_util.verify_password(os.environ['DOORMAN_ADMIN_PASSWORD'], admin.get('password'))
+
+    assert password_util.verify_password(
+        os.environ['DOORMAN_ADMIN_PASSWORD'], admin.get('password')
+    )
 
     assert set(admin.get('groups') or []) >= {'ALL', 'admin'}
     role = role_collection.find_one({'role_name': 'admin'})
     assert role is not None
     for cap in (
-        'manage_users','manage_apis','manage_endpoints','manage_groups','manage_roles',
-        'manage_routings','manage_gateway','manage_subscriptions','manage_credits','manage_auth','manage_security','view_logs'
+        'manage_users',
+        'manage_apis',
+        'manage_endpoints',
+        'manage_groups',
+        'manage_roles',
+        'manage_routings',
+        'manage_gateway',
+        'manage_subscriptions',
+        'manage_credits',
+        'manage_auth',
+        'manage_security',
+        'view_logs',
     ):
         assert role.get(cap) is True, f'Missing admin capability: {cap}'
     grp_admin = group_collection.find_one({'group_name': 'admin'})
     grp_all = group_collection.find_one({'group_name': 'ALL'})
     assert grp_admin is not None and grp_all is not None
 
+
 def test_admin_seed_helper_is_canonical():
     from utils.database import _build_admin_seed_doc
+
     doc = _build_admin_seed_doc('a@b.c', 'hash')
     assert doc['username'] == 'admin'
     assert doc['role'] == 'admin'
@@ -49,4 +73,3 @@ def test_admin_seed_helper_is_canonical():
     assert doc['throttle_wait_duration_type'] == 'second'
     assert doc['throttle_queue_limit'] == 1
     assert set(doc['groups']) == {'ALL', 'admin'}
-

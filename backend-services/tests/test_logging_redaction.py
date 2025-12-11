@@ -1,8 +1,7 @@
 import logging
-from types import SimpleNamespace
+
 
 def test_logging_redaction_filters_sensitive_values():
-
     logger = logging.getLogger('doorman.gateway')
     filt = None
     for h in logger.handlers:
@@ -13,8 +12,13 @@ def test_logging_redaction_filters_sensitive_values():
 
     secret = 'supersecretvalue'
     record = logging.LogRecord(
-        name='doorman.gateway', level=logging.INFO, pathname=__file__, lineno=1,
-        msg=f'Authorization: Bearer {secret}; password=\"{secret}\"; access_token=\"{secret}\"', args=(), exc_info=None
+        name='doorman.gateway',
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg=f'Authorization: Bearer {secret}; password="{secret}"; access_token="{secret}"',
+        args=(),
+        exc_info=None,
     )
     ok = filt.filter(record)
     assert ok is True

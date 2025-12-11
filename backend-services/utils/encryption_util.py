@@ -1,10 +1,11 @@
-from typing import Optional
-import os
 import base64
 import hashlib
+import os
+
 from cryptography.fernet import Fernet
 
-def _get_cipher() -> Optional[Fernet]:
+
+def _get_cipher() -> Fernet | None:
     """Return a Fernet cipher derived from TOKEN_ENCRYPTION_KEY or MEM_ENCRYPTION_KEY.
     If neither is set, returns None (plaintext compatibility mode).
     """
@@ -12,16 +13,15 @@ def _get_cipher() -> Optional[Fernet]:
     if not key:
         return None
     try:
-
         Fernet(key)
         fkey = key
     except Exception:
-
         digest = hashlib.sha256(key.encode('utf-8')).digest()
         fkey = base64.urlsafe_b64encode(digest)
     return Fernet(fkey)
 
-def encrypt_value(value: Optional[str]) -> Optional[str]:
+
+def encrypt_value(value: str | None) -> str | None:
     if value is None:
         return None
     cipher = _get_cipher()
@@ -30,7 +30,8 @@ def encrypt_value(value: Optional[str]) -> Optional[str]:
     token = cipher.encrypt(value.encode('utf-8')).decode('utf-8')
     return f'enc:{token}'
 
-def decrypt_value(value: Optional[str]) -> Optional[str]:
+
+def decrypt_value(value: str | None) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -39,11 +40,9 @@ def decrypt_value(value: Optional[str]) -> Optional[str]:
         return value
     cipher = _get_cipher()
     if not cipher:
-
         return None
     try:
         raw = value[4:]
         return cipher.decrypt(raw.encode('utf-8')).decode('utf-8')
     except Exception:
         return None
-

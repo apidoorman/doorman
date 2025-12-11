@@ -10,21 +10,17 @@ Verifies:
 - Compression level affects size and performance
 """
 
-import pytest
-import gzip
 import json
 import os
-from httpx import AsyncClient
+
+import pytest
 
 
 @pytest.mark.asyncio
 async def test_compression_enabled_for_json_response(client):
     """Verify JSON responses are compressed when client accepts gzip"""
     # Request with Accept-Encoding: gzip header
-    r = await client.get(
-        '/api/health',
-        headers={'Accept-Encoding': 'gzip'}
-    )
+    r = await client.get('/api/health', headers={'Accept-Encoding': 'gzip'})
     assert r.status_code == 200
 
     # httpx automatically decompresses responses, but the middleware
@@ -38,15 +34,12 @@ async def test_compression_reduces_response_size(client):
     # Get a response without compression
     r_uncompressed = await client.get(
         '/api/health',
-        headers={'Accept-Encoding': 'identity'}  # No compression
+        headers={'Accept-Encoding': 'identity'},  # No compression
     )
     assert r_uncompressed.status_code == 200
 
     # Get same response with compression
-    r_compressed = await client.get(
-        '/api/health',
-        headers={'Accept-Encoding': 'gzip'}
-    )
+    r_compressed = await client.get('/api/health', headers={'Accept-Encoding': 'gzip'})
     assert r_compressed.status_code == 200
 
     # Both should have same decompressed content
@@ -62,17 +55,14 @@ async def test_compression_with_large_json_list(client):
     # First authenticate
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
     assert r_auth.status_code == 200
 
     # Get list of APIs (potentially large response)
-    r = await client.get(
-        '/platform/api',
-        headers={'Accept-Encoding': 'gzip'}
-    )
+    r = await client.get('/platform/api', headers={'Accept-Encoding': 'gzip'})
     assert r.status_code == 200
 
     # Should have content-encoding header if response is large enough
@@ -89,10 +79,7 @@ async def test_compression_with_large_json_list(client):
 async def test_small_response_not_compressed(client):
     """Verify small responses below minimum_size are not compressed"""
     # Health endpoint returns small response
-    r = await client.get(
-        '/api/health',
-        headers={'Accept-Encoding': 'gzip'}
-    )
+    r = await client.get('/api/health', headers={'Accept-Encoding': 'gzip'})
     assert r.status_code == 200
 
     response_size = len(r.content)
@@ -100,7 +87,7 @@ async def test_small_response_not_compressed(client):
     # If response is smaller than minimum_size (500 bytes default),
     # it should not be compressed
     if response_size < 500:
-        headers_lower = {k.lower(): v for k, v in r.headers.items()}
+        {k.lower(): v for k, v in r.headers.items()}
         # May or may not have content-encoding based on actual size
         # This is expected behavior - small responses aren't worth compressing
 
@@ -111,7 +98,7 @@ async def test_compression_with_different_content_types(client):
     # Authenticate first
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
@@ -123,10 +110,7 @@ async def test_compression_with_different_content_types(client):
     ]
 
     for endpoint, expected_content_type in endpoints:
-        r = await client.get(
-            endpoint,
-            headers={'Accept-Encoding': 'gzip'}
-        )
+        r = await client.get(endpoint, headers={'Accept-Encoding': 'gzip'})
 
         # Should succeed
         assert r.status_code == 200
@@ -139,10 +123,7 @@ async def test_compression_with_different_content_types(client):
 @pytest.mark.asyncio
 async def test_no_compression_when_not_requested(client):
     """Verify compression is not applied when client doesn't accept it"""
-    r = await client.get(
-        '/api/health',
-        headers={'Accept-Encoding': 'identity'}
-    )
+    r = await client.get('/api/health', headers={'Accept-Encoding': 'identity'})
     assert r.status_code == 200
 
     # Should not have gzip encoding
@@ -157,23 +138,17 @@ async def test_compression_preserves_response_body(client):
     # Authenticate
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
     assert r_auth.status_code == 200
 
     # Get response without compression
-    r1 = await client.get(
-        '/platform/user',
-        headers={'Accept-Encoding': 'identity'}
-    )
+    r1 = await client.get('/platform/user', headers={'Accept-Encoding': 'identity'})
 
     # Get response with compression
-    r2 = await client.get(
-        '/platform/user',
-        headers={'Accept-Encoding': 'gzip'}
-    )
+    r2 = await client.get('/platform/user', headers={'Accept-Encoding': 'gzip'})
 
     # Both should succeed
     assert r1.status_code == 200
@@ -189,13 +164,11 @@ async def test_compression_with_post_request(client):
     # Login with compression
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r = await client.post(
-        '/platform/authorization',
-        json=login_payload,
-        headers={'Accept-Encoding': 'gzip'}
+        '/platform/authorization', json=login_payload, headers={'Accept-Encoding': 'gzip'}
     )
     assert r.status_code == 200
 
@@ -216,10 +189,7 @@ async def test_compression_works_with_errors(client):
     except Exception:
         pass
 
-    r = await client.get(
-        '/platform/user',
-        headers={'Accept-Encoding': 'gzip'}
-    )
+    r = await client.get('/platform/user', headers={'Accept-Encoding': 'gzip'})
 
     # Should be unauthorized
     assert r.status_code in (401, 403)
@@ -236,10 +206,7 @@ async def test_compression_works_with_errors(client):
 @pytest.mark.asyncio
 async def test_compression_with_cache_headers(client):
     """Verify compression doesn't interfere with cache headers"""
-    r = await client.get(
-        '/api/health',
-        headers={'Accept-Encoding': 'gzip'}
-    )
+    r = await client.get('/api/health', headers={'Accept-Encoding': 'gzip'})
     assert r.status_code == 200
 
     # Response should still have normal headers
@@ -265,7 +232,7 @@ async def test_compression_with_large_payload(client):
     # Authenticate
     login_payload = {
         'email': os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev'),
-        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars')
+        'password': os.getenv('DOORMAN_ADMIN_PASSWORD', 'test-only-password-12chars'),
     }
 
     r_auth = await client.post('/platform/authorization', json=login_payload)
@@ -275,10 +242,7 @@ async def test_compression_with_large_payload(client):
     # (This is mainly to test that compression handles large payloads)
 
     # Get list of APIs (can be large)
-    r = await client.get(
-        '/platform/api',
-        headers={'Accept-Encoding': 'gzip'}
-    )
+    r = await client.get('/platform/api', headers={'Accept-Encoding': 'gzip'})
 
     # Should succeed regardless of size
     assert r.status_code == 200

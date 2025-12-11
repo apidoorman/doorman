@@ -1,14 +1,15 @@
-import time
 import random
-import string
+import time
+
 import pytest
 
 pytestmark = [pytest.mark.security]
 
+
 def _mk_user_payload(role_name: str) -> tuple[str, str, str, dict]:
     ts = int(time.time())
-    uname = f"min_{ts}_{random.randint(1000,9999)}"
-    email = f"{uname}@example.com"
+    uname = f'min_{ts}_{random.randint(1000, 9999)}'
+    email = f'{uname}@example.com'
     pwd = 'Strong!Passw0rd1234'
     payload = {
         'username': uname,
@@ -16,16 +17,14 @@ def _mk_user_payload(role_name: str) -> tuple[str, str, str, dict]:
         'password': pwd,
         'role': role_name,
         'groups': ['ALL'],
-        'ui_access': True
+        'ui_access': True,
     }
     return uname, email, pwd, payload
 
+
 def test_negative_permissions_for_logs_and_config(client):
-    role_name = f"minrole_{int(time.time())}"
-    r = client.post('/platform/role', json={
-        'role_name': role_name,
-        'role_description': 'minimal'
-    })
+    role_name = f'minrole_{int(time.time())}'
+    r = client.post('/platform/role', json={'role_name': role_name, 'role_description': 'minimal'})
     assert r.status_code in (200, 201)
 
     uname, email, pwd, payload = _mk_user_payload(role_name)
@@ -33,6 +32,7 @@ def test_negative_permissions_for_logs_and_config(client):
     assert r.status_code in (200, 201)
 
     from client import LiveClient
+
     u = LiveClient(client.base_url)
     u.login(email, pwd)
 

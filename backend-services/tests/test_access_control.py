@@ -1,22 +1,24 @@
-import os
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
+
 @pytest_asyncio.fixture
-async def login_client() :
+async def login_client():
     async def _login(username: str, password: str, email: str = None) -> AsyncClient:
         from doorman import doorman
+
         client = AsyncClient(app=doorman, base_url='http://testserver')
         cred = {'email': email or f'{username}@example.com', 'password': password}
         r = await client.post('/platform/authorization', json=cred)
         assert r.status_code == 200, r.text
         return client
+
     return _login
+
 
 @pytest.mark.asyncio
 async def test_roles_and_permissions_enforced(authed_client, login_client):
-
     cr = await authed_client.post(
         '/platform/role',
         json={
@@ -78,9 +80,9 @@ async def test_roles_and_permissions_enforced(authed_client, login_client):
 
     await viewer_client.aclose()
 
+
 @pytest.mark.asyncio
 async def test_group_and_subscription_enforcement(login_client, authed_client, monkeypatch):
-
     c = await authed_client.post(
         '/platform/api',
         json={
@@ -140,16 +142,23 @@ async def test_group_and_subscription_enforcement(login_client, authed_client, m
     assert s2.status_code in (401, 403)
 
     import services.gateway_service as gs
+
     class _FakeHTTPResponse:
         def __init__(self, status_code=200, json_body=None):
             self.status_code = status_code
             self._json_body = json_body or {'ok': True}
             self.headers = {'Content-Type': 'application/json'}
+
         def json(self):
             return self._json_body
+
     class _FakeAsyncClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, exc_type, exc, tb): return False
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
         async def request(self, method, url, **kwargs):
             """Generic request method used by http_client.request_with_resilience"""
             method = method.upper()
@@ -167,13 +176,25 @@ async def test_group_and_subscription_enforcement(login_client, authed_client, m
                 return await self.put(url, **kwargs)
             else:
                 return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
-        async def get(self, url, params=None, headers=None, **kwargs): return _FakeHTTPResponse(200)
-        async def post(self, url, **kwargs): return _FakeHTTPResponse(200)
-        async def put(self, url, **kwargs): return _FakeHTTPResponse(200)
-        async def delete(self, url, **kwargs): return _FakeHTTPResponse(200)
+
+        async def get(self, url, params=None, headers=None, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def post(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def put(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def delete(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     import routes.gateway_routes as gr
-    async def _no_limit(req): return None
+
+    async def _no_limit(req):
+        return None
+
     monkeypatch.setattr(gr, 'limit_and_throttle', _no_limit)
 
     viewer1_client = await login_client('viewer1', 'StrongViewerPwd!1234')

@@ -7,5 +7,8 @@ def test_config_export_import_roundtrip(client):
     assert r.status_code == 200
     data = r.json().get('response', r.json())
     assert 'imported' in data
+
+
 import pytest
+
 pytestmark = [pytest.mark.config]

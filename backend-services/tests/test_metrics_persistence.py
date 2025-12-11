@@ -1,5 +1,6 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_metrics_persist_and_restore(tmp_path, authed_client):
     r1 = await authed_client.get('/api/status')
@@ -7,6 +8,7 @@ async def test_metrics_persist_and_restore(tmp_path, authed_client):
     assert r1.status_code == 200 and r2.status_code == 200
 
     from utils.metrics_util import metrics_store
+
     before = metrics_store.to_dict()
     assert before.get('total_requests', 0) >= 1
 
@@ -29,6 +31,7 @@ async def test_metrics_persist_and_restore(tmp_path, authed_client):
             if isinstance(b2.get('status_counts'), dict):
                 b2['status_counts'] = {str(k): v for k, v in b2['status_counts'].items()}
             return b2
+
         out = dict(d)
         if isinstance(out.get('status_counts'), dict):
             out['status_counts'] = {str(k): v for k, v in out['status_counts'].items()}

@@ -1,11 +1,11 @@
-import io
-import os
 import time
-import pytest
 
+import pytest
 from config import ENABLE_GRPC
 
-pytestmark = pytest.mark.skipif(not ENABLE_GRPC, reason='gRPC test disabled (set DOORMAN_TEST_GRPC=1 to enable)')
+pytestmark = pytest.mark.skipif(
+    not ENABLE_GRPC, reason='gRPC test disabled (set DOORMAN_TEST_GRPC=1 to enable)'
+)
 
 PROTO_TEMPLATE = """
 syntax = "proto3";
@@ -25,22 +25,23 @@ message HelloReply {
 }
 """
 
+
 def _start_grpc_server(port: int):
-    import grpc
     from concurrent import futures
+
+    import grpc
 
     class GreeterServicer:
         def Hello(self, request, context):
-            from google.protobuf import struct_pb2
             pass
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     return server
 
+
 def test_grpc_gateway_basic_flow(client):
     try:
         import grpc
-        import grpc_tools
     except Exception as e:
         pytest.skip(f'Missing gRPC deps: {e}')
 
@@ -54,25 +55,37 @@ def test_grpc_gateway_basic_flow(client):
     assert r.status_code == 200, r.text
 
     try:
+        import importlib
+        import pathlib
+        import tempfile
+
         from grpc_tools import protoc
-        import tempfile, pathlib, importlib
+
         with tempfile.TemporaryDirectory() as td:
             tmp = pathlib.Path(td)
             (tmp / 'svc.proto').write_text(proto)
             out = tmp / 'gen'
             out.mkdir()
-            code = protoc.main([
-                'protoc', f'--proto_path={td}', f'--python_out={out}', f'--grpc_python_out={out}', str(tmp / 'svc.proto')
-            ])
+            code = protoc.main(
+                [
+                    'protoc',
+                    f'--proto_path={td}',
+                    f'--python_out={out}',
+                    f'--grpc_python_out={out}',
+                    str(tmp / 'svc.proto'),
+                ]
+            )
             assert code == 0
             (out / '__init__.py').write_text('')
             import sys
+
             sys.path.insert(0, str(out))
             pb2 = importlib.import_module('svc_pb2')
             pb2_grpc = importlib.import_module('svc_pb2_grpc')
 
-            import grpc
             from concurrent import futures
+
+            import grpc
 
             class Greeter(pb2_grpc.GreeterServicer):
                 def Hello(self, request, context):
@@ -81,41 +94,53 @@ def test_grpc_gateway_basic_flow(client):
             server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
             pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)
             import socket
-            s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()
+
+            s = socket.socket()
+            s.bind(('127.0.0.1', 0))
+            port = s.getsockname()[1]
+            s.close()
             server.add_insecure_port(f'127.0.0.1:{port}')
             server.start()
 
             try:
-                r = client.post('/platform/api', json={
-                    'api_name': api_name,
-                    'api_version': api_version,
-                    'api_description': 'gRPC demo',
-                    'api_allowed_roles': ['admin'],
-                    'api_allowed_groups': ['ALL'],
-                    'api_servers': [f'grpc://127.0.0.1:{port}'],
-                    'api_type': 'REST',
-                    'api_allowed_retry_count': 0,
-                    'active': True
-                })
+                r = client.post(
+                    '/platform/api',
+                    json={
+                        'api_name': api_name,
+                        'api_version': api_version,
+                        'api_description': 'gRPC demo',
+                        'api_allowed_roles': ['admin'],
+                        'api_allowed_groups': ['ALL'],
+                        'api_servers': [f'grpc://127.0.0.1:{port}'],
+                        'api_type': 'REST',
+                        'api_allowed_retry_count': 0,
+                        'active': True,
+                    },
+                )
                 assert r.status_code in (200, 201), r.text
 
-                r = client.post('/platform/endpoint', json={
-                    'api_name': api_name,
-                    'api_version': api_version,
-                    'endpoint_method': 'POST',
-                    'endpoint_uri': '/grpc',
-                    'endpoint_description': 'grpc'
-                })
+                r = client.post(
+                    '/platform/endpoint',
+                    json={
+                        'api_name': api_name,
+                        'api_version': api_version,
+                        'endpoint_method': 'POST',
+                        'endpoint_uri': '/grpc',
+                        'endpoint_description': 'grpc',
+                    },
+                )
                 assert r.status_code in (200, 201)
 
-                r = client.post('/platform/subscription/subscribe', json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'})
+                r = client.post(
+                    '/platform/subscription/subscribe',
+                    json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'},
+                )
                 assert r.status_code in (200, 201)
 
-                body = {
-                    'method': 'Greeter.Hello',
-                    'message': {'name': 'Doorman'}
-                }
-                r = client.post(f'/api/grpc/{api_name}', json=body, headers={'X-API-Version': api_version})
+                body = {'method': 'Greeter.Hello', 'message': {'name': 'Doorman'}}
+                r = client.post(
+                    f'/api/grpc/{api_name}', json=body, headers={'X-API-Version': api_version}
+                )
                 assert r.status_code == 200, r.text
                 data = r.json().get('response', r.json())
                 assert data.get('message') == 'Hello, Doorman!'
@@ -131,5 +156,8 @@ def test_grpc_gateway_basic_flow(client):
                 server.stop(0)
     except Exception as e:
         pytest.skip(f'Skipping gRPC due to setup failure: {e}')
+
+
 import pytest
+
 pytestmark = [pytest.mark.grpc, pytest.mark.gateway]

@@ -4,23 +4,23 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-from pymongo.errors import DuplicateKeyError
 import logging
 
+from pymongo.errors import DuplicateKeyError
+
+from models.create_role_model import CreateRoleModel
 from models.response_model import ResponseModel
 from models.update_role_model import UpdateRoleModel
-from utils.database_async import role_collection
-from utils.async_db import db_find_one, db_insert_one, db_update_one, db_delete_one, db_find_list
-from utils.cache_manager_util import cache_manager
-from utils.doorman_cache_util import doorman_cache
-from models.create_role_model import CreateRoleModel
-from utils.paging_util import validate_page_params
+from utils.async_db import db_delete_one, db_find_list, db_find_one, db_insert_one, db_update_one
 from utils.constants import ErrorCodes, Messages
+from utils.database_async import role_collection
+from utils.doorman_cache_util import doorman_cache
+from utils.paging_util import validate_page_params
 
 logger = logging.getLogger('doorman.gateway')
 
-class RoleService:
 
+class RoleService:
     @staticmethod
     async def create_role(data: CreateRoleModel, request_id):
         """
@@ -31,11 +31,9 @@ class RoleService:
             logger.error(request_id + ' | Role creation failed with code ROLE001')
             return ResponseModel(
                 status_code=400,
-                response_headers={
-                    'request_id': request_id
-                },
+                response_headers={'request_id': request_id},
                 error_code='ROLE001',
-                error_message='Role already exists'
+                error_message='Role already exists',
             ).dict()
         role_dict = data.dict()
         try:
@@ -43,26 +41,19 @@ class RoleService:
             if not insert_result.acknowledged:
                 logger.error(request_id + ' | Role creation failed with code ROLE002')
                 return ResponseModel(
-                    status_code=400,
-                    error_code='ROLE002',
-                    error_message='Unable to insert role'
+                    status_code=400, error_code='ROLE002', error_message='Unable to insert role'
                 ).dict()
             role_dict['_id'] = str(insert_result.inserted_id)
             doorman_cache.set_cache('role_cache', data.role_name, role_dict)
             logger.info(request_id + ' | Role creation successful')
-            return ResponseModel(
-                status_code=201,
-                message='Role created successfully'
-            ).dict()
-        except DuplicateKeyError as e:
+            return ResponseModel(status_code=201, message='Role created successfully').dict()
+        except DuplicateKeyError:
             logger.error(request_id + ' | Role creation failed with code ROLE001')
             return ResponseModel(
                 status_code=400,
-                response_headers={
-                    'request_id': request_id
-                },
+                response_headers={'request_id': request_id},
                 error_code='ROLE001',
-                error_message='Role already exists'
+                error_message='Role already exists',
             ).dict()
 
     @staticmethod
@@ -75,34 +66,29 @@ class RoleService:
             logger.error(request_id + ' | Role update failed with code ROLE005')
             return ResponseModel(
                 status_code=400,
-                response_headers={
-                    'request_id': request_id
-                },
+                response_headers={'request_id': request_id},
                 error_code='ROLE005',
-                error_message='Role name cannot be changed'
+                error_message='Role name cannot be changed',
             ).dict()
         role = doorman_cache.get_cache('role_cache', role_name)
         if not role:
-            role = await db_find_one(role_collection, {
-                'role_name': role_name
-            })
+            role = await db_find_one(role_collection, {'role_name': role_name})
             if not role:
                 logger.error(request_id + ' | Role update failed with code ROLE004')
                 return ResponseModel(
-                    status_code=400,
-                    error_code='ROLE004',
-                    error_message='Role does not exist'
+                    status_code=400, error_code='ROLE004', error_message='Role does not exist'
                 ).dict()
         else:
             doorman_cache.delete_cache('role_cache', role_name)
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
             try:
-                update_result = await db_update_one(role_collection, {'role_name': role_name}, {'$set': not_null_data})
+                update_result = await db_update_one(
+                    role_collection, {'role_name': role_name}, {'$set': not_null_data}
+                )
                 if update_result.modified_count > 0:
                     doorman_cache.delete_cache('role_cache', role_name)
                 if not update_result.acknowledged or update_result.modified_count == 0:
-
                     current = await db_find_one(role_collection, {'role_name': role_name}) or {}
                     is_applied = all(current.get(k) == v for k, v in not_null_data.items())
                     if not is_applied:
@@ -110,31 +96,30 @@ class RoleService:
                         return ResponseModel(
                             status_code=400,
                             error_code='ROLE006',
-                            error_message='Unable to update role'
+                            error_message='Unable to update role',
                         ).dict()
             except Exception as e:
                 doorman_cache.delete_cache('role_cache', role_name)
-                logger.error(request_id + ' | Role update failed with exception: ' + str(e), exc_info=True)
+                logger.error(
+                    request_id + ' | Role update failed with exception: ' + str(e), exc_info=True
+                )
                 raise
 
             updated_role = await db_find_one(role_collection, {'role_name': role_name}) or {}
-            if updated_role.get('_id'): del updated_role['_id']
+            if updated_role.get('_id'):
+                del updated_role['_id']
             doorman_cache.set_cache('role_cache', role_name, updated_role)
             logger.info(request_id + ' | Role update successful')
             return ResponseModel(
-                status_code=200,
-                response=updated_role,
-                message='Role updated successfully'
+                status_code=200, response=updated_role, message='Role updated successfully'
             ).dict()
         else:
             logger.error(request_id + ' | Role update failed with code ROLE007')
             return ResponseModel(
                 status_code=400,
-                response_headers={
-                    'request_id': request_id
-                },
+                response_headers={'request_id': request_id},
                 error_code='ROLE007',
-                error_message='No data to update'
+                error_message='No data to update',
             ).dict()
 
     @staticmethod
@@ -149,9 +134,7 @@ class RoleService:
             if not role:
                 logger.error(request_id + ' | Role deletion failed with code ROLE004')
                 return ResponseModel(
-                    status_code=400,
-                    error_code='ROLE004',
-                    error_message='Role does not exist'
+                    status_code=400, error_code='ROLE004', error_message='Role does not exist'
                 ).dict()
         else:
             doorman_cache.delete_cache('role_cache', role_name)
@@ -160,19 +143,15 @@ class RoleService:
             logger.error(request_id + ' | Role deletion failed with code ROLE008')
             return ResponseModel(
                 status_code=400,
-                response_headers={
-                    'request_id': request_id
-                },
+                response_headers={'request_id': request_id},
                 error_code='ROLE008',
-                error_message='Unable to delete role'
+                error_message='Unable to delete role',
             ).dict()
         logger.info(request_id + ' | Role Deletion Successful')
         return ResponseModel(
             status_code=200,
-            response_headers={
-                'request_id': request_id
-            },
-            message='Role deleted successfully'
+            response_headers={'request_id': request_id},
+            message='Role deleted successfully',
         ).dict()
 
     @staticmethod
@@ -180,7 +159,9 @@ class RoleService:
         """
         Check if a role exists.
         """
-        if doorman_cache.get_cache('role_cache', data.get('role_name')) or await db_find_one(role_collection, {'role_name': data.get('role_name')}):
+        if doorman_cache.get_cache('role_cache', data.get('role_name')) or await db_find_one(
+            role_collection, {'role_name': data.get('role_name')}
+        ):
             return True
         return False
 
@@ -189,26 +170,28 @@ class RoleService:
         """
         Get all roles.
         """
-        logger.info(request_id + ' | Getting roles: Page=' + str(page) + ' Page Size=' + str(page_size))
+        logger.info(
+            request_id + ' | Getting roles: Page=' + str(page) + ' Page Size=' + str(page_size)
+        )
         try:
             page, page_size = validate_page_params(page, page_size)
         except Exception as e:
             return ResponseModel(
                 status_code=400,
                 error_code=ErrorCodes.PAGE_SIZE,
-                error_message=(Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING)
+                error_message=(
+                    Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING
+                ),
             ).dict()
         skip = (page - 1) * page_size
         roles_all = await db_find_list(role_collection, {})
         roles_all.sort(key=lambda r: r.get('role_name'))
-        roles = roles_all[skip: skip + page_size]
+        roles = roles_all[skip : skip + page_size]
         for role in roles:
-            if role.get('_id'): del role['_id']
+            if role.get('_id'):
+                del role['_id']
         logger.info(request_id + ' | Roles retrieval successful')
-        return ResponseModel(
-            status_code=200,
-            response={'roles': roles}
-        ).dict()
+        return ResponseModel(status_code=200, response={'roles': roles}).dict()
 
     @staticmethod
     async def get_role(role_name, request_id):
@@ -222,15 +205,12 @@ class RoleService:
             if not role:
                 logger.error(request_id + ' | Role retrieval failed with code ROLE004')
                 return ResponseModel(
-                    status_code=404,
-                    error_code='ROLE004',
-                    error_message='Role does not exist'
+                    status_code=404, error_code='ROLE004', error_message='Role does not exist'
                 ).dict()
-            if role.get('_id'): del role['_id']
+            if role.get('_id'):
+                del role['_id']
             doorman_cache.set_cache('role_cache', role_name, role)
-        if role.get('_id'): del role['_id']
+        if role.get('_id'):
+            del role['_id']
         logger.info(request_id + ' | Role retrieval successful')
-        return ResponseModel(
-            status_code=200,
-            response=role
-        ).dict()
+        return ResponseModel(status_code=200, response=role).dict()
