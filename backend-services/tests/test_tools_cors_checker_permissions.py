@@ -20,7 +20,8 @@ async def _login(email: str, password: str) -> AsyncClient:
 @pytest.mark.asyncio
 async def test_tools_cors_checker_requires_manage_security(authed_client):
     uname = f'sec_check_{int(time.time())}'
-    pwd = 'SecCheckStrongPass!!'
+    # Must meet password policy: >=16 chars, upper, lower, digit, special
+    pwd = 'SecCheckStrongPass1!!'
     # No manage_security
     cu = await authed_client.post(
         '/platform/user',
