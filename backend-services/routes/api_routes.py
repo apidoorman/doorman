@@ -17,7 +17,7 @@ from models.update_api_model import UpdateApiModel
 from services.api_service import ApiService
 from utils.audit_util import audit
 from utils.auth_util import auth_required
-from utils.constants import ErrorCodes, Headers, Messages, Roles
+from utils.constants import Defaults, ErrorCodes, Headers, Messages, Roles
 from utils.response_util import process_response, respond_rest
 from utils.role_util import platform_role_required_bool
 
@@ -280,7 +280,9 @@ Response:
 
 
 @api_router.get('/all', description='Get all APIs', response_model=list[ApiModelResponse])
-async def get_all_apis(page: int, page_size: int, request: Request) -> Response:
+async def get_all_apis(
+    request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE
+) -> Response:
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
@@ -318,7 +320,9 @@ async def get_all_apis(page: int, page_size: int, request: Request) -> Response:
 
 
 @api_router.get('', description='Get all APIs (base path)', response_model=list[ApiModelResponse])
-async def get_all_apis_base(page: int, page_size: int, request: Request) -> Response:
+async def get_all_apis_base(
+    request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE
+) -> Response:
     """Convenience alias for GET /platform/api/all to support tests and clients
     that expect listing at the base collection path.
     """
