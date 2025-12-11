@@ -1,9 +1,10 @@
 import os
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_cookie_domain_set_on_login(client, monkeypatch):
-
     monkeypatch.setenv('COOKIE_DOMAIN', 'testserver')
     resp = await client.post(
         '/platform/authorization',

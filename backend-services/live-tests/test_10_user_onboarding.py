@@ -1,7 +1,7 @@
-import os
-import time
 import random
 import string
+import time
+
 
 def _strong_password() -> str:
     upp = random.choice(string.ascii_uppercase)
@@ -12,9 +12,10 @@ def _strong_password() -> str:
     raw = upp + low + dig + spc + tail
     return ''.join(random.sample(raw, len(raw)))
 
+
 def test_user_onboarding_lifecycle(client):
-    username = f"user_{int(time.time())}_{random.randint(1000,9999)}"
-    email = f"{username}@example.com"
+    username = f'user_{int(time.time())}_{random.randint(1000, 9999)}'
+    email = f'{username}@example.com'
     pwd = _strong_password()
 
     payload = {
@@ -23,7 +24,7 @@ def test_user_onboarding_lifecycle(client):
         'password': pwd,
         'role': 'developer',
         'groups': ['ALL'],
-        'ui_access': False
+        'ui_access': False,
     }
     r = client.post('/platform/user', json=payload)
     assert r.status_code in (200, 201), r.text
@@ -38,13 +39,14 @@ def test_user_onboarding_lifecycle(client):
     assert r.status_code in (200, 204), r.text
 
     new_pwd = _strong_password()
-    r = client.put(f'/platform/user/{username}/update-password', json={
-        'old_password': pwd,
-        'new_password': new_pwd
-    })
+    r = client.put(
+        f'/platform/user/{username}/update-password',
+        json={'old_password': pwd, 'new_password': new_pwd},
+    )
     assert r.status_code in (200, 204, 400), r.text
 
     from client import LiveClient
+
     user_client = LiveClient(client.base_url)
     auth = user_client.login(email, new_pwd if r.status_code in (200, 204) else pwd)
     assert 'access_token' in auth.get('response', auth)
@@ -56,5 +58,8 @@ def test_user_onboarding_lifecycle(client):
 
     r = client.delete(f'/platform/user/{username}')
     assert r.status_code in (200, 204), r.text
+
+
 import pytest
+
 pytestmark = [pytest.mark.users, pytest.mark.auth]

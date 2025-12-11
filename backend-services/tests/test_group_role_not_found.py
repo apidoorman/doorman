@@ -1,5 +1,6 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_group_and_role_not_found(authed_client):
     gg = await authed_client.get('/platform/group/not-a-group')
@@ -13,4 +14,3 @@ async def test_group_and_role_not_found(authed_client):
 
     dr = await authed_client.delete('/platform/role/not-a-role')
     assert dr.status_code in (400, 404)
-

@@ -1,6 +1,9 @@
 import pytest
 
-async def _setup_api_with_allowlist(client, name, ver, allowed_pkgs=None, allowed_svcs=None, allowed_methods=None):
+
+async def _setup_api_with_allowlist(
+    client, name, ver, allowed_pkgs=None, allowed_svcs=None, allowed_methods=None
+):
     payload = {
         'api_name': name,
         'api_version': ver,
@@ -19,16 +22,21 @@ async def _setup_api_with_allowlist(client, name, ver, allowed_pkgs=None, allowe
         payload['api_grpc_allowed_methods'] = allowed_methods
     r = await client.post('/platform/api', json=payload)
     assert r.status_code in (200, 201), r.text
-    r2 = await client.post('/platform/endpoint', json={
-        'api_name': name,
-        'api_version': ver,
-        'endpoint_method': 'POST',
-        'endpoint_uri': '/grpc',
-        'endpoint_description': 'grpc',
-    })
+    r2 = await client.post(
+        '/platform/endpoint',
+        json={
+            'api_name': name,
+            'api_version': ver,
+            'endpoint_method': 'POST',
+            'endpoint_uri': '/grpc',
+            'endpoint_description': 'grpc',
+        },
+    )
     assert r2.status_code in (200, 201), r2.text
     from conftest import subscribe_self
+
     await subscribe_self(client, name, ver)
+
 
 @pytest.mark.asyncio
 async def test_grpc_service_not_in_allowlist_returns_403(authed_client):
@@ -43,6 +51,7 @@ async def test_grpc_service_not_in_allowlist_returns_403(authed_client):
     body = r.json()
     assert body.get('error_code') == 'GTW013'
 
+
 @pytest.mark.asyncio
 async def test_grpc_method_not_in_allowlist_returns_403(authed_client):
     name, ver = 'gallow2', 'v1'
@@ -55,6 +64,7 @@ async def test_grpc_method_not_in_allowlist_returns_403(authed_client):
     assert r.status_code == 403
     body = r.json()
     assert body.get('error_code') == 'GTW013'
+
 
 @pytest.mark.asyncio
 async def test_grpc_package_not_in_allowlist_returns_403(authed_client):
@@ -69,6 +79,7 @@ async def test_grpc_package_not_in_allowlist_returns_403(authed_client):
     body = r.json()
     assert body.get('error_code') == 'GTW013'
 
+
 @pytest.mark.asyncio
 async def test_grpc_invalid_traversal_rejected_400(authed_client):
     name, ver = 'gallow4', 'v1'
@@ -81,4 +92,3 @@ async def test_grpc_invalid_traversal_rejected_400(authed_client):
     assert r.status_code == 400
     body = r.json()
     assert body.get('error_code') == 'GTW011'
-

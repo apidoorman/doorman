@@ -1,5 +1,7 @@
 import time
+
 from servers import start_rest_echo_server
+
 
 def test_endpoint_level_servers_override(client):
     srv_api = start_rest_echo_server()
@@ -8,29 +10,38 @@ def test_endpoint_level_servers_override(client):
         api_name = f'combo-{int(time.time())}'
         api_version = 'v1'
 
-        r = client.post('/platform/api', json={
-            'api_name': api_name,
-            'api_version': api_version,
-            'api_description': 'combo demo',
-            'api_allowed_roles': ['admin'],
-            'api_allowed_groups': ['ALL'],
-            'api_servers': [srv_api.url],
-            'api_type': 'REST',
-            'active': True
-        })
+        r = client.post(
+            '/platform/api',
+            json={
+                'api_name': api_name,
+                'api_version': api_version,
+                'api_description': 'combo demo',
+                'api_allowed_roles': ['admin'],
+                'api_allowed_groups': ['ALL'],
+                'api_servers': [srv_api.url],
+                'api_type': 'REST',
+                'active': True,
+            },
+        )
         assert r.status_code in (200, 201), r.text
 
-        r = client.post('/platform/endpoint', json={
-            'api_name': api_name,
-            'api_version': api_version,
-            'endpoint_method': 'GET',
-            'endpoint_uri': '/who',
-            'endpoint_description': 'who am i',
-            'endpoint_servers': [srv_ep.url]
-        })
+        r = client.post(
+            '/platform/endpoint',
+            json={
+                'api_name': api_name,
+                'api_version': api_version,
+                'endpoint_method': 'GET',
+                'endpoint_uri': '/who',
+                'endpoint_description': 'who am i',
+                'endpoint_servers': [srv_ep.url],
+            },
+        )
         assert r.status_code in (200, 201), r.text
 
-        r = client.post('/platform/subscription/subscribe', json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'})
+        r = client.post(
+            '/platform/subscription/subscribe',
+            json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'},
+        )
         assert r.status_code in (200, 201)
 
         r = client.get(f'/api/rest/{api_name}/{api_version}/who')
@@ -51,5 +62,8 @@ def test_endpoint_level_servers_override(client):
             pass
         srv_api.stop()
         srv_ep.stop()
+
+
 import pytest
+
 pytestmark = [pytest.mark.gateway, pytest.mark.routing]

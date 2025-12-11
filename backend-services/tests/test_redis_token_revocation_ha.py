@@ -7,8 +7,10 @@ Simulates multi-node scenario:
 - Token validation on "Node B" (different process) should fail
 """
 
-import pytest
 import os
+
+import pytest
+
 
 @pytest.mark.asyncio
 async def test_redis_token_revocation_shared_across_processes(monkeypatch, authed_client):
@@ -22,6 +24,7 @@ async def test_redis_token_revocation_shared_across_processes(monkeypatch, authe
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'REDIS')
 
     from utils import auth_blacklist
+
     auth_blacklist._redis_client = None
     auth_blacklist._redis_enabled = False
     auth_blacklist._init_redis_if_possible()
@@ -31,7 +34,10 @@ async def test_redis_token_revocation_shared_across_processes(monkeypatch, authe
 
     login_response = await authed_client.post(
         '/platform/authorization',
-        json={'email': os.environ.get('DOORMAN_ADMIN_EMAIL'), 'password': os.environ.get('DOORMAN_ADMIN_PASSWORD')}
+        json={
+            'email': os.environ.get('DOORMAN_ADMIN_EMAIL'),
+            'password': os.environ.get('DOORMAN_ADMIN_PASSWORD'),
+        },
     )
     assert login_response.status_code == 200
     token_data = login_response.json()
@@ -39,11 +45,8 @@ async def test_redis_token_revocation_shared_across_processes(monkeypatch, authe
     assert access_token is not None
 
     from jose import jwt
-    payload = jwt.decode(
-        access_token,
-        os.environ.get('JWT_SECRET_KEY'),
-        algorithms=['HS256']
-    )
+
+    payload = jwt.decode(access_token, os.environ.get('JWT_SECRET_KEY'), algorithms=['HS256'])
     jti = payload.get('jti')
     username = payload.get('sub')
     exp = payload.get('exp')
@@ -52,6 +55,7 @@ async def test_redis_token_revocation_shared_across_processes(monkeypatch, authe
     assert username is not None
 
     import time
+
     ttl = max(1, int(exp - time.time())) if exp else 3600
     auth_blacklist.add_revoked_jti(username, jti, ttl)
 
@@ -65,12 +69,14 @@ async def test_redis_token_revocation_shared_across_processes(monkeypatch, authe
     if auth_blacklist._redis_client:
         auth_blacklist._redis_client.delete(auth_blacklist._revoked_jti_key(username, jti))
 
+
 @pytest.mark.asyncio
 async def test_redis_revoke_all_for_user_shared_across_processes(monkeypatch):
     """Test that user-level revocation via Redis is visible across nodes."""
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'REDIS')
 
     from utils import auth_blacklist
+
     auth_blacklist._redis_client = None
     auth_blacklist._redis_enabled = False
     auth_blacklist._init_redis_if_possible()
@@ -93,13 +99,15 @@ async def test_redis_revoke_all_for_user_shared_across_processes(monkeypatch):
     is_revoked_after_cleanup = auth_blacklist.is_user_revoked(test_username)
     assert is_revoked_after_cleanup is False
 
+
 @pytest.mark.asyncio
 async def test_redis_token_revocation_ttl_expiry(monkeypatch):
     """Test that revoked tokens auto-expire in Redis based on TTL."""
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'REDIS')
 
-    from utils import auth_blacklist
     import time
+
+    from utils import auth_blacklist
 
     auth_blacklist._redis_client = None
     auth_blacklist._redis_enabled = False
@@ -118,6 +126,7 @@ async def test_redis_token_revocation_ttl_expiry(monkeypatch):
     time.sleep(3)
 
     assert auth_blacklist.is_jti_revoked(test_username, test_jti) is False
+
 
 @pytest.mark.asyncio
 async def test_memory_fallback_when_redis_unavailable(monkeypatch):
@@ -138,4 +147,3 @@ async def test_memory_fallback_when_redis_unavailable(monkeypatch):
 
     auth_blacklist.add_revoked_jti(test_username, test_jti, ttl_seconds=60)
     assert auth_blacklist.is_jti_revoked(test_username, test_jti) is True
-

@@ -4,10 +4,10 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-from typing import Dict
 from pydantic import BaseModel, Field
 
 from models.field_validation_model import FieldValidation
+
 
 class ValidationSchema(BaseModel):
     """Validation schema for endpoint request/response validation.
@@ -57,21 +57,12 @@ class ValidationSchema(BaseModel):
         }
     }
     """
-    validation_schema: Dict[str, FieldValidation] = Field(
+
+    validation_schema: dict[str, FieldValidation] = Field(
         ...,
         description='The schema to validate the endpoint against',
         example={
-            'user.name': {
-                'required': True,
-                'type': 'string',
-                'min': 2,
-                'max': 50
-            },
-            'user.age': {
-                'required': True,
-                'type': 'number',
-                'min': 0,
-                'max': 120
-            }
-        }
+            'user.name': {'required': True, 'type': 'string', 'min': 2, 'max': 50},
+            'user.age': {'required': True, 'type': 'number', 'min': 0, 'max': 120},
+        },
     )

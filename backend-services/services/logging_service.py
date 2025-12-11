@@ -4,16 +4,18 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
+import glob
+import json
 import logging
 import os
-import json
-import glob
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
-from fastapi import HTTPException
 import re
+from datetime import datetime
+from typing import Any
+
+from fastapi import HTTPException
 
 logger = logging.getLogger('doorman.logging')
+
 
 class LoggingService:
     def __init__(self):
@@ -24,43 +26,40 @@ class LoggingService:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             backend_root = os.path.normpath(os.path.join(base_dir, '..'))
             candidate = os.path.join(backend_root, 'platform-logs')
-            self.log_directory = candidate if os.path.isdir(candidate) else os.path.join(backend_root, 'logs')
+            self.log_directory = (
+                candidate if os.path.isdir(candidate) else os.path.join(backend_root, 'logs')
+            )
         self.log_file_patterns = ['doorman.log*', 'doorman-trail.log*']
         self.max_logs_per_request = 1000
 
     async def get_logs(
         self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-        user: Optional[str] = None,
-        endpoint: Optional[str] = None,
-        request_id: Optional[str] = None,
-        method: Optional[str] = None,
-        ip_address: Optional[str] = None,
-        min_response_time: Optional[str] = None,
-        max_response_time: Optional[str] = None,
-        level: Optional[str] = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        user: str | None = None,
+        endpoint: str | None = None,
+        request_id: str | None = None,
+        method: str | None = None,
+        ip_address: str | None = None,
+        min_response_time: str | None = None,
+        max_response_time: str | None = None,
+        level: str | None = None,
         limit: int = 100,
         offset: int = 0,
-        request_id_param: str = None
-    ) -> Dict[str, Any]:
+        request_id_param: str = None,
+    ) -> dict[str, Any]:
         """
         Retrieve and filter logs based on various criteria
         """
         try:
-
             log_files: list[str] = []
             for pat in self.log_file_patterns:
                 log_files.extend(glob.glob(os.path.join(self.log_directory, pat)))
 
             if not log_files:
-                return {
-                    'logs': [],
-                    'total': 0,
-                    'has_more': False
-                }
+                return {'logs': [], 'total': 0, 'has_more': False}
 
             logs = []
             total_count = 0
@@ -72,23 +71,26 @@ class LoggingService:
                     continue
 
                 try:
-                    with open(log_file, 'r', encoding='utf-8') as file:
+                    with open(log_file, encoding='utf-8') as file:
                         for line in file:
                             log_entry = self._parse_log_line(line)
-                            if log_entry and self._matches_filters(log_entry, {
-                                'start_date': start_date,
-                                'end_date': end_date,
-                                'start_time': start_time,
-                                'end_time': end_time,
-                                'user': user,
-                                'endpoint': endpoint,
-                                'request_id': request_id,
-                                'method': method,
-                                'ip_address': ip_address,
-                                'min_response_time': min_response_time,
-                                'max_response_time': max_response_time,
-                                'level': level
-                            }):
+                            if log_entry and self._matches_filters(
+                                log_entry,
+                                {
+                                    'start_date': start_date,
+                                    'end_date': end_date,
+                                    'start_time': start_time,
+                                    'end_time': end_time,
+                                    'user': user,
+                                    'endpoint': endpoint,
+                                    'request_id': request_id,
+                                    'method': method,
+                                    'ip_address': ip_address,
+                                    'min_response_time': min_response_time,
+                                    'max_response_time': max_response_time,
+                                    'level': level,
+                                },
+                            ):
                                 total_count += 1
                                 if len(logs) < limit and total_count > offset:
                                     logs.append(log_entry)
@@ -103,17 +105,13 @@ class LoggingService:
                     logger.warning(f'Error reading log file {log_file}: {str(e)}')
                     continue
 
-            return {
-                'logs': logs,
-                'total': total_count,
-                'has_more': total_count > offset + limit
-            }
+            return {'logs': logs, 'total': total_count, 'has_more': total_count > offset + limit}
 
         except Exception as e:
             logger.error(f'Error retrieving logs: {str(e)}', exc_info=True)
             raise HTTPException(status_code=500, detail='Failed to retrieve logs')
 
-    def get_available_log_files(self) -> List[str]:
+    def get_available_log_files(self) -> list[str]:
         """
         Get list of available log files for debugging
         """
@@ -123,12 +121,11 @@ class LoggingService:
         log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
         return log_files
 
-    async def get_log_statistics(self, request_id: str = None) -> Dict[str, Any]:
+    async def get_log_statistics(self, request_id: str = None) -> dict[str, Any]:
         """
         Get log statistics for dashboard
         """
         try:
-
             log_files: list[str] = []
             for pat in self.log_file_patterns:
                 log_files.extend(glob.glob(os.path.join(self.log_directory, pat)))
@@ -143,7 +140,7 @@ class LoggingService:
                     'avg_response_time': 0,
                     'top_apis': [],
                     'top_users': [],
-                    'top_endpoints': []
+                    'top_endpoints': [],
                 }
 
             stats = {
@@ -155,7 +152,7 @@ class LoggingService:
                 'response_times': [],
                 'apis': {},
                 'users': {},
-                'endpoints': {}
+                'endpoints': {},
             }
 
             for log_file in log_files:
@@ -163,7 +160,7 @@ class LoggingService:
                     continue
 
                 try:
-                    with open(log_file, 'r', encoding='utf-8') as file:
+                    with open(log_file, encoding='utf-8') as file:
                         for line in file:
                             log_entry = self._parse_log_line(line)
                             if log_entry:
@@ -181,28 +178,42 @@ class LoggingService:
 
                                 if log_entry.get('response_time'):
                                     try:
-                                        stats['response_times'].append(float(log_entry['response_time']))
+                                        stats['response_times'].append(
+                                            float(log_entry['response_time'])
+                                        )
                                     except (ValueError, TypeError):
                                         pass
 
                                 if log_entry.get('api'):
-                                    stats['apis'][log_entry['api']] = stats['apis'].get(log_entry['api'], 0) + 1
+                                    stats['apis'][log_entry['api']] = (
+                                        stats['apis'].get(log_entry['api'], 0) + 1
+                                    )
 
                                 if log_entry.get('user'):
-                                    stats['users'][log_entry['user']] = stats['users'].get(log_entry['user'], 0) + 1
+                                    stats['users'][log_entry['user']] = (
+                                        stats['users'].get(log_entry['user'], 0) + 1
+                                    )
 
                                 if log_entry.get('endpoint'):
-                                    stats['endpoints'][log_entry['endpoint']] = stats['endpoints'].get(log_entry['endpoint'], 0) + 1
+                                    stats['endpoints'][log_entry['endpoint']] = (
+                                        stats['endpoints'].get(log_entry['endpoint'], 0) + 1
+                                    )
 
                 except Exception as e:
                     logger.warning(f'Error reading log file {log_file} for statistics: {str(e)}')
                     continue
 
-            avg_response_time = sum(stats['response_times']) / len(stats['response_times']) if stats['response_times'] else 0
+            avg_response_time = (
+                sum(stats['response_times']) / len(stats['response_times'])
+                if stats['response_times']
+                else 0
+            )
 
             top_apis = sorted(stats['apis'].items(), key=lambda x: x[1], reverse=True)[:10]
             top_users = sorted(stats['users'].items(), key=lambda x: x[1], reverse=True)[:10]
-            top_endpoints = sorted(stats['endpoints'].items(), key=lambda x: x[1], reverse=True)[:10]
+            top_endpoints = sorted(stats['endpoints'].items(), key=lambda x: x[1], reverse=True)[
+                :10
+            ]
 
             return {
                 'total_logs': stats['total_logs'],
@@ -213,7 +224,9 @@ class LoggingService:
                 'avg_response_time': round(avg_response_time, 2),
                 'top_apis': [{'name': api, 'count': count} for api, count in top_apis],
                 'top_users': [{'name': user, 'count': count} for user, count in top_users],
-                'top_endpoints': [{'name': endpoint, 'count': count} for endpoint, count in top_endpoints]
+                'top_endpoints': [
+                    {'name': endpoint, 'count': count} for endpoint, count in top_endpoints
+                ],
             }
 
         except Exception as e:
@@ -223,21 +236,17 @@ class LoggingService:
     async def export_logs(
         self,
         format: str = 'json',
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        filters: Dict[str, Any] = None,
-        request_id: str = None
-    ) -> Dict[str, Any]:
+        start_date: str | None = None,
+        end_date: str | None = None,
+        filters: dict[str, Any] = None,
+        request_id: str = None,
+    ) -> dict[str, Any]:
         """
         Export logs in various formats
         """
         try:
-
             logs_data = await self.get_logs(
-                start_date=start_date,
-                end_date=end_date,
-                limit=10000,
-                **filters if filters else {}
+                start_date=start_date, end_date=end_date, limit=10000, **filters if filters else {}
             )
 
             logs = logs_data['logs']
@@ -246,24 +255,24 @@ class LoggingService:
                 return {
                     'format': 'json',
                     'data': json.dumps(logs, indent=2, default=str),
-                    'filename': f"logs_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                    'filename': f'logs_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json',
                 }
             elif format.lower() == 'csv':
                 if not logs:
                     return {
                         'format': 'csv',
                         'data': 'timestamp,level,message,source,user,api,endpoint,method,status_code,response_time,ip_address,protocol,request_id,group,role\n',
-                        'filename': f"logs_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                        'filename': f'logs_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
                     }
 
                 csv_data = 'timestamp,level,message,source,user,api,endpoint,method,status_code,response_time,ip_address,protocol,request_id,group,role\n'
                 for log in logs:
-                    csv_data += f"{log.get('timestamp', '')},{log.get('level', '')},{log.get('message', '').replace(',', ';')},{log.get('source', '')},{log.get('user', '')},{log.get('api', '')},{log.get('endpoint', '')},{log.get('method', '')},{log.get('status_code', '')},{log.get('response_time', '')},{log.get('ip_address', '')},{log.get('protocol', '')},{log.get('request_id', '')},{log.get('group', '')},{log.get('role', '')}\n"
+                    csv_data += f'{log.get("timestamp", "")},{log.get("level", "")},{log.get("message", "").replace(",", ";")},{log.get("source", "")},{log.get("user", "")},{log.get("api", "")},{log.get("endpoint", "")},{log.get("method", "")},{log.get("status_code", "")},{log.get("response_time", "")},{log.get("ip_address", "")},{log.get("protocol", "")},{log.get("request_id", "")},{log.get("group", "")},{log.get("role", "")}\n'
 
                 return {
                     'format': 'csv',
                     'data': csv_data,
-                    'filename': f"logs_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                    'filename': f'logs_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
                 }
             else:
                 raise HTTPException(status_code=400, detail='Unsupported export format')
@@ -272,7 +281,7 @@ class LoggingService:
             logger.error(f'Error exporting logs: {str(e)}')
             raise HTTPException(status_code=500, detail='Failed to export logs')
 
-    def _parse_log_line(self, line: str) -> Optional[Dict[str, Any]]:
+    def _parse_log_line(self, line: str) -> dict[str, Any] | None:
         """
         Parse a log line and extract structured data
         Format: timestamp - logger_name - level - request_id | message
@@ -292,7 +301,9 @@ class LoggingService:
                     level = rec.get('level', '')
                     structured = self._extract_structured_data(message)
                     return {
-                        'timestamp': timestamp if isinstance(timestamp, str) else timestamp.isoformat(),
+                        'timestamp': timestamp
+                        if isinstance(timestamp, str)
+                        else timestamp.isoformat(),
                         'level': level,
                         'message': message,
                         'source': name,
@@ -330,7 +341,7 @@ class LoggingService:
             logger.debug(f'Failed to parse log line: {str(e)}', exc_info=True)
             return None
 
-    def _extract_structured_data(self, message: str) -> Dict[str, Any]:
+    def _extract_structured_data(self, message: str) -> dict[str, Any]:
         """
         Extract structured data from log message
         """
@@ -375,12 +386,11 @@ class LoggingService:
 
         return data
 
-    def _matches_filters(self, log_entry: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+    def _matches_filters(self, log_entry: dict[str, Any], filters: dict[str, Any]) -> bool:
         """
         Check if log entry matches all applied filters
         """
         try:
-
             timestamp_str = log_entry.get('timestamp', '')
             if not timestamp_str:
                 return False
@@ -429,14 +439,20 @@ class LoggingService:
                     log_value = str(log_entry.get(field, '')).lower()
 
                     if not log_value:
-                        logger.debug(f"Filter '{field}' = '{filter_value}' but log has no value for '{field}'")
+                        logger.debug(
+                            f"Filter '{field}' = '{filter_value}' but log has no value for '{field}'"
+                        )
                         return False
 
                     if filter_value not in log_value:
-                        logger.debug(f"Filter '{field}' = '{filter_value}' not found in log value '{log_value}'")
+                        logger.debug(
+                            f"Filter '{field}' = '{filter_value}' not found in log value '{log_value}'"
+                        )
                         return False
                     else:
-                        logger.debug(f"Filter '{field}' = '{filter_value}' matches log value '{log_value}'")
+                        logger.debug(
+                            f"Filter '{field}' = '{filter_value}' matches log value '{log_value}'"
+                        )
 
             if filters.get('status_code') and filters['status_code'].strip():
                 try:
@@ -470,7 +486,7 @@ class LoggingService:
 
             applied_filters = [f'{k}={v}' for k, v in filters.items() if v and str(v).strip()]
             if applied_filters:
-                logger.debug(f"Log entry passed all filters: {', '.join(applied_filters)}")
+                logger.debug(f'Log entry passed all filters: {", ".join(applied_filters)}')
             return True
 
         except Exception as e:

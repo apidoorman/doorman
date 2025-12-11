@@ -1,12 +1,12 @@
 import os
 import time
-import json
 from pathlib import Path
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_dump_file_naming_and_dir_creation(monkeypatch, tmp_path):
-
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
     monkeypatch.setenv('MEM_ENCRYPTION_KEY', 'unit-test-key-12345')
 
@@ -16,16 +16,14 @@ async def test_dump_file_naming_and_dir_creation(monkeypatch, tmp_path):
     dump_path = dump_memory_to_file(str(hint_file))
     assert Path(dump_path).exists()
 
-    assert Path(dump_path).name.startswith('mydump-') and dump_path.endswith(
-        '.bin'
-    )
+    assert Path(dump_path).name.startswith('mydump-') and dump_path.endswith('.bin')
 
     latest = find_latest_dump_path(str(tmp_path / 'custom' / 'mydump.bin'))
     assert latest == dump_path
 
+
 @pytest.mark.asyncio
 async def test_dump_with_directory_hint_uses_default_stem(monkeypatch, tmp_path):
-
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
     monkeypatch.setenv('MEM_ENCRYPTION_KEY', 'unit-test-key-99999')
 
@@ -36,6 +34,7 @@ async def test_dump_with_directory_hint_uses_default_stem(monkeypatch, tmp_path)
     dump_path = dump_memory_to_file(str(d))
     assert Path(dump_path).exists()
     assert Path(dump_path).name.startswith('memory_dump-')
+
 
 def test_find_latest_prefers_newest_by_stem(tmp_path):
     from utils.memory_dump_util import find_latest_dump_path
@@ -54,6 +53,7 @@ def test_find_latest_prefers_newest_by_stem(tmp_path):
     latest = find_latest_dump_path(str(d / 'memory_dump.bin'))
     assert latest and latest.endswith(b.name)
 
+
 def test_find_latest_ignores_other_stems_when_dir_hint(tmp_path):
     from utils.memory_dump_util import find_latest_dump_path
 
@@ -70,8 +70,8 @@ def test_find_latest_ignores_other_stems_when_dir_hint(tmp_path):
     latest = find_latest_dump_path(str(d))
     assert latest and Path(latest).name.startswith('memory_dump-')
 
-def test_find_latest_uses_default_when_no_hint(monkeypatch, tmp_path):
 
+def test_find_latest_uses_default_when_no_hint(monkeypatch, tmp_path):
     import utils.memory_dump_util as md
 
     base = tmp_path / 'default'
@@ -89,6 +89,7 @@ def test_find_latest_uses_default_when_no_hint(monkeypatch, tmp_path):
     latest = md.find_latest_dump_path(None)
     assert latest and latest.endswith(b.name)
 
+
 def test_encrypt_decrypt_roundtrip(monkeypatch):
     import utils.memory_dump_util as md
 
@@ -99,15 +100,16 @@ def test_encrypt_decrypt_roundtrip(monkeypatch):
     out = md._decrypt_blob(blob, key)
     assert out == pt
 
+
 def test_encrypt_requires_sufficient_key(monkeypatch):
     import utils.memory_dump_util as md
 
     with pytest.raises(ValueError):
         md._encrypt_blob(b'data', 'short')
 
+
 @pytest.mark.asyncio
 async def test_dump_and_restore_roundtrip_with_bytes(monkeypatch, tmp_path):
-
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
     monkeypatch.setenv('MEM_ENCRYPTION_KEY', 'unit-test-key-abcde')
     monkeypatch.setenv('MEM_DUMP_PATH', str(tmp_path / 'mem' / 'memory_dump.bin'))
@@ -115,12 +117,9 @@ async def test_dump_and_restore_roundtrip_with_bytes(monkeypatch, tmp_path):
     import utils.memory_dump_util as md
     from utils.database import database
 
-    database.db.settings.insert_one({
-        '_id': 'cfg',
-        'blob': b'\x00\x01',
-        'tuple': (1, 2, 3),
-        'aset': {'a', 'b'},
-    })
+    database.db.settings.insert_one(
+        {'_id': 'cfg', 'blob': b'\x00\x01', 'tuple': (1, 2, 3), 'aset': {'a', 'b'}}
+    )
 
     dump_path = md.dump_memory_to_file(None)
     assert Path(dump_path).exists()
@@ -134,15 +133,16 @@ async def test_dump_and_restore_roundtrip_with_bytes(monkeypatch, tmp_path):
     assert set(restored.get('aset')) == {'a', 'b'}
     assert list(restored.get('tuple')) == [1, 2, 3]
 
+
 def test_restore_nonexistent_file_raises(tmp_path):
     import utils.memory_dump_util as md
 
     with pytest.raises(FileNotFoundError):
         md.restore_memory_from_file(str(tmp_path / 'nope.bin'))
 
+
 @pytest.mark.asyncio
 async def test_dump_fails_with_short_key(monkeypatch, tmp_path):
-
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
     monkeypatch.setenv('MEM_ENCRYPTION_KEY', 'short')
     monkeypatch.setenv('MEM_DUMP_PATH', str(tmp_path / 'd' / 'dump.bin'))

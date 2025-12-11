@@ -1,9 +1,10 @@
-import time
 import socket
-import requests
-import pytest
+import time
 
+import pytest
+import requests
 from config import ENABLE_GRPC
+
 
 def _find_port() -> int:
     s = socket.socket()
@@ -11,6 +12,7 @@ def _find_port() -> int:
     p = s.getsockname()[1]
     s.close()
     return p
+
 
 def _get_host_from_container() -> str:
     """Get the hostname to use when referring to the host machine from a Docker container.
@@ -39,17 +41,22 @@ def _get_host_from_container() -> str:
     # This is the most common development setup
     return '127.0.0.1'
 
+
 @pytest.mark.skipif(not ENABLE_GRPC, reason='gRPC disabled')
 def test_public_grpc_with_proto_upload(client):
     try:
+        import importlib
+        import pathlib
+        import sys
+        import tempfile
+        from concurrent import futures
+
         import grpc
         from grpc_tools import protoc
-        from concurrent import futures
-        import tempfile, pathlib, importlib, sys
     except Exception as e:
         pytest.skip(f'Missing gRPC deps: {e}')
 
-    PROTO = '''
+    PROTO = """
 syntax = "proto3";
 package {pkg};
 service Resource {
@@ -66,7 +73,7 @@ message UpdateRequest { int32 id = 1; string name = 2; }
 message UpdateReply { string message = 1; }
 message DeleteRequest { int32 id = 1; }
 message DeleteReply { bool ok = 1; }
-'''
+"""
 
     base = client.base_url.rstrip('/')
     ts = int(time.time())
@@ -79,7 +86,15 @@ message DeleteReply { bool ok = 1; }
         (tmp / 'svc.proto').write_text(PROTO.replace('{pkg}', pkg))
         out = tmp / 'gen'
         out.mkdir()
-        code = protoc.main(['protoc', f'--proto_path={td}', f'--python_out={out}', f'--grpc_python_out={out}', str(tmp / 'svc.proto')])
+        code = protoc.main(
+            [
+                'protoc',
+                f'--proto_path={td}',
+                f'--python_out={out}',
+                f'--grpc_python_out={out}',
+                str(tmp / 'svc.proto'),
+            ]
+        )
         assert code == 0
         (out / '__init__.py').write_text('')
         sys.path.insert(0, str(out))
@@ -112,35 +127,63 @@ message DeleteReply { bool ok = 1; }
             r_up = client.post(f'/platform/proto/{api_name}/{api_version}', files=files)
             assert r_up.status_code in (200, 201), r_up.text
 
-            r_api = client.post('/platform/api', json={
-                'api_name': api_name,
-                'api_version': api_version,
-                'api_description': 'public grpc with uploaded proto',
-                'api_allowed_roles': [],
-                'api_allowed_groups': [],
-                'api_servers': [f'grpc://{host_ref}:{port}'],
-                'api_type': 'REST',
-                'active': True,
-                'api_public': True,
-                'api_grpc_package': pkg
-            })
+            r_api = client.post(
+                '/platform/api',
+                json={
+                    'api_name': api_name,
+                    'api_version': api_version,
+                    'api_description': 'public grpc with uploaded proto',
+                    'api_allowed_roles': [],
+                    'api_allowed_groups': [],
+                    'api_servers': [f'grpc://{host_ref}:{port}'],
+                    'api_type': 'REST',
+                    'active': True,
+                    'api_public': True,
+                    'api_grpc_package': pkg,
+                },
+            )
             assert r_api.status_code in (200, 201), r_api.text
 
-            r_ep = client.post('/platform/endpoint', json={
-                'api_name': api_name,
-                'api_version': api_version,
-                'endpoint_method': 'POST',
-                'endpoint_uri': '/grpc',
-                'endpoint_description': 'grpc'
-            })
+            r_ep = client.post(
+                '/platform/endpoint',
+                json={
+                    'api_name': api_name,
+                    'api_version': api_version,
+                    'endpoint_method': 'POST',
+                    'endpoint_uri': '/grpc',
+                    'endpoint_description': 'grpc',
+                },
+            )
             assert r_ep.status_code in (200, 201), r_ep.text
 
-            url = f"{base}/api/grpc/{api_name}"
+            url = f'{base}/api/grpc/{api_name}'
             hdr = {'X-API-Version': api_version}
-            assert requests.post(url, json={'method': 'Resource.Create', 'message': {'name': 'A'}}, headers=hdr).status_code == 200
-            assert requests.post(url, json={'method': 'Resource.Read', 'message': {'id': 1}}, headers=hdr).status_code == 200
-            assert requests.post(url, json={'method': 'Resource.Update', 'message': {'id': 1, 'name': 'B'}}, headers=hdr).status_code == 200
-            assert requests.post(url, json={'method': 'Resource.Delete', 'message': {'id': 1}}, headers=hdr).status_code == 200
+            assert (
+                requests.post(
+                    url, json={'method': 'Resource.Create', 'message': {'name': 'A'}}, headers=hdr
+                ).status_code
+                == 200
+            )
+            assert (
+                requests.post(
+                    url, json={'method': 'Resource.Read', 'message': {'id': 1}}, headers=hdr
+                ).status_code
+                == 200
+            )
+            assert (
+                requests.post(
+                    url,
+                    json={'method': 'Resource.Update', 'message': {'id': 1, 'name': 'B'}},
+                    headers=hdr,
+                ).status_code
+                == 200
+            )
+            assert (
+                requests.post(
+                    url, json={'method': 'Resource.Delete', 'message': {'id': 1}}, headers=hdr
+                ).status_code
+                == 200
+            )
         finally:
             try:
                 client.delete(f'/platform/endpoint/POST/{api_name}/{api_version}/grpc')
@@ -151,4 +194,3 @@ message DeleteReply { bool ok = 1; }
             except Exception:
                 pass
             server.stop(0)
-

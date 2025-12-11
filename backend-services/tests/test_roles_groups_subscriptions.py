@@ -1,8 +1,8 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_roles_crud(authed_client):
-
     r = await authed_client.post(
         '/platform/role',
         json={
@@ -35,9 +35,9 @@ async def test_roles_crud(authed_client):
     d = await authed_client.delete('/platform/role/qa')
     assert d.status_code == 200
 
+
 @pytest.mark.asyncio
 async def test_groups_crud(authed_client):
-
     cg = await authed_client.post(
         '/platform/group',
         json={'group_name': 'qa-group', 'group_description': 'QA', 'api_access': []},
@@ -58,9 +58,9 @@ async def test_groups_crud(authed_client):
     dg = await authed_client.delete('/platform/group/qa-group')
     assert dg.status_code == 200
 
+
 @pytest.mark.asyncio
 async def test_subscriptions_flow(authed_client):
-
     api_payload = {
         'api_name': 'orders',
         'api_version': 'v1',
@@ -92,9 +92,9 @@ async def test_subscriptions_flow(authed_client):
     )
     assert us.status_code in (200, 400)
 
+
 @pytest.mark.asyncio
 async def test_token_defs_and_deduction_on_gateway(monkeypatch, authed_client):
-
     credit_group = 'ai-group'
     cd = await authed_client.post(
         '/platform/credit',
@@ -103,7 +103,13 @@ async def test_token_defs_and_deduction_on_gateway(monkeypatch, authed_client):
             'api_key': 'sk-test-123',
             'api_key_header': 'x-api-key',
             'credit_tiers': [
-                {'tier_name': 'basic', 'credits': 100, 'input_limit': 150, 'output_limit': 150, 'reset_frequency': 'monthly'}
+                {
+                    'tier_name': 'basic',
+                    'credits': 100,
+                    'input_limit': 150,
+                    'output_limit': 150,
+                    'reset_frequency': 'monthly',
+                }
             ],
         },
     )
@@ -144,12 +150,10 @@ async def test_token_defs_and_deduction_on_gateway(monkeypatch, authed_client):
     assert s.status_code in (200, 201)
 
     uc = await authed_client.post(
-        f'/platform/credit/admin',
+        '/platform/credit/admin',
         json={
             'username': 'admin',
-            'users_credits': {
-                credit_group: {'tier_name': 'basic', 'available_credits': 2}
-            },
+            'users_credits': {credit_group: {'tier_name': 'basic', 'available_credits': 2}},
         },
     )
     assert uc.status_code in (200, 201), uc.text
@@ -158,7 +162,9 @@ async def test_token_defs_and_deduction_on_gateway(monkeypatch, authed_client):
         r = await authed_client.get('/platform/credit/admin')
         assert r.status_code == 200, r.text
         body = r.json()
-        users_credits = body.get('users_credits') or body.get('response', {}).get('users_credits', {})
+        users_credits = body.get('users_credits') or body.get('response', {}).get(
+            'users_credits', {}
+        )
         return int(users_credits.get(credit_group, {}).get('available_credits', 0))
 
     import services.gateway_service as gs
@@ -177,6 +183,7 @@ async def test_token_defs_and_deduction_on_gateway(monkeypatch, authed_client):
     class _FakeAsyncClient:
         def __init__(self, timeout=None, limits=None, http2=False):
             self._timeout = timeout
+
         async def __aenter__(self):
             return self
 

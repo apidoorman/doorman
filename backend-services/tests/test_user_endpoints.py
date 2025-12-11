@@ -1,8 +1,8 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_user_me_and_crud(authed_client):
-
     me = await authed_client.get('/platform/user/me')
     assert me.status_code == 200
     assert me.json().get('username') == 'admin'
@@ -25,8 +25,7 @@ async def test_user_me_and_crud(authed_client):
     assert uu.status_code == 200
 
     up = await authed_client.put(
-        '/platform/user/testuser1/update-password',
-        json={'new_password': 'ThisIsANewPwd!456'},
+        '/platform/user/testuser1/update-password', json={'new_password': 'ThisIsANewPwd!456'}
     )
     assert up.status_code == 200
 

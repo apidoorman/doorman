@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from fastapi import Request, HTTPException
-from typing import Optional, List
-
-from utils.security_settings_util import get_cached_settings
-from utils.audit_util import audit
 import os
 
-def _get_client_ip(request: Request, trust_xff: bool) -> Optional[str]:
+from fastapi import HTTPException, Request
+
+from utils.audit_util import audit
+from utils.security_settings_util import get_cached_settings
+
+
+def _get_client_ip(request: Request, trust_xff: bool) -> str | None:
     """Determine client IP with optional proxy trust.
 
     When `trust_xff` is True, this prefers headers supplied by trusted proxies.
@@ -28,7 +29,14 @@ def _get_client_ip(request: Request, trust_xff: bool) -> Optional[str]:
             return _ip_in_list(src_ip, trusted) if src_ip else False
 
         if trust_xff and _from_trusted_proxy():
-            for header in ('x-forwarded-for', 'X-Forwarded-For', 'x-real-ip', 'X-Real-IP', 'cf-connecting-ip', 'CF-Connecting-IP'):
+            for header in (
+                'x-forwarded-for',
+                'X-Forwarded-For',
+                'x-real-ip',
+                'X-Real-IP',
+                'cf-connecting-ip',
+                'CF-Connecting-IP',
+            ):
                 val = request.headers.get(header)
                 if val:
                     ip = val.split(',')[0].strip()
@@ -38,11 +46,13 @@ def _get_client_ip(request: Request, trust_xff: bool) -> Optional[str]:
     except Exception:
         return request.client.host if request.client else None
 
-def _ip_in_list(ip: str, patterns: List[str]) -> bool:
+
+def _ip_in_list(ip: str, patterns: list[str]) -> bool:
     try:
         import ipaddress
+
         ip_obj = ipaddress.ip_address(ip)
-        for pat in (patterns or []):
+        for pat in patterns or []:
             p = (pat or '').strip()
             if not p:
                 continue
@@ -60,16 +70,19 @@ def _ip_in_list(ip: str, patterns: List[str]) -> bool:
     except Exception:
         return False
 
-def _is_loopback(ip: Optional[str]) -> bool:
+
+def _is_loopback(ip: str | None) -> bool:
     try:
         if not ip:
             return False
         if ip in ('testserver', 'localhost'):
             return True
         import ipaddress
+
         return ipaddress.ip_address(ip).is_loopback
     except Exception:
         return False
+
 
 def enforce_api_ip_policy(request: Request, api: dict):
     """
@@ -81,16 +94,36 @@ def enforce_api_ip_policy(request: Request, api: dict):
     """
     try:
         settings = get_cached_settings()
-        trust_xff = bool(api.get('api_trust_x_forwarded_for')) if api.get('api_trust_x_forwarded_for') is not None else bool(settings.get('trust_x_forwarded_for'))
+        trust_xff = (
+            bool(api.get('api_trust_x_forwarded_for'))
+            if api.get('api_trust_x_forwarded_for') is not None
+            else bool(settings.get('trust_x_forwarded_for'))
+        )
         client_ip = _get_client_ip(request, trust_xff)
         if not client_ip:
             return
         try:
             settings = get_cached_settings()
             env_flag = os.getenv('LOCAL_HOST_IP_BYPASS')
-            allow_local = (env_flag.lower() == 'true') if isinstance(env_flag, str) and env_flag.strip() != '' else bool(settings.get('allow_localhost_bypass'))
+            allow_local = (
+                (env_flag.lower() == 'true')
+                if isinstance(env_flag, str) and env_flag.strip() != ''
+                else bool(settings.get('allow_localhost_bypass'))
+            )
             direct_ip = getattr(getattr(request, 'client', None), 'host', None)
-            has_forward = any(request.headers.get(h) for h in ('x-forwarded-for','X-Forwarded-For','x-real-ip','X-Real-IP','cf-connecting-ip','CF-Connecting-IP','forwarded','Forwarded'))
+            has_forward = any(
+                request.headers.get(h)
+                for h in (
+                    'x-forwarded-for',
+                    'X-Forwarded-For',
+                    'x-real-ip',
+                    'X-Real-IP',
+                    'cf-connecting-ip',
+                    'CF-Connecting-IP',
+                    'forwarded',
+                    'Forwarded',
+                )
+            )
             if allow_local and direct_ip and _is_loopback(direct_ip) and not has_forward:
                 return
         except Exception:
@@ -100,14 +133,28 @@ def enforce_api_ip_policy(request: Request, api: dict):
         bl = api.get('api_ip_blacklist') or []
         if bl and _ip_in_list(client_ip, bl):
             try:
-                audit(request, actor=None, action='ip.api_deny', target=str(api.get('api_id') or api.get('api_name') or 'unknown_api'), status='blocked', details={'reason': 'blacklisted', 'effective_ip': client_ip})
+                audit(
+                    request,
+                    actor=None,
+                    action='ip.api_deny',
+                    target=str(api.get('api_id') or api.get('api_name') or 'unknown_api'),
+                    status='blocked',
+                    details={'reason': 'blacklisted', 'effective_ip': client_ip},
+                )
             except Exception:
                 pass
             raise HTTPException(status_code=403, detail='API011')
         if mode == 'whitelist':
             if not wl or not _ip_in_list(client_ip, wl):
                 try:
-                    audit(request, actor=None, action='ip.api_deny', target=str(api.get('api_id') or api.get('api_name') or 'unknown_api'), status='blocked', details={'reason': 'not_in_whitelist', 'effective_ip': client_ip})
+                    audit(
+                        request,
+                        actor=None,
+                        action='ip.api_deny',
+                        target=str(api.get('api_id') or api.get('api_name') or 'unknown_api'),
+                        status='blocked',
+                        details={'reason': 'not_in_whitelist', 'effective_ip': client_ip},
+                    )
                 except Exception:
                     pass
                 raise HTTPException(status_code=403, detail='API010')

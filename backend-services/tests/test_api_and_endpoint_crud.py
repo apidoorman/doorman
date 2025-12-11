@@ -1,8 +1,8 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_api_crud_flow(authed_client):
-
     payload = {
         'api_name': 'customer',
         'api_version': 'v1',
@@ -28,8 +28,7 @@ async def test_api_crud_flow(authed_client):
     assert any(a.get('api_name') == 'customer' and a.get('api_version') == 'v1' for a in apis)
 
     upd = await authed_client.put(
-        '/platform/api/customer/v1',
-        json={'api_description': 'Customer API Updated'},
+        '/platform/api/customer/v1', json={'api_description': 'Customer API Updated'}
     )
     assert upd.status_code == 200
 

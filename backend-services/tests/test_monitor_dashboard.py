@@ -1,8 +1,8 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_monitor_metrics_and_dashboard(authed_client):
-
     d = await authed_client.get('/platform/dashboard')
     assert d.status_code == 200
     dj = d.json()
@@ -12,6 +12,7 @@ async def test_monitor_metrics_and_dashboard(authed_client):
     assert m.status_code == 200
     mj = m.json()
     assert isinstance(mj, dict)
+
 
 @pytest.mark.asyncio
 async def test_liveness_and_readiness(client):

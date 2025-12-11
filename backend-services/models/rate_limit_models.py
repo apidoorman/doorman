@@ -9,59 +9,64 @@ This module defines the data structures for the rate limiting system including:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Any
-from enum import Enum
 from datetime import datetime
-
+from enum import Enum
+from typing import Any
 
 # ============================================================================
 # ENUMS
 # ============================================================================
 
+
 class RuleType(Enum):
     """Types of rate limit rules"""
-    PER_USER = "per_user"
-    PER_API = "per_api"
-    PER_ENDPOINT = "per_endpoint"
-    PER_IP = "per_ip"
-    PER_USER_API = "per_user_api"  # Combined: specific user on specific API
-    PER_USER_ENDPOINT = "per_user_endpoint"  # Combined: specific user on specific endpoint
-    GLOBAL = "global"  # Global rate limit for all requests
+
+    PER_USER = 'per_user'
+    PER_API = 'per_api'
+    PER_ENDPOINT = 'per_endpoint'
+    PER_IP = 'per_ip'
+    PER_USER_API = 'per_user_api'  # Combined: specific user on specific API
+    PER_USER_ENDPOINT = 'per_user_endpoint'  # Combined: specific user on specific endpoint
+    GLOBAL = 'global'  # Global rate limit for all requests
 
 
 class TimeWindow(Enum):
     """Time windows for rate limiting"""
-    SECOND = "second"
-    MINUTE = "minute"
-    HOUR = "hour"
-    DAY = "day"
-    MONTH = "month"
+
+    SECOND = 'second'
+    MINUTE = 'minute'
+    HOUR = 'hour'
+    DAY = 'day'
+    MONTH = 'month'
 
 
 class TierName(Enum):
     """Predefined tier names"""
-    FREE = "free"
-    PRO = "pro"
-    ENTERPRISE = "enterprise"
-    CUSTOM = "custom"
+
+    FREE = 'free'
+    PRO = 'pro'
+    ENTERPRISE = 'enterprise'
+    CUSTOM = 'custom'
 
 
 class QuotaType(Enum):
     """Types of quotas"""
-    REQUESTS = "requests"
-    BANDWIDTH = "bandwidth"
-    COMPUTE_TIME = "compute_time"
+
+    REQUESTS = 'requests'
+    BANDWIDTH = 'bandwidth'
+    COMPUTE_TIME = 'compute_time'
 
 
 # ============================================================================
 # RATE LIMIT RULE MODELS
 # ============================================================================
 
+
 @dataclass
 class RateLimitRule:
     """
     Defines a rate limiting rule
-    
+
     Examples:
         # Per-user rule: 100 requests per minute
         RateLimitRule(
@@ -71,7 +76,7 @@ class RateLimitRule:
             limit=100,
             burst_allowance=20
         )
-        
+
         # Per-API rule: 1000 requests per hour
         RateLimitRule(
             rule_id="rule_002",
@@ -81,24 +86,25 @@ class RateLimitRule:
             limit=1000
         )
     """
+
     rule_id: str
     rule_type: RuleType
     time_window: TimeWindow
     limit: int  # Maximum requests allowed in time window
-    
+
     # Optional fields
-    target_identifier: Optional[str] = None  # User ID, API name, endpoint URI, or IP
+    target_identifier: str | None = None  # User ID, API name, endpoint URI, or IP
     burst_allowance: int = 0  # Additional requests allowed for bursts
     priority: int = 0  # Higher priority rules are checked first
     enabled: bool = True
-    
+
     # Metadata
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    created_by: Optional[str] = None
-    description: Optional[str] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    created_by: str | None = None
+    description: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage"""
         return {
             'rule_id': self.rule_id,
@@ -112,11 +118,11 @@ class RateLimitRule:
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'created_by': self.created_by,
-            'description': self.description
+            'description': self.description,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'RateLimitRule':
+    def from_dict(cls, data: dict[str, Any]) -> 'RateLimitRule':
         """Create from dictionary"""
         return cls(
             rule_id=data['rule_id'],
@@ -127,10 +133,14 @@ class RateLimitRule:
             burst_allowance=data.get('burst_allowance', 0),
             priority=data.get('priority', 0),
             enabled=data.get('enabled', True),
-            created_at=datetime.fromisoformat(data['created_at']) if data.get('created_at') else None,
-            updated_at=datetime.fromisoformat(data['updated_at']) if data.get('updated_at') else None,
+            created_at=datetime.fromisoformat(data['created_at'])
+            if data.get('created_at')
+            else None,
+            updated_at=datetime.fromisoformat(data['updated_at'])
+            if data.get('updated_at')
+            else None,
             created_by=data.get('created_by'),
-            description=data.get('description')
+            description=data.get('description'),
         )
 
 
@@ -138,31 +148,33 @@ class RateLimitRule:
 # TIER/PLAN MODELS
 # ============================================================================
 
+
 @dataclass
 class TierLimits:
     """Rate limits and quotas for a specific tier"""
+
     # Rate limits (requests per time window)
-    requests_per_second: Optional[int] = None
-    requests_per_minute: Optional[int] = None
-    requests_per_hour: Optional[int] = None
-    requests_per_day: Optional[int] = None
-    requests_per_month: Optional[int] = None
-    
+    requests_per_second: int | None = None
+    requests_per_minute: int | None = None
+    requests_per_hour: int | None = None
+    requests_per_day: int | None = None
+    requests_per_month: int | None = None
+
     # Burst allowances
     burst_per_second: int = 0
     burst_per_minute: int = 0
     burst_per_hour: int = 0
-    
+
     # Quotas
-    monthly_request_quota: Optional[int] = None
-    daily_request_quota: Optional[int] = None
-    monthly_bandwidth_quota: Optional[int] = None  # In bytes
-    
+    monthly_request_quota: int | None = None
+    daily_request_quota: int | None = None
+    monthly_bandwidth_quota: int | None = None  # In bytes
+
     # Throttling configuration
     enable_throttling: bool = False  # If true, queue/delay requests; if false, hard reject (429)
     max_queue_time_ms: int = 5000  # Maximum time to queue a request before rejecting (milliseconds)
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             'requests_per_second': self.requests_per_second,
@@ -177,11 +189,11 @@ class TierLimits:
             'daily_request_quota': self.daily_request_quota,
             'monthly_bandwidth_quota': self.monthly_bandwidth_quota,
             'enable_throttling': self.enable_throttling,
-            'max_queue_time_ms': self.max_queue_time_ms
+            'max_queue_time_ms': self.max_queue_time_ms,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TierLimits':
+    def from_dict(cls, data: dict[str, Any]) -> 'TierLimits':
         """Create from dictionary"""
         return cls(**data)
 
@@ -190,7 +202,7 @@ class TierLimits:
 class Tier:
     """
     Defines a tier/plan with associated rate limits and quotas
-    
+
     Examples:
         # Free tier
         Tier(
@@ -203,7 +215,7 @@ class Tier:
                 daily_request_quota=10000
             )
         )
-        
+
         # Pro tier
         Tier(
             tier_id="tier_pro",
@@ -218,24 +230,25 @@ class Tier:
             price_monthly=49.99
         )
     """
+
     tier_id: str
     name: TierName
     display_name: str
     limits: TierLimits
-    
+
     # Optional fields
-    description: Optional[str] = None
-    price_monthly: Optional[float] = None
-    price_yearly: Optional[float] = None
-    features: List[str] = field(default_factory=list)
+    description: str | None = None
+    price_monthly: float | None = None
+    price_yearly: float | None = None
+    features: list[str] = field(default_factory=list)
     is_default: bool = False
     enabled: bool = True
-    
+
     # Metadata
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage"""
         return {
             'tier_id': self.tier_id,
@@ -249,11 +262,11 @@ class Tier:
             'is_default': self.is_default,
             'enabled': self.enabled,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Tier':
+    def from_dict(cls, data: dict[str, Any]) -> 'Tier':
         """Create from dictionary"""
         return cls(
             tier_id=data['tier_id'],
@@ -266,30 +279,35 @@ class Tier:
             features=data.get('features', []),
             is_default=data.get('is_default', False),
             enabled=data.get('enabled', True),
-            created_at=datetime.fromisoformat(data['created_at']) if data.get('created_at') else None,
-            updated_at=datetime.fromisoformat(data['updated_at']) if data.get('updated_at') else None
+            created_at=datetime.fromisoformat(data['created_at'])
+            if data.get('created_at')
+            else None,
+            updated_at=datetime.fromisoformat(data['updated_at'])
+            if data.get('updated_at')
+            else None,
         )
 
 
 @dataclass
 class UserTierAssignment:
     """Assigns a user to a tier with optional overrides"""
+
     user_id: str
     tier_id: str
-    
+
     # Optional overrides (override tier defaults for this specific user)
-    override_limits: Optional[TierLimits] = None
-    
+    override_limits: TierLimits | None = None
+
     # Scheduling
-    effective_from: Optional[datetime] = None
-    effective_until: Optional[datetime] = None
-    
+    effective_from: datetime | None = None
+    effective_until: datetime | None = None
+
     # Metadata
-    assigned_at: Optional[datetime] = None
-    assigned_by: Optional[str] = None
-    notes: Optional[str] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
+    assigned_at: datetime | None = None
+    assigned_by: str | None = None
+    notes: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             'user_id': self.user_id,
@@ -299,7 +317,7 @@ class UserTierAssignment:
             'effective_until': self.effective_until.isoformat() if self.effective_until else None,
             'assigned_at': self.assigned_at.isoformat() if self.assigned_at else None,
             'assigned_by': self.assigned_by,
-            'notes': self.notes
+            'notes': self.notes,
         }
 
 
@@ -307,41 +325,43 @@ class UserTierAssignment:
 # QUOTA TRACKING MODELS
 # ============================================================================
 
+
 @dataclass
 class QuotaUsage:
     """
     Tracks current quota usage for a user/API/endpoint
-    
+
     This is stored in Redis for real-time tracking
     """
+
     key: str  # Redis key (e.g., "quota:user:john_doe:month:2025-12")
     quota_type: QuotaType
     current_usage: int
     limit: int
     reset_at: datetime  # When the quota resets
-    
+
     # Optional fields
     burst_usage: int = 0  # Burst tokens used
     burst_limit: int = 0
-    
+
     @property
     def remaining(self) -> int:
         """Calculate remaining quota"""
         return max(0, self.limit - self.current_usage)
-    
+
     @property
     def percentage_used(self) -> float:
         """Calculate percentage of quota used"""
         if self.limit == 0:
             return 0.0
         return (self.current_usage / self.limit) * 100
-    
+
     @property
     def is_exhausted(self) -> bool:
         """Check if quota is exhausted"""
         return self.current_usage >= self.limit
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             'key': self.key,
@@ -353,7 +373,7 @@ class QuotaUsage:
             'reset_at': self.reset_at.isoformat(),
             'burst_usage': self.burst_usage,
             'burst_limit': self.burst_limit,
-            'is_exhausted': self.is_exhausted
+            'is_exhausted': self.is_exhausted,
         }
 
 
@@ -361,9 +381,10 @@ class QuotaUsage:
 class RateLimitCounter:
     """
     Real-time counter for rate limiting (stored in Redis)
-    
+
     Uses sliding window counter algorithm
     """
+
     key: str  # Redis key (e.g., "ratelimit:user:john_doe:minute:1701504000")
     window_start: int  # Unix timestamp
     window_size: int  # Window size in seconds
@@ -371,23 +392,23 @@ class RateLimitCounter:
     limit: int  # Maximum allowed requests
     burst_count: int = 0  # Burst tokens used
     burst_limit: int = 0
-    
+
     @property
     def remaining(self) -> int:
         """Calculate remaining requests"""
         return max(0, self.limit - self.count)
-    
+
     @property
     def is_limited(self) -> bool:
         """Check if rate limit is exceeded"""
         return self.count >= self.limit
-    
+
     @property
     def reset_at(self) -> int:
         """Calculate when the window resets (Unix timestamp)"""
         return self.window_start + self.window_size
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             'key': self.key,
@@ -399,7 +420,7 @@ class RateLimitCounter:
             'reset_at': self.reset_at,
             'burst_count': self.burst_count,
             'burst_limit': self.burst_limit,
-            'is_limited': self.is_limited
+            'is_limited': self.is_limited,
         }
 
 
@@ -407,28 +428,30 @@ class RateLimitCounter:
 # HISTORICAL TRACKING MODELS
 # ============================================================================
 
+
 @dataclass
 class UsageHistoryRecord:
     """
     Historical usage record for analytics
-    
+
     Stored in time-series database or MongoDB
     """
+
     timestamp: datetime
-    user_id: Optional[str] = None
-    api_name: Optional[str] = None
-    endpoint_uri: Optional[str] = None
-    ip_address: Optional[str] = None
-    
+    user_id: str | None = None
+    api_name: str | None = None
+    endpoint_uri: str | None = None
+    ip_address: str | None = None
+
     # Metrics
     request_count: int = 0
     blocked_count: int = 0  # Requests blocked by rate limit
     burst_used: int = 0
-    
+
     # Aggregation period
-    period: str = "minute"  # minute, hour, day
-    
-    def to_dict(self) -> Dict[str, Any]:
+    period: str = 'minute'  # minute, hour, day
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             'timestamp': self.timestamp.isoformat(),
@@ -439,7 +462,7 @@ class UsageHistoryRecord:
             'request_count': self.request_count,
             'blocked_count': self.blocked_count,
             'burst_used': self.burst_used,
-            'period': self.period
+            'period': self.period,
         }
 
 
@@ -447,42 +470,44 @@ class UsageHistoryRecord:
 # RESPONSE MODELS
 # ============================================================================
 
+
 @dataclass
 class RateLimitInfo:
     """
     Information about current rate limit status
-    
+
     Returned in API responses and headers
     """
+
     limit: int
     remaining: int
     reset_at: int  # Unix timestamp
-    retry_after: Optional[int] = None  # Seconds until retry (when limited)
-    
+    retry_after: int | None = None  # Seconds until retry (when limited)
+
     # Additional info
     burst_limit: int = 0
     burst_remaining: int = 0
-    tier: Optional[str] = None
-    
-    def to_headers(self) -> Dict[str, str]:
+    tier: str | None = None
+
+    def to_headers(self) -> dict[str, str]:
         """Convert to HTTP headers"""
         headers = {
             'X-RateLimit-Limit': str(self.limit),
             'X-RateLimit-Remaining': str(self.remaining),
-            'X-RateLimit-Reset': str(self.reset_at)
+            'X-RateLimit-Reset': str(self.reset_at),
         }
-        
+
         if self.retry_after is not None:
             headers['X-RateLimit-Retry-After'] = str(self.retry_after)
             headers['Retry-After'] = str(self.retry_after)
-        
+
         if self.burst_limit > 0:
             headers['X-RateLimit-Burst-Limit'] = str(self.burst_limit)
             headers['X-RateLimit-Burst-Remaining'] = str(self.burst_remaining)
-        
+
         return headers
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             'limit': self.limit,
@@ -491,13 +516,14 @@ class RateLimitInfo:
             'retry_after': self.retry_after,
             'burst_limit': self.burst_limit,
             'burst_remaining': self.burst_remaining,
-            'tier': self.tier
+            'tier': self.tier,
         }
 
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
 
 def get_time_window_seconds(window: TimeWindow) -> int:
     """Convert time window enum to seconds"""
@@ -506,39 +532,32 @@ def get_time_window_seconds(window: TimeWindow) -> int:
         TimeWindow.MINUTE: 60,
         TimeWindow.HOUR: 3600,
         TimeWindow.DAY: 86400,
-        TimeWindow.MONTH: 2592000  # 30 days
+        TimeWindow.MONTH: 2592000,  # 30 days
     }
     return mapping[window]
 
 
 def generate_redis_key(
-    rule_type: RuleType,
-    identifier: str,
-    window: TimeWindow,
-    window_start: int
+    rule_type: RuleType, identifier: str, window: TimeWindow, window_start: int
 ) -> str:
     """
     Generate Redis key for rate limit counter
-    
+
     Examples:
         generate_redis_key(RuleType.PER_USER, "john_doe", TimeWindow.MINUTE, 1701504000)
         # Returns: "ratelimit:user:john_doe:minute:1701504000"
     """
     type_prefix = rule_type.value.replace('per_', '')
     window_name = window.value
-    return f"ratelimit:{type_prefix}:{identifier}:{window_name}:{window_start}"
+    return f'ratelimit:{type_prefix}:{identifier}:{window_name}:{window_start}'
 
 
-def generate_quota_key(
-    user_id: str,
-    quota_type: QuotaType,
-    period: str
-) -> str:
+def generate_quota_key(user_id: str, quota_type: QuotaType, period: str) -> str:
     """
     Generate Redis key for quota tracking
-    
+
     Examples:
         generate_quota_key("john_doe", QuotaType.REQUESTS, "2025-12")
         # Returns: "quota:user:john_doe:requests:month:2025-12"
     """
-    return f"quota:user:{user_id}:{quota_type.value}:month:{period}"
+    return f'quota:user:{user_id}:{quota_type.value}:month:{period}'

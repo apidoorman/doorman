@@ -5,12 +5,14 @@ Reduces duplicate code for GraphQL/gRPC API name/version parsing.
 """
 
 import re
-from typing import Tuple, Optional
-from fastapi import Request, HTTPException
-from utils.doorman_cache_util import doorman_cache
-from utils import api_util
 
-def parse_graphql_grpc_path(path: str, request: Request) -> Tuple[str, str, str]:
+from fastapi import HTTPException, Request
+
+from utils import api_util
+from utils.doorman_cache_util import doorman_cache
+
+
+def parse_graphql_grpc_path(path: str, request: Request) -> tuple[str, str, str]:
     """Parse GraphQL/gRPC path to extract API name and version.
 
     Args:
@@ -38,7 +40,8 @@ def parse_graphql_grpc_path(path: str, request: Request) -> Tuple[str, str, str]
 
     return api_name, api_version, api_path
 
-async def resolve_api(api_name: str, api_version: str) -> Optional[dict]:
+
+async def resolve_api(api_name: str, api_version: str) -> dict | None:
     """Resolve API from cache or database.
 
     Args:
@@ -52,7 +55,10 @@ async def resolve_api(api_name: str, api_version: str) -> Optional[dict]:
     api_key = doorman_cache.get_cache('api_id_cache', api_path)
     return await api_util.get_api(api_key, api_path)
 
-async def resolve_api_from_request(path: str, request: Request) -> Tuple[Optional[dict], str, str, str]:
+
+async def resolve_api_from_request(
+    path: str, request: Request
+) -> tuple[dict | None, str, str, str]:
     """Parse path, extract API name/version, and resolve API in one call.
 
     Args:

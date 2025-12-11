@@ -1,8 +1,10 @@
 from __future__ import annotations
-import threading
-import socket
+
 import json
+import socket
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
 
 def _find_free_port() -> int:
     s = socket.socket()
@@ -10,6 +12,7 @@ def _find_free_port() -> int:
     port = s.getsockname()[1]
     s.close()
     return port
+
 
 def _get_host_from_container() -> str:
     """Get the hostname to use when referring to the host machine from a Docker container.
@@ -38,6 +41,7 @@ def _get_host_from_container() -> str:
     # This is the most common development setup
     return '127.0.0.1'
 
+
 class _ThreadedHTTPServer:
     def __init__(self, handler_cls, host='0.0.0.0', port=None):
         self.bind_host = host
@@ -61,6 +65,7 @@ class _ThreadedHTTPServer:
     def url(self):
         return f'http://{self.host}:{self.port}'
 
+
 def start_rest_echo_server():
     class Handler(BaseHTTPRequestHandler):
         def _json(self, status=200, payload=None):
@@ -76,7 +81,7 @@ def start_rest_echo_server():
                 'method': 'GET',
                 'path': self.path,
                 'headers': {k: v for k, v in self.headers.items()},
-                'query': self.path.split('?', 1)[1] if '?' in self.path else ''
+                'query': self.path.split('?', 1)[1] if '?' in self.path else '',
             }
             self._json(200, payload)
 
@@ -91,7 +96,7 @@ def start_rest_echo_server():
                 'method': 'POST',
                 'path': self.path,
                 'headers': {k: v for k, v in self.headers.items()},
-                'json': parsed
+                'json': parsed,
             }
             self._json(200, payload)
 
@@ -106,7 +111,7 @@ def start_rest_echo_server():
                 'method': 'PUT',
                 'path': self.path,
                 'headers': {k: v for k, v in self.headers.items()},
-                'json': parsed
+                'json': parsed,
             }
             self._json(200, payload)
 
@@ -119,6 +124,7 @@ def start_rest_echo_server():
             self._json(200, payload)
 
     return _ThreadedHTTPServer(Handler).start()
+
 
 def start_soap_echo_server():
     class Handler(BaseHTTPRequestHandler):
@@ -134,12 +140,11 @@ def start_soap_echo_server():
             content_length = int(self.headers.get('Content-Length', '0') or '0')
             _ = self.rfile.read(content_length) if content_length else b''
             resp = (
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
-                "  <soap:Body><EchoResponse><message>ok</message></EchoResponse></soap:Body>"
-                "</soap:Envelope>"
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
+                '  <soap:Body><EchoResponse><message>ok</message></EchoResponse></soap:Body>'
+                '</soap:Envelope>'
             )
             self._xml(200, resp)
 
     return _ThreadedHTTPServer(Handler).start()
-

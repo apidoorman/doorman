@@ -1,5 +1,5 @@
-import os
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_max_page_size_boundary_api_list(authed_client, monkeypatch):
@@ -13,6 +13,7 @@ async def test_max_page_size_boundary_api_list(authed_client, monkeypatch):
     body = r_bad.json()
     assert 'error_message' in body
 
+
 @pytest.mark.asyncio
 async def test_max_page_size_boundary_users_list(authed_client, monkeypatch):
     monkeypatch.setenv('MAX_PAGE_SIZE', '3')
@@ -23,6 +24,7 @@ async def test_max_page_size_boundary_users_list(authed_client, monkeypatch):
     r_bad = await authed_client.get('/platform/user/all?page=1&page_size=4')
     assert r_bad.status_code == 400, r_bad.text
 
+
 @pytest.mark.asyncio
 async def test_invalid_page_values(authed_client, monkeypatch):
     monkeypatch.setenv('MAX_PAGE_SIZE', '10')
@@ -32,4 +34,3 @@ async def test_invalid_page_values(authed_client, monkeypatch):
 
     r2 = await authed_client.get('/platform/group/all?page=1&page_size=0')
     assert r2.status_code == 400
-

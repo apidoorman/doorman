@@ -1,18 +1,20 @@
 import os
 import sys
 import time
+
 import pytest
-import requests
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from config import BASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD, require_env, STRICT_HEALTH
 from client import LiveClient
+from config import ADMIN_EMAIL, ADMIN_PASSWORD, BASE_URL, STRICT_HEALTH, require_env
+
 
 @pytest.fixture(scope='session')
 def base_url() -> str:
     require_env()
     return BASE_URL
+
 
 @pytest.fixture(scope='session')
 def client(base_url) -> LiveClient:
@@ -32,7 +34,7 @@ def client(base_url) -> LiveClient:
                         ok = data.get('status') in ('online', 'healthy')
                         if ok:
                             break
-                        last_err = f"status json={j}"
+                        last_err = f'status json={j}'
                     except Exception as e:
                         last_err = f'json parse error: {e}'
                 else:
@@ -48,6 +50,7 @@ def client(base_url) -> LiveClient:
     assert 'access_token' in auth.get('response', auth), 'login did not return access_token'
     return c
 
+
 @pytest.fixture(autouse=True)
 def ensure_session_and_relaxed_limits(client: LiveClient):
     """Per-test guard: ensure we're authenticated and not rate-limited.
@@ -59,22 +62,28 @@ def ensure_session_and_relaxed_limits(client: LiveClient):
         r = client.get('/platform/authorization/status')
         if r.status_code not in (200, 204):
             from config import ADMIN_EMAIL, ADMIN_PASSWORD
+
             client.login(ADMIN_EMAIL, ADMIN_PASSWORD)
     except Exception:
         from config import ADMIN_EMAIL, ADMIN_PASSWORD
+
         client.login(ADMIN_EMAIL, ADMIN_PASSWORD)
     try:
-        client.put('/platform/user/admin', json={
-            'rate_limit_duration': 1000000,
-            'rate_limit_duration_type': 'second',
-            'throttle_duration': 1000000,
-            'throttle_duration_type': 'second',
-            'throttle_queue_limit': 1000000,
-            'throttle_wait_duration': 0,
-            'throttle_wait_duration_type': 'second'
-        })
+        client.put(
+            '/platform/user/admin',
+            json={
+                'rate_limit_duration': 1000000,
+                'rate_limit_duration_type': 'second',
+                'throttle_duration': 1000000,
+                'throttle_duration_type': 'second',
+                'throttle_queue_limit': 1000000,
+                'throttle_wait_duration': 0,
+                'throttle_wait_duration_type': 'second',
+            },
+        )
     except Exception:
         pass
+
 
 def pytest_addoption(parser):
     parser.addoption('--graph', action='store_true', default=False, help='Force GraphQL tests')

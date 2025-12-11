@@ -2,6 +2,7 @@ import os
 
 from utils.constants import Defaults
 
+
 def max_page_size() -> int:
     try:
         env = os.getenv(Defaults.MAX_PAGE_SIZE_ENV)
@@ -10,6 +11,7 @@ def max_page_size() -> int:
         return max(int(env), 1)
     except Exception:
         return Defaults.MAX_PAGE_SIZE_DEFAULT
+
 
 def validate_page_params(page: int, page_size: int) -> tuple[int, int]:
     p = int(page)
@@ -22,4 +24,3 @@ def validate_page_params(page: int, page_size: int) -> tuple[int, int]:
     if ps > m:
         raise ValueError(f'page_size must be <= {m}')
     return p, ps
-

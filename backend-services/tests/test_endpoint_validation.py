@@ -1,5 +1,6 @@
 import pytest
 
+
 async def _ensure_api_and_endpoint(client, api_name, version, method, uri):
     c = await client.post(
         '/platform/api',
@@ -29,6 +30,7 @@ async def _ensure_api_and_endpoint(client, api_name, version, method, uri):
     g = await client.get(f'/platform/endpoint/{method}/{api_name}/{version}{uri}')
     assert g.status_code == 200
     return g.json().get('endpoint_id') or g.json().get('response', {}).get('endpoint_id')
+
 
 @pytest.mark.asyncio
 async def test_endpoint_validation_crud(authed_client):

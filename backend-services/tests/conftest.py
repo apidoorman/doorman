@@ -22,6 +22,7 @@ os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
 
 try:
     import sys as _sys
+
     if _sys.version_info >= (3, 13):
         os.environ.setdefault('DISABLE_PLATFORM_CHUNKED_WRAP', 'true')
         os.environ.setdefault('DISABLE_PLATFORM_CORS_ASGI', 'true')
@@ -34,18 +35,22 @@ _PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+import asyncio
+import datetime as _dt
+
+import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-import pytest
-import asyncio
-from typing import Optional
-import datetime as _dt
 
 try:
     from utils.database import database as _db
-    _INITIAL_DB_SNAPSHOT: Optional[dict] = _db.db.dump_data() if getattr(_db, 'memory_only', True) else None
+
+    _INITIAL_DB_SNAPSHOT: dict | None = (
+        _db.db.dump_data() if getattr(_db, 'memory_only', True) else None
+    )
 except Exception:
     _INITIAL_DB_SNAPSHOT = None
+
 
 @pytest_asyncio.fixture(autouse=True)
 async def ensure_memory_dump_defaults(monkeypatch, tmp_path):
@@ -58,11 +63,15 @@ async def ensure_memory_dump_defaults(monkeypatch, tmp_path):
     """
     try:
         monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
-        monkeypatch.setenv('MEM_ENCRYPTION_KEY', os.environ.get('MEM_ENCRYPTION_KEY') or 'test-encryption-key-32-characters-min')
+        monkeypatch.setenv(
+            'MEM_ENCRYPTION_KEY',
+            os.environ.get('MEM_ENCRYPTION_KEY') or 'test-encryption-key-32-characters-min',
+        )
         dump_base = tmp_path / 'mem' / 'memory_dump.bin'
         monkeypatch.setenv('MEM_DUMP_PATH', str(dump_base))
         try:
             import utils.memory_dump_util as md
+
             md.DEFAULT_DUMP_PATH = str(dump_base)
         except Exception:
             pass
@@ -70,19 +79,21 @@ async def ensure_memory_dump_defaults(monkeypatch, tmp_path):
         pass
     yield
 
+
 @pytest.fixture(autouse=True)
 def _log_test_start_end(request):
     try:
         ts = _dt.datetime.now().strftime('%H:%M:%S.%f')[:-3]
-        print(f"=== [{ts}] START {request.node.nodeid}", flush=True)
+        print(f'=== [{ts}] START {request.node.nodeid}', flush=True)
     except Exception:
         pass
     yield
     try:
         ts = _dt.datetime.now().strftime('%H:%M:%S.%f')[:-3]
-        print(f"=== [{ts}] END   {request.node.nodeid}", flush=True)
+        print(f'=== [{ts}] END   {request.node.nodeid}', flush=True)
     except Exception:
         pass
+
 
 @pytest.fixture(autouse=True, scope='session')
 def _log_env_toggles():
@@ -92,29 +103,43 @@ def _log_env_toggles():
             'DISABLE_PLATFORM_CORS_ASGI': os.getenv('DISABLE_PLATFORM_CORS_ASGI'),
             'DISABLE_BODY_SIZE_LIMIT': os.getenv('DISABLE_BODY_SIZE_LIMIT'),
             'DOORMAN_TEST_MODE': os.getenv('DOORMAN_TEST_MODE'),
-            'PYTHON_VERSION': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            'PYTHON_VERSION': f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}',
         }
-        print(f"=== ENV TOGGLES: {toggles}", flush=True)
+        print(f'=== ENV TOGGLES: {toggles}', flush=True)
     except Exception:
         pass
     yield
 
+
 @pytest_asyncio.fixture
 async def authed_client():
+    # Ensure chaos is disabled so login/cache work reliably across tests
+    try:
+        from utils import chaos_util as _cu
 
+        _cu.enable('redis', False)
+        _cu.enable('mongo', False)
+    except Exception:
+        pass
     from doorman import doorman
+
     client = AsyncClient(app=doorman, base_url='http://testserver')
 
     r = await client.post(
         '/platform/authorization',
-        json={'email': os.environ.get('DOORMAN_ADMIN_EMAIL'), 'password': os.environ.get('DOORMAN_ADMIN_PASSWORD')},
+        json={
+            'email': os.environ.get('DOORMAN_ADMIN_EMAIL'),
+            'password': os.environ.get('DOORMAN_ADMIN_PASSWORD'),
+        },
     )
     assert r.status_code == 200, r.text
 
     try:
         has_cookie = any(c.name == 'access_token_cookie' for c in client.cookies.jar)
         if not has_cookie:
-            body = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
+            body = (
+                r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
+            )
             token = body.get('access_token')
             if token:
                 client.cookies.set(
@@ -126,25 +151,31 @@ async def authed_client():
     except Exception:
         pass
     try:
-        await client.put('/platform/user/admin', json={
-            'bandwidth_limit_bytes': 0,
-            'bandwidth_limit_window': 'day',
-            'rate_limit_duration': 1000000,
-            'rate_limit_duration_type': 'second',
-            'throttle_duration': 1000000,
-            'throttle_duration_type': 'second',
-            'throttle_queue_limit': 1000000,
-            'throttle_wait_duration': 0,
-            'throttle_wait_duration_type': 'second'
-        })
+        await client.put(
+            '/platform/user/admin',
+            json={
+                'bandwidth_limit_bytes': 0,
+                'bandwidth_limit_window': 'day',
+                'rate_limit_duration': 1000000,
+                'rate_limit_duration_type': 'second',
+                'throttle_duration': 1000000,
+                'throttle_duration_type': 'second',
+                'throttle_queue_limit': 1000000,
+                'throttle_wait_duration': 0,
+                'throttle_wait_duration_type': 'second',
+            },
+        )
     except Exception:
         pass
     return client
 
+
 @pytest.fixture
 def client():
     from doorman import doorman
+
     return AsyncClient(app=doorman, base_url='http://testserver')
+
 
 @pytest.fixture
 def event_loop():
@@ -152,17 +183,20 @@ def event_loop():
     yield loop
     loop.close()
 
+
 @pytest_asyncio.fixture(autouse=True)
 async def reset_http_client():
     """Reset the pooled httpx client between tests to prevent connection pool exhaustion."""
     try:
         from services.gateway_service import GatewayService
+
         await GatewayService.aclose_http_client()
     except Exception:
         pass
 
     try:
         from utils.limit_throttle_util import reset_counters
+
         reset_counters()
     except Exception:
         pass
@@ -170,9 +204,11 @@ async def reset_http_client():
     yield
     try:
         from services.gateway_service import GatewayService
+
         await GatewayService.aclose_http_client()
     except Exception:
         pass
+
 
 @pytest_asyncio.fixture(autouse=True, scope='module')
 async def reset_in_memory_db_state():
@@ -184,22 +220,28 @@ async def reset_in_memory_db_state():
     try:
         if _INITIAL_DB_SNAPSHOT is not None:
             from utils.database import database as _db
+
             _db.db.load_data(_INITIAL_DB_SNAPSHOT)
             try:
-                from utils.database import user_collection
                 from utils import password_util as _pw
+                from utils.database import user_collection
+
                 pwd = os.environ.get('DOORMAN_ADMIN_PASSWORD') or 'test-only-password-12chars'
-                user_collection.update_one({'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}})
+                user_collection.update_one(
+                    {'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}}
+                )
             except Exception:
                 pass
     except Exception:
         pass
     try:
         from utils.doorman_cache_util import doorman_cache
+
         doorman_cache.clear_all()
     except Exception:
         pass
     yield
+
 
 async def create_api(client: AsyncClient, api_name: str, api_version: str):
     payload = {
@@ -216,7 +258,10 @@ async def create_api(client: AsyncClient, api_name: str, api_version: str):
     assert r.status_code in (200, 201), r.text
     return r
 
-async def create_endpoint(client: AsyncClient, api_name: str, api_version: str, method: str, uri: str):
+
+async def create_endpoint(
+    client: AsyncClient, api_name: str, api_version: str, method: str, uri: str
+):
     payload = {
         'api_name': api_name,
         'api_version': api_version,
@@ -228,10 +273,10 @@ async def create_endpoint(client: AsyncClient, api_name: str, api_version: str, 
     assert r.status_code in (200, 201), r.text
     return r
 
-async def subscribe_self(client: AsyncClient, api_name: str, api_version: str):
 
+async def subscribe_self(client: AsyncClient, api_name: str, api_version: str):
     r_me = await client.get('/platform/user/me')
-    username = (r_me.json().get('username') if r_me.status_code == 200 else 'admin')
+    username = r_me.json().get('username') if r_me.status_code == 200 else 'admin'
     r = await client.post(
         '/platform/subscription/subscribe',
         json={'username': username, 'api_name': api_name, 'api_version': api_version},

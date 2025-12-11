@@ -2,6 +2,7 @@ import logging
 import re
 import sys
 
+
 class _RedactFilter(logging.Filter):
     PATTERNS = [
         re.compile(r'(?i)(authorization\s*[:=]\s*)([^;\r\n]+)'),
@@ -17,12 +18,20 @@ class _RedactFilter(logging.Filter):
             msg = str(record.getMessage())
             red = msg
             for pat in self.PATTERNS:
-                red = pat.sub(lambda m: (m.group(1) + '[REDACTED]' + (m.group(3) if m.lastindex and m.lastindex >= 3 else '')), red)
+                red = pat.sub(
+                    lambda m: (
+                        m.group(1)
+                        + '[REDACTED]'
+                        + (m.group(3) if m.lastindex and m.lastindex >= 3 else '')
+                    ),
+                    red,
+                )
             if red != msg:
                 record.msg = red
         except Exception:
             pass
         return True
+
 
 def _ensure_logger(name: str):
     logger = logging.getLogger(name)
@@ -34,9 +43,9 @@ def _ensure_logger(name: str):
     h.addFilter(_RedactFilter())
     logger.addHandler(h)
 
+
 try:
     _ensure_logger('doorman.gateway')
     _ensure_logger('doorman.logging')
 except Exception:
     pass
-

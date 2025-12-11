@@ -1,5 +1,6 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_rest_preflight_per_api_cors_allows_blocks(authed_client):
     name, ver = 'corsrest', 'v1'
@@ -48,6 +49,7 @@ async def test_rest_preflight_per_api_cors_allows_blocks(authed_client):
 
     assert blocked.headers.get('access-control-allow-origin') in (None, '')
 
+
 @pytest.mark.asyncio
 async def test_graphql_preflight_per_api_cors_allows(authed_client):
     name, ver = 'corsgql', 'v1'
@@ -82,6 +84,7 @@ async def test_graphql_preflight_per_api_cors_allows(authed_client):
     assert 'Content-Type' in (pre.headers.get('access-control-allow-headers') or '')
     assert pre.headers.get('access-control-allow-credentials') == 'true'
 
+
 @pytest.mark.asyncio
 async def test_soap_preflight_per_api_cors_allows(authed_client):
     name, ver = 'corssoap', 'v1'
@@ -115,4 +118,3 @@ async def test_soap_preflight_per_api_cors_allows(authed_client):
     assert 'Content-Type' in (pre.headers.get('access-control-allow-headers') or '')
 
     assert pre.headers.get('access-control-allow-credentials') in (None, 'false')
-

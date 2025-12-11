@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from fastapi import Request, HTTPException
 import time
-from typing import Optional
 
-from utils.doorman_cache_util import doorman_cache
+from fastapi import HTTPException, Request
+
 from utils.database import user_collection
+from utils.doorman_cache_util import doorman_cache
 
-def _window_to_seconds(win: Optional[str]) -> int:
+
+def _window_to_seconds(win: str | None) -> int:
     mapping = {
         'second': 1,
         'minute': 60,
@@ -21,14 +22,16 @@ def _window_to_seconds(win: Optional[str]) -> int:
     w = win.lower().rstrip('s')
     return mapping.get(w, 86400)
 
-def _bucket_key(username: str, window: str, now: Optional[int] = None) -> tuple[str, int]:
+
+def _bucket_key(username: str, window: str, now: int | None = None) -> tuple[str, int]:
     sec = _window_to_seconds(window)
     now = now or int(time.time())
     bucket = (now // sec) * sec
     key = f'bandwidth_usage:{username}:{sec}:{bucket}'
     return key, sec
 
-def _get_user(username: str) -> Optional[dict]:
+
+def _get_user(username: str) -> dict | None:
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
         user = user_collection.find_one({'username': username})
@@ -36,10 +39,12 @@ def _get_user(username: str) -> Optional[dict]:
             del user['_id']
     return user
 
+
 def _get_client():
     return doorman_cache.cache if getattr(doorman_cache, 'is_redis', False) else None
 
-def get_current_usage(username: str, window: Optional[str]) -> int:
+
+def get_current_usage(username: str, window: str | None) -> int:
     win = window or 'day'
     key, ttl = _bucket_key(username, win)
     client = _get_client()
@@ -55,7 +60,8 @@ def get_current_usage(username: str, window: Optional[str]) -> int:
     except Exception:
         return 0
 
-def add_usage(username: str, delta_bytes: int, window: Optional[str]) -> None:
+
+def add_usage(username: str, delta_bytes: int, window: str | None) -> None:
     if not delta_bytes:
         return
     win = window or 'day'
@@ -75,7 +81,8 @@ def add_usage(username: str, delta_bytes: int, window: Optional[str]) -> None:
     except Exception:
         pass
 
-async def enforce_pre_request_limit(request: Request, username: Optional[str]) -> None:
+
+async def enforce_pre_request_limit(request: Request, username: str | None) -> None:
     if not username:
         return
     user = _get_user(username)

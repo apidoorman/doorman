@@ -1,6 +1,9 @@
 from __future__ import annotations
-import requests
+
 from urllib.parse import urljoin
+
+import requests
+
 
 class LiveClient:
     def __init__(self, base_url: str):
@@ -30,7 +33,9 @@ class LiveClient:
     def post(self, path: str, json=None, data=None, files=None, headers=None, **kwargs):
         url = urljoin(self.base_url, path.lstrip('/'))
         hdrs = self._headers_with_csrf(headers)
-        return self.sess.post(url, json=json, data=data, files=files, headers=hdrs, allow_redirects=False, **kwargs)
+        return self.sess.post(
+            url, json=json, data=data, files=files, headers=hdrs, allow_redirects=False, **kwargs
+        )
 
     def put(self, path: str, json=None, headers=None, **kwargs):
         url = urljoin(self.base_url, path.lstrip('/'))

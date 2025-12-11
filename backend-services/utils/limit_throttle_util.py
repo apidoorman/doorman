@@ -1,17 +1,18 @@
-from fastapi import Request, HTTPException
 import asyncio
-import time
 import logging
 import os
+import time
 
+from fastapi import HTTPException, Request
+
+from utils.async_db import db_find_one
 from utils.auth_util import auth_required
 from utils.database_async import user_collection
-from utils.async_db import db_find_one
-import asyncio
 from utils.doorman_cache_util import doorman_cache
 from utils.ip_policy_util import _get_client_ip
 
 logger = logging.getLogger('doorman.gateway')
+
 
 class InMemoryWindowCounter:
     """Simple in-memory counter with TTL semantics to mimic required Redis ops.
@@ -36,6 +37,7 @@ class InMemoryWindowCounter:
 
     See: doorman.py app_lifespan() for multi-worker validation
     """
+
     def __init__(self):
         self._store = {}
 
@@ -45,7 +47,6 @@ class InMemoryWindowCounter:
         if entry and entry['expires_at'] > now:
             entry['count'] += 1
         else:
-
             entry = {'count': 1, 'expires_at': now + 1}
         self._store[key] = entry
         return entry['count']
@@ -57,7 +58,9 @@ class InMemoryWindowCounter:
             entry['expires_at'] = now + int(ttl_seconds)
             self._store[key] = entry
 
+
 _fallback_counter = InMemoryWindowCounter()
+
 
 def duration_to_seconds(duration: str) -> int:
     mapping = {
@@ -67,7 +70,7 @@ def duration_to_seconds(duration: str) -> int:
         'day': 86400,
         'week': 604800,
         'month': 2592000,
-        'year': 31536000
+        'year': 31536000,
     }
     if not duration:
         return 60
@@ -75,13 +78,14 @@ def duration_to_seconds(duration: str) -> int:
         duration = duration[:-1]
     return mapping.get(duration.lower(), 60)
 
+
 async def limit_and_throttle(request: Request):
     """Enforce user-level rate limiting and throttling.
-    
+
     **Rate Limiting Hierarchy:**
     1. Tier-based limits (checked by TierRateLimitMiddleware first)
     2. User-specific overrides (checked here)
-    
+
     This function provides user-specific rate/throttle settings that override
     or supplement tier-based limits. The TierRateLimitMiddleware runs first
     and enforces tier limits, then this function applies user-specific rules.
@@ -163,7 +167,9 @@ async def limit_and_throttle(request: Request):
                 await _fallback_counter.expire(throttle_key, throttle_window)
         try:
             if os.getenv('DOORMAN_TEST_MODE', 'false').lower() == 'true':
-                logger.info(f'[throttle] key={throttle_key} count={throttle_count} qlimit={int(user.get("throttle_queue_limit") or 10)} window={throttle_window}s')
+                logger.info(
+                    f'[throttle] key={throttle_key} count={throttle_count} qlimit={int(user.get("throttle_queue_limit") or 10)} window={throttle_window}s'
+                )
         except Exception:
             pass
         throttle_queue_limit = int(user.get('throttle_queue_limit') or 10)
@@ -181,12 +187,17 @@ async def limit_and_throttle(request: Request):
                 throttle_wait *= duration_to_seconds(throttle_wait_duration)
             dynamic_wait = throttle_wait * (throttle_count - throttle_limit)
             try:
-                import sys as _sys, os as _os
-                if _os.getenv('DOORMAN_TEST_MODE', 'false').lower() == 'true' and _sys.version_info >= (3, 13):
+                import os as _os
+                import sys as _sys
+
+                if _os.getenv(
+                    'DOORMAN_TEST_MODE', 'false'
+                ).lower() == 'true' and _sys.version_info >= (3, 13):
                     dynamic_wait = max(dynamic_wait, 0.2)
             except Exception:
                 pass
             await asyncio.sleep(dynamic_wait)
+
 
 def reset_counters():
     """Reset in-memory rate/throttle counters (used by tests and cache clears).
@@ -196,6 +207,7 @@ def reset_counters():
         _fallback_counter._store.clear()
     except Exception:
         pass
+
 
 async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
     """IP-based rate limiting for endpoints that don't require authentication.
@@ -232,12 +244,7 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
     try:
         if os.getenv('LOGIN_IP_RATE_DISABLED', 'false').lower() == 'true':
             now = int(time.time())
-            return {
-                'limit': limit,
-                'remaining': limit,
-                'reset': now + window,
-                'window': window
-            }
+            return {'limit': limit, 'remaining': limit, 'reset': now + window, 'window': window}
         client_ip = _get_client_ip(request, trust_xff=True)
         if not client_ip:
             logger.warning('Unable to determine client IP for rate limiting, allowing request')
@@ -245,7 +252,7 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
                 'limit': limit,
                 'remaining': limit,
                 'reset': int(time.time()) + window,
-                'window': window
+                'window': window,
             }
 
         now = int(time.time())
@@ -273,7 +280,7 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
             'limit': limit,
             'remaining': remaining,
             'reset': reset_time,
-            'window': window
+            'window': window,
         }
 
         if count > limit:
@@ -283,14 +290,14 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
                 detail={
                     'error_code': 'IP_RATE_LIMIT',
                     'message': f'Too many requests from your IP address. Please wait {retry_after} seconds before trying again. Limit: {limit} requests per {window} seconds.',
-                    'retry_after': retry_after
+                    'retry_after': retry_after,
                 },
                 headers={
                     'Retry-After': str(retry_after),
                     'X-RateLimit-Limit': str(limit),
                     'X-RateLimit-Remaining': '0',
-                    'X-RateLimit-Reset': str(reset_time)
-                }
+                    'X-RateLimit-Reset': str(reset_time),
+                },
             )
 
         if count > (limit * 0.8):
@@ -306,5 +313,5 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
             'limit': limit,
             'remaining': limit,
             'reset': int(time.time()) + window,
-            'window': window
+            'window': window,
         }

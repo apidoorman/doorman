@@ -1,6 +1,7 @@
-import os
 import json
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_routing_crud(authed_client):
@@ -30,13 +31,10 @@ async def test_routing_crud(authed_client):
     delete = await authed_client.delete('/platform/routing/client-A')
     assert delete.status_code == 200
 
+
 @pytest.mark.asyncio
 async def test_security_and_memory_dump_restore(authed_client):
-
-    ur = await authed_client.put(
-        '/platform/role/admin',
-        json={'manage_security': True},
-    )
+    ur = await authed_client.put('/platform/role/admin', json={'manage_security': True})
     assert ur.status_code == 200
 
     gs = await authed_client.get('/platform/security/settings')
@@ -54,12 +52,11 @@ async def test_security_and_memory_dump_restore(authed_client):
         restore = await authed_client.post('/platform/memory/restore', json={'path': path})
         assert restore.status_code == 200
 
+
 @pytest.mark.asyncio
 async def test_logging_endpoints(authed_client):
-
     r1 = await authed_client.put(
-        '/platform/role/admin',
-        json={'view_logs': True, 'export_logs': True},
+        '/platform/role/admin', json={'view_logs': True, 'export_logs': True}
     )
     assert r1.status_code == 200
 
@@ -78,16 +75,12 @@ async def test_logging_endpoints(authed_client):
     download = await authed_client.get('/platform/logging/logs/download?format=json')
     assert download.status_code == 200
 
+
 @pytest.mark.asyncio
 async def test_onboard_public_apis_for_all_gateway_types(monkeypatch, authed_client):
-
     rest_apis = [
-        ('jsonplaceholder', 'v1', ['https://jsonplaceholder.typicode.com'], [
-            ('GET', '/posts/1')
-        ]),
-        ('httpbin', 'v1', ['https://httpbin.org'], [
-            ('GET', '/get')
-        ]),
+        ('jsonplaceholder', 'v1', ['https://jsonplaceholder.typicode.com'], [('GET', '/posts/1')]),
+        ('httpbin', 'v1', ['https://httpbin.org'], [('GET', '/get')]),
     ]
     for name, ver, servers, endpoints in rest_apis:
         c = await authed_client.post(
@@ -149,7 +142,11 @@ async def test_onboard_public_apis_for_all_gateway_types(monkeypatch, authed_cli
         assert s.status_code in (200, 201)
 
     soap_apis = [
-        ('soap-number', 'v1', ['https://www.dataaccess.com/webservicesserver/NumberConversion.wso']),
+        (
+            'soap-number',
+            'v1',
+            ['https://www.dataaccess.com/webservicesserver/NumberConversion.wso'],
+        ),
         ('soap-tempconvert', 'v1', ['https://www.w3schools.com/xml/tempconvert.asmx']),
     ]
     for name, ver, servers in soap_apis:
@@ -199,21 +196,30 @@ async def test_onboard_public_apis_for_all_gateway_types(monkeypatch, authed_cli
         assert s.status_code in (200, 201)
 
     import services.gateway_service as gs
+
     class _FakeHTTPResponse:
         def __init__(self, status_code=200, json_body=None, text_body=None, headers=None):
             self.status_code = status_code
             self._json_body = json_body
-            self.text = text_body if text_body is not None else ('' if json_body is not None else 'OK')
-            self.headers = headers or {'Content-Type': 'application/json' if json_body is not None else 'text/plain'}
+            self.text = (
+                text_body if text_body is not None else ('' if json_body is not None else 'OK')
+            )
+            self.headers = headers or {
+                'Content-Type': 'application/json' if json_body is not None else 'text/plain'
+            }
+
         def json(self):
             if self._json_body is None:
                 return json.loads(self.text or '{}')
             return self._json_body
+
     class _FakeAsyncClient:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
+
         async def request(self, method, url, **kwargs):
             """Generic request method used by http_client.request_with_resilience"""
             method = method.upper()
@@ -231,23 +237,32 @@ async def test_onboard_public_apis_for_all_gateway_types(monkeypatch, authed_cli
                 return await self.put(url, **kwargs)
             else:
                 return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
+
         async def get(self, url, params=None, headers=None, **kwargs):
             return _FakeHTTPResponse(200, json_body={'ping': 'pong'})
+
         async def post(self, url, **kwargs):
             return _FakeHTTPResponse(200, json_body={'ping': 'pong'})
+
         async def put(self, url, **kwargs):
             return _FakeHTTPResponse(200, json_body={'ping': 'pong'})
+
         async def delete(self, url, **kwargs):
             return _FakeHTTPResponse(200, json_body={'ping': 'pong'})
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
 
     import routes.gateway_routes as gr
+
     async def _no_limit(req):
         return None
+
     async def _pass_sub(req):
         return {'sub': 'admin'}
+
     async def _pass_group(req, full_path: str = None, user_to_subscribe=None):
         return {'sub': 'admin'}
+
     monkeypatch.setattr(gr, 'limit_and_throttle', _no_limit)
     monkeypatch.setattr(gr, 'subscription_required', _pass_sub)
     monkeypatch.setattr(gr, 'group_required', _pass_group)
