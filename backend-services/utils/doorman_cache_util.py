@@ -173,6 +173,28 @@ class DoormanCacheManager:
     def _get_key(self, cache_name, key):
         return f'{self.prefixes[cache_name]}{key}'
 
+    def _to_json_serializable(self, value):
+        """Recursively convert bytes and other non-JSON types into serializable forms.
+
+        - bytes -> UTF-8 string (best-effort)
+        - dict/list -> deep-convert
+        Other types are returned as-is and delegated to json.dumps
+        """
+        try:
+            if isinstance(value, bytes):
+                try:
+                    return value.decode('utf-8')
+                except Exception:
+                    # Fallback to latin-1 to preserve bytes in a reversible way
+                    return value.decode('latin-1', errors='ignore')
+            if isinstance(value, dict):
+                return {k: self._to_json_serializable(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [self._to_json_serializable(v) for v in value]
+            return value
+        except Exception:
+            return value
+
     def set_cache(self, cache_name, key, value):
         ttl = self.default_ttls.get(cache_name, 86400)
         cache_key = self._get_key(cache_name, key)
@@ -182,12 +204,13 @@ class DoormanCacheManager:
         if self.is_redis:
             try:
                 loop = asyncio.get_running_loop()
-                return loop.run_in_executor(None, self.cache.setex, cache_key, ttl, json.dumps(value))
+                payload = json.dumps(self._to_json_serializable(value))
+                return loop.run_in_executor(None, self.cache.setex, cache_key, ttl, payload)
             except RuntimeError:
-                self.cache.setex(cache_key, ttl, json.dumps(value))
+                self.cache.setex(cache_key, ttl, json.dumps(self._to_json_serializable(value)))
                 return None
         else:
-            self.cache.setex(cache_key, ttl, json.dumps(value))
+            self.cache.setex(cache_key, ttl, json.dumps(self._to_json_serializable(value)))
 
     def get_cache(self, cache_name, key):
         cache_key = self._get_key(cache_name, key)

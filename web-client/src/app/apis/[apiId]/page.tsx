@@ -704,14 +704,15 @@ const ApiDetailPage = () => {
         )}
 
         {api && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            {/* Basic Information */}
             <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Basic Information</h3>
+              <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 py-4">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Basic Information</h3>
               </div>
               <div className="p-6 space-y-4">
                 {(((isEditing ? (editData as any)?.api_public : (api as any)?.api_public) ?? false) && ((isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false)) && (
-                  <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                  <div className="rounded-sm bg-warning-50 border border-warning-500/40 p-3 text-[13px] text-warning-800 dark:bg-warning-500/10 dark:text-warning-300">
                     Public + Credits: Anyone can call this API and the group API key will be injected. Per-user deductions/keys are skipped.
                   </div>
                 )}
@@ -720,14 +721,15 @@ const ApiDetailPage = () => {
                   ((isEditing ? (editData as any)?.api_auth_required : (api as any)?.api_auth_required) ?? true) === false &&
                   ((isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false) === true
                 ) && (
-                  <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                  <div className="rounded-sm bg-warning-50 border border-warning-500/40 p-3 text-[13px] text-warning-800 dark:bg-warning-500/10 dark:text-warning-300">
                     No Auth + Credits: Unauthenticated requests are allowed and the group API key will be injected. Per-user deductions/keys are skipped. Consider enabling Auth Required or disabling Credits.
                   </div>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    API Name
-                  </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      API Name
+                    </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -736,15 +738,15 @@ const ApiDetailPage = () => {
                       className="input"
                       placeholder="Enter API name"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{api.api_name}</p>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{api.api_name}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Version
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Version
+                    </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -753,15 +755,15 @@ const ApiDetailPage = () => {
                       className="input"
                       placeholder="Enter API version"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{api.api_version}</p>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{api.api_version}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Type
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Type
+                    </label>
                   {isEditing ? (
                     <select
                       value={editData.api_type || ''}
@@ -773,15 +775,15 @@ const ApiDetailPage = () => {
                       <option value="SOAP">SOAP</option>
                       <option value="gRPC">gRPC</option>
                     </select>
-                  ) : (
-                    <span className="badge badge-primary">{api.api_type}</span>
-                  )}
-                </div>
+                    ) : (
+                      <span className="badge badge-primary">{api.api_type}</span>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Description
-                  </label>
+                  <div className="md:col-span-2">
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Description
+                    </label>
                   {isEditing ? (
                     <textarea
                       value={editData.api_description || ''}
@@ -790,15 +792,15 @@ const ApiDetailPage = () => {
                       rows={3}
                       placeholder="Enter API description"
                     />
-                  ) : (
-                    <p className="text-gray-600 dark:text-gray-400">{api.api_description || 'No description'}</p>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-600 dark:text-gray-400">{api.api_description || 'No description'}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Retry Count
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Retry Count
+                    </label>
                   {isEditing ? (
                     <input
                       type="number"
@@ -807,20 +809,23 @@ const ApiDetailPage = () => {
                       className="input"
                       min="0"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{api.api_allowed_retry_count}</p>
-                  )}
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{api.api_allowed_retry_count}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
+            {/* Configuration */}
             <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Configuration</h3>
+              <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 py-4">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Configuration</h3>
               </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Active</label>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">Active</label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
@@ -829,17 +834,17 @@ const ApiDetailPage = () => {
                         onChange={(e) => handleInputChange('active' as any, e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enable this API</label>
-                    </div>
-                  ) : (
-                    <span className={`badge ${((api as any).active ?? true) ? 'badge-success' : 'badge-error'}`}>
-                      {((api as any).active ?? true) ? 'Active' : 'Disabled'}
-                    </span>
-                  )}
-                </div>
+                        <label className="ml-2 text-[13px] text-gray-700 dark:text-gray-300">Enable this API</label>
+                      </div>
+                    ) : (
+                      <span className={`badge ${((api as any).active ?? true) ? 'badge-success' : 'badge-error'}`}>
+                        {((api as any).active ?? true) ? 'Active' : 'Disabled'}
+                      </span>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
@@ -939,16 +944,18 @@ const ApiDetailPage = () => {
                     <p className="text-gray-900 dark:text-white">{api.api_authorization_field_swap || 'None'}</p>
                   )}
                 </div>
+                </div>
               </div>
             </div>
 
+          {/* IP Access Control */}
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">IP Access Control</h3>
             </div>
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600 dark:text-gray-400">Manage IP policy for this API</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Manage IP policy for this API (whitelist or deny specific IPs/CIDRs).</div>
                 <button type="button" className="btn btn-ghost btn-xs" onClick={addMyIpToWhitelist}>Add My IP</button>
               </div>
               {(() => {
@@ -993,10 +1000,16 @@ const ApiDetailPage = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Policy</label>
                     {isEditing ? (
-                      <select className="input" value={(editData.api_ip_mode as any) || 'allow_all'} onChange={(e)=>handleInputChange('api_ip_mode', e.target.value as any)}>
-                        <option value="allow_all">Allow All</option>
-                        <option value="whitelist">Whitelist</option>
-                      </select>
+                      <>
+                        <select className="input" value={(editData.api_ip_mode as any) || 'allow_all'} onChange={(e)=>handleInputChange('api_ip_mode', e.target.value as any)}>
+                          <option value="allow_all">Allow All</option>
+                          <option value="whitelist">Whitelist</option>
+                        </select>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          When set to <span className="font-semibold">Whitelist</span>, only IPs/CIDRs in the whitelist can call this API. The blacklist below is
+                          <span className="font-semibold"> always evaluated first</span> and will deny matching IPs regardless of policy.
+                        </p>
+                      </>
                     ) : (
                       <p className="text-gray-900 dark:text-white">{(api as any).api_ip_mode || 'allow_all'}</p>
                     )}
@@ -1018,17 +1031,37 @@ const ApiDetailPage = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist (IPs/CIDRs; one per line or comma-separated)</label>
                     {isEditing ? (
-                      <textarea className="input min-h-[120px]" value={ipWhitelistText} onChange={(e)=>setIpWhitelistText(e.target.value)} />
+                      <>
+                        <textarea
+                          className="input min-h-[120px]"
+                          value={ipWhitelistText}
+                          onChange={(e)=>setIpWhitelistText(e.target.value)}
+                          placeholder={"10.0.0.0/8\n192.168.1.100"}
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Used only when Policy is <span className="font-semibold">Whitelist</span>. Clients must match one of these IPs/CIDRs (after global platform IP rules).
+                        </p>
+                      </>
                     ) : (
                       <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{((api as any).api_ip_whitelist || []).join('\n') || '—'}</pre>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist (IPs/CIDRs; one per line or comma-separated)</label>
                     {isEditing ? (
-                      <textarea className="input min-h-[120px]" value={ipBlacklistText} onChange={(e)=>setIpBlacklistText(e.target.value)} />
+                      <>
+                        <textarea
+                          className="input min-h-[120px]"
+                          value={ipBlacklistText}
+                          onChange={(e)=>setIpBlacklistText(e.target.value)}
+                          placeholder={"203.0.113.0/24\n203.0.113.50"}
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Always evaluated first. Any matching IP/CIDR is denied before whitelist or other checks.
+                        </p>
+                      </>
                     ) : (
                       <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{((api as any).api_ip_blacklist || []).join('\n') || '—'}</pre>
                     )}

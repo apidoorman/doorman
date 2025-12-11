@@ -6,9 +6,16 @@ Handles rule CRUD, validation, and application.
 """
 
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from datetime import datetime
-from motor.motor_asyncio import AsyncIOMotorDatabase
+try:
+    # Use a type-only import to avoid a hard runtime dependency during tests
+    if TYPE_CHECKING:
+        from motor.motor_asyncio import AsyncIOMotorDatabase  # pragma: no cover
+    else:  # Fallback for runtime when motor isn't installed (e.g., unit tests)
+        AsyncIOMotorDatabase = Any  # type: ignore
+except Exception:  # Defensive: never fail import due to typing
+    AsyncIOMotorDatabase = Any  # type: ignore
 
 from models.rate_limit_models import RateLimitRule, RuleType, TimeWindow
 

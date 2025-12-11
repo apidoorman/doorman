@@ -125,34 +125,39 @@ class GatewayService:
             origin = (origin or '').strip()
             req_method = (req_method or '').strip().upper()
             requested_headers = [h.strip() for h in (req_headers or '').split(',') if h.strip()]
-            allow_origins = api.get('api_cors_allow_origins') or ['*']
-            allow_methods = [m.strip().upper() for m in (api.get('api_cors_allow_methods') or ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']) if m]
+
+            _ao = api.get('api_cors_allow_origins', None)
+            # None => default '*', empty list => disallow all
+            allow_origins = (['*'] if _ao is None else list(_ao))
+            _am = api.get('api_cors_allow_methods', None)
+            allow_methods = [m.strip().upper() for m in (_am if _am is not None else ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS']) if m]
             if 'OPTIONS' not in allow_methods:
                 allow_methods.append('OPTIONS')
-            allow_headers = api.get('api_cors_allow_headers') or ['*']
+            _ah = api.get('api_cors_allow_headers', None)
+            allow_headers = (_ah if _ah is not None else ['*'])
             allow_credentials = bool(api.get('api_cors_allow_credentials'))
             expose_headers = api.get('api_cors_expose_headers') or []
 
+            # Determine if origin is allowed
             origin_allowed = False
             if '*' in allow_origins:
                 origin_allowed = True
             elif origin and origin in allow_origins:
                 origin_allowed = True
             else:
-                # Support simple wildcard subdomain patterns: https://*.example.com
+                # Wildcard subdomains: http(s)://*.example.com
                 for entry in allow_origins:
                     e = (entry or '').strip()
                     if e.startswith('http://*.') or e.startswith('https://*.'):
                         try:
                             scheme, rest = e.split('://', 1)
-                            host_suffix = rest[1:]  # drop the leading '*'
+                            host_suffix = rest[1:]
                             if '://' in origin:
                                 o_scheme, o_host = origin.split('://', 1)
                             else:
                                 o_scheme, o_host = 'https', origin
                             if o_scheme != scheme:
                                 continue
-                            # Ensure at least one additional subdomain label exists
                             if o_host.endswith(host_suffix) and o_host.count('.') >= host_suffix.count('.') + 1:
                                 origin_allowed = True
                                 break
@@ -169,8 +174,9 @@ class GatewayService:
 
             preflight_ok = origin_allowed and method_allowed and headers_allowed
 
+            # Build headers; only echo ACAO on allowed preflight
             cors_headers = {}
-            if origin_allowed:
+            if preflight_ok and origin_allowed:
                 cors_headers['Access-Control-Allow-Origin'] = origin
                 cors_headers['Vary'] = 'Origin'
             if allow_credentials:
@@ -181,6 +187,7 @@ class GatewayService:
                 cors_headers['Access-Control-Allow-Headers'] = ', '.join(allow_headers)
             if expose_headers:
                 cors_headers['Access-Control-Expose-Headers'] = ', '.join(expose_headers)
+
             return preflight_ok, cors_headers
         except Exception:
             return False, {}

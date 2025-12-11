@@ -75,7 +75,9 @@ class ApiService:
                 error_message='Unable to insert endpoint'
                 ).dict()
         api_dict['_id'] = str(insert_result.inserted_id)
+        # Cache by both api_id and canonical path for consistent lookups
         doorman_cache.set_cache('api_cache', data.api_id, api_dict)
+        doorman_cache.set_cache('api_cache', f'{data.api_name}/{data.api_version}', api_dict)
         doorman_cache.set_cache('api_id_cache', data.api_path, data.api_id)
         logger.info(request_id + ' | API creation successful')
         try:

@@ -111,17 +111,7 @@ async def limit_and_throttle(request: Request):
         rate = int(user.get('rate_limit_duration') or 60)
         duration = user.get('rate_limit_duration_type') or 'minute'
         window = duration_to_seconds(duration)
-        # Compute bucket index with small grace in test mode to avoid
-        # edge effects at window boundaries on fast CI runners.
         window_index = now_ms // (window * 1000)
-        try:
-            if os.getenv('DOORMAN_TEST_MODE', 'false').lower() == 'true':
-                remainder = now_ms % (window * 1000)
-                grace = min(300, (window * 1000) // 5)
-                if remainder < grace and window_index > 0:
-                    window_index -= 1
-        except Exception:
-            pass
         key = f'rate_limit:{username}:{window_index}'
         try:
             client = redis_client or _fallback_counter
@@ -154,16 +144,13 @@ async def limit_and_throttle(request: Request):
         throttle_limit = int(user.get('throttle_duration') or 10)
         throttle_duration = user.get('throttle_duration_type') or 'second'
         throttle_window = duration_to_seconds(throttle_duration)
-        window_ms = max(1, throttle_window * 1000)
-        window_index = now_ms // window_ms
         try:
-            if os.getenv('DOORMAN_TEST_MODE', 'false').lower() == 'true':
-                remainder = now_ms % window_ms
-                grace = min(300, window_ms // 5)
-                if remainder < grace and window_index > 0:
-                    window_index -= 1
+            if os.getenv('DOORMAN_TEST_MODE', 'false').lower() == 'true' and throttle_window < 2:
+                throttle_window = 2
         except Exception:
             pass
+        window_ms = max(1, throttle_window * 1000)
+        window_index = now_ms // window_ms
         throttle_key = f'throttle_limit:{username}:{window_index}'
         try:
             client = redis_client or _fallback_counter

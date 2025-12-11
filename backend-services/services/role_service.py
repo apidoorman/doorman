@@ -218,7 +218,7 @@ class RoleService:
         logger.info(request_id + ' | Getting role: ' + role_name)
         role = doorman_cache.get_cache('role_cache', role_name)
         if not role:
-            role = role_collection.find_one({'role_name': role_name})
+            role = await db_find_one(role_collection, {'role_name': role_name})
             if not role:
                 logger.error(request_id + ' | Role retrieval failed with code ROLE004')
                 return ResponseModel(

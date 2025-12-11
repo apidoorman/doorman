@@ -67,25 +67,13 @@ load_env_files
 
 trap graceful_stop SIGTERM SIGINT
 
-# Start backend (Doorman)
+# Start backend (Doorman) in the foreground so logs go to container stdout
 echo "[entrypoint] Starting Doorman backend..."
 (
   cd /app/backend-services
   # Ensure required directories
   mkdir -p proto generated logs
-  python doorman.py start
-  # Wait for PID file and keep a watcher process alive for wait -n
-  for i in {1..60}; do
-    if [ -f doorman.pid ]; then break; fi; sleep 0.2; done
-  if [ -f doorman.pid ]; then
-    DOORMAN_PID=$(cat doorman.pid || true)
-    # Keep this subshell alive while backend is running
-    while [ -n "${DOORMAN_PID}" ] && kill -0 "$DOORMAN_PID" 2>/dev/null; do
-      sleep 1
-    done
-  else
-    echo "[entrypoint] Warning: doorman.pid not found; backend watcher will exit"
-  fi
+  python doorman.py run
 ) &
 BACK_PID=$!
 

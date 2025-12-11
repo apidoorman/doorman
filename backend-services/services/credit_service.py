@@ -219,7 +219,7 @@ class CreditService:
         try:
             if data.username and data.username != username:
                 return ResponseModel(status_code=400, error_code='CRD014', error_message='Username in body does not match path').dict()
-            doc = user_credit_collection.find_one({'username': username})
+            doc = await db_find_one(user_credit_collection, {'username': username})
             users_credits = data.users_credits or {}
             secured = {}
             for group, info in users_credits.items():
@@ -229,9 +229,9 @@ class CreditService:
                 secured[group] = info
             payload = {'username': username, 'users_credits': secured}
             if doc:
-                user_credit_collection.update_one({'username': username}, {'$set': {'users_credits': secured}})
+                await db_update_one(user_credit_collection, {'username': username}, {'$set': {'users_credits': secured}})
             else:
-                user_credit_collection.insert_one(payload)
+                await db_insert_one(user_credit_collection, payload)
             return ResponseModel(status_code=200, message='Credits saved successfully').dict()
         except PyMongoError as e:
             logger.error(request_id + f' | Add credits failed with database error: {str(e)}')
@@ -285,7 +285,7 @@ class CreditService:
     async def get_user_credits(username: str, request_id):
         logger.info(request_id + f' | Getting credits for user: {username}')
         try:
-            doc = user_credit_collection.find_one({'username': username})
+            doc = await db_find_one(user_credit_collection, {'username': username})
             if not doc:
                 return ResponseModel(status_code=404, error_code='CRD017', error_message='User credits not found').dict()
             if doc.get('_id'):

@@ -531,17 +531,53 @@ doorman = FastAPI(
     generate_unique_id_function=_generate_unique_id,
 )
 
+# Add CORS middleware
+# Starlette CORS middleware is disabled by default because platform and per-API
+# CORS are enforced explicitly below. Enable only if requested via env.
+if os.getenv('ENABLE_STARLETTE_CORS', 'false').lower() in ('1','true','yes','on'):
+    doorman.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # In production, replace with specific origins
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],  # This will include X-Requested-With
+        expose_headers=[],
+        max_age=600,
+    )
+
 https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
 domain = os.getenv('COOKIE_DOMAIN', 'localhost')
 
 # - API gateway routes (/api/*): CORS controlled per-API in gateway routes/services
 
 def _platform_cors_config():
-    """Platform CORS accepts all origins - API-level CORS is enforced in gateway routes."""
+    """Compute platform CORS config from environment.
+
+    Env vars:
+    - ALLOWED_ORIGINS: CSV list or '*'
+    - ALLOW_METHODS: CSV list (defaults to common methods)
+    - ALLOW_HEADERS: CSV list or '*'
+    - ALLOW_CREDENTIALS: true/false
+    - CORS_STRICT: true/false (when true, do not echo wildcard origins with credentials)
+    """
+    import os as _os
+    strict = _os.getenv('CORS_STRICT', 'false').lower() in ('1','true','yes','on')
+    allowed_origins = [o.strip() for o in (_os.getenv('ALLOWED_ORIGINS') or '').split(',') if o.strip()] or ['*']
+    allow_methods = [m.strip() for m in (_os.getenv('ALLOW_METHODS') or 'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD').split(',') if m.strip()]
+    allow_headers_env = _os.getenv('ALLOW_HEADERS') or ''
+    if allow_headers_env.strip() == '*':
+        # Default to a known, minimal safe list when wildcard requested
+        allow_headers = ['Accept','Content-Type','X-CSRF-Token','Authorization']
+    else:
+        allow_headers = [h.strip() for h in allow_headers_env.split(',') if h.strip()] or ['Accept','Content-Type','X-CSRF-Token','Authorization']
+    allow_credentials = _os.getenv('ALLOW_CREDENTIALS', 'false').lower() in ('1','true','yes','on')
+
     return {
-        'credentials': True,
-        'methods': ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-        'headers': ['Accept', 'Content-Type', 'X-CSRF-Token', 'Authorization', 'X-Request-ID', 'X-Requested-With'],
+        'strict': strict,
+        'origins': allowed_origins,
+        'credentials': allow_credentials,
+        'methods': allow_methods,
+        'headers': allow_headers,
     }
 
 
@@ -549,39 +585,58 @@ def _platform_cors_config():
 async def platform_cors(request: Request, call_next):
     """Platform CORS middleware - accepts all origins (API-level CORS enforced in gateway)."""
     try:
-        if os.getenv('DISABLE_PLATFORM_CORS_ASGI', 'false').lower() in ('1','true','yes','on'):
-            path = str(request.url.path)
-            if path.startswith('/platform/'):
-                cfg = _platform_cors_config()
-                origin = request.headers.get('origin') or request.headers.get('Origin')
-
-                if request.method.upper() == 'OPTIONS':
-                    from fastapi.responses import Response as _Resp
-                    headers = {}
-                    if origin:
-                        headers['Access-Control-Allow-Origin'] = origin
-                        headers['Vary'] = 'Origin'
-                    headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
-                    headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
-                    headers['Access-Control-Allow-Credentials'] = 'true'
-                    rid = request.headers.get('x-request-id') or request.headers.get('X-Request-ID')
-                    if rid:
-                        headers['request_id'] = rid
-                    return _Resp(status_code=204, headers=headers)
-
-                response = await call_next(request)
-                try:
-                    response.headers['Access-Control-Allow-Credentials'] = 'true'
-                    if origin:
-                        response.headers['Access-Control-Allow-Origin'] = origin
+        path = str(request.url.path)
+        if path.startswith('/platform/') or path == '/platform':
+            cfg = _platform_cors_config()
+            origin = request.headers.get('origin') or request.headers.get('Origin')
+            origin_allowed = False
+            if origin:
+                if '*' in cfg['origins']:
+                    if cfg['strict'] and cfg['credentials']:
                         try:
-                            _ = response.headers.pop('Vary', None)
+                            lo = origin.lower()
+                            origin_allowed = (
+                                lo.startswith('http://localhost') or
+                                lo.startswith('https://localhost') or
+                                lo.startswith('http://127.0.0.1') or
+                                lo.startswith('https://127.0.0.1')
+                            )
                         except Exception:
-                            pass
-                        response.headers['Vary'] = 'Origin'
-                except Exception:
-                    pass
-                return response
+                            origin_allowed = False
+                    else:
+                        origin_allowed = True
+                else:
+                    origin_allowed = origin in cfg['origins']
+
+            if request.method.upper() == 'OPTIONS':
+                from fastapi.responses import Response as _Resp
+                headers = {}
+                if origin_allowed:
+                    headers['Access-Control-Allow-Origin'] = origin
+                    headers['Vary'] = 'Origin'
+                headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
+                headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
+                if cfg['credentials']:
+                    headers['Access-Control-Allow-Credentials'] = 'true'
+                rid = request.headers.get('x-request-id') or request.headers.get('X-Request-ID')
+                if rid:
+                    headers['request_id'] = rid
+                return _Resp(status_code=204, headers=headers)
+
+            response = await call_next(request)
+            try:
+                if cfg['credentials']:
+                    response.headers['Access-Control-Allow-Credentials'] = 'true'
+                if origin_allowed:
+                    response.headers['Access-Control-Allow-Origin'] = origin
+                    try:
+                        _ = response.headers.pop('Vary', None)
+                    except Exception:
+                        pass
+                    response.headers['Vary'] = 'Origin'
+            except Exception:
+                pass
+            return response
     except Exception:
         pass
     return await call_next(request)
@@ -838,24 +893,29 @@ async def body_size_limit(request: Request, call_next):
         raise
 
 class PlatformCORSMiddleware:
-    """ASGI-level CORS for /platform/* routes - accepts all origins.
-    
-    API-level CORS is enforced in gateway routes.
+    """ASGI-level CORS for /platform/* routes only.
+
+    API-level CORS is enforced in gateway routes. This middleware should not
+    interfere with /api/* paths. It also respects DISABLE_PLATFORM_CORS_ASGI:
+    when set to true, this middleware becomes a no-op.
     """
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        # If explicitly disabled, act as a passthrough
         try:
             if os.getenv('DISABLE_PLATFORM_CORS_ASGI', 'false').lower() in ('1','true','yes','on'):
                 return await self.app(scope, receive, send)
         except Exception:
             pass
+
         try:
             if scope.get('type') != 'http':
                 return await self.app(scope, receive, send)
-            path = scope.get('path') or ''
-            if not (str(path).startswith('/platform/') or str(path).startswith('/api/')):
+            path = str(scope.get('path') or '')
+            # Only handle platform routes here; leave /api/* to route handlers
+            if not (path.startswith('/platform/') or path == '/platform'):
                 return await self.app(scope, receive, send)
 
             cfg = _platform_cors_config()
@@ -867,14 +927,32 @@ class PlatformCORSMiddleware:
                 pass
             origin = hdrs.get('origin')
 
+            # Evaluate origin allowance based on config
+            origin_allowed = False
+            if origin:
+                if '*' in cfg['origins']:
+                    if cfg['strict'] and cfg['credentials']:
+                        lo = origin.lower()
+                        origin_allowed = (
+                            lo.startswith('http://localhost') or
+                            lo.startswith('https://localhost') or
+                            lo.startswith('http://127.0.0.1') or
+                            lo.startswith('https://127.0.0.1')
+                        )
+                    else:
+                        origin_allowed = True
+                else:
+                    origin_allowed = origin in cfg['origins']
+
             if str(scope.get('method', '')).upper() == 'OPTIONS':
                 headers = []
-                if origin:
+                if origin_allowed and origin:
                     headers.append((b'access-control-allow-origin', origin.encode('latin1')))
                     headers.append((b'vary', b'Origin'))
                 headers.append((b'access-control-allow-methods', ', '.join(cfg['methods']).encode('latin1')))
                 headers.append((b'access-control-allow-headers', ', '.join(cfg['headers']).encode('latin1')))
-                headers.append((b'access-control-allow-credentials', b'true'))
+                if cfg['credentials']:
+                    headers.append((b'access-control-allow-credentials', b'true'))
                 rid = hdrs.get('x-request-id')
                 if rid:
                     headers.append((b'request_id', rid.encode('latin1')))
@@ -883,16 +961,8 @@ class PlatformCORSMiddleware:
                 return
 
             async def send_wrapper(message):
-                if message.get('type') == 'http.response.start':
-                    headers = list(message.get('headers') or [])
-                    try:
-                        headers.append((b'access-control-allow-credentials', b'true'))
-                        if origin:
-                            headers.append((b'access-control-allow-origin', origin.encode('latin1')))
-                            headers.append((b'vary', b'Origin'))
-                    except Exception:
-                        pass
-                    message = {**message, 'headers': headers}
+                # Do not modify non-OPTIONS responses here; platform HTTP middleware handles
+                # response headers to avoid duplicates.
                 await send(message)
 
             return await self.app(scope, receive, send_wrapper)

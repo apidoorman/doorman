@@ -112,6 +112,7 @@ class TierService:
     async def list_tiers(
         self,
         enabled_only: bool = False,
+        search_term: Optional[str] = None,
         skip: int = 0,
         limit: int = 100
     ) -> List[Tier]:
@@ -131,10 +132,19 @@ class TierService:
             query['enabled'] = True
         
         cursor = self.tiers_collection.find(query).skip(skip).limit(limit)
-        tiers = []
+        tiers: List[Tier] = []
         
         async for tier_data in cursor:
             tiers.append(Tier.from_dict(tier_data))
+        
+        if search_term:
+            term = search_term.lower()
+            tiers = [
+                tier for tier in tiers
+                if term in (tier.name or '').lower()
+                or term in (tier.display_name or '').lower()
+                or term in (tier.description or '').lower()
+            ]
         
         return tiers
     

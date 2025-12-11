@@ -703,52 +703,6 @@ const SecurityPage = () => {
                   </div>
                 )}
 
-                {activeTab === 'rate-limits' && (
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white">Rate Limits</h3>
-                      <button onClick={handleAddRateLimit} className="btn btn-primary">
-                        <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        Add Rate Limit
-                      </button>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th>Path</th>
-                            <th>Limit</th>
-                            <th>Window</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rateLimits.map((limit) => (
-                            <tr key={limit.id} className="hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors">
-                              <td>
-                                <p className="font-medium text-gray-900 dark:text-white">{limit.path}</p>
-                              </td>
-                              <td>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">{limit.limit}</p>
-                              </td>
-                              <td>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">{limit.window}</p>
-                              </td>
-                              <td>
-                                <span className={`badge ${limit.status === 'active' ? 'badge-success' : 'badge-gray'}`}>
-                                  {limit.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
                 {activeTab === 'ip-whitelist' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">

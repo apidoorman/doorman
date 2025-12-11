@@ -267,7 +267,7 @@ export default function EditTierPage() {
                     className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Enable Rate Limiting
+                    Enforce tier based rate limiting
                   </span>
                 </label>
               </div>
@@ -379,7 +379,7 @@ export default function EditTierPage() {
                   />
                   <div className="ml-3">
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Enable request throttling
+                      Enforce tier based throttling
                     </span>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       When enabled, requests exceeding limits will be queued instead of immediately rejected. When disabled, requests return 429 errors.
