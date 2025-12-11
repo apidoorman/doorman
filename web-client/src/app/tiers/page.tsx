@@ -46,24 +46,46 @@ interface TierStats {
   inactive_users: number
 }
 
+type TierFilter = 'all' | 'enabled' | 'disabled' | 'default'
+
 export default function TiersPage() {
   const router = useRouter()
   const [tiers, setTiers] = useState<Tier[]>([])
   const [stats, setStats] = useState<TierStats[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState<TierFilter>('all')
 
   useEffect(() => {
-    fetchTiers()
+    fetchTiers('', 'all')
     fetchStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const fetchTiers = async () => {
+  const fetchTiers = async (search: string, status: TierFilter = filterStatus) => {
     try {
       setLoading(true)
-      const data = await getJson(`${SERVER_URL}/platform/tiers`)
+      const params = new URLSearchParams()
+      if (search?.trim()) {
+        params.append('search', search.trim())
+      }
+      if (status === 'enabled') {
+        params.append('enabled_only', 'true')
+      }
+      const query = params.toString()
+      const data = await getJson(`${SERVER_URL}/platform/tiers${query ? `?${query}` : ''}`)
       // Ensure data is an array
-      setTiers(Array.isArray(data) ? data : [])
+      let nextTiers = Array.isArray(data) ? data : []
+
+      if (status === 'disabled') {
+        nextTiers = nextTiers.filter(t => !t.enabled)
+      } else if (status === 'default') {
+        nextTiers = nextTiers.filter(t => t.is_default)
+      }
+
+      setTiers(nextTiers)
+      setFilterStatus(status)
       setError(null)
     } catch (err) {
       console.error('Failed to fetch tiers:', err)
@@ -90,7 +112,7 @@ export default function TiersPage() {
 
     try {
       await delJson(`${SERVER_URL}/platform/tiers/${tierId}`)
-      await fetchTiers()
+      await fetchTiers(searchTerm)
     } catch (err: any) {
       alert(err.message || 'Failed to delete tier')
     }
@@ -101,6 +123,20 @@ export default function TiersPage() {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
     return num.toString()
+  }
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    fetchTiers(searchTerm)
+  }
+
+  const handleClearSearch = () => {
+    setSearchTerm('')
+    fetchTiers('', filterStatus)
+  }
+
+  const handleFilterChange = (status: TierFilter) => {
+    fetchTiers(searchTerm, status)
   }
 
   const getTierStats = (tierId: string) => {
@@ -130,6 +166,67 @@ export default function TiersPage() {
               </svg>
               Add Tier
             </button>
+          </div>
+
+          {/* Search & Filters */}
+          <div className="card">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <form onSubmit={handleSearch} className="flex-1">
+                <div className="relative">
+                  <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Search tiers by name or description..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-3 text-gray-400 hover:text-gray-600"
+                      onClick={handleClearSearch}
+                      aria-label="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                <button
+                  type="button"
+                  onClick={() => handleFilterChange('all')}
+                  className={`btn ${filterStatus === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                >
+                  All Tiers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFilterChange('enabled')}
+                  className={`btn ${filterStatus === 'enabled' ? 'btn-primary' : 'btn-secondary'}`}
+                >
+                  Enabled
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFilterChange('disabled')}
+                  className={`btn ${filterStatus === 'disabled' ? 'btn-primary' : 'btn-secondary'}`}
+                >
+                  Disabled
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFilterChange('default')}
+                  className={`btn ${filterStatus === 'default' ? 'btn-primary' : 'btn-secondary'}`}
+                >
+                  Default
+                </button>
+              </div>
+            </div>
           </div>
 
           {loading ? (

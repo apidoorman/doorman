@@ -23,7 +23,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
       </head>
-      <body className={`${inter.className} h-full bg-gray-50 dark:bg-dark-bg text-gray-900 dark:text-dark-text antialiased transition-colors duration-200`}>
+      <body className={`${inter.className} h-full transition-colors duration-200`}>
         <AuthProvider>
           <ToastProvider>
             {children}

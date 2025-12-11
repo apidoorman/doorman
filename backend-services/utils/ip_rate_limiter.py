@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from fastapi import Request
 
+import time
 from utils.redis_client import RedisClient, get_redis_client
 from utils.rate_limiter import RateLimiter, RateLimitResult
 
@@ -248,7 +249,7 @@ class IPRateLimiter:
         """
         # Check whitelist (always allow)
         if self.is_whitelisted(ip):
-            return RateLimitResult(allowed=True, limit=999999, remaining=999999)
+            return RateLimitResult(allowed=True, limit=999999, remaining=999999, reset_at=int(time.time()) + 60)
         
         # Check blacklist (always deny)
         if self.is_blacklisted(ip):
@@ -256,7 +257,7 @@ class IPRateLimiter:
                 allowed=False,
                 limit=0,
                 remaining=0,
-                message=f"IP {ip} is blacklisted"
+                reset_at=int(time.time()) + 60
             )
         
         # Check reputation score
@@ -282,7 +283,7 @@ class IPRateLimiter:
                 allowed=False,
                 limit=limit_per_minute,
                 remaining=0,
-                message=f"IP rate limit exceeded: {limit_per_minute}/minute"
+                reset_at=int(time.time()) + 60
             )
         
         # Check per-hour limit
@@ -295,7 +296,7 @@ class IPRateLimiter:
                 allowed=False,
                 limit=limit_per_hour,
                 remaining=0,
-                message=f"IP rate limit exceeded: {limit_per_hour}/hour"
+                reset_at=int(time.time()) + 3600
             )
         
         # Increment counters
@@ -312,7 +313,8 @@ class IPRateLimiter:
         return RateLimitResult(
             allowed=True,
             limit=limit_per_minute,
-            remaining=limit_per_minute - minute_count - 1
+            remaining=limit_per_minute - minute_count - 1,
+            reset_at=int(time.time()) + 60
         )
     
     def get_top_ips(self, limit: int = 10) -> List[tuple]:

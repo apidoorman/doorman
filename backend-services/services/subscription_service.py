@@ -21,15 +21,33 @@ class SubscriptionService:
         """
         Check if an API exists.
         """
-        api = doorman_cache.get_cache('api_cache', f'{api_name}/{api_version}')
+        path_key = f'{api_name}/{api_version}'
+        api = doorman_cache.get_cache('api_cache', path_key)
         if not api:
+            # Try resolving via api_id_cache if path lookup missed
+            api_id = doorman_cache.get_cache('api_id_cache', f'/{api_name}/{api_version}')
+            if api_id:
+                api = doorman_cache.get_cache('api_cache', api_id)
+        if not api:
+            # Fallback to database lookup
             api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
             if not api:
-
                 return None
+            # Normalize document and warm caches for both path and id keys
             if api.get('_id'):
                 del api['_id']
-            doorman_cache.set_cache('api_cache', f'{api_name}/{api_version}', api)
+            try:
+                if not api.get('api_id'):
+                    # Ensure api_id exists for consistent caching
+                    import uuid as _uuid
+                    api['api_id'] = api.get('api_id') or str(_uuid.uuid4())
+            except Exception:
+                pass
+            doorman_cache.set_cache('api_cache', path_key, api)
+            try:
+                doorman_cache.set_cache('api_id_cache', f'/{api_name}/{api_version}', api.get('api_id'))
+            except Exception:
+                pass
         if api and '_id' in api:
             del api['_id']
         return api

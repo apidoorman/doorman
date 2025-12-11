@@ -354,7 +354,7 @@ const AddApiPage = () => {
           <div className="card">
             <div className="card-header flex items-center justify-between">
               <h3 className="card-title">IP Access Control</h3>
-              <FormHelp docHref="/docs/using-fields.html#api-ip-policy">Control IP access per API.</FormHelp>
+              <FormHelp docHref="/docs/using-fields.html#api-ip-policy">Control IP access per API (whitelist or deny specific IPs/CIDRs).</FormHelp>
             </div>
             <div className="p-6 space-y-4">
               {(() => {
@@ -402,7 +402,10 @@ const AddApiPage = () => {
                     <option value="allow_all">Allow All</option>
                     <option value="whitelist">Whitelist</option>
                   </select>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">When Whitelist is selected, only listed IPs/CIDRs can call this API. Blacklist applies always.</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    When set to <span className="font-semibold">Whitelist</span>, only IPs/CIDRs in the whitelist can call this API. The blacklist below is
+                    <span className="font-semibold"> always evaluated first</span> and will deny matching IPs regardless of policy.
+                  </p>
                 </div>
                 <div className="md:col-span-2 flex items-center gap-2">
                   <input id="api_trust_x_forwarded_for" type="checkbox" className="h-4 w-4" checked={!!(formData as any).api_trust_x_forwarded_for} onChange={(e)=>setFormData(p=>({...p, api_trust_x_forwarded_for: e.target.checked}))} />
@@ -413,14 +416,30 @@ const AddApiPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist (one per line or comma-separated)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist (IPs/CIDRs; one per line or comma-separated)</label>
                     <button type="button" className="btn btn-ghost btn-xs" onClick={addMyIpToWhitelist}>Add My IP</button>
                   </div>
-                  <textarea className="input min-h-[120px]" value={ipWhitelistText} onChange={(e)=>setIpWhitelistText(e.target.value)} placeholder="192.168.1.10\n10.0.0.0/8" />
+                  <textarea
+                    className="input min-h-[120px]"
+                    value={ipWhitelistText}
+                    onChange={(e)=>setIpWhitelistText(e.target.value)}
+                    placeholder={"10.0.0.0/8\n192.168.1.100"}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Used only when Policy is <span className="font-semibold">Whitelist</span>. Clients must match one of these IPs/CIDRs (after global platform IP rules).
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist (one per line or comma-separated)</label>
-                  <textarea className="input min-h-[120px]" value={ipBlacklistText} onChange={(e)=>setIpBlacklistText(e.target.value)} placeholder="203.0.113.0/24" />
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist (IPs/CIDRs; one per line or comma-separated)</label>
+                  <textarea
+                    className="input min-h-[120px]"
+                    value={ipBlacklistText}
+                    onChange={(e)=>setIpBlacklistText(e.target.value)}
+                    placeholder={"203.0.113.0/24\n203.0.113.50"}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Always evaluated first. Any matching IP/CIDR is denied before whitelist or other checks.
+                  </p>
                 </div>
               </div>
             </div>

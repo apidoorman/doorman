@@ -66,7 +66,7 @@ const Dashboard = () => {
           <div className="page-header">
             <div>
               <h1 className="page-title">Dashboard</h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-[13px] text-gray-600 dark:text-white/60 mt-1">
                 Overview of your API gateway performance and usage
               </p>
             </div>
@@ -83,13 +83,13 @@ const Dashboard = () => {
           </div>
 
           {error && (
-            <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
+            <div className="rounded-sm bg-error-50 border border-error-500/40 p-3 dark:bg-error-500/10 dark:border-error-500/40">
               <div className="flex">
-                <svg className="h-5 w-5 text-error-400 dark:text-error-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-4 w-4 text-error-500 dark:text-error-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div className="ml-3">
-                  <p className="text-sm text-error-700 dark:text-error-300">{error}</p>
+                  <p className="text-[13px] text-error-700 dark:text-error-300">{error}</p>
                 </div>
               </div>
             </div>
@@ -166,7 +166,7 @@ const Dashboard = () => {
                             height: `${Math.max(barHeight, 4)}px`
                           }}
                         ></div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 mt-2">{month}</span>
+                        <span className="text-[11px] text-gray-600 dark:text-white/60 mt-2">{month}</span>
                       </div>
                     )
                   })
@@ -185,13 +185,13 @@ const Dashboard = () => {
                       {user.username.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      <p className="text-[13px] font-medium text-gray-900 dark:text-white truncate">
                         {user.username}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      <p className="text-[11px] text-gray-600 dark:text-white/60 truncate">
                         Requests: {user.requests}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      <p className="text-[11px] text-gray-600 dark:text-white/60 truncate">
                         Subscribers: {user.subscribers}
                       </p>
                     </div>

@@ -137,12 +137,22 @@ class Database:
                 _email, _pwd_hash = _admin_seed_creds()
                 users.insert_one(_build_admin_seed_doc(_email, _pwd_hash))
 
-            try:
-                adm = users.find_one({'username': 'admin'})
-                if adm and adm.get('ui_access') is not True:
-                    users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
-            except Exception:
-                pass
+        try:
+            adm = users.find_one({'username': 'admin'})
+            if adm and adm.get('ui_access') is not True:
+                users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
+        except Exception:
+            pass
+
+        # Align admin password with DOORMAN_ADMIN_PASSWORD if provided, even if
+        # the admin user already exists. This makes re-initialization idempotent
+        # for tests that adjust the env and call initialize_collections again.
+        try:
+            env_pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
+            if env_pwd:
+                users.update_one({'username': 'admin'}, {'$set': {'password': password_util.hash_password(env_pwd)}})
+        except Exception:
+            pass
 
             try:
                 from datetime import datetime
@@ -603,6 +613,7 @@ class InMemoryDB:
         self._sync_vault_entries = InMemoryCollection('vault_entries')
         self._sync_tiers = InMemoryCollection('tiers')
         self._sync_user_tier_assignments = InMemoryCollection('user_tier_assignments')
+        self._sync_rate_limit_rules = InMemoryCollection('rate_limit_rules')
         
         # Expose as async or sync based on mode
         if async_mode:
@@ -621,6 +632,7 @@ class InMemoryDB:
             self.vault_entries = AsyncInMemoryCollection(self._sync_vault_entries)
             self.tiers = AsyncInMemoryCollection(self._sync_tiers)
             self.user_tier_assignments = AsyncInMemoryCollection(self._sync_user_tier_assignments)
+            self.rate_limit_rules = AsyncInMemoryCollection(self._sync_rate_limit_rules)
         else:
             self.users = self._sync_users
             self.apis = self._sync_apis
@@ -637,13 +649,14 @@ class InMemoryDB:
             self.vault_entries = self._sync_vault_entries
             self.tiers = self._sync_tiers
             self.user_tier_assignments = self._sync_user_tier_assignments
+            self.rate_limit_rules = self._sync_rate_limit_rules
 
     def list_collection_names(self):
         return [
             'users', 'apis', 'endpoints', 'groups', 'roles',
             'subscriptions', 'routings', 'credit_defs', 'user_credits',
             'endpoint_validations', 'settings', 'revocations', 'vault_entries',
-            'tiers', 'user_tier_assignments'
+            'tiers', 'user_tier_assignments', 'rate_limit_rules'
         ]
 
     def create_collection(self, name):

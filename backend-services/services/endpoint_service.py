@@ -45,7 +45,8 @@ class EndpointService:
                 error_code='END001',
                 error_message='Endpoint already exists for the requested API name, version and URI'
             ).dict()
-        data.api_id = doorman_cache.get_cache('api_id_cache', data.api_name + data.api_version)
+        # Resolve API ID from cache using canonical key "/{name}/{version}"
+        data.api_id = doorman_cache.get_cache('api_id_cache', f'/{data.api_name}/{data.api_version}')
         if not data.api_id:
             api = api_collection.find_one({'api_name': data.api_name, 'api_version': data.api_version})
             if not api:
@@ -56,7 +57,8 @@ class EndpointService:
                     error_message='API does not exist for the requested name and version'
                 ).dict()
             data.api_id = api.get('api_id')
-            doorman_cache.set_cache('api_id_cache', f'{data.api_name}/{data.api_version}', data.api_id)
+            # Ensure cache uses the same canonical key with leading slash
+            doorman_cache.set_cache('api_id_cache', f'/{data.api_name}/{data.api_version}', data.api_id)
         data.endpoint_id = str(uuid.uuid4())
         endpoint_dict = data.dict()
         insert_result = endpoint_collection.insert_one(endpoint_dict)

@@ -73,6 +73,25 @@ class AsyncDoormanCacheManager:
             'credit_def_cache': 86400
         }
 
+    def _to_json_serializable(self, value):
+        """Recursively convert bytes and non-JSON types into serializable forms.
+
+        Mirrors the sync cache utility behavior so cached values are portable.
+        """
+        try:
+            if isinstance(value, bytes):
+                try:
+                    return value.decode('utf-8')
+                except Exception:
+                    return value.decode('latin-1', errors='ignore')
+            if isinstance(value, dict):
+                return {k: self._to_json_serializable(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [self._to_json_serializable(v) for v in value]
+            return value
+        except Exception:
+            return value
+
     async def _ensure_redis_connection(self):
         """Lazy initialize Redis connection (async)."""
         if not self.is_redis or self.cache is not None:
@@ -123,10 +142,11 @@ class AsyncDoormanCacheManager:
         ttl = self.default_ttls.get(cache_name, 86400)
         cache_key = self._get_key(cache_name, key)
 
+        payload = json.dumps(self._to_json_serializable(value))
         if self.is_redis:
-            await self.cache.setex(cache_key, ttl, json.dumps(value))
+            await self.cache.setex(cache_key, ttl, payload)
         else:
-            self.cache.setex(cache_key, ttl, json.dumps(value))
+            self.cache.setex(cache_key, ttl, payload)
 
     async def get_cache(self, cache_name: str, key: str) -> Optional[Any]:
         """Get cache value (async)."""

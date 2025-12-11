@@ -323,9 +323,9 @@ async def rest_preflight(request: Request, path: str):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     try:
-
         from utils import api_util as _api_util
         from utils.doorman_cache_util import doorman_cache as _cache
+        import os as _os
         parts = [p for p in (path or '').split('/') if p]
         name_ver = ''
         if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
@@ -336,28 +336,53 @@ async def rest_preflight(request: Request, path: str):
             from fastapi.responses import Response as StarletteResponse
             return StarletteResponse(status_code=204, headers={'request_id': request_id})
 
+        # Optionally enforce 405 for unregistered endpoints when requested
         try:
-            import os as _os, re as _re
-            if _os.getenv('STRICT_OPTIONS_405', 'false').lower() == 'true':
-                endpoints = await _api_util.get_api_endpoints(api.get('api_id'))
+            if _os.getenv('STRICT_OPTIONS_405', 'false').lower() in ('1','true','yes','on'):
                 endpoint_uri = '/' + '/'.join(parts[2:]) if len(parts) > 2 else '/'
-                regex_pattern = _re.compile(r'\{[^/]+\}')
-                methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD']
-                exists = False
-                for ep in endpoints or []:
-                    pat = regex_pattern.sub(r'([^/]+)', ep)
-                    if any(_re.fullmatch(pat, m + endpoint_uri) for m in methods):
-                        exists = True
-                        break
-                if not exists:
-                    from fastapi.responses import Response as StarletteResponse
-                    return StarletteResponse(status_code=405, headers={'request_id': request_id})
+                try:
+                    endpoints = await _api_util.get_api_endpoints(api.get('api_id'))
+                    import re as _re
+                    regex_pattern = _re.compile(r'\{[^/]+\}')
+                    # For preflight, only care that the endpoint exists for any method
+                    exists = any(
+                        _re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), 'GET' + endpoint_uri)
+                        or _re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), 'POST' + endpoint_uri)
+                        or _re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), 'PUT' + endpoint_uri)
+                        or _re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), 'DELETE' + endpoint_uri)
+                        or _re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), 'PATCH' + endpoint_uri)
+                        or _re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), 'HEAD' + endpoint_uri)
+                        for ep in (endpoints or [])
+                    )
+                    if not exists:
+                        from fastapi.responses import Response as StarletteResponse
+                        return StarletteResponse(status_code=405, headers={'request_id': request_id})
+                except Exception:
+                    pass
         except Exception:
             pass
+
         origin = request.headers.get('origin') or request.headers.get('Origin')
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
+        # Deterministic: always decide ACAO here from API config, regardless of computation above.
+        # 1) Remove any existing ACAO/Vary from computed headers
+        if headers:
+            headers.pop('Access-Control-Allow-Origin', None)
+            headers.pop('Vary', None)
+        # 2) Re-apply ACAO only if origin is explicitly allowed or wildcard configured
+        try:
+            allowed_list = api.get('api_cors_allow_origins')
+            allow_any = isinstance(allowed_list, list) and ('*' in allowed_list)
+            explicitly_allowed = isinstance(allowed_list, list) and (origin in allowed_list)
+            if allow_any or explicitly_allowed:
+                headers = headers or {}
+                headers['Access-Control-Allow-Origin'] = origin
+                headers['Vary'] = 'Origin'
+        except Exception:
+            # If API config unreadable, safest is to not echo ACAO
+            pass
         headers = {**(headers or {}), 'request_id': request_id}
         from fastapi.responses import Response as StarletteResponse
         return StarletteResponse(status_code=204, headers=headers)
@@ -485,6 +510,12 @@ async def soap_preflight(request: Request, path: str):
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
+        if not ok and headers:
+            try:
+                headers.pop('Access-Control-Allow-Origin', None)
+                headers.pop('Vary', None)
+            except Exception:
+                pass
         headers = {**(headers or {}), 'request_id': request_id}
         from fastapi.responses import Response as StarletteResponse
         return StarletteResponse(status_code=204, headers=headers)
@@ -624,6 +655,12 @@ async def graphql_preflight(request: Request, path: str):
         req_method = request.headers.get('access-control-request-method') or request.headers.get('Access-Control-Request-Method')
         req_headers = request.headers.get('access-control-request-headers') or request.headers.get('Access-Control-Request-Headers')
         ok, headers = GatewayService._compute_api_cors_headers(api, origin, req_method, req_headers)
+        if not ok and headers:
+            try:
+                headers.pop('Access-Control-Allow-Origin', None)
+                headers.pop('Vary', None)
+            except Exception:
+                pass
         headers = {**(headers or {}), 'request_id': request_id}
         from fastapi.responses import Response as StarletteResponse
         return StarletteResponse(status_code=204, headers=headers)

@@ -33,11 +33,52 @@ class AsyncDatabase:
         self.memory_only = str(mem_flag).upper() == 'MEM'
 
         if self.memory_only:
-            self.client = None
-            self.db_existed = False
-            self.db = InMemoryDB(async_mode=True)
-            logger.info('Async Memory-only mode: Using in-memory collections')
-            return
+            # Reuse the same in-memory data as the sync layer while exposing
+            # async-compatible collection interfaces (wrapping the same sync collections).
+            try:
+                from utils.database import database as _sync_db
+                self.client = None
+                self.db_existed = getattr(_sync_db, 'db_existed', False)
+
+                # Build a lightweight async view that wraps the shared sync collections
+                class _AsyncDBView:
+                    def __init__(self, sync_db: InMemoryDB):
+                        self._sync = sync_db
+                        # Wrap collections with async facade using the same underlying storage
+                        from utils.database import AsyncInMemoryCollection as _AIC
+                        self.users = _AIC(sync_db._sync_users)
+                        self.apis = _AIC(sync_db._sync_apis)
+                        self.endpoints = _AIC(sync_db._sync_endpoints)
+                        self.groups = _AIC(sync_db._sync_groups)
+                        self.roles = _AIC(sync_db._sync_roles)
+                        self.subscriptions = _AIC(sync_db._sync_subscriptions)
+                        self.routings = _AIC(sync_db._sync_routings)
+                        self.credit_defs = _AIC(sync_db._sync_credit_defs)
+                        self.user_credits = _AIC(sync_db._sync_user_credits)
+                        self.endpoint_validations = _AIC(sync_db._sync_endpoint_validations)
+                        self.settings = _AIC(sync_db._sync_settings)
+                        self.revocations = _AIC(sync_db._sync_revocations)
+                        self.vault_entries = _AIC(sync_db._sync_vault_entries)
+                        self.tiers = _AIC(sync_db._sync_tiers)
+                        self.user_tier_assignments = _AIC(sync_db._sync_user_tier_assignments)
+                        self.rate_limit_rules = _AIC(sync_db._sync_rate_limit_rules)
+
+                    def list_collection_names(self):
+                        return self._sync.list_collection_names()
+
+                    def get_database(self):
+                        return self
+
+                self.db = _AsyncDBView(_sync_db.db)
+                logger.info('Async Memory-only mode: Sharing in-memory data via async wrappers')
+                return
+            except Exception:
+                # Fallback to independent async DB (should not happen in tests)
+                self.client = None
+                self.db_existed = False
+                self.db = InMemoryDB(async_mode=True)
+                logger.info('Async Memory-only mode: Using isolated in-memory collections')
+                return
 
         mongo_hosts = os.getenv('MONGO_DB_HOSTS')
         replica_set_name = os.getenv('MONGO_REPLICA_SET_NAME')
@@ -251,11 +292,8 @@ class AsyncDatabase:
 async_database = AsyncDatabase()
 
 if async_database.memory_only:
-    try:
-        from utils.database import database as _sync_db
-        async_database.db = _sync_db.db
-    except Exception:
-        pass
+    # Already sharing the same DB; no snapshot hydration needed
+    pass
 
 if async_database.memory_only:
     db = async_database.db

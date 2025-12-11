@@ -177,6 +177,7 @@ async def create_tier(
 async def list_tiers(
     request: Request,
     enabled_only: bool = Query(False, description="Only return enabled tiers"),
+    search: Optional[str] = Query(None, description="Search tiers by name or description"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     tier_service: TierService = Depends(get_tier_service_dep)
@@ -204,7 +205,12 @@ async def list_tiers(
                 error_message='You do not have permission to manage tiers'
             ))
         
-        tiers = await tier_service.list_tiers(enabled_only=enabled_only, skip=skip, limit=limit)
+        tiers = await tier_service.list_tiers(
+            enabled_only=enabled_only,
+            search_term=search,
+            skip=skip,
+            limit=limit
+        )
         
         tier_list = [
             TierResponse(

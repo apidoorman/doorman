@@ -191,8 +191,8 @@ Configure via Security Settings UI or API:
 ```
 
 **Precedence:**
-1. Whitelist is evaluated first (if non-empty, only these IPs allowed)
-2. Blacklist is evaluated second (always denied)
+1. **Blacklist is always evaluated first** – if the client IP matches `ip_blacklist`, access is denied.
+2. **Whitelist is evaluated next (if non-empty)** – when a global whitelist is configured, any IP **not** in `ip_whitelist` is denied.
 
 **Client IP detection:**
 - Direct connection: Socket IP used
@@ -212,12 +212,17 @@ Each API can define additional IP restrictions:
 
 ```json
 {
-  "api_ip_mode": "whitelist",
+  "api_ip_mode": "whitelist",           // "allow_all" (default) or "whitelist"
   "api_ip_whitelist": ["203.0.113.0/24"],
-  "api_ip_blacklist": ["203.0.113.50"],
+  "api_ip_blacklist": ["203.0.113.50"],  // Always enforced, regardless of mode
   "api_trust_x_forwarded_for": true
 }
 ```
+
+**Evaluation logic:**
+- `api_ip_blacklist` is **always** applied first. If the effective client IP matches, the request is denied.
+- If `api_ip_mode == "whitelist"` then `api_ip_whitelist` is enforced: the effective IP **must** be in the whitelist or the request is denied.
+- If `api_ip_mode == "allow_all"`, the per-API whitelist is ignored, but the blacklist still applies.
 
 **Use cases:**
 - Restrict internal APIs to VPN range
@@ -225,7 +230,7 @@ Each API can define additional IP restrictions:
 - Geo-restriction via proxy headers
 
 **Audit trail**: All IP denials logged with:
-- Reason (not in whitelist, in blacklist)
+- Reason (`blacklisted`, `not_in_whitelist`)
 - Source IP and effective IP
 - XFF header value if present
 
