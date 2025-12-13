@@ -13,7 +13,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, HTTPException
 
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required
@@ -152,6 +152,8 @@ async def get_analytics_overview(
             )
         )
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -266,6 +268,8 @@ async def get_analytics_timeseries(
             )
         )
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -351,6 +355,8 @@ async def get_top_apis(
             )
         )
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -431,6 +437,8 @@ async def get_top_users(
             )
         )
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -527,6 +535,8 @@ async def get_top_endpoints(
             )
         )
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -641,6 +651,8 @@ async def get_api_analytics(
             )
         )
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
         return respond_rest(

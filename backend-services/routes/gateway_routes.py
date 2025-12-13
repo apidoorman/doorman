@@ -12,7 +12,7 @@ import time
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from models.response_model import ResponseModel
 from services.gateway_service import GatewayService
@@ -149,7 +149,7 @@ Response:
 
 @gateway_router.api_route(
     '/caches',
-    methods=['DELETE', 'OPTIONS'],
+    methods=['DELETE'],
     description='Clear all caches',
     response_model=ResponseModel,
     dependencies=[Depends(auth_required)],
@@ -218,6 +218,13 @@ async def clear_all_caches(request: Request):
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Clear caches took {end_time - start_time:.2f}ms')
+
+
+# Handle CORS preflight without requiring auth
+@gateway_router.options('/caches', include_in_schema=False)
+async def clear_all_caches_options():
+    # CORSMiddleware will attach appropriate headers; 204 is fine for preflight
+    return Response(status_code=204)
 
 
 """

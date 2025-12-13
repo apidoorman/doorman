@@ -114,6 +114,7 @@ class Database:
                         'manage_credits': True,
                         'manage_auth': True,
                         'manage_security': True,
+                        'view_analytics': True,
                         'view_logs': True,
                         'export_logs': True,
                         'ui_access': True,
@@ -250,6 +251,8 @@ class Database:
                     )
         except Exception:
             pass
+        # Ensure admin role exists with full privileges when using Mongo
+        try:
             if not self.db.roles.find_one({'role_name': 'admin'}):
                 self.db.roles.insert_one(
                     {
@@ -265,11 +268,14 @@ class Database:
                         'manage_subscriptions': True,
                         'manage_credits': True,
                         'manage_auth': True,
+                        'view_analytics': True,
                         'view_logs': True,
                         'export_logs': True,
                         'manage_security': True,
                     }
                 )
+        except Exception:
+            pass
             if not self.db.groups.find_one({'group_name': 'admin'}):
                 self.db.groups.insert_one(
                     {

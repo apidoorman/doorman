@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import pytest
@@ -79,7 +80,7 @@ async def test_bandwidth_limit_resets_after_window(monkeypatch, authed_client):
     assert r1.status_code == 200
     r2 = await authed_client.get(f'/api/rest/{name}/{ver}{uri}')
     assert r2.status_code == 429
-    time.sleep(1.1)
+    await asyncio.sleep(1.1)
     r3 = await authed_client.get(f'/api/rest/{name}/{ver}{uri}')
     assert r3.status_code == 200
 

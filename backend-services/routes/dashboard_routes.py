@@ -9,7 +9,7 @@ import time
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required
@@ -100,6 +100,8 @@ async def get_dashboard_data(request: Request):
             )
         )
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(

@@ -8,7 +8,7 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel, Field
 
 from models.response_model import ResponseModel
@@ -210,6 +210,8 @@ async def cors_check(request: Request, body: CorsCheckRequest):
             'rest',
         )
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -301,6 +303,8 @@ async def grpc_env_check(request: Request):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -369,6 +373,8 @@ async def chaos_toggle(request: Request, body: ChaosToggleRequest):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -412,6 +418,8 @@ async def chaos_stats(request: Request):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(

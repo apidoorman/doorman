@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from models.create_vault_entry_model import CreateVaultEntryModel
 from models.response_model import ResponseModel
@@ -57,6 +57,8 @@ async def create_vault_entry(entry_data: CreateVaultEntryModel, request: Request
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(await VaultService.create_vault_entry(username, entry_data, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -116,6 +118,8 @@ async def list_vault_entries(request: Request):
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(await VaultService.list_vault_entries(username, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -170,6 +174,8 @@ async def get_vault_entry(key_name: str, request: Request):
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(await VaultService.get_vault_entry(username, key_name, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -216,6 +222,8 @@ async def update_vault_entry(key_name: str, update_data: UpdateVaultEntryModel, 
         return respond_rest(
             await VaultService.update_vault_entry(username, key_name, update_data, request_id)
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -260,6 +268,8 @@ async def delete_vault_entry(key_name: str, request: Request):
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(await VaultService.delete_vault_entry(username, key_name, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(

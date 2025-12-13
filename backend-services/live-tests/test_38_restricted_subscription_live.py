@@ -1,7 +1,8 @@
 import time
 
+import os
 import pytest
-
+from servers import start_rest_echo_server, start_soap_echo_server, start_graphql_json_server
 pytestmark = [pytest.mark.public, pytest.mark.auth]
 
 
@@ -54,27 +55,30 @@ def restricted_apis(client):
 
     # REST (requires subscription)
     name = f'rx-rest-{stamp}'
-    _mk_api(client, name, ver, ['https://httpbin.org'])
-    _mk_endpoint(client, name, ver, 'GET', '/get')
-    out.append(('REST', name, ver, {'uri': '/get'}))
+    rest = start_rest_echo_server()
+    _mk_api(client, name, ver, [rest.url])
+    _mk_endpoint(client, name, ver, 'GET', '/r')
+    out.append(('REST', name, ver, {'uri': '/r'}))
 
     # SOAP (requires subscription)
     name = f'rx-soap-{stamp}'
-    _mk_api(client, name, ver, ['http://www.dneonline.com'])
-    _mk_endpoint(client, name, ver, 'POST', '/calculator.asmx')
-    out.append(('SOAP', name, ver, {'uri': '/calculator.asmx'}))
+    soap = start_soap_echo_server()
+    _mk_api(client, name, ver, [soap.url])
+    _mk_endpoint(client, name, ver, 'POST', '/svc')
+    out.append(('SOAP', name, ver, {'uri': '/svc'}))
 
     # GraphQL (requires subscription)
     name = f'rx-gql-{stamp}'
-    _mk_api(client, name, ver, ['https://rickandmortyapi.com'])
+    gql = start_graphql_json_server({'data': {'ok': True}})
+    _mk_api(client, name, ver, [gql.url])
     _mk_endpoint(client, name, ver, 'POST', '/graphql')
-    out.append(('GRAPHQL', name, ver, {'query': '{ characters(page: 1) { info { count } } }'}))
+    out.append(('GRAPHQL', name, ver, {'query': '{ ok }'}))
 
     # gRPC (requires subscription) — do not upload proto here; we only assert auth behavior
     name = f'rx-grpc-{stamp}'
-    _mk_api(client, name, ver, ['grpc://grpcb.in:9000'], extra={'api_grpc_package': 'grpcbin'})
+    _mk_api(client, name, ver, [rest.url])
     _mk_endpoint(client, name, ver, 'POST', '/grpc')
-    out.append(('GRPC', name, ver, {'method': 'GRPCBin.Empty', 'message': {}}))
+    out.append(('GRPC', name, ver, {'method': 'Svc.M', 'message': {}}))
 
     try:
         yield out

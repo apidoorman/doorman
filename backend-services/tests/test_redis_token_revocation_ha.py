@@ -105,6 +105,7 @@ async def test_redis_token_revocation_ttl_expiry(monkeypatch):
     """Test that revoked tokens auto-expire in Redis based on TTL."""
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'REDIS')
 
+    import asyncio
     import time
 
     from utils import auth_blacklist
@@ -123,7 +124,7 @@ async def test_redis_token_revocation_ttl_expiry(monkeypatch):
 
     assert auth_blacklist.is_jti_revoked(test_username, test_jti) is True
 
-    time.sleep(3)
+    await asyncio.sleep(3)
 
     assert auth_blacklist.is_jti_revoked(test_username, test_jti) is False
 

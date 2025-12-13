@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import Response as FastAPIResponse
 from pydantic import BaseModel
 
@@ -86,6 +86,8 @@ async def get_metrics(
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -407,6 +409,8 @@ async def generate_report(request: Request, start: str, end: str):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error in report: {str(e)}', exc_info=True)
         return process_response(

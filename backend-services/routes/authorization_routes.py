@@ -857,6 +857,15 @@ async def authorization_status(request: Request):
                 message='Token is valid',
             )
         )
+    except HTTPException as e:
+        return respond_rest(
+            ResponseModel(
+                status_code=getattr(e, 'status_code', 401),
+                response_headers={'request_id': request_id},
+                error_code='AUTH005',
+                error_message=str(getattr(e, 'detail', 'Token error')),
+            )
+        )
     except JWTError:
         return respond_rest(
             ResponseModel(

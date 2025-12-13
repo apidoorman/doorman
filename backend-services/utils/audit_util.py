@@ -83,6 +83,9 @@ def _is_sensitive_key(key: str) -> bool:
     """Check if a key name indicates sensitive data."""
     try:
         lk = str(key).lower().replace('-', '_')
+        # Exclude field names that are configuration, not actual sensitive values
+        if lk in ('api_authorization_field_swap', 'authorization_field_swap'):
+            return False
         return lk in SENSITIVE_KEYS or any(
             s in lk for s in ['password', 'secret', 'token', 'key', 'auth']
         )

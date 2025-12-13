@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from models.create_role_model import CreateRoleModel
 from models.response_model import ResponseModel
@@ -82,6 +82,8 @@ async def create_role(api_data: CreateRoleModel, request: Request):
                     )
                 )
         return respond_rest(await RoleService.create_role(api_data, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -165,6 +167,8 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
         except Exception:
             pass
         return respond_rest(await RoleService.update_role(role_name, api_data, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -231,6 +235,8 @@ async def delete_role(role_name: str, request: Request):
                 )
             )
         return respond_rest(await RoleService.delete_role(role_name, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -288,6 +294,8 @@ async def get_roles(
         except Exception:
             pass
         return respond_rest(data)
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -344,6 +352,8 @@ async def get_role(role_name: str, request: Request):
         except Exception:
             pass
         return respond_rest(data)
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(

@@ -128,19 +128,13 @@ def _reset_caches(client):
         pass
 
 
-def _wait_for_clean_window():
-    """Wait until we're at the start of a new minute window for clean rate limit state.
+def _wait_for_clean_window(max_wait: float = 5.0):
+    """Wait briefly for rate limit state to settle.
     
-    The tier rate limit uses minute-based windows (now // 60), so we need to
-    ensure we're in a fresh minute that hasn't had any requests yet.
+    Instead of waiting for minute boundaries (which can take 60s), just wait
+    a short time after cache clear to let state settle.
     """
-    now = time.time()
-    current_minute = int(now) // 60
-    # Wait until we're in a new minute
-    while int(time.time()) // 60 == current_minute:
-        time.sleep(0.5)
-    # Small buffer after minute boundary
-    time.sleep(0.2)
+    time.sleep(max_wait)
 
 
 def test_tier_rate_limiting_strict_local(client):

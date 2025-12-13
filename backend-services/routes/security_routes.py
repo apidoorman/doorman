@@ -9,7 +9,7 @@ import sys
 import time
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from models.response_model import ResponseModel
 from models.security_settings_model import SecuritySettingsModel
@@ -106,6 +106,8 @@ async def get_security_settings(request: Request):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -194,6 +196,8 @@ async def update_security_settings(request: Request, body: SecuritySettingsModel
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -305,6 +309,8 @@ async def restart_gateway(request: Request):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(

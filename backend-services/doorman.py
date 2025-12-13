@@ -638,8 +638,14 @@ def _platform_cors_config() -> dict:
     allow_headers_env = _os.getenv('ALLOW_HEADERS') or ''
     if allow_headers_env.strip() == '*':
         # Default to a known, minimal safe list when wildcard requested
-        # Tests expect exactly these four when ALLOW_HEADERS='*'
-        allow_headers = ['Accept', 'Content-Type', 'X-CSRF-Token', 'Authorization']
+        # Include X-Requested-With for common browser/XHR compat
+        allow_headers = [
+            'Accept',
+            'Content-Type',
+            'X-CSRF-Token',
+            'Authorization',
+            'X-Requested-With',
+        ]
     else:
         # When not wildcard, allow a sensible default set (can be overridden by env)
         allow_headers = [h.strip() for h in allow_headers_env.split(',') if h.strip()] or [
@@ -647,6 +653,7 @@ def _platform_cors_config() -> dict:
             'Content-Type',
             'X-CSRF-Token',
             'Authorization',
+            'X-Requested-With',
         ]
     # Default to allowing credentials in dev to reduce setup friction; can be
     # tightened via ALLOW_CREDENTIALS=false for stricter environments.
@@ -1189,16 +1196,39 @@ async def security_headers(request: Request, call_next):
         )
 
         try:
-            csp = os.getenv('CONTENT_SECURITY_POLICY')
-            if csp is None or not csp.strip():
-                csp = (
-                    "default-src 'none'; "
-                    "frame-ancestors 'none'; "
-                    "base-uri 'none'; "
-                    "form-action 'self'; "
-                    "img-src 'self' data:; "
-                    "connect-src 'self';"
-                )
+            # Relax CSP for interactive docs to allow required scripts/styles
+            _path = str(getattr(getattr(request, 'url', None), 'path', '') or '')
+            csp_env = os.getenv('CONTENT_SECURITY_POLICY')
+            if csp_env is not None and csp_env.strip():
+                csp = csp_env
+            else:
+                if _path.startswith('/platform/docs') or _path.startswith('/platform/redoc'):
+                    # Allow Swagger/Redoc assets from jsDelivr and embedding in iframes
+                    csp = (
+                        "default-src 'self'; "
+                        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                        "img-src 'self' data: https://cdn.jsdelivr.net; "
+                        "font-src 'self' data: https://cdn.jsdelivr.net; "
+                        "connect-src 'self'; "
+                        "frame-ancestors *; "
+                        "base-uri 'self';"
+                    )
+                    try:
+                        # Remove X-Frame-Options to allow embedding via frame-ancestors
+                        if 'X-Frame-Options' in response.headers:
+                            del response.headers['X-Frame-Options']
+                    except Exception:
+                        pass
+                else:
+                    csp = (
+                        "default-src 'none'; "
+                        "frame-ancestors 'none'; "
+                        "base-uri 'none'; "
+                        "form-action 'self'; "
+                        "img-src 'self' data:; "
+                        "connect-src 'self';"
+                    )
             response.headers.setdefault('Content-Security-Policy', csp)
         except Exception:
             pass
