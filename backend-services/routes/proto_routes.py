@@ -249,6 +249,8 @@ async def upload_proto_file(
         safe_api_version = sanitize_filename(api_version)
         # Preserve original package name; do not rewrite to api/version
         pkg_name = _extract_package_name(proto_content)
+        if not validate_path(PROJECT_ROOT, proto_path):
+            raise ValueError('Invalid proto path detected')
         proto_path.write_text(proto_content)
         try:
             # Ensure grpc_tools is available before attempting compilation
@@ -274,7 +276,9 @@ async def upload_proto_file(
             if pkg_name:
                 rel_pkg = Path(pkg_name.replace('.', '/'))
                 pkg_proto_path = (proto_path.parent / rel_pkg.with_suffix('.proto')).resolve()
-                if validate_path(PROJECT_ROOT, pkg_proto_path):
+                if validate_path(PROJECT_ROOT, pkg_proto_path) and validate_path(proto_path.parent, pkg_proto_path):
+                    if not validate_path(PROJECT_ROOT, pkg_proto_path.parent):
+                        raise ValueError('Invalid package path detected')
                     pkg_proto_path.parent.mkdir(parents=True, exist_ok=True)
                     pkg_proto_path.write_text(proto_content)
                     compile_input = pkg_proto_path
@@ -308,7 +312,9 @@ async def upload_proto_file(
             pb2_grpc_file = (
                 generated_dir / f'{safe_api_name}_{safe_api_version}_pb2_grpc.py'
             ).resolve()
-            if validate_path(generated_dir, pb2_grpc_file) and pb2_grpc_file.exists():
+            if not validate_path(generated_dir, pb2_grpc_file):
+                raise ValueError('Invalid pb2_grpc file path detected')
+            if pb2_grpc_file.exists():
                 try:
                     content = pb2_grpc_file.read_text()
                     escaped_mod = re.escape(f'{safe_api_name}_{safe_api_version}_pb2')
@@ -413,6 +419,8 @@ async def get_proto_file(api_name: str, api_version: str, request: Request):
                 'rest',
             )
         proto_path, _ = get_safe_proto_path(api_name, api_version)
+        if not validate_path(PROJECT_ROOT, proto_path):
+            raise ValueError('Invalid proto path detected')
         if not proto_path.exists():
             return process_response(
                 ResponseModel(
@@ -516,6 +524,8 @@ async def update_proto_file(
                 'rest',
             )
         proto_path, generated_dir = get_safe_proto_path(api_name, api_version)
+        if not validate_path(PROJECT_ROOT, proto_path):
+            raise ValueError('Invalid proto path detected')
 
         content = await proto_file.read()
         try:
@@ -531,7 +541,8 @@ async def update_proto_file(
                 ).dict(),
                 'rest',
             )
-
+        if not validate_path(PROJECT_ROOT, proto_path):
+            raise ValueError('Invalid proto path detected')
         proto_path.write_text(proto_content)
         try:
             try:

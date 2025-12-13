@@ -210,7 +210,10 @@ export default function MarkdownViewer({ src, searchTerm }: { src: string; searc
           setHtml(renderMarkdown(md, searchTerm))
         }
       } catch (e: any) {
-        if (!cancelled) setHtml(`Failed to load documentation: ${e?.message || e}`)
+        if (!cancelled) {
+          const errorMsg = escapeHtml(String(e?.message || e))
+          setHtml(`<p class="text-red-600">Failed to load documentation: ${errorMsg}</p>`)
+        }
       }
     }
     load()
