@@ -8,7 +8,7 @@ from config import ENABLE_GRPC
 
 def _find_port() -> int:
     s = socket.socket()
-    s.bind(('0.0.0.0', 0))
+    s.bind(('127.0.0.1', 0))
     p = s.getsockname()[1]
     s.close()
     return p
@@ -117,7 +117,7 @@ message DeleteReply { bool ok = 1; }
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
         pb2_grpc.add_ResourceServicer_to_server(Resource(), server)
         port = _find_port()
-        server.add_insecure_port(f'0.0.0.0:{port}')
+        server.add_insecure_port(f'127.0.0.1:{port}')
         server.start()
         time.sleep(0.2)
 

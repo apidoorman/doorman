@@ -16,7 +16,7 @@
     "clsx": "^2.1.0",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.460.0",
-    "next": "^15.3.7",
+    "next": "15.5.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^3.5.1"
@@ -34,8 +34,10 @@
   }
   ,
   "overrides": {
-    "next": "^15.3.7",
-    "glob": "^10.3.12",
-    "js-yaml": "^4.1.0"
+    "next": "15.5.9",
+    "glob": "^11.0.0",
+    "js-yaml": "^4.1.0",
+    "brace-expansion": "^2.0.2",
+    "@eslint/plugin-kit": "^0.3.4"
   }
 }
