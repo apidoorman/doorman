@@ -870,22 +870,24 @@ const ApiDetailPage = () => {
                   <div>
                     <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
                   {isEditing ? (
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={!!(editData as any).api_public}
-                        onChange={(e) => handleInputChange('api_public' as any, e.target.checked)}
-                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        disabled={!!(editData as any).api_credits_enabled}
-                      />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Anyone with the URL can call this API</label>
-                    </div>
+                    <>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={!!(editData as any).api_public}
+                          onChange={(e) => handleInputChange('api_public' as any, e.target.checked)}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                          disabled={!!(editData as any).api_credits_enabled}
+                        />
+                        <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Anyone with the URL can call this API</label>
+                      </div>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
+                    </>
                   ) : (
                     <span className={`badge ${((api as any).api_public ?? false) ? 'badge-warning' : 'badge-secondary'}`}>
                       {((api as any).api_public ?? false) ? 'Public' : 'Private'}
                     </span>
                   )}
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
                 </div>
 
                 <div>
