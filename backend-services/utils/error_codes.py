@@ -22,6 +22,7 @@ Usage:
     ).dict()
 """
 
+
 class ErrorCode:
     """
     Centralized error code constants.
@@ -217,7 +218,9 @@ class ErrorCode:
 
     RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED'
 
+
 # Alias for backward compatibility
 class ErrorCodes(ErrorCode):
     """Deprecated: Use ErrorCode instead."""
+
     pass

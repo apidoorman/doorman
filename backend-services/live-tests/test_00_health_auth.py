@@ -1,5 +1,6 @@
 import pytest
 
+
 def test_status_ok(client):
     r = client.get('/api/health')
     assert r.status_code == 200
@@ -12,6 +13,7 @@ def test_status_ok(client):
     else:
         assert 'error_code' in (j or {})
 
+
 def test_auth_status_me(client):
     r = client.get('/platform/authorization/status')
     assert r.status_code in (200, 204)
@@ -21,5 +23,6 @@ def test_auth_status_me(client):
     me = r.json().get('response', r.json())
     assert me.get('username') == 'admin'
     assert me.get('ui_access') is True
-import pytest
+
+
 pytestmark = [pytest.mark.health, pytest.mark.auth]

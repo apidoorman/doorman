@@ -4,18 +4,21 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-import redis
+import asyncio
 import json
+import logging
 import os
 import threading
-from typing import Dict, Any, Optional
-import asyncio
-import logging
+from typing import Any
+
+import redis
+
 from utils import chaos_util
+
 
 class MemoryCache:
     def __init__(self, maxsize: int = 10000):
-        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._cache: dict[str, dict[str, Any]] = {}
         self._lock = threading.RLock()
         self._maxsize = maxsize
         self._access_order = []
@@ -29,16 +32,13 @@ class MemoryCache:
                     lru_key = self._access_order.pop(0)
                     self._cache.pop(lru_key, None)
 
-            self._cache[key] = {
-                'value': value,
-                'expires_at': self._get_current_time() + ttl
-            }
+            self._cache[key] = {'value': value, 'expires_at': self._get_current_time() + ttl}
 
             if key in self._access_order:
                 self._access_order.remove(key)
             self._access_order.append(key)
 
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         with self._lock:
             if key in self._cache:
                 cache_entry = self._cache[key]
@@ -70,42 +70,45 @@ class MemoryCache:
 
     def _get_current_time(self) -> int:
         import time
+
         return int(time.time())
 
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         with self._lock:
             current_time = self._get_current_time()
             total_entries = len(self._cache)
-            expired_entries = sum(1 for entry in self._cache.values()
-                                if current_time >= entry['expires_at'])
+            expired_entries = sum(
+                1 for entry in self._cache.values() if current_time >= entry['expires_at']
+            )
             active_entries = total_entries - expired_entries
             return {
                 'total_entries': total_entries,
                 'active_entries': active_entries,
                 'expired_entries': expired_entries,
                 'maxsize': self._maxsize,
-                'usage_percent': (total_entries / self._maxsize * 100) if self._maxsize > 0 else 0
+                'usage_percent': (total_entries / self._maxsize * 100) if self._maxsize > 0 else 0,
             }
 
     def _cleanup_expired(self):
         current_time = self._get_current_time()
         expired_keys = [
-            key for key, entry in self._cache.items()
-            if current_time >= entry['expires_at']
+            key for key, entry in self._cache.items() if current_time >= entry['expires_at']
         ]
         for key in expired_keys:
             del self._cache[key]
             if key in self._access_order:
                 self._access_order.remove(key)
         if expired_keys:
-            logging.getLogger('doorman.cache').info(f'Cleaned up {len(expired_keys)} expired cache entries')
+            logging.getLogger('doorman.cache').info(
+                f'Cleaned up {len(expired_keys)} expired cache entries'
+            )
 
     def stop_auto_save(self):
         return
 
+
 class DoormanCacheManager:
     def __init__(self):
-
         cache_flag = os.getenv('MEM_OR_EXTERNAL')
         if cache_flag is None:
             cache_flag = os.getenv('MEM_OR_REDIS', 'MEM')
@@ -124,12 +127,14 @@ class DoormanCacheManager:
                     port=redis_port,
                     db=redis_db,
                     decode_responses=True,
-                    max_connections=100
+                    max_connections=100,
                 )
                 self.cache = redis.StrictRedis(connection_pool=pool)
                 self.is_redis = True
             except Exception as e:
-                logging.getLogger('doorman.cache').warning(f'Redis connection failed, falling back to memory cache: {e}')
+                logging.getLogger('doorman.cache').warning(
+                    f'Redis connection failed, falling back to memory cache: {e}'
+                )
                 maxsize = int(os.getenv('CACHE_MAX_SIZE', 10000))
                 self.cache = MemoryCache(maxsize=maxsize)
                 self.is_redis = False
@@ -150,7 +155,7 @@ class DoormanCacheManager:
             'endpoint_server_cache': 'endpoint_server_cache:',
             'client_routing_cache': 'client_routing_cache:',
             'token_def_cache': 'token_def_cache:',
-            'credit_def_cache': 'credit_def_cache:'
+            'credit_def_cache': 'credit_def_cache:',
         }
         self.default_ttls = {
             'api_cache': 86400,
@@ -167,11 +172,33 @@ class DoormanCacheManager:
             'endpoint_server_cache': 86400,
             'client_routing_cache': 86400,
             'token_def_cache': 86400,
-            'credit_def_cache': 86400
+            'credit_def_cache': 86400,
         }
 
     def _get_key(self, cache_name, key):
         return f'{self.prefixes[cache_name]}{key}'
+
+    def _to_json_serializable(self, value):
+        """Recursively convert bytes and other non-JSON types into serializable forms.
+
+        - bytes -> UTF-8 string (best-effort)
+        - dict/list -> deep-convert
+        Other types are returned as-is and delegated to json.dumps
+        """
+        try:
+            if isinstance(value, bytes):
+                try:
+                    return value.decode('utf-8')
+                except Exception:
+                    # Fallback to latin-1 to preserve bytes in a reversible way
+                    return value.decode('latin-1', errors='ignore')
+            if isinstance(value, dict):
+                return {k: self._to_json_serializable(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [self._to_json_serializable(v) for v in value]
+            return value
+        except Exception:
+            return value
 
     def set_cache(self, cache_name, key, value):
         ttl = self.default_ttls.get(cache_name, 86400)
@@ -182,12 +209,13 @@ class DoormanCacheManager:
         if self.is_redis:
             try:
                 loop = asyncio.get_running_loop()
-                return loop.run_in_executor(None, self.cache.setex, cache_key, ttl, json.dumps(value))
+                payload = json.dumps(self._to_json_serializable(value))
+                return loop.run_in_executor(None, self.cache.setex, cache_key, ttl, payload)
             except RuntimeError:
-                self.cache.setex(cache_key, ttl, json.dumps(value))
+                self.cache.setex(cache_key, ttl, json.dumps(self._to_json_serializable(value)))
                 return None
         else:
-            self.cache.setex(cache_key, ttl, json.dumps(value))
+            self.cache.setex(cache_key, ttl, json.dumps(self._to_json_serializable(value)))
 
     def get_cache(self, cache_name, key):
         cache_key = self._get_key(cache_name, key)
@@ -232,7 +260,7 @@ class DoormanCacheManager:
             'type': self.cache_type,
             'is_redis': self.is_redis,
             'prefixes': list(self.prefixes.keys()),
-            'default_ttl': self.default_ttls
+            'default_ttl': self.default_ttls,
         }
         if not self.is_redis and hasattr(self.cache, 'get_cache_stats'):
             info['memory_stats'] = self.cache.get_cache_stats()
@@ -244,7 +272,6 @@ class DoormanCacheManager:
             self.cache._cleanup_expired()
 
     def force_save_cache(self):
-
         return
 
     def stop_cache_persistence(self):
@@ -294,8 +321,9 @@ class DoormanCacheManager:
             elif hasattr(result, 'deleted_count') and result.deleted_count > 0:
                 self.delete_cache(cache_name, key)
             return result
-        except Exception as e:
+        except Exception:
             self.delete_cache(cache_name, key)
             raise
+
 
 doorman_cache = DoormanCacheManager()

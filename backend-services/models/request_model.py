@@ -1,10 +1,10 @@
 from pydantic import BaseModel
-from typing import Dict, Optional
+
 
 class RequestModel(BaseModel):
     method: str
     path: str
-    headers: Dict[str, str]
-    query_params: Dict[str, str]
-    identity: Optional[str] = None
-    body: Optional[str] = None
+    headers: dict[str, str]
+    query_params: dict[str, str]
+    identity: str | None = None
+    body: str | None = None

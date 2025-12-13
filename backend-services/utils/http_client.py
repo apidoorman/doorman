@@ -15,20 +15,23 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import random
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
-import logging
+
 from utils.metrics_util import metrics_store
 
 logger = logging.getLogger('doorman.gateway')
 
+
 class CircuitOpenError(Exception):
     pass
+
 
 @dataclass
 class _BreakerState:
@@ -36,9 +39,17 @@ class _BreakerState:
     opened_at: float = 0.0
     state: str = 'closed'
 
+
 class _CircuitManager:
     def __init__(self) -> None:
-        self._states: Dict[str, _BreakerState] = {}
+        self._states: dict[str, _BreakerState] = {}
+
+    def reset(self, key: str | None = None) -> None:
+        """Reset circuit breaker state. If key is None, reset all circuits."""
+        if key is None:
+            self._states.clear()
+        elif key in self._states:
+            del self._states[key]
 
     def get(self, key: str) -> _BreakerState:
         st = self._states.get(key)
@@ -75,9 +86,11 @@ class _CircuitManager:
             st.state = 'open'
             st.opened_at = self.now()
 
+
 circuit_manager = _CircuitManager()
 
-def _build_timeout(api_config: Optional[dict]) -> httpx.Timeout:
+
+def _build_timeout(api_config: dict | None) -> httpx.Timeout:
     # Per-API overrides if present on document; otherwise env defaults
     def _f(key: str, env_key: str, default: float) -> float:
         try:
@@ -93,8 +106,10 @@ def _build_timeout(api_config: Optional[dict]) -> httpx.Timeout:
     pool = _f('api_pool_timeout', 'HTTP_TIMEOUT', 30.0)
     return httpx.Timeout(connect=connect, read=read, write=write, pool=pool)
 
+
 def _should_retry_status(status: int) -> bool:
     return status in (500, 502, 503, 504)
+
 
 def _backoff_delay(attempt: int) -> float:
     base = float(os.getenv('HTTP_RETRY_BASE_DELAY', 0.25))
@@ -102,19 +117,20 @@ def _backoff_delay(attempt: int) -> float:
     delay = min(cap, base * (2 ** max(0, attempt - 1)))
     return random.uniform(0, delay)
 
+
 async def request_with_resilience(
     client: httpx.AsyncClient,
     method: str,
     url: str,
     *,
     api_key: str,
-    headers: Optional[Dict[str, str]] = None,
-    params: Optional[Dict[str, Any]] = None,
+    headers: dict[str, str] | None = None,
+    params: dict[str, Any] | None = None,
     data: Any = None,
     json: Any = None,
     content: Any = None,
     retries: int = 0,
-    api_config: Optional[dict] = None,
+    api_config: dict | None = None,
 ) -> httpx.Response:
     """Perform an HTTP request with retries, backoff, and circuit breaker.
 
@@ -132,8 +148,8 @@ async def request_with_resilience(
     if enabled:
         circuit_manager.check(api_key, open_seconds)
 
-    last_exc: Optional[BaseException] = None
-    response: Optional[httpx.Response] = None
+    last_exc: BaseException | None = None
+    response: httpx.Response | None = None
     for attempt in range(1, attempts + 1):
         if attempt > 1:
             try:
@@ -143,15 +159,31 @@ async def request_with_resilience(
             await asyncio.sleep(_backoff_delay(attempt))
         try:
             try:
-                requester = getattr(client, 'request')
+                requester = client.request
             except Exception:
                 requester = None
             if requester is not None:
-                response = await requester(
-                    method.upper(), url,
-                    headers=headers, params=params, data=data, json=json, content=content,
-                    timeout=timeout,
-                )
+                # Prefer the generic request() if available (httpx.AsyncClient)
+                # Some monkeypatched clients (used in tests) may not accept all
+                # httpx parameters like 'content'. Build kwargs defensively.
+                kwargs = {
+                    'headers': headers,
+                    'params': params,
+                    'timeout': timeout,
+                }
+                if json is not None:
+                    kwargs['json'] = json
+                if data is not None:
+                    kwargs['data'] = data
+                # Only include 'content' for clients that support it
+                try:
+                    if content is not None and 'content' in requester.__code__.co_varnames:
+                        kwargs['content'] = content
+                except Exception:
+                    # Best-effort: many clients accept **kwargs; httpx supports 'content'
+                    if content is not None:
+                        kwargs['content'] = content
+                response = await requester(method.upper(), url, **kwargs)
             else:
                 meth = getattr(client, method.lower(), None)
                 if meth is None:
@@ -165,10 +197,7 @@ async def request_with_resilience(
                     kwargs['json'] = json
                 elif data is not None:
                     kwargs['json'] = data
-                response = await meth(
-                    url,
-                    **kwargs,
-                )
+                response = await meth(url, **kwargs)
 
             if _should_retry_status(response.status_code) and attempt < attempts:
                 if enabled:

@@ -47,7 +47,7 @@ const AddUserPage = () => {
     rate_limit_enabled: true,
     throttle_duration: 10,
     throttle_duration_type: 'second',
-    throttle_wait_duration: 0.5,
+    throttle_wait_duration: 5,
     throttle_wait_duration_type: 'second',
     throttle_queue_limit: 10,
     throttle_enabled: true,
@@ -353,7 +353,7 @@ const AddUserPage = () => {
                       onChange={(e) => handleInputChange('rate_limit_enabled', e.target.checked)}
                       disabled={loading}
                     />
-                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce rate limiting for this user</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce user based rate limiting</span>
                   </div>
                 </div>
                 <div>
@@ -410,7 +410,7 @@ const AddUserPage = () => {
                       onChange={(e) => handleInputChange('throttle_enabled', e.target.checked)}
                       disabled={loading}
                     />
-                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce throttling for this user</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce user based throttling</span>
                   </div>
                 </div>
                 <div>
@@ -518,7 +518,7 @@ const AddUserPage = () => {
                       onChange={(e) => handleInputChange('bandwidth_limit_enabled', e.target.checked)}
                       disabled={loading}
                     />
-                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce bandwidth limit for this user</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce user based bandwidth limits</span>
                   </div>
                 </div>
                 <div>

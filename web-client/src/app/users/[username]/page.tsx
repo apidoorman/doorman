@@ -14,6 +14,7 @@ interface User {
   username: string
   email: string
   role: string
+  tier_id?: string
   groups: string[]
   rate_limit_duration: number
   rate_limit_duration_type: string
@@ -37,6 +38,7 @@ interface UpdateUserData {
   email?: string
   password?: string
   role?: string
+  tier_id?: string
   groups?: string[]
   rate_limit_duration?: number
   rate_limit_duration_type?: string
@@ -71,9 +73,26 @@ const UserDetailPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [availableTiers, setAvailableTiers] = useState<any[]>([])
+  const [currentTier, setCurrentTier] = useState<any>(null)
   const isProtected = PROTECTED_USERS.includes((username || '').toLowerCase())
   const currentCustomAttrs = (isEditing ? (editData.custom_attributes || {}) : (user?.custom_attributes || {})) as Record<string, string>
   const editCustomAttrCount = Object.keys(currentCustomAttrs).length
+
+  useEffect(() => {
+    // Fetch available tiers
+    const fetchTiers = async () => {
+      try {
+        const tiers = await fetchJson(`${SERVER_URL}/platform/tiers`)
+        // Ensure tiers is an array
+        setAvailableTiers(Array.isArray(tiers) ? tiers : [])
+      } catch (err) {
+        console.error('Failed to fetch tiers:', err)
+        setAvailableTiers([]) // Reset to empty array on error
+      }
+    }
+    fetchTiers()
+  }, [])
 
   useEffect(() => {
     const userData = sessionStorage.getItem('selectedUser')
@@ -85,6 +104,7 @@ const UserDetailPage = () => {
           username: parsedUser.username,
           email: parsedUser.email,
           role: parsedUser.role,
+          tier_id: parsedUser.tier_id,
           groups: [...parsedUser.groups],
           rate_limit_duration: parsedUser.rate_limit_duration,
           rate_limit_duration_type: parsedUser.rate_limit_duration_type,
@@ -110,12 +130,29 @@ const UserDetailPage = () => {
             sessionStorage.setItem('selectedUser', JSON.stringify(refreshed))
             setEditData(prev => ({
               ...prev,
+              tier_id: refreshed.tier_id,
               bandwidth_limit_bytes: refreshed.bandwidth_limit_bytes,
               bandwidth_limit_window: refreshed.bandwidth_limit_window,
               bandwidth_limit_enabled: Boolean((refreshed as any).bandwidth_limit_enabled),
               rate_limit_enabled: Boolean((refreshed as any).rate_limit_enabled),
               throttle_enabled: Boolean((refreshed as any).throttle_enabled),
             }))
+            // Fetch current tier if assigned
+            if (refreshed.tier_id) {
+              try {
+                const tier = await fetchJson(`${SERVER_URL}/platform/tiers/${refreshed.tier_id}`)
+                // Ensure tier is a valid object with tier_id
+                if (tier && typeof tier === 'object' && tier.tier_id) {
+                  setCurrentTier(tier)
+                } else {
+                  setCurrentTier(null)
+                }
+              } catch {
+                setCurrentTier(null)
+              }
+            } else {
+              setCurrentTier(null)
+            }
           } catch {}
         })()
       } catch (err) {
@@ -147,6 +184,7 @@ const UserDetailPage = () => {
         username: user.username,
         email: user.email,
         role: user.role,
+        tier_id: user.tier_id,
         groups: [...user.groups],
         rate_limit_duration: user.rate_limit_duration,
         rate_limit_duration_type: user.rate_limit_duration_type,
@@ -433,7 +471,7 @@ const UserDetailPage = () => {
         )}
 
         {user && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
             {isProtected && (
               <div className="rounded-lg bg-warning-50 border border-warning-200 p-4 dark:bg-warning-900/20 dark:border-warning-800">
                 <div className="flex">
@@ -446,16 +484,18 @@ const UserDetailPage = () => {
                 </div>
               </div>
             )}
+            {/* Basic Information */}
             <div className="card">
-              <div className="card-header flex items-center justify-between">
-                <h3 className="card-title">Basic Information</h3>
+              <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 py-4 flex items-center justify-between">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Basic Information</h3>
                 <FormHelp docHref="/docs/using-fields.html#users">Update identity, role, status, and UI access.</FormHelp>
               </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Username
-                  </label>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Username
+                    </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -464,15 +504,15 @@ const UserDetailPage = () => {
                       className="input"
                       placeholder="Enter username"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{user.username}</p>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{user.username}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Email
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Email
+                    </label>
                   {isEditing ? (
                     <input
                       type="email"
@@ -481,16 +521,16 @@ const UserDetailPage = () => {
                       className="input"
                       placeholder="Enter email"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{user.email}</p>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{user.email}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Role
-                    <InfoTooltip text="Platform role controls permissions (e.g., manage_apis, view_logs)." />
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Role
+                      <InfoTooltip text="Platform role controls permissions (e.g., manage_apis, view_logs)." />
+                    </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -499,16 +539,45 @@ const UserDetailPage = () => {
                       className="input"
                       placeholder="Enter role"
                     />
-                  ) : (
-                    <span className="badge badge-primary">{user.role}</span>
-                  )}
-                </div>
+                    ) : (
+                      <span className="badge badge-primary">{user.role}</span>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Status
-                    <InfoTooltip text="Inactive users cannot authenticate until re-enabled. Does not affect public or no-auth APIs." />
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Tier
+                      <InfoTooltip text="Assign user to a pricing tier. Tier limits take priority over custom rate limits." />
+                    </label>
+                  {isEditing ? (
+                    <select
+                      value={editData.tier_id || ''}
+                      onChange={(e) => handleInputChange('tier_id', e.target.value || undefined)}
+                      className="input"
+                    >
+                      <option value="">No Tier (Use custom rate limits)</option>
+                      {Array.isArray(availableTiers) && availableTiers.map((tier) => (
+                        <option key={tier.tier_id} value={tier.tier_id}>
+                          {tier.display_name || tier.name} - {tier.limits?.requests_per_minute || 0} req/min
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      {currentTier ? (
+                        <span className="badge badge-success">{currentTier.display_name || currentTier.name}</span>
+                      ) : (
+                        <span className="badge badge-gray">No Tier</span>
+                      )}
+                      </>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Status
+                      <InfoTooltip text="Inactive users cannot authenticate until re-enabled. Does not affect public or no-auth APIs." />
+                    </label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
@@ -517,22 +586,22 @@ const UserDetailPage = () => {
                         onChange={(e) => handleInputChange('active', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                        Active
-                      </label>
-                    </div>
-                  ) : (
-                    <span className={`badge ${user.active ? 'badge-success' : 'badge-error'}`}>
-                      {user.active ? 'Active' : 'Inactive'}
-                    </span>
-                  )}
-                </div>
+                        <label className="ml-2 text-[13px] text-gray-700 dark:text-gray-300">
+                          Active
+                        </label>
+                      </div>
+                    ) : (
+                      <span className={`badge ${user.active ? 'badge-success' : 'badge-error'}`}>
+                        {user.active ? 'Active' : 'Inactive'}
+                      </span>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    UI Access
-                    <InfoTooltip text="Controls access to the admin UI. API access is controlled per API (Public/Auth Required settings)." />
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      UI Access
+                      <InfoTooltip text="Controls access to the admin UI. API access is controlled per API (Public/Auth Required settings)." />
+                    </label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
@@ -541,22 +610,24 @@ const UserDetailPage = () => {
                         onChange={(e) => handleInputChange('ui_access', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                        Allow UI access
-                      </label>
-                    </div>
-                  ) : (
-                    <span className={`badge ${user.ui_access ? 'badge-success' : 'badge-gray'}`}>
-                      {user.ui_access ? 'Enabled' : 'Disabled'}
-                    </span>
-                  )}
+                        <label className="ml-2 text-[13px] text-gray-700 dark:text-gray-300">
+                          Allow UI access
+                        </label>
+                      </div>
+                    ) : (
+                      <span className={`badge ${user.ui_access ? 'badge-success' : 'badge-gray'}`}>
+                        {user.ui_access ? 'Enabled' : 'Disabled'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
+            {/* Bandwidth Limit */}
             <div className="card">
-              <div className="card-header flex items-center justify-between">
-                <h3 className="card-title">Bandwidth Limit</h3>
+              <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 py-4 flex items-center justify-between">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Bandwidth Limit</h3>
                 {!isEditing && (
                   <button onClick={refreshUsage} className="btn btn-outline btn-sm" disabled={refreshingUsage}>
                     {refreshingUsage ? (
@@ -567,9 +638,10 @@ const UserDetailPage = () => {
                   </button>
                 )}
               </div>
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enforcement</label>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="md:col-span-3">
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">Enforcement</label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
@@ -578,33 +650,33 @@ const UserDetailPage = () => {
                         onChange={(e) => handleInputChange('bandwidth_limit_enabled', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                        Enforce bandwidth limit for this user
-                      </label>
-                    </div>
-                  ) : (
-                    (() => {
-                      const bwEnabled = Boolean((user as any).bandwidth_limit_enabled) && (Number(user.bandwidth_limit_bytes || 0) > 0)
-                      return (
-                        <span className={`badge ${bwEnabled ? 'badge-success' : 'badge-gray'}`}>
-                          {bwEnabled ? 'Enabled' : 'Disabled'}
-                        </span>
-                      )
-                    })()
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bytes (limit)</label>
+                        <label className="ml-2 text-[13px] text-gray-700 dark:text-gray-300">
+                          Enforce user based bandwidth limits
+                        </label>
+                      </div>
+                    ) : (
+                      (() => {
+                        const bwEnabled = Boolean((user as any).bandwidth_limit_enabled) && (Number(user.bandwidth_limit_bytes || 0) > 0)
+                        return (
+                          <span className={`badge ${bwEnabled ? 'badge-success' : 'badge-gray'}`}>
+                            {bwEnabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                        )
+                      })()
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">Bytes (limit)</label>
                   {isEditing ? (
                     <input type="number" className="input" min={0}
                       value={editData.bandwidth_limit_bytes ?? 0}
                       onChange={(e) => handleInputChange('bandwidth_limit_bytes', e.target.value ? parseInt(e.target.value) : undefined)} />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{user.bandwidth_limit_bytes ?? '—'}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Window</label>
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{user.bandwidth_limit_bytes ?? '—'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">Window</label>
                   {isEditing ? (
                     <select className="input" value={editData.bandwidth_limit_window || 'day'}
                       onChange={(e) => handleInputChange('bandwidth_limit_window', e.target.value)}>
@@ -628,22 +700,26 @@ const UserDetailPage = () => {
                     </p>
                   </div>
                 )}
+                </div>
               </div>
             </div>
 
+            {/* Groups */}
             <div className="card">
-              <div className="card-header flex items-center justify-between">
-                <h3 className="card-title">Groups</h3>
+              <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 py-4 flex items-center justify-between">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Groups</h3>
                 <FormHelp docHref="/docs/using-fields.html#access-control">Groups are used in API access checks alongside roles.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
-                  <button onClick={addGroup} className="btn btn-primary">
-                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Add Group
-                  </button>
+                  <div>
+                    <button onClick={addGroup} className="btn btn-primary">
+                      <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add Group
+                    </button>
+                  </div>
                 )}
 
                 <div className="space-y-2">
@@ -698,7 +774,7 @@ const UserDetailPage = () => {
                         onChange={(e) => handleInputChange('rate_limit_enabled', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce rate limiting for this user</label>
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce user based rate limiting</label>
                     </div>
                   ) : (
                     (() => {
@@ -761,7 +837,7 @@ const UserDetailPage = () => {
                         onChange={(e) => handleInputChange('throttle_enabled', e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce throttling for this user</label>
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enforce user based throttling</label>
                     </div>
                   ) : (
                     (() => {
@@ -857,34 +933,39 @@ const UserDetailPage = () => {
               </div>
             </div>
 
+            {/* Custom Attributes */}
             <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Custom Attributes</h3>
+              <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 py-4">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Custom Attributes</h3>
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={newCustomAttribute.key}
-                      onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, key: e.target.value }))}
-                      className="input"
-                      disabled={editCustomAttrCount >= 10}
-                      placeholder="Attribute key"
-                    />
-                    <input
-                      type="text"
-                      value={newCustomAttribute.value}
-                      onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, value: e.target.value }))}
-                      className="input"
-                      disabled={editCustomAttrCount >= 10}
-                      placeholder="Attribute value"
-                    />
-                    <button onClick={addCustomAttribute} className="btn btn-primary col-span-2" disabled={editCustomAttrCount >= 10}>
-                      Add Attribute
-                    </button>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={newCustomAttribute.key}
+                        onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, key: e.target.value }))}
+                        className="input"
+                        disabled={editCustomAttrCount >= 10}
+                        placeholder="Attribute key"
+                      />
+                      <input
+                        type="text"
+                        value={newCustomAttribute.value}
+                        onChange={(e) => setNewCustomAttribute(prev => ({ ...prev, value: e.target.value }))}
+                        className="input"
+                        disabled={editCustomAttrCount >= 10}
+                        placeholder="Attribute value"
+                      />
+                    </div>
+                    <div>
+                      <button onClick={addCustomAttribute} className="btn btn-primary" disabled={editCustomAttrCount >= 10}>
+                        Add Attribute
+                      </button>
+                    </div>
                     {editCustomAttrCount >= 10 && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 col-span-2">Maximum of 10 custom attributes reached. Remove one to add another.</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">Maximum of 10 custom attributes reached. Remove one to add another.</p>
                     )}
                   </div>
                 )}

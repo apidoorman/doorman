@@ -1,7 +1,7 @@
-import re
-from typing import Dict, List
-from fastapi import Request
 import logging
+import re
+
+from fastapi import Request
 
 _logger = logging.getLogger('doorman.gateway')
 
@@ -16,6 +16,7 @@ SENSITIVE_HEADERS = {
     'x-csrf-token',
     'csrf-token',
 }
+
 
 def sanitize_headers(value: str):
     """Sanitize header values to prevent injection attacks.
@@ -36,6 +37,7 @@ def sanitize_headers(value: str):
         return value
     except Exception:
         return ''
+
 
 def redact_sensitive_header(header_name: str, header_value: str) -> str:
     """Redact sensitive header values for logging purposes.
@@ -69,7 +71,8 @@ def redact_sensitive_header(header_name: str, header_value: str) -> str:
     except Exception:
         return '[REDACTION_ERROR]'
 
-def log_headers_safely(request: Request, allowed_headers: List[str] = None, redact: bool = True):
+
+def log_headers_safely(request: Request, allowed_headers: list[str] = None, redact: bool = True):
     """Log request headers safely with redaction.
 
     Args:
@@ -100,12 +103,13 @@ def log_headers_safely(request: Request, allowed_headers: List[str] = None, reda
             headers_to_log[key] = sanitized
 
         if headers_to_log:
-            _logger.debug(f"Request headers: {headers_to_log}")
+            _logger.debug(f'Request headers: {headers_to_log}')
 
     except Exception as e:
-        _logger.debug(f"Failed to log headers safely: {e}")
+        _logger.debug(f'Failed to log headers safely: {e}')
 
-async def get_headers(request: Request, allowed_headers: List[str]):
+
+async def get_headers(request: Request, allowed_headers: list[str]):
     """Extract and sanitize allowed headers from request.
 
     This function is used for forwarding headers to upstream services.

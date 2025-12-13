@@ -1,12 +1,15 @@
-import os
-import pytest
 import asyncio
 import logging
+import os
 from io import StringIO
+
+import pytest
+
 
 @pytest.mark.asyncio
 async def test_graceful_shutdown_allows_inflight_completion(monkeypatch):
     from services.user_service import UserService
+
     original = UserService.check_password_return_user
 
     async def _slow_check(email, password):
@@ -21,8 +24,9 @@ async def test_graceful_shutdown_allows_inflight_completion(monkeypatch):
     logger.addHandler(handler)
 
     try:
-        from doorman import doorman, app_lifespan
         from httpx import AsyncClient
+
+        from doorman import app_lifespan, doorman
 
         async with app_lifespan(doorman):
             client = AsyncClient(app=doorman, base_url='http://testserver')
@@ -41,4 +45,3 @@ async def test_graceful_shutdown_allows_inflight_completion(monkeypatch):
         assert 'Waiting for in-flight requests to complete' in logs
     finally:
         logger.removeHandler(handler)
-

@@ -4,9 +4,9 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-import re
 import html
-from typing import Optional
+import re
+
 
 def sanitize_html(text: str, allow_tags: bool = False) -> str:
     """
@@ -20,7 +20,8 @@ def sanitize_html(text: str, allow_tags: bool = False) -> str:
         text = re.sub(r'<[^>]+>', '', text)
         return html.escape(text)
 
-def sanitize_input(text: str, max_length: Optional[int] = None) -> str:
+
+def sanitize_input(text: str, max_length: int | None = None) -> str:
     """
     Comprehensive input sanitization for user-provided text.
     """
@@ -33,25 +34,21 @@ def sanitize_input(text: str, max_length: Optional[int] = None) -> str:
         sanitized = sanitized[:max_length]
     return sanitized
 
+
 def sanitize_url(url: str) -> str:
     """
     Sanitize URL to prevent javascript: and data: URL attacks.
     """
     if not url or not isinstance(url, str):
-        return ""
+        return ''
     url = url.strip()
-    dangerous_schemes = [
-        'javascript:',
-        'data:',
-        'vbscript:',
-        'file:',
-        'about:'
-    ]
+    dangerous_schemes = ['javascript:', 'data:', 'vbscript:', 'file:', 'about:']
     url_lower = url.lower()
     for scheme in dangerous_schemes:
         if url_lower.startswith(scheme):
-            return ""
+            return ''
     return url
+
 
 def strip_control_characters(text: str) -> str:
     """
@@ -60,6 +57,7 @@ def strip_control_characters(text: str) -> str:
     if not text or not isinstance(text, str):
         return text
     return ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+
 
 def sanitize_username(username: str) -> str:
     """
@@ -70,6 +68,7 @@ def sanitize_username(username: str) -> str:
     username = sanitize_html(username, allow_tags=False)
     safe_pattern = re.compile(r'[^a-zA-Z0-9_\-\.@]')
     return safe_pattern.sub('', username)
+
 
 def sanitize_api_name(name: str) -> str:
     """

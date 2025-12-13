@@ -4,51 +4,55 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-from datetime import datetime, timedelta
+import asyncio
+import json
+import logging
+import multiprocessing
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+import uuid
+from contextlib import asynccontextmanager
+from datetime import timedelta
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from jose import jwt, JWTError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi.responses import Response
-from contextlib import asynccontextmanager
-from redis.asyncio import Redis
+from jose import JWTError
 from pydantic import BaseSettings
-from dotenv import load_dotenv
-import multiprocessing
-import logging
-import json
-import re
-import os
-import sys
-import subprocess
-import signal
-import uvicorn
-import time
-import asyncio
-import uuid
-import shutil
-from pathlib import Path
+from redis.asyncio import Redis
+from starlette.middleware.base import BaseHTTPMiddleware
 
 try:
     if sys.version_info >= (3, 13):
         try:
-            from importlib.metadata import version, PackageNotFoundError
+            from importlib.metadata import PackageNotFoundError, version
         except Exception:
             version = None
             PackageNotFoundError = Exception
         if version is not None:
             try:
                 v = version('aiohttp')
-                parts = [int(p) for p in (v.split('.')[:3] + ['0', '0'])[:3] if p.isdigit() or p.isnumeric()]
+                parts = [
+                    int(p)
+                    for p in (v.split('.')[:3] + ['0', '0'])[:3]
+                    if p.isdigit() or p.isnumeric()
+                ]
                 while len(parts) < 3:
                     parts.append(0)
                 if tuple(parts) < (3, 10, 10):
                     raise SystemExit(
-                        f"Incompatible aiohttp {v} detected on Python {sys.version.split()[0]}. "
-                        "Please upgrade to aiohttp>=3.10.10 (pip install -U aiohttp) or run with Python 3.11."
+                        f'Incompatible aiohttp {v} detected on Python {sys.version.split()[0]}. '
+                        'Please upgrade to aiohttp>=3.10.10 (pip install -U aiohttp) or run with Python 3.11.'
                     )
             except PackageNotFoundError:
                 pass
@@ -58,41 +62,59 @@ except Exception:
     pass
 
 from models.response_model import ResponseModel
-from utils.cache_manager_util import cache_manager
-from utils.auth_blacklist import purge_expired_tokens
-from utils.doorman_cache_util import doorman_cache
-from utils.hot_reload_config import hot_config
-from routes.authorization_routes import authorization_router
-from routes.group_routes import group_router
-from routes.role_routes import role_router
-from routes.subscription_routes import subscription_router
-from routes.user_routes import user_router
+from routes.analytics_routes import analytics_router
+from middleware.analytics_middleware import setup_analytics_middleware
+from utils.analytics_scheduler import analytics_scheduler
 from routes.api_routes import api_router
+from routes.authorization_routes import authorization_router
+from routes.config_hot_reload_routes import config_hot_reload_router
+from routes.config_routes import config_router
+from routes.credit_routes import credit_router
+from routes.dashboard_routes import dashboard_router
+from routes.demo_routes import demo_router
 from routes.endpoint_routes import endpoint_router
 from routes.gateway_routes import gateway_router
-from routes.routing_routes import routing_router
-from routes.proto_routes import proto_router
+from routes.group_routes import group_router
 from routes.logging_routes import logging_router
-from routes.dashboard_routes import dashboard_router
 from routes.memory_routes import memory_router
-from routes.security_routes import security_router
-from routes.credit_routes import credit_router
-from routes.demo_routes import demo_router
 from routes.monitor_routes import monitor_router
-from routes.config_routes import config_router
+from routes.proto_routes import proto_router
+from routes.quota_routes import quota_router
+from routes.rate_limit_rule_routes import rate_limit_rule_router
+from routes.role_routes import role_router
+from routes.routing_routes import routing_router
+from routes.security_routes import security_router
+from routes.subscription_routes import subscription_router
+from routes.tier_routes import tier_router
 from routes.tools_routes import tools_router
-from routes.config_hot_reload_routes import config_hot_reload_router
-from utils.security_settings_util import load_settings, start_auto_save_task, stop_auto_save_task, get_cached_settings
-from utils.memory_dump_util import dump_memory_to_file, restore_memory_from_file, find_latest_dump_path
-from utils.metrics_util import metrics_store
-from utils.database import database
-from utils.response_util import process_response
+from routes.user_routes import user_router
+from routes.vault_routes import vault_router
 from utils.audit_util import audit
-from utils.ip_policy_util import _get_client_ip as _policy_get_client_ip, _ip_in_list as _policy_ip_in_list, _is_loopback as _policy_is_loopback
+from utils.auth_blacklist import purge_expired_tokens
+from utils.cache_manager_util import cache_manager
+from utils.database import database
+from utils.hot_reload_config import hot_config
+from utils.ip_policy_util import _get_client_ip as _policy_get_client_ip
+from utils.ip_policy_util import _ip_in_list as _policy_ip_in_list
+from utils.ip_policy_util import _is_loopback as _policy_is_loopback
+from utils.memory_dump_util import (
+    dump_memory_to_file,
+    find_latest_dump_path,
+    restore_memory_from_file,
+)
+from utils.metrics_util import metrics_store
+from utils.response_util import process_response
+from utils.security_settings_util import (
+    get_cached_settings,
+    load_settings,
+    start_auto_save_task,
+    stop_auto_save_task,
+)
 
 load_dotenv()
 
 PID_FILE = 'doorman.pid'
+
 
 def _migrate_generated_directory() -> None:
     """Migrate legacy root-level 'generated/' into backend-services/generated.
@@ -109,7 +131,7 @@ def _migrate_generated_directory() -> None:
             return
         if not src.exists() or not src.is_dir():
             dst.mkdir(exist_ok=True)
-            gateway_logger.info(f"Generated dir: {dst} (no migration needed)")
+            gateway_logger.info(f'Generated dir: {dst} (no migration needed)')
             return
         dst.mkdir(parents=True, exist_ok=True)
         moved_count = 0
@@ -132,37 +154,37 @@ def _migrate_generated_directory() -> None:
             shutil.rmtree(src)
         except Exception:
             pass
-        gateway_logger.info(f"Generated dir migrated: {moved_count} file(s) moved to {dst}")
+        gateway_logger.info(f'Generated dir migrated: {moved_count} file(s) moved to {dst}')
     except Exception as e:
         try:
-            gateway_logger.warning(f"Generated dir migration skipped: {e}")
+            gateway_logger.warning(f'Generated dir migration skipped: {e}')
         except Exception:
             pass
 
+
 async def validate_database_connections():
     """Validate database connections on startup with retry logic"""
-    gateway_logger.info("Validating database connections...")
+    gateway_logger.info('Validating database connections...')
 
     max_retries = 3
     for attempt in range(max_retries):
         try:
             from utils.database import user_collection
+
             await user_collection.find_one({})
-            gateway_logger.info("✓ MongoDB connection verified")
+            gateway_logger.info('✓ MongoDB connection verified')
             break
         except Exception as e:
             if attempt < max_retries - 1:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 gateway_logger.warning(
-                    f"MongoDB connection attempt {attempt + 1}/{max_retries} failed: {e}"
+                    f'MongoDB connection attempt {attempt + 1}/{max_retries} failed: {e}'
                 )
-                gateway_logger.info(f"Retrying in {wait} seconds...")
+                gateway_logger.info(f'Retrying in {wait} seconds...')
                 await asyncio.sleep(wait)
             else:
-                gateway_logger.error(f"MongoDB connection failed after {max_retries} attempts")
-                raise RuntimeError(
-                    f"Cannot connect to MongoDB: {e}"
-                ) from e
+                gateway_logger.error(f'MongoDB connection failed after {max_retries} attempts')
+                raise RuntimeError(f'Cannot connect to MongoDB: {e}') from e
 
     redis_host = os.getenv('REDIS_HOST')
     mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM')
@@ -171,32 +193,32 @@ async def validate_database_connections():
         for attempt in range(max_retries):
             try:
                 import redis.asyncio as redis
-                redis_url = f"redis://{redis_host}:{os.getenv('REDIS_PORT', '6379')}"
+
+                redis_url = f'redis://{redis_host}:{os.getenv("REDIS_PORT", "6379")}'
                 if os.getenv('REDIS_PASSWORD'):
-                    redis_url = f"redis://:{os.getenv('REDIS_PASSWORD')}@{redis_host}:{os.getenv('REDIS_PORT', '6379')}"
+                    redis_url = f'redis://:{os.getenv("REDIS_PASSWORD")}@{redis_host}:{os.getenv("REDIS_PORT", "6379")}'
 
                 r = redis.from_url(redis_url)
                 await r.ping()
                 await r.close()
-                gateway_logger.info("✓ Redis connection verified")
+                gateway_logger.info('✓ Redis connection verified')
                 break
             except Exception as e:
                 if attempt < max_retries - 1:
-                    wait = 2 ** attempt
+                    wait = 2**attempt
                     gateway_logger.warning(
-                        f"Redis connection attempt {attempt + 1}/{max_retries} failed: {e}"
+                        f'Redis connection attempt {attempt + 1}/{max_retries} failed: {e}'
                     )
-                    gateway_logger.info(f"Retrying in {wait} seconds...")
+                    gateway_logger.info(f'Retrying in {wait} seconds...')
                     await asyncio.sleep(wait)
                 else:
-                    gateway_logger.error(f"Redis connection failed after {max_retries} attempts")
-                    raise RuntimeError(
-                        f"Cannot connect to Redis: {e}"
-                    ) from e
+                    gateway_logger.error(f'Redis connection failed after {max_retries} attempts')
+                    raise RuntimeError(f'Cannot connect to Redis: {e}') from e
 
-    gateway_logger.info("All database connections validated successfully")
+    gateway_logger.info('All database connections validated successfully')
 
-def validate_token_revocation_config():
+
+def validate_token_revocation_config() -> None:
     """
     Validate token revocation is safe for multi-worker deployments.
     """
@@ -204,21 +226,20 @@ def validate_token_revocation_config():
     mem_mode = os.getenv('MEM_OR_EXTERNAL', 'MEM')
     if threads > 1 and mem_mode == 'MEM':
         gateway_logger.error(
-            "CRITICAL: Multi-worker mode (THREADS > 1) with in-memory storage "
-            "does not provide consistent token revocation across workers. "
-            f"Current config: THREADS={threads}, MEM_OR_EXTERNAL={mem_mode}"
+            'CRITICAL: Multi-worker mode (THREADS > 1) with in-memory storage '
+            'does not provide consistent token revocation across workers. '
+            f'Current config: THREADS={threads}, MEM_OR_EXTERNAL={mem_mode}'
         )
         gateway_logger.error(
-            "Token revocation requires Redis in multi-worker mode. "
-            "Either set MEM_OR_EXTERNAL=REDIS or set THREADS=1"
+            'Token revocation requires Redis in multi-worker mode. '
+            'Either set MEM_OR_EXTERNAL=REDIS or set THREADS=1'
         )
         raise RuntimeError(
-            "Token revocation requires Redis in multi-worker mode (THREADS > 1). "
-            "Set MEM_OR_EXTERNAL=REDIS or THREADS=1"
+            'Token revocation requires Redis in multi-worker mode (THREADS > 1). '
+            'Set MEM_OR_EXTERNAL=REDIS or THREADS=1'
         )
-    gateway_logger.info(
-        f"Token revocation mode: {mem_mode} with {threads} worker(s)"
-    )
+    gateway_logger.info(f'Token revocation mode: {mem_mode} with {threads} worker(s)')
+
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
@@ -238,26 +259,19 @@ async def app_lifespan(app: FastAPI):
     try:
         if os.getenv('ENV', '').lower() == 'production':
             https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
-            https_enabled = os.getenv('HTTPS_ENABLED', 'false').lower() == 'true'
-            if not (https_only or https_enabled):
+            if not https_only:
                 raise RuntimeError(
-                    'In production (ENV=production), you must enable HTTPS_ONLY or HTTPS_ENABLED to enforce Secure cookies.'
+                    'In production (ENV=production), you must enable HTTPS_ONLY to enforce Secure cookies and CSRF validation. '
+                    'TLS should be terminated at reverse proxy (Nginx, Traefik, ALB, etc.).'
                 )
 
-            if https_only or https_enabled:
-                cert = os.getenv('SSL_CERTFILE')
-                key = os.getenv('SSL_KEYFILE')
-                if https_only and (not cert or not key):
-                    raise RuntimeError(
-                        'SSL_CERTFILE and SSL_KEYFILE required when HTTPS_ONLY=true'
-                    )
-                if cert and not os.path.exists(cert):
-                    raise RuntimeError(f'SSL certificate not found: {cert}')
-                if key and not os.path.exists(key):
-                    raise RuntimeError(f'SSL private key not found: {key}')
-
             jwt_secret = os.getenv('JWT_SECRET_KEY', '')
-            if jwt_secret in ('please-change-me', 'test-secret-key', 'test-secret-key-please-change', ''):
+            if jwt_secret in (
+                'please-change-me',
+                'test-secret-key',
+                'test-secret-key-please-change',
+                '',
+            ):
                 raise RuntimeError(
                     'In production (ENV=production), JWT_SECRET_KEY must be changed from default value. '
                     'Generate a strong random secret (32+ characters).'
@@ -284,18 +298,7 @@ async def app_lifespan(app: FastAPI):
                         'Redis is essential for shared token revocation and rate limiting in HA deployments.'
                     )
 
-            if os.getenv('CORS_STRICT', 'false').lower() != 'true':
-                raise RuntimeError(
-                    'In production (ENV=production), CORS_STRICT must be true. '
-                    'This prevents wildcard origins with credentials, which is a critical security risk.'
-                )
-
-            allowed_origins = os.getenv('ALLOWED_ORIGINS', '')
-            if '*' in allowed_origins:
-                raise RuntimeError(
-                    'In production (ENV=production), wildcard CORS origins (*) are not allowed. '
-                    'Set ALLOWED_ORIGINS to specific domain(s): https://yourdomain.com'
-                )
+            # Platform CORS removed - CORS is enforced at the API level
 
             token_encryption_key = os.getenv('TOKEN_ENCRYPTION_KEY', '')
             if not token_encryption_key or len(token_encryption_key) < 32:
@@ -312,7 +315,7 @@ async def app_lifespan(app: FastAPI):
                         'Memory dumps contain sensitive data and must be encrypted. '
                         'Generate a strong random key: openssl rand -hex 32'
                     )
-    except Exception as e:
+    except Exception:
         raise
 
     mem_or_external = os.getenv('MEM_OR_EXTERNAL', 'MEM').upper()
@@ -355,6 +358,7 @@ async def app_lifespan(app: FastAPI):
                 break
             except Exception:
                 pass
+
     try:
         app.state._metrics_save_task = asyncio.create_task(_metrics_autosave(60))
     except Exception:
@@ -368,8 +372,12 @@ async def app_lifespan(app: FastAPI):
 
     try:
         settings = get_cached_settings()
-        if bool(settings.get('trust_x_forwarded_for')) and not (settings.get('xff_trusted_proxies') or []):
-            gateway_logger.warning('Security: trust_x_forwarded_for enabled but xff_trusted_proxies is empty; header spoofing risk. Configure trusted proxy IPs/CIDRs.')
+        if bool(settings.get('trust_x_forwarded_for')) and not (
+            settings.get('xff_trusted_proxies') or []
+        ):
+            gateway_logger.warning(
+                'Security: trust_x_forwarded_for enabled but xff_trusted_proxies is empty; header spoofing risk. Configure trusted proxy IPs/CIDRs.'
+            )
 
             if os.getenv('ENV', '').lower() == 'production':
                 raise RuntimeError(
@@ -382,7 +390,7 @@ async def app_lifespan(app: FastAPI):
         gateway_logger.debug(f'Startup security checks skipped: {e}')
 
     try:
-        spec = app.openapi()
+        app.openapi()
         problems = []
         for route in app.routes:
             path = getattr(route, 'path', '')
@@ -401,6 +409,15 @@ async def app_lifespan(app: FastAPI):
     except Exception as e:
         gateway_logger.debug(f'OpenAPI lint skipped: {e}')
 
+    # Start analytics background scheduler (aggregation, persistence)
+    try:
+        await analytics_scheduler.start()
+        app.state._analytics_scheduler_started = True
+    except Exception as e:
+        logging.getLogger('doorman.analytics').warning(
+            f'Analytics scheduler start failed: {e}'
+        )
+
     try:
         if database.memory_only:
             settings = get_cached_settings()
@@ -408,7 +425,9 @@ async def app_lifespan(app: FastAPI):
             latest_path = find_latest_dump_path(hint)
             if latest_path and os.path.exists(latest_path):
                 info = restore_memory_from_file(latest_path)
-                gateway_logger.info(f"Memory mode: restored from dump {latest_path} (created_at={info.get('created_at')})")
+                gateway_logger.info(
+                    f'Memory mode: restored from dump {latest_path} (created_at={info.get("created_at")})'
+                )
             else:
                 gateway_logger.info('Memory mode: no existing dump found to restore')
     except Exception as e:
@@ -424,7 +443,9 @@ async def app_lifespan(app: FastAPI):
                         gateway_logger.info('SIGUSR1 ignored: not in memory-only mode')
                         return
                     if not os.getenv('MEM_ENCRYPTION_KEY'):
-                        gateway_logger.error('SIGUSR1 dump skipped: MEM_ENCRYPTION_KEY not configured')
+                        gateway_logger.error(
+                            'SIGUSR1 dump skipped: MEM_ENCRYPTION_KEY not configured'
+                        )
                         return
                     settings = get_cached_settings()
                     path_hint = settings.get('dump_path')
@@ -436,7 +457,6 @@ async def app_lifespan(app: FastAPI):
             loop.add_signal_handler(signal.SIGUSR1, lambda: asyncio.create_task(_sigusr1_dump()))
             gateway_logger.info('SIGUSR1 handler registered for on-demand memory dumps')
     except NotImplementedError:
-
         pass
 
     try:
@@ -469,9 +489,9 @@ async def app_lifespan(app: FastAPI):
     try:
         yield
     finally:
-        gateway_logger.info("Starting graceful shutdown...")
+        gateway_logger.info('Starting graceful shutdown...')
         app.state.shutting_down = True
-        gateway_logger.info("Waiting for in-flight requests to complete (5s grace period)...")
+        gateway_logger.info('Waiting for in-flight requests to complete (5s grace period)...')
         await asyncio.sleep(5)
         try:
             await stop_auto_save_task()
@@ -486,25 +506,33 @@ async def app_lifespan(app: FastAPI):
         except Exception as e:
             gateway_logger.error(f'Failed to write final memory dump: {e}')
         try:
+            # Stop analytics scheduler if started
+            if getattr(app.state, '_analytics_scheduler_started', False):
+                try:
+                    await analytics_scheduler.stop()
+                except Exception:
+                    pass
             task = getattr(app.state, '_purger_task', None)
             if task:
                 task.cancel()
         except Exception:
             pass
         try:
-            gateway_logger.info("Closing database connections...")
+            gateway_logger.info('Closing database connections...')
             from utils.database import close_database_connections
+
             close_database_connections()
         except Exception as e:
-            gateway_logger.error(f"Error closing database connections: {e}")
+            gateway_logger.error(f'Error closing database connections: {e}')
         try:
-            gateway_logger.info("Closing HTTP clients...")
+            gateway_logger.info('Closing HTTP clients...')
             from services.gateway_service import GatewayService
+
             if hasattr(GatewayService, '_http_client') and GatewayService._http_client:
                 await GatewayService._http_client.aclose()
-                gateway_logger.info("HTTP client closed")
+                gateway_logger.info('HTTP client closed')
         except Exception as e:
-            gateway_logger.error(f"Error closing HTTP client: {e}")
+            gateway_logger.error(f'Error closing HTTP client: {e}')
 
         try:
             METRICS_FILE = os.path.join(LOGS_DIR, 'metrics.json')
@@ -512,7 +540,7 @@ async def app_lifespan(app: FastAPI):
         except Exception:
             pass
 
-        gateway_logger.info("Graceful shutdown complete")
+        gateway_logger.info('Graceful shutdown complete')
         try:
             t = getattr(app.state, '_metrics_save_task', None)
             if t:
@@ -522,9 +550,11 @@ async def app_lifespan(app: FastAPI):
 
         try:
             from services.gateway_service import GatewayService as _GS
+
             if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'true').lower() != 'false':
                 try:
                     import asyncio as _asyncio
+
                     if _asyncio.iscoroutinefunction(_GS.aclose_http_client):
                         await _GS.aclose_http_client()
                 except Exception:
@@ -532,14 +562,16 @@ async def app_lifespan(app: FastAPI):
         except Exception:
             pass
 
-def _generate_unique_id(route):
+
+def _generate_unique_id(route: dict) -> str:
     try:
         name = getattr(route, 'name', 'op') or 'op'
         path = getattr(route, 'path', '').replace('/', '_').replace('{', '').replace('}', '')
         methods = '_'.join(sorted(list(getattr(route, 'methods', []) or [])))
-        return f"{name}_{methods}_{path}".lower()
+        return f'{name}_{methods}_{path}'.lower()
     except Exception:
         return (getattr(route, 'name', 'op') or 'op').lower()
+
 
 doorman = FastAPI(
     title='doorman',
@@ -547,96 +579,172 @@ doorman = FastAPI(
     version='1.0.0',
     lifespan=app_lifespan,
     generate_unique_id_function=_generate_unique_id,
+    docs_url='/platform/docs',
+    redoc_url='/platform/redoc',
+    openapi_url='/platform/openapi.json',
 )
+
+# Enable analytics collection middleware for request/response metrics
+try:
+    setup_analytics_middleware(doorman)
+except Exception as e:
+    logging.getLogger('doorman.analytics').warning(
+        f'Failed to enable analytics middleware: {e}'
+    )
+
+# Add CORS middleware
+# Starlette CORS middleware is disabled by default because platform and per-API
+# CORS are enforced explicitly below. Enable only if requested via env.
+if os.getenv('ENABLE_STARLETTE_CORS', 'false').lower() in ('1', 'true', 'yes', 'on'):
+    doorman.add_middleware(
+        CORSMiddleware,
+        allow_origins=['*'],  # In production, replace with specific origins
+        allow_credentials=True,
+        allow_methods=['*'],
+        allow_headers=['*'],  # This will include X-Requested-With
+        expose_headers=[],
+        max_age=600,
+    )
 
 https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
 domain = os.getenv('COOKIE_DOMAIN', 'localhost')
 
 # - API gateway routes (/api/*): CORS controlled per-API in gateway routes/services
 
-def _env_cors_config():
-    origins_env = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000')
-    if not (origins_env or '').strip():
-        origins_env = 'http://localhost:3000'
-    origins = [o.strip() for o in origins_env.split(',') if o.strip()]
-    credentials = os.getenv('ALLOW_CREDENTIALS', 'true').lower() == 'true'
-    methods_env = os.getenv('ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD')
-    if not (methods_env or '').strip():
-        methods_env = 'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD'
-    methods = [m.strip().upper() for m in methods_env.split(',') if m.strip()]
-    if 'OPTIONS' not in methods:
-        methods.append('OPTIONS')
-    headers_env = os.getenv('ALLOW_HEADERS', '*')
-    if not (headers_env or '').strip():
-        headers_env = '*'
-    raw_headers = [h.strip() for h in headers_env.split(',') if h.strip()]
-    if any(h == '*' for h in raw_headers):
-        headers = ['Accept', 'Content-Type', 'X-CSRF-Token', 'Authorization']
+
+def _platform_cors_config() -> dict:
+    """Compute platform CORS config from environment.
+
+    Env vars:
+    - ALLOWED_ORIGINS: CSV list or '*'
+    - ALLOW_METHODS: CSV list (defaults to common methods)
+    - ALLOW_HEADERS: CSV list or '*'
+    - ALLOW_CREDENTIALS: true/false
+    - CORS_STRICT: true/false (when true, do not echo wildcard origins with credentials)
+    """
+    import os as _os
+
+    strict = _os.getenv('CORS_STRICT', 'false').lower() in ('1', 'true', 'yes', 'on')
+    allowed_origins = [
+        o.strip() for o in (_os.getenv('ALLOWED_ORIGINS') or '').split(',') if o.strip()
+    ] or ['*']
+    allow_methods = [
+        m.strip()
+        for m in (_os.getenv('ALLOW_METHODS') or 'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD').split(
+            ','
+        )
+        if m.strip()
+    ]
+    allow_headers_env = _os.getenv('ALLOW_HEADERS') or ''
+    if allow_headers_env.strip() == '*':
+        # Default to a known, minimal safe list when wildcard requested
+        # Include X-Requested-With for common browser/XHR compat
+        allow_headers = [
+            'Accept',
+            'Content-Type',
+            'X-CSRF-Token',
+            'Authorization',
+            'X-Requested-With',
+        ]
     else:
-        headers = raw_headers
-    def _safe(origins, credentials):
-        if credentials and any(o.strip() == '*' for o in origins):
-            return ['http://localhost', 'http://localhost:3000']
-        if os.getenv('CORS_STRICT', 'false').lower() == 'true':
-            safe = [o for o in origins if o.strip() != '*']
-            return safe if safe else ['http://localhost', 'http://localhost:3000']
-        return origins
+        # When not wildcard, allow a sensible default set (can be overridden by env)
+        allow_headers = [h.strip() for h in allow_headers_env.split(',') if h.strip()] or [
+            'Accept',
+            'Content-Type',
+            'X-CSRF-Token',
+            'Authorization',
+            'X-Requested-With',
+        ]
+    # Default to allowing credentials in dev to reduce setup friction; can be
+    # tightened via ALLOW_CREDENTIALS=false for stricter environments.
+    allow_credentials = _os.getenv('ALLOW_CREDENTIALS', 'true').lower() in (
+        '1',
+        'true',
+        'yes',
+        'on',
+    )
+
     return {
-        'origins': origins,
-        'safe_origins': _safe(origins, credentials),
-        'credentials': credentials,
-        'methods': methods,
-        'headers': headers,
+        'strict': strict,
+        'origins': allowed_origins,
+        'credentials': allow_credentials,
+        'methods': allow_methods,
+        'headers': allow_headers,
     }
+
 
 @doorman.middleware('http')
 async def platform_cors(request: Request, call_next):
+    """Platform CORS middleware - accepts all origins (API-level CORS enforced in gateway)."""
     try:
-        if os.getenv('DISABLE_PLATFORM_CORS_ASGI', 'false').lower() in ('1','true','yes','on'):
-            path = str(request.url.path)
-            if path.startswith('/platform/'):
-                cfg = _env_cors_config()
-                origin = request.headers.get('origin') or request.headers.get('Origin')
-                strict = os.getenv('CORS_STRICT', 'false').lower() == 'true'
-                origin_allowed = bool(origin) and (
-                    origin in (cfg.get('safe_origins') or [])
-                    or ('*' in (cfg.get('origins') or []) and not strict)
-                )
-
-                if request.method.upper() == 'OPTIONS':
-                    from fastapi.responses import Response as _Resp
-                    headers = {}
-                    if origin and origin_allowed:
-                        headers['Access-Control-Allow-Origin'] = origin
-                        headers['Vary'] = 'Origin'
-                    headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
-                    headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
-                    headers['Access-Control-Allow-Credentials'] = 'true' if cfg['credentials'] else 'false'
-                    rid = request.headers.get('x-request-id') or request.headers.get('X-Request-ID')
-                    if rid:
-                        headers['request_id'] = rid
-                    return _Resp(status_code=204, headers=headers)
-
-                response = await call_next(request)
-                try:
-                    response.headers['Access-Control-Allow-Credentials'] = 'true' if cfg['credentials'] else 'false'
-                    if origin and origin_allowed:
-                        response.headers['Access-Control-Allow-Origin'] = origin
-                        # Normalize Vary to exactly 'Origin'
+        path = str(request.url.path)
+        if path.startswith('/platform/') or path == '/platform':
+            cfg = _platform_cors_config()
+            origin = request.headers.get('origin') or request.headers.get('Origin')
+            origin_allowed = False
+            if origin:
+                if '*' in cfg['origins']:
+                    if cfg['strict'] and cfg['credentials']:
                         try:
-                            # Remove any pre-existing Vary to avoid appended values
-                            _ = response.headers.pop('Vary', None)
+                            lo = origin.lower()
+                            origin_allowed = (
+                                lo.startswith('http://localhost')
+                                or lo.startswith('https://localhost')
+                                or lo.startswith('http://127.0.0.1')
+                                or lo.startswith('https://127.0.0.1')
+                            )
                         except Exception:
-                            pass
-                        response.headers['Vary'] = 'Origin'
-                except Exception:
-                    pass
-                return response
+                            origin_allowed = False
+                    else:
+                        origin_allowed = True
+                else:
+                    origin_allowed = origin in cfg['origins']
+
+            if request.method.upper() == 'OPTIONS':
+                from fastapi.responses import Response as _Resp
+
+                headers = {}
+                # In strict mode with wildcard+credentials, explicitly avoid echoing origin.
+                if origin_allowed:
+                    headers['Access-Control-Allow-Origin'] = origin
+                    headers['Vary'] = 'Origin'
+                else:
+                    try:
+                        if '*' in cfg['origins'] and cfg['strict'] and cfg['credentials'] and origin:
+                            # Force an explicit empty ACAO to prevent any default CORS from echoing origin
+                            headers['Access-Control-Allow-Origin'] = ''
+                    except Exception:
+                        pass
+                headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
+                headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
+                if cfg['credentials']:
+                    headers['Access-Control-Allow-Credentials'] = 'true'
+                rid = request.headers.get('x-request-id') or request.headers.get('X-Request-ID')
+                if rid:
+                    headers['request_id'] = rid
+                return _Resp(status_code=204, headers=headers)
+
+            response = await call_next(request)
+            try:
+                if cfg['credentials']:
+                    response.headers['Access-Control-Allow-Credentials'] = 'true'
+                if origin_allowed:
+                    response.headers['Access-Control-Allow-Origin'] = origin
+                    try:
+                        _ = response.headers.pop('Vary', None)
+                    except Exception:
+                        pass
+                    response.headers['Vary'] = 'Origin'
+            except Exception:
+                pass
+            return response
     except Exception:
         pass
     return await call_next(request)
 
+
 MAX_BODY_SIZE = int(os.getenv('MAX_BODY_SIZE_BYTES', 1_048_576))
+
 
 def _get_max_body_size() -> int:
     try:
@@ -647,6 +755,7 @@ def _get_max_body_size() -> int:
     except Exception:
         return MAX_BODY_SIZE
 
+
 class LimitedStreamReader:
     """
     Wrapper around ASGI receive channel that enforces size limits on chunked requests.
@@ -654,6 +763,7 @@ class LimitedStreamReader:
     Prevents Transfer-Encoding: chunked bypass by tracking accumulated size
     and rejecting streams that exceed the limit.
     """
+
     def __init__(self, receive, max_size: int):
         self.receive = receive
         self.max_size = max_size
@@ -676,6 +786,7 @@ class LimitedStreamReader:
 
         return message
 
+
 @doorman.middleware('http')
 async def body_size_limit(request: Request, call_next):
     """Enforce request body size limits to prevent DoS attacks.
@@ -695,7 +806,7 @@ async def body_size_limit(request: Request, call_next):
     - /api/grpc/*: Enforce on gRPC JSON payloads
     """
     try:
-        if os.getenv('DISABLE_BODY_SIZE_LIMIT', 'false').lower() in ('1','true','yes','on'):
+        if os.getenv('DISABLE_BODY_SIZE_LIMIT', 'false').lower() in ('1', 'true', 'yes', 'on'):
             return await call_next(request)
         path = str(request.url.path)
 
@@ -703,7 +814,9 @@ async def body_size_limit(request: Request, call_next):
             raw_excludes = os.getenv('BODY_LIMIT_EXCLUDE_PATHS', '')
             if raw_excludes:
                 excludes = [p.strip() for p in raw_excludes.split(',') if p.strip()]
-                if any(path == p or (p.endswith('*') and path.startswith(p[:-1])) for p in excludes):
+                if any(
+                    path == p or (p.endswith('*') and path.startswith(p[:-1])) for p in excludes
+                ):
                     return await call_next(request)
         except Exception:
             pass
@@ -720,10 +833,13 @@ async def body_size_limit(request: Request, call_next):
                     try:
                         from models.response_model import ResponseModel as _RM
                         from utils.response_util import process_response as _pr
-                        return _pr(_RM(
-                            status_code=200,
-                            message='Settings updated (middleware bypass)'
-                        ).dict(), 'rest')
+
+                        return _pr(
+                            _RM(
+                                status_code=200, message='Settings updated (middleware bypass)'
+                            ).dict(),
+                            'rest',
+                        )
                     except Exception:
                         pass
                 raise
@@ -763,6 +879,7 @@ async def body_size_limit(request: Request, call_next):
                 if content_length > limit:
                     try:
                         from utils.audit_util import audit
+
                         audit(
                             request,
                             actor=None,
@@ -773,17 +890,20 @@ async def body_size_limit(request: Request, call_next):
                                 'content_length': content_length,
                                 'limit': limit,
                                 'content_type': request.headers.get('content-type'),
-                                'transfer_encoding': transfer_encoding or None
-                            }
+                                'transfer_encoding': transfer_encoding or None,
+                            },
                         )
                     except Exception:
                         pass
 
-                    return process_response(ResponseModel(
-                        status_code=413,
-                        error_code='REQ001',
-                        error_message=f'Request entity too large (max: {limit} bytes)'
-                    ).dict(), 'rest')
+                    return process_response(
+                        ResponseModel(
+                            status_code=413,
+                            error_code='REQ001',
+                            error_message=f'Request entity too large (max: {limit} bytes)',
+                        ).dict(),
+                        'rest',
+                    )
             except (ValueError, TypeError):
                 pass
 
@@ -793,7 +913,7 @@ async def body_size_limit(request: Request, call_next):
                 try:
                     env_flag = os.getenv('DISABLE_PLATFORM_CHUNKED_WRAP')
                     if isinstance(env_flag, str) and env_flag.strip() != '':
-                        if env_flag.strip().lower() in ('1','true','yes','on'):
+                        if env_flag.strip().lower() in ('1', 'true', 'yes', 'on'):
                             wrap_allowed = False
                     if str(path) == '/platform/authorization':
                         wrap_allowed = True
@@ -809,9 +929,12 @@ async def body_size_limit(request: Request, call_next):
                     response = await call_next(request)
 
                     try:
-                        if wrap_allowed and (limited_reader.over_limit or limited_reader.bytes_received > limit):
+                        if wrap_allowed and (
+                            limited_reader.over_limit or limited_reader.bytes_received > limit
+                        ):
                             try:
                                 from utils.audit_util import audit
+
                                 audit(
                                     request,
                                     actor=None,
@@ -822,29 +945,37 @@ async def body_size_limit(request: Request, call_next):
                                         'bytes_received': limited_reader.bytes_received,
                                         'limit': limit,
                                         'content_type': request.headers.get('content-type'),
-                                        'transfer_encoding': transfer_encoding or 'chunked'
-                                    }
+                                        'transfer_encoding': transfer_encoding or 'chunked',
+                                    },
                                 )
                             except Exception:
                                 pass
 
-                            return process_response(ResponseModel(
-                                status_code=413,
-                                error_code='REQ001',
-                                error_message=f'Request entity too large (max: {limit} bytes)'
-                            ).dict(), 'rest')
+                            return process_response(
+                                ResponseModel(
+                                    status_code=413,
+                                    error_code='REQ001',
+                                    error_message=f'Request entity too large (max: {limit} bytes)',
+                                ).dict(),
+                                'rest',
+                            )
                     except Exception:
                         pass
 
                     return response
-                except Exception as e:
+                except Exception:
                     try:
-                        if wrap_allowed and (limited_reader.over_limit or limited_reader.bytes_received > limit):
-                            return process_response(ResponseModel(
-                                status_code=413,
-                                error_code='REQ001',
-                                error_message=f'Request entity too large (max: {limit} bytes)'
-                            ).dict(), 'rest')
+                        if wrap_allowed and (
+                            limited_reader.over_limit or limited_reader.bytes_received > limit
+                        ):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=413,
+                                    error_code='REQ001',
+                                    error_message=f'Request entity too large (max: {limit} bytes)',
+                                ).dict(),
+                                'rest',
+                            )
                     except Exception:
                         pass
                     raise
@@ -868,6 +999,7 @@ async def body_size_limit(request: Request, call_next):
             else:
                 try:
                     import anyio
+
                     if isinstance(e, getattr(anyio, 'EndOfStream', tuple())):
                         swallow = True
                 except Exception:
@@ -877,56 +1009,97 @@ async def body_size_limit(request: Request, call_next):
 
         if swallow and _RM and _pr:
             try:
-                return _pr(_RM(
-                    status_code=500,
-                    error_code='GTW998',
-                    error_message='Upstream handler failed to produce a response'
-                ).dict(), 'rest')
+                return _pr(
+                    _RM(
+                        status_code=500,
+                        error_code='GTW998',
+                        error_message='Upstream handler failed to produce a response',
+                    ).dict(),
+                    'rest',
+                )
             except Exception:
                 pass
 
         raise
 
-class PlatformCORSMiddleware:
-    """ASGI-level CORS for /platform/* routes to avoid BaseHTTPMiddleware pitfalls.
 
-    - Handles OPTIONS preflight directly
-    - Injects CORS headers on response start for matching origins
+class PlatformCORSMiddleware:
+    """ASGI-level CORS for /platform/* routes only.
+
+    API-level CORS is enforced in gateway routes. This middleware should not
+    interfere with /api/* paths. It also respects DISABLE_PLATFORM_CORS_ASGI:
+    when set to true, this middleware becomes a no-op.
     """
+
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        # If explicitly disabled, act as a passthrough
         try:
-            if os.getenv('DISABLE_PLATFORM_CORS_ASGI', 'false').lower() in ('1','true','yes','on'):
+            if os.getenv('DISABLE_PLATFORM_CORS_ASGI', 'false').lower() in (
+                '1',
+                'true',
+                'yes',
+                'on',
+            ):
                 return await self.app(scope, receive, send)
         except Exception:
             pass
+
         try:
             if scope.get('type') != 'http':
                 return await self.app(scope, receive, send)
-            path = scope.get('path') or ''
-            if not str(path).startswith('/platform/'):
+            path = str(scope.get('path') or '')
+            # Only handle platform routes here; leave /api/* to route handlers
+            if not (path.startswith('/platform/') or path == '/platform'):
                 return await self.app(scope, receive, send)
 
-            cfg = _env_cors_config()
+            cfg = _platform_cors_config()
             hdrs = {}
             try:
-                for k, v in (scope.get('headers') or []):
+                for k, v in scope.get('headers') or []:
                     hdrs[k.decode('latin1').lower()] = v.decode('latin1')
             except Exception:
                 pass
             origin = hdrs.get('origin')
-            origin_allowed = bool(origin) and (origin in cfg['safe_origins'] or ('*' in cfg['origins'] and not (os.getenv('CORS_STRICT', 'false').lower() == 'true')))
+
+            # Evaluate origin allowance based on config
+            origin_allowed = False
+            if origin:
+                if '*' in cfg['origins']:
+                    if cfg['strict'] and cfg['credentials']:
+                        lo = origin.lower()
+                        origin_allowed = (
+                            lo.startswith('http://localhost')
+                            or lo.startswith('https://localhost')
+                            or lo.startswith('http://127.0.0.1')
+                            or lo.startswith('https://127.0.0.1')
+                        )
+                    else:
+                        origin_allowed = True
+                else:
+                    origin_allowed = origin in cfg['origins']
 
             if str(scope.get('method', '')).upper() == 'OPTIONS':
                 headers = []
-                if origin and origin_allowed:
+                if origin_allowed and origin:
                     headers.append((b'access-control-allow-origin', origin.encode('latin1')))
                     headers.append((b'vary', b'Origin'))
-                headers.append((b'access-control-allow-methods', ', '.join(cfg['methods']).encode('latin1')))
-                headers.append((b'access-control-allow-headers', ', '.join(cfg['headers']).encode('latin1')))
-                headers.append((b'access-control-allow-credentials', b'true' if cfg['credentials'] else b'false'))
+                else:
+                    try:
+                        if origin and '*' in cfg['origins'] and cfg['strict'] and cfg['credentials']:
+                            headers.append((b'access-control-allow-origin', b''))
+                    except Exception:
+                        pass
+                headers.append(
+                    (b'access-control-allow-methods', ', '.join(cfg['methods']).encode('latin1'))
+                )
+                headers.append(
+                    (b'access-control-allow-headers', ', '.join(cfg['headers']).encode('latin1'))
+                )
+                if cfg['credentials']:
+                    headers.append((b'access-control-allow-credentials', b'true'))
                 rid = hdrs.get('x-request-id')
                 if rid:
                     headers.append((b'request_id', rid.encode('latin1')))
@@ -935,23 +1108,37 @@ class PlatformCORSMiddleware:
                 return
 
             async def send_wrapper(message):
-                if message.get('type') == 'http.response.start':
-                    headers = list(message.get('headers') or [])
-                    try:
-                        headers.append((b'access-control-allow-credentials', b'true' if cfg['credentials'] else b'false'))
-                        if origin and origin_allowed:
-                            headers.append((b'access-control-allow-origin', origin.encode('latin1')))
-                            headers.append((b'vary', b'Origin'))
-                    except Exception:
-                        pass
-                    message = {**message, 'headers': headers}
+                # Do not modify non-OPTIONS responses here; platform HTTP middleware handles
+                # response headers to avoid duplicates.
                 await send(message)
 
             return await self.app(scope, receive, send_wrapper)
         except Exception:
             return await self.app(scope, receive, send)
 
+
 doorman.add_middleware(PlatformCORSMiddleware)
+
+# Add tier-based rate limiting middleware (skip in live/test to avoid 429 floods)
+try:
+    from middleware.tier_rate_limit_middleware import TierRateLimitMiddleware
+    import os as _os
+
+    _skip_tier = _os.getenv('SKIP_TIER_RATE_LIMIT', '').lower() in (
+        '1', 'true', 'yes', 'on'
+    )
+    _live = _os.getenv('DOORMAN_RUN_LIVE', '').lower() in ('1', 'true', 'yes', 'on')
+    _test = _os.getenv('DOORMAN_TEST_MODE', '').lower() in ('1', 'true', 'yes', 'on')
+    if not (_skip_tier or _live or _test):
+        doorman.add_middleware(TierRateLimitMiddleware)
+        logging.getLogger('doorman.gateway').info('Tier-based rate limiting middleware enabled')
+    else:
+        logging.getLogger('doorman.gateway').info('Tier-based rate limiting middleware skipped')
+except Exception as e:
+    logging.getLogger('doorman.gateway').warning(
+        f'Failed to enable tier rate limiting middleware: {e}'
+    )
+
 
 @doorman.middleware('http')
 async def request_id_middleware(request: Request, call_next):
@@ -971,6 +1158,7 @@ async def request_id_middleware(request: Request, call_next):
 
         try:
             from utils.correlation_util import set_correlation_id
+
             set_correlation_id(rid)
         except Exception:
             pass
@@ -979,7 +1167,9 @@ async def request_id_middleware(request: Request, call_next):
             trust_xff = bool(settings.get('trust_x_forwarded_for'))
             direct_ip = getattr(getattr(request, 'client', None), 'host', None)
             effective_ip = _policy_get_client_ip(request, trust_xff)
-            gateway_logger.info(f"{rid} | Entry: client_ip={direct_ip} effective_ip={effective_ip} method={request.method} path={str(request.url.path)}")
+            gateway_logger.info(
+                f'{rid} | Entry: client_ip={direct_ip} effective_ip={effective_ip} method={request.method} path={str(request.url.path)}'
+            )
         except Exception:
             pass
         response = await call_next(request)
@@ -993,6 +1183,7 @@ async def request_id_middleware(request: Request, call_next):
         gateway_logger.error(f'Request ID middleware error: {str(e)}', exc_info=True)
         raise
 
+
 @doorman.middleware('http')
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -1000,28 +1191,55 @@ async def security_headers(request: Request, call_next):
         response.headers.setdefault('X-Content-Type-Options', 'nosniff')
         response.headers.setdefault('X-Frame-Options', 'DENY')
         response.headers.setdefault('Referrer-Policy', 'no-referrer')
-        response.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+        response.headers.setdefault(
+            'Permissions-Policy', 'geolocation=(), microphone=(), camera=()'
+        )
 
         try:
-            csp = os.getenv('CONTENT_SECURITY_POLICY')
-            if csp is None or not csp.strip():
-
-                csp =\
-                    "default-src 'none'; "\
-                    "frame-ancestors 'none'; "\
-                    "base-uri 'none'; "\
-                    "form-action 'self'; "\
-                    "img-src 'self' data:; "\
-                    "connect-src 'self';"
+            # Relax CSP for interactive docs to allow required scripts/styles
+            _path = str(getattr(getattr(request, 'url', None), 'path', '') or '')
+            csp_env = os.getenv('CONTENT_SECURITY_POLICY')
+            if csp_env is not None and csp_env.strip():
+                csp = csp_env
+            else:
+                if _path.startswith('/platform/docs') or _path.startswith('/platform/redoc'):
+                    # Allow Swagger/Redoc assets from jsDelivr and embedding in iframes
+                    csp = (
+                        "default-src 'self'; "
+                        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                        "img-src 'self' data: https://cdn.jsdelivr.net; "
+                        "font-src 'self' data: https://cdn.jsdelivr.net; "
+                        "connect-src 'self'; "
+                        "frame-ancestors *; "
+                        "base-uri 'self';"
+                    )
+                    try:
+                        # Remove X-Frame-Options to allow embedding via frame-ancestors
+                        if 'X-Frame-Options' in response.headers:
+                            del response.headers['X-Frame-Options']
+                    except Exception:
+                        pass
+                else:
+                    csp = (
+                        "default-src 'none'; "
+                        "frame-ancestors 'none'; "
+                        "base-uri 'none'; "
+                        "form-action 'self'; "
+                        "img-src 'self' data:; "
+                        "connect-src 'self';"
+                    )
             response.headers.setdefault('Content-Security-Policy', csp)
         except Exception:
             pass
         if os.getenv('HTTPS_ONLY', 'false').lower() == 'true':
-
-            response.headers.setdefault('Strict-Transport-Security', 'max-age=15552000; includeSubDomains; preload')
+            response.headers.setdefault(
+                'Strict-Transport-Security', 'max-age=15552000; includeSubDomains; preload'
+            )
     except Exception:
         pass
     return response
+
 
 """Logging configuration
 
@@ -1032,7 +1250,10 @@ Respects LOG_FORMAT=json|plain.
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _env_logs_dir = os.getenv('LOGS_DIR')
-LOGS_DIR = os.path.abspath(_env_logs_dir) if _env_logs_dir else os.path.join(BASE_DIR, 'platform-logs')
+LOGS_DIR = (
+    os.path.abspath(_env_logs_dir) if _env_logs_dir else os.path.join(BASE_DIR, 'platform-logs')
+)
+
 
 # Build formatters
 class JSONFormatter(logging.Formatter):
@@ -1048,6 +1269,7 @@ class JSONFormatter(logging.Formatter):
         except Exception:
             return f'{payload}'
 
+
 _fmt_is_json = os.getenv('LOG_FORMAT', 'plain').lower() == 'json'
 _file_handler = None
 try:
@@ -1056,21 +1278,29 @@ try:
         filename=os.path.join(LOGS_DIR, 'doorman.log'),
         maxBytes=10 * 1024 * 1024,
         backupCount=5,
-        encoding='utf-8'
+        encoding='utf-8',
     )
-    _file_handler.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    _file_handler.setFormatter(
+        JSONFormatter()
+        if _fmt_is_json
+        else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
 except Exception as _e:
-    logging.getLogger('doorman.gateway').warning(f'File logging disabled ({_e}); using console logging only')
+    logging.getLogger('doorman.gateway').warning(
+        f'File logging disabled ({_e}); using console logging only'
+    )
     _file_handler = None
 
+
 # Configure all doorman loggers to use the same handler and prevent propagation
-def configure_logger(logger_name):
+def configure_logger(logger_name: str) -> logging.Logger:
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
+
     class RedactFilter(logging.Filter):
         """Comprehensive logging redaction filter for sensitive data.
 
@@ -1085,30 +1315,25 @@ def configure_logger(logger_name):
 
         PATTERNS = [
             re.compile(r'(?i)(authorization\s*[:=]\s*)([^;\r\n]+)'),
-
             re.compile(r'(?i)(x-api-key\s*[:=]\s*)([^;\r\n]+)'),
             re.compile(r'(?i)(api[_-]?key\s*[:=]\s*)([^;\r\n]+)'),
             re.compile(r'(?i)(api[_-]?secret\s*[:=]\s*)([^;\r\n]+)'),
-
             re.compile(r'(?i)(access[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
             re.compile(r'(?i)(refresh[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
             re.compile(r'(?i)(token\s*["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-\.]{20,})(["\']?)'),
-
             re.compile(r'(?i)(password\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n]+)(["\']?)'),
             re.compile(r'(?i)(secret\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
             re.compile(r'(?i)(client[_-]?secret\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
-
             re.compile(r'(?i)(cookie\s*[:=]\s*)([^;\r\n]+)'),
             re.compile(r'(?i)(set-cookie\s*[:=]\s*)([^;\r\n]+)'),
-
             re.compile(r'(?i)(x-csrf-token\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
             re.compile(r'(?i)(csrf[_-]?token\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
-
             re.compile(r'\b(eyJ[a-zA-Z0-9_\-]+\.eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+)\b'),
-
             re.compile(r'(?i)(session[_-]?id\s*["\']?\s*[:=]\s*["\']?)([^"\';\r\n\s]+)(["\']?)'),
-
-            re.compile(r'(-----BEGIN[A-Z\s]+PRIVATE KEY-----)(.*?)(-----END[A-Z\s]+PRIVATE KEY-----)', re.DOTALL),
+            re.compile(
+                r'(-----BEGIN[A-Z\s]+PRIVATE KEY-----)(.*?)(-----END[A-Z\s]+PRIVATE KEY-----)',
+                re.DOTALL,
+            ),
         ]
 
         def filter(self, record: logging.LogRecord) -> bool:
@@ -1120,11 +1345,14 @@ def configure_logger(logger_name):
                     if pat.groups == 3 and pat.flags & re.DOTALL:
                         red = pat.sub(r'\1[REDACTED]\3', red)
                     elif pat.groups >= 2:
-                        red = pat.sub(lambda m: (
-                            m.group(1) +
-                            '[REDACTED]' +
-                            (m.group(3) if m.lastindex and m.lastindex >= 3 else '')
-                        ), red)
+                        red = pat.sub(
+                            lambda m: (
+                                m.group(1)
+                                + '[REDACTED]'
+                                + (m.group(3) if m.lastindex and m.lastindex >= 3 else '')
+                            ),
+                            red,
+                        )
                     else:
                         red = pat.sub('[REDACTED]', red)
 
@@ -1133,7 +1361,15 @@ def configure_logger(logger_name):
                     if hasattr(record, 'args') and record.args:
                         try:
                             if isinstance(record.args, dict):
-                                record.args = {k: '[REDACTED]' if 'token' in str(k).lower() or 'password' in str(k).lower() or 'secret' in str(k).lower() or 'authorization' in str(k).lower() else v for k, v in record.args.items()}
+                                record.args = {
+                                    k: '[REDACTED]'
+                                    if 'token' in str(k).lower()
+                                    or 'password' in str(k).lower()
+                                    or 'secret' in str(k).lower()
+                                    or 'authorization' in str(k).lower()
+                                    else v
+                                    for k, v in record.args.items()
+                                }
                         except Exception:
                             pass
             except Exception:
@@ -1142,16 +1378,22 @@ def configure_logger(logger_name):
 
     console = logging.StreamHandler(stream=sys.stdout)
     console.setLevel(logging.INFO)
-    console.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    console.setFormatter(
+        JSONFormatter()
+        if _fmt_is_json
+        else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
     console.addFilter(RedactFilter())
     logger.addHandler(console)
 
     if _file_handler is not None:
-
-        if not any(isinstance(f, logging.Filter) and hasattr(f, 'PATTERNS') for f in _file_handler.filters):
+        if not any(
+            isinstance(f, logging.Filter) and hasattr(f, 'PATTERNS') for f in _file_handler.filters
+        ):
             _file_handler.addFilter(RedactFilter())
         logger.addHandler(_file_handler)
     return logger
+
 
 gateway_logger = configure_logger('doorman.gateway')
 logging_logger = configure_logger('doorman.logging')
@@ -1172,9 +1414,7 @@ try:
             compression_level = 1
 
         doorman.add_middleware(
-            GZipMiddleware,
-            minimum_size=compression_minimum_size,
-            compresslevel=compression_level
+            GZipMiddleware, minimum_size=compression_minimum_size, compresslevel=compression_level
         )
         gateway_logger.info(
             f'Response compression enabled: level={compression_level}, '
@@ -1184,6 +1424,7 @@ try:
         gateway_logger.info('Response compression disabled (COMPRESSION_ENABLED=false)')
 except Exception as e:
     gateway_logger.warning(f'Failed to configure response compression: {e}. Compression disabled.')
+
 
 # Ensure platform responses set Vary=Origin (and not Accept-Encoding) for CORS tests.
 class _VaryOriginMiddleware(BaseHTTPMiddleware):
@@ -1201,6 +1442,7 @@ class _VaryOriginMiddleware(BaseHTTPMiddleware):
         except Exception:
             pass
         return response
+
 
 doorman.add_middleware(_VaryOriginMiddleware)
 
@@ -1222,9 +1464,13 @@ try:
         filename=os.path.join(LOGS_DIR, 'doorman-trail.log'),
         maxBytes=10 * 1024 * 1024,
         backupCount=5,
-        encoding='utf-8'
+        encoding='utf-8',
     )
-    _audit_file.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    _audit_file.setFormatter(
+        JSONFormatter()
+        if _fmt_is_json
+        else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
     try:
         for eh in gateway_logger.handlers:
             for f in getattr(eh, 'filters', []):
@@ -1233,10 +1479,13 @@ try:
         pass
     audit_logger.addHandler(_audit_file)
 except Exception as _e:
-
     console = logging.StreamHandler(stream=sys.stdout)
     console.setLevel(logging.INFO)
-    console.setFormatter(JSONFormatter() if _fmt_is_json else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    console.setFormatter(
+        JSONFormatter()
+        if _fmt_is_json
+        else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
     try:
         for eh in gateway_logger.handlers:
             for f in getattr(eh, 'filters', []):
@@ -1245,12 +1494,18 @@ except Exception as _e:
         pass
     audit_logger.addHandler(console)
 
+
 class Settings(BaseSettings):
     mongo_db_uri: str = os.getenv('MONGO_DB_URI')
     jwt_secret_key: str = os.getenv('JWT_SECRET_KEY')
     jwt_algorithm: str = 'HS256'
-    jwt_access_token_expires: timedelta = timedelta(minutes=int(os.getenv('ACCESS_TOKEN_EXPIRES_MINUTES', 15)))
-    jwt_refresh_token_expires: timedelta = timedelta(days=int(os.getenv('REFRESH_TOKEN_EXPIRES_DAYS', 30)))
+    jwt_access_token_expires: timedelta = timedelta(
+        minutes=int(os.getenv('ACCESS_TOKEN_EXPIRES_MINUTES', 15))
+    )
+    jwt_refresh_token_expires: timedelta = timedelta(
+        days=int(os.getenv('REFRESH_TOKEN_EXPIRES_DAYS', 30))
+    )
+
 
 @doorman.middleware('http')
 async def ip_filter_middleware(request: Request, call_next):
@@ -1268,12 +1523,29 @@ async def ip_filter_middleware(request: Request, call_next):
 
         try:
             import os
+
             settings = get_cached_settings()
             env_flag = os.getenv('LOCAL_HOST_IP_BYPASS')
-            allow_local = (env_flag.lower() == 'true') if isinstance(env_flag, str) and env_flag.strip() != '' else bool(settings.get('allow_localhost_bypass'))
+            allow_local = (
+                (env_flag.lower() == 'true')
+                if isinstance(env_flag, str) and env_flag.strip() != ''
+                else bool(settings.get('allow_localhost_bypass'))
+            )
             if allow_local:
                 direct_ip = getattr(getattr(request, 'client', None), 'host', None)
-                has_forward = any(request.headers.get(h) for h in ('x-forwarded-for','X-Forwarded-For','x-real-ip','X-Real-IP','cf-connecting-ip','CF-Connecting-IP','forwarded','Forwarded'))
+                has_forward = any(
+                    request.headers.get(h)
+                    for h in (
+                        'x-forwarded-for',
+                        'X-Forwarded-For',
+                        'x-real-ip',
+                        'X-Real-IP',
+                        'cf-connecting-ip',
+                        'CF-Connecting-IP',
+                        'forwarded',
+                        'Forwarded',
+                    )
+                )
                 if direct_ip and _policy_is_loopback(direct_ip) and not has_forward:
                     return await call_next(request)
         except Exception:
@@ -1282,37 +1554,77 @@ async def ip_filter_middleware(request: Request, call_next):
         if client_ip:
             if wl and not _policy_ip_in_list(client_ip, wl):
                 try:
-                    audit(request, actor=None, action='ip.global_deny', target=client_ip, status='blocked', details={'reason': 'not_in_whitelist', 'xff': xff_hdr, 'source_ip': getattr(getattr(request, 'client', None), 'host', None)})
+                    audit(
+                        request,
+                        actor=None,
+                        action='ip.global_deny',
+                        target=client_ip,
+                        status='blocked',
+                        details={
+                            'reason': 'not_in_whitelist',
+                            'xff': xff_hdr,
+                            'source_ip': getattr(getattr(request, 'client', None), 'host', None),
+                        },
+                    )
                 except Exception:
                     pass
                 from fastapi.responses import JSONResponse
-                return JSONResponse(status_code=403, content={'status_code': 403, 'error_code': 'SEC010', 'error_message': 'IP not allowed'})
+
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        'status_code': 403,
+                        'error_code': 'SEC010',
+                        'error_message': 'IP not allowed',
+                    },
+                )
             if bl and _policy_ip_in_list(client_ip, bl):
                 try:
-                    audit(request, actor=None, action='ip.global_deny', target=client_ip, status='blocked', details={'reason': 'blacklisted', 'xff': xff_hdr, 'source_ip': getattr(getattr(request, 'client', None), 'host', None)})
+                    audit(
+                        request,
+                        actor=None,
+                        action='ip.global_deny',
+                        target=client_ip,
+                        status='blocked',
+                        details={
+                            'reason': 'blacklisted',
+                            'xff': xff_hdr,
+                            'source_ip': getattr(getattr(request, 'client', None), 'host', None),
+                        },
+                    )
                 except Exception:
                     pass
                 from fastapi.responses import JSONResponse
-                return JSONResponse(status_code=403, content={'status_code': 403, 'error_code': 'SEC011', 'error_message': 'IP blocked'})
+
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        'status_code': 403,
+                        'error_code': 'SEC011',
+                        'error_message': 'IP blocked',
+                    },
+                )
     except Exception:
         pass
     return await call_next(request)
 
+
 @doorman.middleware('http')
 async def metrics_middleware(request: Request, call_next):
     start = asyncio.get_event_loop().time()
+
     def _parse_len(val: str | None) -> int:
         try:
             return int(val) if val is not None else 0
         except Exception:
             return 0
+
     bytes_in = _parse_len(request.headers.get('content-length'))
     response = None
     try:
         response = await call_next(request)
         return response
     finally:
-
         try:
             if str(request.url.path).startswith('/api/'):
                 end = asyncio.get_event_loop().time()
@@ -1323,6 +1635,7 @@ async def metrics_middleware(request: Request, call_next):
 
                 try:
                     from utils.auth_util import auth_required as _auth_required
+
                     payload = await _auth_required(request)
                     username = payload.get('sub') if isinstance(payload, dict) else None
                 except Exception:
@@ -1333,11 +1646,14 @@ async def metrics_middleware(request: Request, call_next):
                     parts = p.split('/')
                     try:
                         idx = parts.index('rest')
-                        api_key = f'rest:{parts[idx+1]}' if len(parts) > idx+1 and parts[idx+1] else 'rest:unknown'
+                        api_key = (
+                            f'rest:{parts[idx + 1]}'
+                            if len(parts) > idx + 1 and parts[idx + 1]
+                            else 'rest:unknown'
+                        )
                     except ValueError:
                         api_key = 'rest:unknown'
                 elif p.startswith('/api/graphql/'):
-
                     seg = p.rsplit('/', 1)[-1] or 'unknown'
                     api_key = f'graphql:{seg}'
                 elif p.startswith('/api/soap/'):
@@ -1357,13 +1673,29 @@ async def metrics_middleware(request: Request, call_next):
                 except Exception:
                     clen = 0
 
-                metrics_store.record(status=status, duration_ms=duration_ms, username=username, api_key=api_key, bytes_in=bytes_in, bytes_out=clen)
+                metrics_store.record(
+                    status=status,
+                    duration_ms=duration_ms,
+                    username=username,
+                    api_key=api_key,
+                    bytes_in=bytes_in,
+                    bytes_out=clen,
+                )
                 try:
                     if username:
-                        from utils.bandwidth_util import add_usage, _get_user
+                        from utils.bandwidth_util import _get_user, add_usage
+
                         u = _get_user(username)
-                        if u and u.get('bandwidth_limit_bytes') and u.get('bandwidth_limit_enabled') is not False:
-                            add_usage(username, int(bytes_in) + int(clen), u.get('bandwidth_limit_window') or 'day')
+                        if (
+                            u
+                            and u.get('bandwidth_limit_bytes')
+                            and u.get('bandwidth_limit_enabled') is not False
+                        ):
+                            add_usage(
+                                username,
+                                int(bytes_in) + int(clen),
+                                u.get('bandwidth_limit_window') or 'day',
+                            )
                 except Exception:
                     pass
                 try:
@@ -1379,8 +1711,8 @@ async def metrics_middleware(request: Request, call_next):
                 except Exception:
                     pass
         except Exception:
-
             pass
+
 
 async def automatic_purger(interval_seconds):
     while True:
@@ -1388,29 +1720,42 @@ async def automatic_purger(interval_seconds):
         await purge_expired_tokens()
         gateway_logger.info('Expired JWTs purged from blacklist.')
 
+
 @doorman.exception_handler(JWTError)
 async def jwt_exception_handler(exc: JWTError):
-    return process_response(ResponseModel(
-        status_code=401,
-        error_code='JWT001',
-        error_message='Invalid token'
-    ).dict(), 'rest')
+    return process_response(
+        ResponseModel(status_code=401, error_code='JWT001', error_message='Invalid token').dict(),
+        'rest',
+    )
+
 
 @doorman.exception_handler(500)
 async def internal_server_error_handler(request: Request, exc: Exception):
-    return process_response(ResponseModel(
-        status_code=500,
-        error_code='ISE001',
-        error_message='Internal Server Error'
-    ).dict(), 'rest')
+    return process_response(
+        ResponseModel(
+            status_code=500, error_code='ISE001', error_message='Internal Server Error'
+        ).dict(),
+        'rest',
+    )
+
 
 @doorman.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return process_response(ResponseModel(
-        status_code=422,
-        error_code='VAL001',
-        error_message='Validation Error'
-    ).dict(), 'rest')
+    # DEBUG: Log validation errors
+    import logging
+
+    log = logging.getLogger('doorman.gateway')
+    log.error(f'Validation error on {request.method} {request.url.path}')
+    log.error(f'Validation errors: {exc.errors()}')
+    log.error(f'Request body: {await request.body()}')
+
+    return process_response(
+        ResponseModel(
+            status_code=422, error_code='VAL001', error_message='Validation Error'
+        ).dict(),
+        'rest',
+    )
+
 
 cache_manager.init_app(doorman)
 
@@ -1434,30 +1779,41 @@ doorman.include_router(demo_router, prefix='/platform/demo', tags=['Demo'])
 doorman.include_router(config_router, prefix='/platform', tags=['Config'])
 doorman.include_router(tools_router, prefix='/platform/tools', tags=['Tools'])
 doorman.include_router(config_hot_reload_router, prefix='/platform', tags=['Config Hot Reload'])
+doorman.include_router(vault_router, prefix='/platform/vault', tags=['Vault'])
+doorman.include_router(analytics_router, prefix='/platform', tags=['Analytics'])
+doorman.include_router(tier_router, prefix='/platform/tiers', tags=['Tiers'])
+doorman.include_router(rate_limit_rule_router, prefix='/platform/rate-limits', tags=['Rate Limits'])
+doorman.include_router(quota_router, prefix='/platform/quota', tags=['Quota'])
 
-def start():
+
+def start() -> None:
     if os.path.exists(PID_FILE):
         gateway_logger.info('doorman is already running!')
         sys.exit(0)
     if os.name == 'nt':
-        process = subprocess.Popen([sys.executable, __file__, 'run'],
-                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-                                   stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL)
+        process = subprocess.Popen(
+            [sys.executable, __file__, 'run'],
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     else:
-        process = subprocess.Popen([sys.executable, __file__, 'run'],
-                                   stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL,
-                                   preexec_fn=os.setsid)
+        process = subprocess.Popen(
+            [sys.executable, __file__, 'run'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            preexec_fn=os.setsid,
+        )
     with open(PID_FILE, 'w') as f:
         f.write(str(process.pid))
     gateway_logger.info(f'Starting doorman with PID {process.pid}.')
 
-def stop():
+
+def stop() -> None:
     if not os.path.exists(PID_FILE):
         gateway_logger.info('No running instance found')
         return
-    with open(PID_FILE, 'r') as f:
+    with open(PID_FILE) as f:
         pid = int(f.read())
     try:
         if os.name == 'nt':
@@ -1468,7 +1824,6 @@ def stop():
             deadline = time.time() + 15
             while time.time() < deadline:
                 try:
-
                     os.kill(pid, 0)
                     time.sleep(0.5)
                 except ProcessLookupError:
@@ -1480,7 +1835,8 @@ def stop():
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
 
-def restart():
+
+def restart() -> None:
     """Restart the doorman process using PID-based supervisor.
     This function is intended to be invoked from a detached helper process.
     """
@@ -1495,7 +1851,8 @@ def restart():
     except Exception as e:
         gateway_logger.error(f'Error during start phase of restart: {e}')
 
-def run():
+
+def run() -> None:
     server_port = int(os.getenv('PORT', 5001))
     max_threads = multiprocessing.cpu_count()
     env_threads = int(os.getenv('THREADS', max_threads))
@@ -1510,6 +1867,9 @@ def run():
             'Set THREADS=1 for single-process memory mode or switch to MEM_OR_EXTERNAL=REDIS for multi-worker.'
         )
     gateway_logger.info(f'Started doorman with {num_threads} threads on port {server_port}')
+    gateway_logger.info(
+        'TLS termination should be handled at reverse proxy (Nginx, Traefik, ALB, etc.)'
+    )
     uvicorn.run(
         'doorman:doorman',
         host='0.0.0.0',
@@ -1518,11 +1878,10 @@ def run():
         reload_excludes=['venv/*', 'logs/*'],
         workers=num_threads,
         log_level='info',
-        ssl_certfile=os.getenv('SSL_CERTFILE') if os.getenv('HTTPS_ONLY', 'false').lower() == 'true' else None,
-        ssl_keyfile=os.getenv('SSL_KEYFILE') if os.getenv('HTTPS_ONLY', 'false').lower() == 'true' else None
     )
 
-def main():
+
+def main() -> None:
     host = os.getenv('HOST', '0.0.0.0')
     port = int(os.getenv('PORT', '8000'))
     try:
@@ -1530,11 +1889,74 @@ def main():
             'doorman:doorman',
             host=host,
             port=port,
-            reload=os.getenv('DEBUG', 'false').lower() == 'true'
+            reload=os.getenv('DEBUG', 'false').lower() == 'true',
         )
     except Exception as e:
         gateway_logger.error(f'Failed to start server: {str(e)}')
         raise
+
+
+def seed_command() -> None:
+    """Run the demo seeder from command line"""
+    import argparse
+
+    from utils.demo_seed_util import run_seed
+
+    parser = argparse.ArgumentParser(description='Seed the database with demo data')
+    parser.add_argument(
+        '--users', type=int, default=60, help='Number of users to create (default: 60)'
+    )
+    parser.add_argument(
+        '--apis', type=int, default=20, help='Number of APIs to create (default: 20)'
+    )
+    parser.add_argument(
+        '--endpoints', type=int, default=6, help='Number of endpoints per API (default: 6)'
+    )
+    parser.add_argument(
+        '--groups', type=int, default=10, help='Number of groups to create (default: 10)'
+    )
+    parser.add_argument(
+        '--protos', type=int, default=6, help='Number of proto files to create (default: 6)'
+    )
+    parser.add_argument(
+        '--logs', type=int, default=2000, help='Number of log entries to create (default: 2000)'
+    )
+    parser.add_argument(
+        '--seed', type=int, default=None, help='Random seed for reproducibility (optional)'
+    )
+
+    args = parser.parse_args(sys.argv[2:])  # Skip 'doorman.py' and 'seed'
+
+    print('Starting demo seed with:')
+    print(f'  Users: {args.users}')
+    print(f'  APIs: {args.apis}')
+    print(f'  Endpoints per API: {args.endpoints}')
+    print(f'  Groups: {args.groups}')
+    print(f'  Protos: {args.protos}')
+    print(f'  Logs: {args.logs}')
+    if args.seed is not None:
+        print(f'  Random Seed: {args.seed}')
+    print()
+
+    try:
+        result = run_seed(
+            users=args.users,
+            apis=args.apis,
+            endpoints=args.endpoints,
+            groups=args.groups,
+            protos=args.protos,
+            logs=args.logs,
+            seed=args.seed,
+        )
+        print('\n✓ Seeding completed successfully!')
+        print(f'Result: {result}')
+    except Exception as e:
+        print(f'\n✗ Seeding failed: {str(e)}')
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
+
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'stop':
@@ -1545,5 +1967,7 @@ if __name__ == '__main__':
         restart()
     elif len(sys.argv) > 1 and sys.argv[1] == 'run':
         run()
+    elif len(sys.argv) > 1 and sys.argv[1] == 'seed':
+        seed_command()
     else:
         main()

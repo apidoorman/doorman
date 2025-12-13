@@ -10,21 +10,29 @@ def test_security_settings_get_put(client):
     updated = r.json().get('response', r.json())
     assert bool(updated.get('enable_auto_save') or False) == desired
 
+
 def test_tools_cors_check(client):
-    r = client.post('/platform/tools/cors/check', json={
-        'origin': 'http://localhost:3000',
-        'method': 'GET',
-        'request_headers': ['Content-Type']
-    })
+    r = client.post(
+        '/platform/tools/cors/check',
+        json={
+            'origin': 'http://localhost:3000',
+            'method': 'GET',
+            'request_headers': ['Content-Type'],
+        },
+    )
     assert r.status_code == 200
     payload = r.json().get('response', r.json())
     assert 'config' in payload and 'preflight' in payload
+
 
 def test_clear_all_caches(client):
     r = client.delete('/api/caches')
     assert r.status_code == 200
     body = r.json().get('response', r.json())
-    assert 'All caches cleared' in (body.get('message') or body.get('error_message') or 'All caches cleared')
+    assert 'All caches cleared' in (
+        body.get('message') or body.get('error_message') or 'All caches cleared'
+    )
+
 
 def test_logging_endpoints(client):
     r = client.get('/platform/logging/logs?limit=10')
@@ -36,5 +44,8 @@ def test_logging_endpoints(client):
     assert r.status_code == 200
     files = r.json().get('response', r.json())
     assert 'count' in files
+
+
 import pytest
+
 pytestmark = [pytest.mark.security, pytest.mark.tools, pytest.mark.logging]

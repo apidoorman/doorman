@@ -4,16 +4,18 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-from fastapi import HTTPException, Depends, Request
-from jose import jwt, JWTError
 import logging
 
-from utils.doorman_cache_util import doorman_cache
+from fastapi import HTTPException, Request
+from jose import JWTError
+
+from utils.async_db import db_find_one
+from utils.auth_util import auth_required
 from utils.database_async import subscriptions_collection
-from utils.async_db import db_find_one, db_update_one
-from utils.auth_util import SECRET_KEY, ALGORITHM, auth_required
+from utils.doorman_cache_util import doorman_cache
 
 logger = logging.getLogger('doorman.gateway')
+
 
 async def subscription_required(request: Request):
     try:
@@ -24,11 +26,11 @@ async def subscription_required(request: Request):
         full_path = request.url.path
         if full_path.startswith('/api/rest/'):
             prefix = '/api/rest/'
-            path = full_path[len(prefix):]
+            path = full_path[len(prefix) :]
             api_and_version = '/'.join(path.split('/')[:2])
         elif full_path.startswith('/api/soap/'):
             prefix = '/api/soap/'
-            path = full_path[len(prefix):]
+            path = full_path[len(prefix) :]
             api_and_version = '/'.join(path.split('/')[:2])
         elif full_path.startswith('/api/graphql/'):
             api_name = full_path.replace('/api/graphql/', '')
@@ -45,8 +47,14 @@ async def subscription_required(request: Request):
                 api_and_version = '/'.join(segs[2:4])
             else:
                 api_and_version = '/'.join(segs[:2])
-        user_subscriptions = doorman_cache.get_cache('user_subscription_cache', username) or await db_find_one(subscriptions_collection, {'username': username})
-        subscriptions = user_subscriptions.get('apis') if user_subscriptions and 'apis' in user_subscriptions else None
+        user_subscriptions = doorman_cache.get_cache(
+            'user_subscription_cache', username
+        ) or await db_find_one(subscriptions_collection, {'username': username})
+        subscriptions = (
+            user_subscriptions.get('apis')
+            if user_subscriptions and 'apis' in user_subscriptions
+            else None
+        )
         if not subscriptions or api_and_version not in subscriptions:
             logger.info(f'User {username} attempted access to {api_and_version}')
             raise HTTPException(status_code=403, detail='You are not subscribed to this resource')

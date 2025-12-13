@@ -5,17 +5,19 @@ See https://github.com/pypeople-dev/doorman for more information
 """
 
 import logging
+
 from fastapi import HTTPException, Request
 
-from utils.doorman_cache_util import doorman_cache
 from services.user_service import UserService
-from utils.database_async import api_collection
 from utils.async_db import db_find_one
 from utils.auth_util import auth_required
+from utils.database_async import api_collection
+from utils.doorman_cache_util import doorman_cache
 
 logger = logging.getLogger('doorman.gateway')
 
-async def group_required(request: Request = None, full_path: str = None, user_to_subscribe = None):
+
+async def group_required(request: Request = None, full_path: str = None, user_to_subscribe=None):
     try:
         payload = await auth_required(request)
         username = payload.get('sub')
@@ -37,7 +39,7 @@ async def group_required(request: Request = None, full_path: str = None, user_to
             prefix = '/api/grpc/'
             if request:
                 postfix = '/' + request.headers.get('X-API-Version', 'v0')
-        path = full_path[len(prefix):] if full_path.startswith(prefix) else full_path
+        path = full_path[len(prefix) :] if full_path.startswith(prefix) else full_path
         api_and_version = '/'.join(path.split('/')[:2]) + postfix
         if not api_and_version or '/' not in api_and_version:
             raise HTTPException(status_code=404, detail='Invalid API path format')
@@ -46,11 +48,15 @@ async def group_required(request: Request = None, full_path: str = None, user_to
             user = await UserService.get_user_by_username_helper(user_to_subscribe)
         else:
             user = await UserService.get_user_by_username_helper(username)
-        api = doorman_cache.get_cache('api_cache', api_and_version) or await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
+        api = doorman_cache.get_cache('api_cache', api_and_version) or await db_find_one(
+            api_collection, {'api_name': api_name, 'api_version': api_version}
+        )
         if not api:
             raise HTTPException(status_code=404, detail='API not found')
         if not set(user.get('groups') or []).intersection(api.get('api_allowed_groups') or []):
-            raise HTTPException(status_code=401, detail='You do not have the correct group for this')
+            raise HTTPException(
+                status_code=401, detail='You do not have the correct group for this'
+            )
     except HTTPException as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     return payload

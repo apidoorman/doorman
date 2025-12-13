@@ -4,32 +4,38 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-from typing import Dict, Any, Optional, Callable
-from fastapi import HTTPException
-import json
 import re
-from datetime import datetime
 import uuid
+from collections.abc import Callable
+from datetime import datetime
+from typing import Any
+
+from fastapi import HTTPException
+
 try:
     from defusedxml import ElementTree as ET
+
     _DEFUSED = True
 except Exception:
     import xml.etree.ElementTree as ET
+
     _DEFUSED = False
-from graphql import parse, GraphQLError
 import grpc
+from graphql import GraphQLError, parse
 
 from models.field_validation_model import FieldValidation
 from models.validation_schema_model import ValidationSchema
-from utils.doorman_cache_util import doorman_cache
-from utils.database_async import endpoint_validation_collection
 from utils.async_db import db_find_one
+from utils.database_async import endpoint_validation_collection
+from utils.doorman_cache_util import doorman_cache
+
 
 class ValidationError(Exception):
     def __init__(self, message: str, field_path: str):
         self.message = message
         self.field_path = field_path
         super().__init__(self.message)
+
 
 class ValidationUtil:
     def __init__(self):
@@ -38,16 +44,16 @@ class ValidationUtil:
             'number': self._validate_number,
             'boolean': self._validate_boolean,
             'array': self._validate_array,
-            'object': self._validate_object
+            'object': self._validate_object,
         }
         self.format_validators = {
             'email': self._validate_email,
             'url': self._validate_url,
             'date': self._validate_date,
             'datetime': self._validate_datetime,
-            'uuid': self._validate_uuid
+            'uuid': self._validate_uuid,
         }
-        self.custom_validators: Dict[str, Callable] = {}
+        self.custom_validators: dict[str, Callable] = {}
         # When defusedxml is unavailable, apply a basic pre-parse guard against DOCTYPE/ENTITY.
 
     def _reject_unsafe_xml(self, xml_text: str) -> None:
@@ -62,10 +68,12 @@ class ValidationUtil:
         if '<!doctype' in lowered or '<!entity' in lowered:
             raise HTTPException(status_code=400, detail='XML DTD/entities are not allowed')
 
-    def register_custom_validator(self, name: str, validator: Callable[[Any, FieldValidation], None]) -> None:
+    def register_custom_validator(
+        self, name: str, validator: Callable[[Any, FieldValidation], None]
+    ) -> None:
         self.custom_validators[name] = validator
 
-    async def get_validation_schema(self, endpoint_id: str) -> Optional[ValidationSchema]:
+    async def get_validation_schema(self, endpoint_id: str) -> ValidationSchema | None:
         """Return the ValidationSchema for an endpoint_id if configured.
 
         Looks up the in-memory cache first, then falls back to the DB collection.
@@ -75,7 +83,9 @@ class ValidationUtil:
         """
         validation_doc = doorman_cache.get_cache('endpoint_validation_cache', endpoint_id)
         if not validation_doc:
-            validation_doc = await db_find_one(endpoint_validation_collection, {'endpoint_id': endpoint_id})
+            validation_doc = await db_find_one(
+                endpoint_validation_collection, {'endpoint_id': endpoint_id}
+            )
             if validation_doc:
                 try:
                     vdoc = dict(validation_doc)
@@ -91,14 +101,20 @@ class ValidationUtil:
         raw = validation_doc.get('validation_schema')
         if not raw:
             return None
-        mapping = raw.get('validation_schema') if isinstance(raw, dict) and 'validation_schema' in raw else raw
+        mapping = (
+            raw.get('validation_schema')
+            if isinstance(raw, dict) and 'validation_schema' in raw
+            else raw
+        )
         if not isinstance(mapping, dict):
             return None
         schema = ValidationSchema(validation_schema=mapping)
         self._validate_schema_paths(schema.validation_schema)
         return schema
 
-    def _validate_schema_paths(self, schema: Dict[str, FieldValidation], parent_path: str = '') -> None:
+    def _validate_schema_paths(
+        self, schema: dict[str, FieldValidation], parent_path: str = ''
+    ) -> None:
         for field_path, validation in schema.items():
             full_path = f'{parent_path}.{field_path}' if parent_path else field_path
             if not self._is_valid_field_path(full_path):
@@ -160,7 +176,9 @@ class ValidationUtil:
                 if field_validation.required and field_path not in value:
                     raise ValidationError(f'Required field {field_path} is missing', path)
                 if field_path in value:
-                    self._validate_value(value[field_path], field_validation, f'{path}.{field_path}')
+                    self._validate_value(
+                        value[field_path], field_validation, f'{path}.{field_path}'
+                    )
 
     def _validate_value(self, value: Any, validation: FieldValidation, field_path: str) -> None:
         if validation.required and value is None:
@@ -175,7 +193,6 @@ class ValidationUtil:
             try:
                 self.custom_validators[validation.custom_validator](value, validation)
             except ValidationError as e:
-
                 raise ValidationError(e.message, field_path)
 
     def _validate_email(self, value: str, validation: FieldValidation, path: str) -> None:
@@ -184,29 +201,32 @@ class ValidationUtil:
             raise ValidationError('Invalid email format', path)
 
     def _validate_url(self, value: str, validation: FieldValidation, path: str) -> None:
-        url_pattern = r'^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$'
+        url_pattern = (
+            r'^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}'
+            r'\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$'
+        )
         if not re.match(url_pattern, value):
             raise ValidationError('Invalid URL format', path)
 
     def _validate_date(self, value: str, validation: FieldValidation, path: str) -> None:
         try:
             datetime.strptime(value, '%Y-%m-%d')
-        except ValueError:
-            raise ValidationError('Invalid date format (YYYY-MM-DD)', path)
+        except ValueError as e:
+            raise ValidationError('Invalid date format (YYYY-MM-DD)', path) from e
 
     def _validate_datetime(self, value: str, validation: FieldValidation, path: str) -> None:
         try:
             datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            raise ValidationError('Invalid datetime format (ISO 8601)', path)
+        except ValueError as e:
+            raise ValidationError('Invalid datetime format (ISO 8601)', path) from e
 
     def _validate_uuid(self, value: str, validation: FieldValidation, path: str) -> None:
         try:
             uuid.UUID(value)
-        except ValueError:
-            raise ValidationError('Invalid UUID format', path)
+        except ValueError as e:
+            raise ValidationError('Invalid UUID format', path) from e
 
-    async def validate_rest_request(self, endpoint_id: str, request_data: Dict[str, Any]) -> None:
+    async def validate_rest_request(self, endpoint_id: str, request_data: dict[str, Any]) -> None:
         schema = await self.get_validation_schema(endpoint_id)
         if not schema:
             return
@@ -216,8 +236,11 @@ class ValidationUtil:
                 self._validate_value(value, validation, field_path)
             except ValidationError as e:
                 import logging
-                logging.getLogger('doorman.gateway').error(f'Validation failed for {field_path}: {e}')
-                raise HTTPException(status_code=400, detail=str(e))
+
+                logging.getLogger('doorman.gateway').error(
+                    f'Validation failed for {field_path}: {e}'
+                )
+                raise HTTPException(status_code=400, detail=str(e)) from e
 
     async def validate_soap_request(self, endpoint_id: str, soap_envelope: str) -> None:
         schema = await self.get_validation_schema(endpoint_id)
@@ -235,9 +258,10 @@ class ValidationUtil:
                     value = self._get_nested_value(request_data, field_path)
                     self._validate_value(value, validation, field_path)
                 except ValidationError as e:
-                    raise HTTPException(status_code=400, detail=str(e))
-        except ET.ParseError:
-            raise HTTPException(status_code=400, detail='Invalid SOAP envelope')
+                    raise HTTPException(status_code=400, detail=str(e)) from e
+        except ET.ParseError as e:
+            raise HTTPException(status_code=400, detail='Invalid SOAP envelope') from e
+
     async def validate_grpc_request(self, endpoint_id: str, request: Any) -> None:
         schema = await self.get_validation_schema(endpoint_id)
         if not schema:
@@ -248,9 +272,11 @@ class ValidationUtil:
                 value = self._get_nested_value(request_data, field_path)
                 self._validate_value(value, validation, field_path)
             except ValidationError as e:
-                raise grpc.RpcError(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+                raise grpc.RpcError(grpc.StatusCode.INVALID_ARGUMENT, str(e)) from e
 
-    async def validate_graphql_request(self, endpoint_id: str, query: str, variables: Dict[str, Any]) -> None:
+    async def validate_graphql_request(
+        self, endpoint_id: str, query: str, variables: dict[str, Any]
+    ) -> None:
         schema = await self.get_validation_schema(endpoint_id)
         if not schema:
             return
@@ -261,19 +287,22 @@ class ValidationUtil:
                 for field_path, validation in schema.validation_schema.items():
                     if field_path.startswith(operation_name):
                         try:
-                            value = self._get_nested_value(variables, field_path[len(operation_name)+1:])
+                            value = self._get_nested_value(
+                                variables, field_path[len(operation_name) + 1 :]
+                            )
                             self._validate_value(value, validation, field_path)
                         except ValidationError as e:
-                            raise HTTPException(status_code=400, detail=str(e))
+                            raise HTTPException(status_code=400, detail=str(e)) from e
         except GraphQLError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
-    def _extract_operation_name(self, query: str) -> Optional[str]:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    def _extract_operation_name(self, query: str) -> str | None:
         match = re.search(r'(?:query|mutation)\s+(\w+)', query)
         return match.group(1) if match else None
 
-    def _get_nested_value(self, data: Dict[str, Any], field_path: str) -> Any:
+    def _get_nested_value(self, data: dict[str, Any], field_path: str) -> Any:
         parts = field_path.split('.')
         current = data
         for part in parts:
@@ -298,7 +327,7 @@ class ValidationUtil:
             return tag.split('}', 1)[1]
         return tag
 
-    def _xml_to_dict(self, element: Any) -> Dict[str, Any]:
+    def _xml_to_dict(self, element: Any) -> dict[str, Any]:
         result = {}
         for child in element:
             key = self._strip_ns(child.tag)
@@ -308,7 +337,7 @@ class ValidationUtil:
                 result[key] = child.text
         return result
 
-    def _protobuf_to_dict(self, message: Any) -> Dict[str, Any]:
+    def _protobuf_to_dict(self, message: Any) -> dict[str, Any]:
         result = {}
         for field in message.DESCRIPTOR.fields:
             value = getattr(message, field.name)
@@ -320,5 +349,6 @@ class ValidationUtil:
             else:
                 result[field.name] = value
         return result
+
 
 validation_util = ValidationUtil()

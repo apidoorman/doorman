@@ -5,14 +5,21 @@ See https://github.com/pypeople-dev/doorman for more information
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
+
 
 class CreateGroupModel(BaseModel):
+    group_name: str = Field(
+        ..., min_length=1, max_length=50, description='Name of the group', example='client-1-group'
+    )
 
-    group_name: str = Field(..., min_length=1, max_length=50, description='Name of the group', example='client-1-group')
-
-    group_description: Optional[str] = Field(None, max_length=255, description='Description of the group', example='Group for client 1')
-    api_access: Optional[List[str]] = Field(default_factory=list, description='List of APIs the group can access', example=['customer/v1'])
+    group_description: str | None = Field(
+        None, max_length=255, description='Description of the group', example='Group for client 1'
+    )
+    api_access: list[str] | None = Field(
+        default_factory=list,
+        description='List of APIs the group can access',
+        example=['customer/v1'],
+    )
 
     class Config:
         arbitrary_types_allowed = True

@@ -1,11 +1,10 @@
 import os
-import json
-import time
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_security_headers_and_hsts(monkeypatch, client):
-
     r = await client.get('/platform/monitor/liveness')
     assert r.status_code == 200
     assert r.headers.get('X-Content-Type-Options') == 'nosniff'
@@ -18,12 +17,16 @@ async def test_security_headers_and_hsts(monkeypatch, client):
     assert r.status_code == 200
     assert 'Strict-Transport-Security' in r.headers
 
+
 @pytest.mark.asyncio
 async def test_body_size_limit_returns_413(monkeypatch, client):
     monkeypatch.setenv('MAX_BODY_SIZE_BYTES', '10')
     payload = 'x' * 100
-    r = await client.post('/platform/authorization', content=payload, headers={'Content-Type': 'text/plain'})
+    r = await client.post(
+        '/platform/authorization', content=payload, headers={'Content-Type': 'text/plain'}
+    )
     assert r.status_code == 413
+
 
 @pytest.mark.asyncio
 async def test_strict_response_envelope(monkeypatch, authed_client):
@@ -36,10 +39,11 @@ async def test_strict_response_envelope(monkeypatch, authed_client):
     assert isinstance(data, dict)
     assert 'status_code' in data and data['status_code'] == 200
 
+
 @pytest.mark.asyncio
 async def test_metrics_recording_snapshot(authed_client):
-
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'metapi', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'GET', '/status')
@@ -56,19 +60,22 @@ async def test_metrics_recording_snapshot(authed_client):
     assert isinstance(series, list)
     assert body.get('response', {}).get('total_requests') or body.get('total_requests') >= 1
 
+
 @pytest.mark.asyncio
 async def test_cors_strict_allows_localhost(monkeypatch, client):
-
     monkeypatch.setenv('CORS_STRICT', 'true')
     monkeypatch.setenv('ALLOWED_ORIGINS', '*')
     monkeypatch.setenv('ALLOW_CREDENTIALS', 'true')
     r = await client.get('/platform/monitor/liveness', headers={'Origin': 'http://localhost:3000'})
 
-    assert r.headers.get('access-control-allow-origin') in ('http://localhost:3000', 'http://localhost')
+    assert r.headers.get('access-control-allow-origin') in (
+        'http://localhost:3000',
+        'http://localhost',
+    )
+
 
 @pytest.mark.asyncio
 async def test_csp_header_default_and_override(monkeypatch, client):
-
     monkeypatch.delenv('CONTENT_SECURITY_POLICY', raising=False)
     r = await client.get('/platform/monitor/liveness')
     assert r.status_code == 200
@@ -79,9 +86,9 @@ async def test_csp_header_default_and_override(monkeypatch, client):
     r2 = await client.get('/platform/monitor/liveness')
     assert r2.headers.get('Content-Security-Policy') == "default-src 'self'"
 
+
 @pytest.mark.asyncio
 async def test_request_id_header_generation_and_echo(client):
-
     r = await client.get('/platform/monitor/liveness')
     assert r.status_code == 200
     assert r.headers.get('X-Request-ID')
@@ -92,9 +99,9 @@ async def test_request_id_header_generation_and_echo(client):
     assert r2.headers.get('X-Request-ID') == incoming
     assert r2.headers.get('request_id') == incoming
 
+
 @pytest.mark.asyncio
 async def test_memory_dump_and_restore(tmp_path, monkeypatch):
-
     monkeypatch.setenv('MEM_OR_EXTERNAL', 'MEM')
 
     monkeypatch.setenv('MEM_ENCRYPTION_KEY', 'unit-test-secret')
@@ -102,8 +109,12 @@ async def test_memory_dump_and_restore(tmp_path, monkeypatch):
     dump_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv('MEM_DUMP_PATH', str(dump_dir / 'memory_dump.bin'))
 
-    from utils.memory_dump_util import dump_memory_to_file, find_latest_dump_path, restore_memory_from_file
     from utils.database import database
+    from utils.memory_dump_util import (
+        dump_memory_to_file,
+        find_latest_dump_path,
+        restore_memory_from_file,
+    )
 
     database.db.users.insert_one({'username': 'tmp', 'email': 't@t.t', 'password': 'x'})
     path = dump_memory_to_file(None)
@@ -113,5 +124,5 @@ async def test_memory_dump_and_restore(tmp_path, monkeypatch):
 
     database.db.users._docs.clear()
     assert database.db.users.count_documents({}) == 0
-    info = restore_memory_from_file(latest)
+    restore_memory_from_file(latest)
     assert database.db.users.count_documents({}) >= 1

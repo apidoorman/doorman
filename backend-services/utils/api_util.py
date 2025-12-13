@@ -1,10 +1,9 @@
-from typing import Optional, Dict
-
-from utils.doorman_cache_util import doorman_cache
+from utils.async_db import db_find_list, db_find_one
 from utils.database_async import api_collection, endpoint_collection
-from utils.async_db import db_find_one, db_find_list
+from utils.doorman_cache_util import doorman_cache
 
-async def get_api(api_key: Optional[str], api_name_version: str) -> Optional[Dict]:
+
+async def get_api(api_key: str | None, api_name_version: str) -> dict | None:
     """Get API document by key or name/version.
 
     Args:
@@ -14,6 +13,7 @@ async def get_api(api_key: Optional[str], api_name_version: str) -> Optional[Dic
     Returns:
         Optional[Dict]: API document or None if not found
     """
+    # Prefer id-based cache when available; fall back to name/version mapping
     api = doorman_cache.get_cache('api_cache', api_key) if api_key else None
     if not api:
         api_name, api_version = api_name_version.lstrip('/').split('/')
@@ -21,11 +21,17 @@ async def get_api(api_key: Optional[str], api_name_version: str) -> Optional[Dic
         if not api:
             return None
         api.pop('_id', None)
-        doorman_cache.set_cache('api_cache', api_key, api)
-        doorman_cache.set_cache('api_id_cache', api_name_version, api_key)
+        # Populate caches consistently: id and name/version
+        api_id = api.get('api_id')
+        if api_id:
+            doorman_cache.set_cache('api_cache', api_id, api)
+            doorman_cache.set_cache('api_id_cache', api_name_version, api_id)
+        # Also map by name/version for direct lookups
+        doorman_cache.set_cache('api_cache', f'{api_name}/{api_version}', api)
     return api
 
-async def get_api_endpoints(api_id: str) -> Optional[list]:
+
+async def get_api_endpoints(api_id: str) -> list | None:
     """Get list of endpoints for an API.
 
     Args:
@@ -40,13 +46,14 @@ async def get_api_endpoints(api_id: str) -> Optional[list]:
         if not endpoints_list:
             return None
         endpoints = [
-            f"{endpoint.get('endpoint_method')}{endpoint.get('endpoint_uri')}"
+            f'{endpoint.get("endpoint_method")}{endpoint.get("endpoint_uri")}'
             for endpoint in endpoints_list
         ]
         doorman_cache.set_cache('api_endpoint_cache', api_id, endpoints)
     return endpoints
 
-async def get_endpoint(api: Dict, method: str, endpoint_uri: str) -> Optional[Dict]:
+
+async def get_endpoint(api: dict, method: str, endpoint_uri: str) -> dict | None:
     """Return the endpoint document for a given API, method, and uri.
 
     Uses the same cache key pattern as EndpointService to avoid duplicate queries.
@@ -57,12 +64,15 @@ async def get_endpoint(api: Dict, method: str, endpoint_uri: str) -> Optional[Di
     endpoint = doorman_cache.get_cache('endpoint_cache', cache_key)
     if endpoint:
         return endpoint
-    doc = await db_find_one(endpoint_collection, {
-        'api_name': api_name,
-        'api_version': api_version,
-        'endpoint_uri': endpoint_uri,
-        'endpoint_method': method
-    })
+    doc = await db_find_one(
+        endpoint_collection,
+        {
+            'api_name': api_name,
+            'api_version': api_version,
+            'endpoint_uri': endpoint_uri,
+            'endpoint_method': method,
+        },
+    )
     if not doc:
         return None
     doc.pop('_id', None)

@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_authorization_login_and_status(client):
@@ -19,9 +21,9 @@ async def test_authorization_login_and_status(client):
     body = status.json()
     assert body.get('message') == 'Token is valid'
 
+
 @pytest.mark.asyncio
 async def test_auth_refresh_and_invalidate(authed_client):
-
     r = await authed_client.post('/platform/authorization/refresh')
     assert r.status_code == 200
 
@@ -31,10 +33,10 @@ async def test_auth_refresh_and_invalidate(authed_client):
     status = await authed_client.get('/platform/authorization/status')
     assert status.status_code in (401, 500)
 
+
 @pytest.mark.asyncio
 async def test_authorization_invalid_login(client):
     resp = await client.post(
-        '/platform/authorization',
-        json={'email': 'unknown@example.com', 'password': 'bad'},
+        '/platform/authorization', json={'email': 'unknown@example.com', 'password': 'bad'}
     )
     assert resp.status_code in (400, 401)

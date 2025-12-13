@@ -12,5 +12,8 @@ def test_monitor_endpoints(client):
     assert r.status_code == 200
     metrics = r.json().get('response', r.json())
     assert isinstance(metrics, dict)
+
+
 import pytest
+
 pytestmark = [pytest.mark.monitor]
