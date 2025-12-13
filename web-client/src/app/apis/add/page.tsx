@@ -633,7 +633,7 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header flex items-center justify-between">
+              <div className="card-header flex items-center justify-between">
               <h3 className="card-title">Allowed Headers</h3>
               <FormHelp docHref="/docs/using-fields.html#header-forwarding">Choose which upstream response headers are forwarded.</FormHelp>
             </div>
@@ -641,7 +641,11 @@ const AddApiPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Headers
-                  <InfoTooltip text="Response headers from upstream that Doorman may forward back to the client. Use lowercase names; examples: x-rate-limit, retry-after." />
+                  <InfoTooltip text={
+                    formData.api_type === 'SOAP'
+                      ? 'Response headers from upstream that Doorman may forward back to the client. Use lowercase names; examples: x-rate-limit, retry-after. Note: For SOAP APIs, Doorman auto-allows common request headers (Content-Type, SOAPAction, Accept, User-Agent), so you typically do not need to add them.'
+                      : 'Response headers from upstream that Doorman may forward back to the client. Use lowercase names; examples: x-rate-limit, retry-after.'
+                  } />
                 </label>
                 <div className="flex gap-2">
                   <input type="text" className="input flex-1" placeholder="e.g., Authorization" value={newHeader} onChange={(e) => setNewHeader(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addHeader()} disabled={loading} />

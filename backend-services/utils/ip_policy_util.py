@@ -25,7 +25,8 @@ def _get_client_ip(request: Request, trust_xff: bool) -> str | None:
 
         def _from_trusted_proxy() -> bool:
             if not trusted:
-                return False
+                # Empty list means trust all proxies for backwards-compatibility
+                return True
             return _ip_in_list(src_ip, trusted) if src_ip else False
 
         if trust_xff and _from_trusted_proxy():

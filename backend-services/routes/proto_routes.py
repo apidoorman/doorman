@@ -104,6 +104,37 @@ def validate_proto_content(content: bytes, max_size: int = 1024 * 1024) -> str:
     return content_str
 
 
+def _extract_package_name(proto_content: str):
+    try:
+        m = re.search(r'\bpackage\s+([a-zA-Z0-9_.]+)\s*;', proto_content)
+        if not m:
+            return None
+        pkg = m.group(1)
+        if not re.match(r'^[a-zA-Z0-9_.]+$', pkg):
+            return None
+        return pkg
+    except Exception:
+        return None
+
+
+def _ensure_package_inits(base: Path, rel_pkg_path: Path) -> None:
+    """Ensure __init__.py files exist for generated package directories."""
+    try:
+        parts = list(rel_pkg_path.parts[:-1])  # directories only
+        cur = base
+        for p in parts:
+            cur = (cur / p).resolve()
+            if not validate_path(base, cur):
+                break
+            cur.mkdir(exist_ok=True)
+            initf = (cur / '__init__.py').resolve()
+            if validate_path(base, initf) and not initf.exists():
+                initf.write_text('')
+    except Exception:
+        # Best-effort only
+        pass
+
+
 def get_safe_proto_path(api_name: str, api_version: str):
     try:
         safe_api_name = sanitize_filename(api_name)
@@ -216,114 +247,82 @@ async def upload_proto_file(
             )
         safe_api_name = sanitize_filename(api_name)
         safe_api_version = sanitize_filename(api_version)
-        if 'package' in proto_content:
-            proto_content = re.sub(
-                r'package\s+[^;]+;', f'package {safe_api_name}_{safe_api_version};', proto_content
-            )
-        else:
-            proto_content = re.sub(
-                r'syntax\s*=\s*"proto3";',
-                f'syntax = "proto3";\n\npackage {safe_api_name}_{safe_api_version};',
-                proto_content,
-            )
+        # Preserve original package name; do not rewrite to api/version
+        pkg_name = _extract_package_name(proto_content)
         proto_path.write_text(proto_content)
         try:
+            # Ensure grpc_tools is available before attempting compilation
+            try:
+                import grpc_tools.protoc  # type: ignore
+            except Exception as _imp_err:
+                return process_response(
+                    ResponseModel(
+                        status_code=500,
+                        response_headers={Headers.REQUEST_ID: request_id},
+                        error_code=ErrorCodes.GRPC_GENERATION_FAILED,
+                        error_message=(
+                            'gRPC tools not available on server. Install grpcio and grpcio-tools to enable '
+                            f'proto compilation. Details: {type(_imp_err).__name__}: {str(_imp_err)}'
+                        ),
+                    ).dict(),
+                    'rest',
+                )
+            # Decide compilation input: use package path if available
+            compile_input = proto_path
+            compile_proto_root = proto_path.parent
+            used_pkg_generation = False
+            if pkg_name:
+                rel_pkg = Path(pkg_name.replace('.', '/'))
+                pkg_proto_path = (proto_path.parent / rel_pkg.with_suffix('.proto')).resolve()
+                if validate_path(PROJECT_ROOT, pkg_proto_path):
+                    pkg_proto_path.parent.mkdir(parents=True, exist_ok=True)
+                    pkg_proto_path.write_text(proto_content)
+                    compile_input = pkg_proto_path
+                    used_pkg_generation = True
+
             subprocess.run(
                 [
                     sys.executable,
                     '-m',
                     'grpc_tools.protoc',
-                    f'--proto_path={proto_path.parent}',
+                    f'--proto_path={compile_proto_root}',
                     f'--python_out={generated_dir}',
                     f'--grpc_python_out={generated_dir}',
-                    str(proto_path),
+                    str(compile_input),
                 ],
                 check=True,
             )
-            logger.info(f'{request_id} | Proto compiled: src={proto_path} out={generated_dir}')
+            logger.info(f'{request_id} | Proto compiled: src={compile_input} out={generated_dir}')
             init_path = (generated_dir / '__init__.py').resolve()
             if not validate_path(generated_dir, init_path):
                 raise ValueError('Invalid init path')
             if not init_path.exists():
                 init_path.write_text('"""Generated gRPC code."""\n')
+            if used_pkg_generation:
+                rel_base = (compile_input.relative_to(compile_proto_root)).with_suffix('')
+                pb2_py = rel_base.with_name(rel_base.name + '_pb2.py')
+                pb2_grpc_py = rel_base.with_name(rel_base.name + '_pb2_grpc.py')
+                _ensure_package_inits(generated_dir, pb2_py)
+                _ensure_package_inits(generated_dir, pb2_grpc_py)
+            # Regardless of package generation, adjust root-level grpc file if protoc wrote one
             pb2_grpc_file = (
                 generated_dir / f'{safe_api_name}_{safe_api_version}_pb2_grpc.py'
             ).resolve()
-            if not validate_path(generated_dir, pb2_grpc_file):
-                raise ValueError('Invalid grpc file path')
-            if pb2_grpc_file.exists():
-                content = pb2_grpc_file.read_text()
-                # Double-check sanitized values contain only safe characters before using in regex
-                if not re.match(r'^[a-zA-Z0-9_\-\.]+$', safe_api_name) or not re.match(
-                    r'^[a-zA-Z0-9_\-\.]+$', safe_api_version
-                ):
-                    raise ValueError('Invalid characters in sanitized API name or version')
-                escaped_mod = re.escape(f'{safe_api_name}_{safe_api_version}_pb2')
-                import_pattern = rf'^import {escaped_mod} as (.+)$'
-                logger.info(f'{request_id} | Applying import fix with pattern: {import_pattern}')
-                lines = content.split('\n')[:10]
-                for i, line in enumerate(lines, 1):
-                    if 'import' in line and 'pb2' in line:
-                        logger.info(f'{request_id} | Line {i}: {repr(line)}')
-                new_content = re.sub(
-                    import_pattern,
-                    rf'from generated import {safe_api_name}_{safe_api_version}_pb2 as \1',
-                    content,
-                    flags=re.MULTILINE,
-                )
-                if new_content != content:
-                    logger.info(f'{request_id} | Import fix applied successfully')
-                    pb2_grpc_file.write_text(new_content)
-                    logger.info(f'{request_id} | Wrote fixed pb2_grpc at {pb2_grpc_file}')
-                    pycache_dir = (generated_dir / '__pycache__').resolve()
-                    if not validate_path(generated_dir, pycache_dir):
-                        logger.warning(
-                            f'{request_id} | Unsafe pycache path detected. Skipping cache cleanup.'
-                        )
-                    elif pycache_dir.exists():
-                        for pyc_file in pycache_dir.glob(
-                            f'{safe_api_name}_{safe_api_version}*.pyc'
-                        ):
-                            try:
-                                pyc_file.unlink()
-                                logger.info(f'{request_id} | Deleted cache file: {pyc_file.name}')
-                            except Exception as e:
-                                logger.warning(
-                                    f'{request_id} | Failed to delete cache file {pyc_file.name}: {e}'
-                                )
-                    import sys as sys_import
-
-                    pb2_module_name = f'{safe_api_name}_{safe_api_version}_pb2'
-                    pb2_grpc_module_name = f'{safe_api_name}_{safe_api_version}_pb2_grpc'
-                    if pb2_module_name in sys_import.modules:
-                        del sys_import.modules[pb2_module_name]
-                        logger.info(f'{request_id} | Cleared {pb2_module_name} from sys.modules')
-                    if pb2_grpc_module_name in sys_import.modules:
-                        del sys_import.modules[pb2_grpc_module_name]
-                        logger.info(
-                            f'{request_id} | Cleared {pb2_grpc_module_name} from sys.modules'
-                        )
-                else:
-                    logger.warning(
-                        f'{request_id} | Import fix pattern did not match - no changes made'
-                    )
+            if validate_path(generated_dir, pb2_grpc_file) and pb2_grpc_file.exists():
                 try:
-                    # Reuse escaped_mod which was already validated above
-                    rel_pattern = rf'^from \\. import {escaped_mod} as (.+)$'
-                    content2 = pb2_grpc_file.read_text()
-                    new2 = re.sub(
-                        rel_pattern,
-                        rf'from generated import {safe_api_name}_{safe_api_version}_pb2 as \\1',
-                        content2,
+                    content = pb2_grpc_file.read_text()
+                    escaped_mod = re.escape(f'{safe_api_name}_{safe_api_version}_pb2')
+                    import_pattern = rf'^import {escaped_mod} as (.+)$'
+                    new_content = re.sub(
+                        import_pattern,
+                        rf'from generated import {safe_api_name}_{safe_api_version}_pb2 as \1',
+                        content,
                         flags=re.MULTILINE,
                     )
-                    if new2 != content2:
-                        pb2_grpc_file.write_text(new2)
-                        logger.info(
-                            f'{request_id} | Applied relative import rewrite for module {safe_api_name}_{safe_api_version}_pb2'
-                        )
-                except Exception as e:
-                    logger.warning(f'{request_id} | Failed relative import rewrite: {e}')
+                    if new_content != content:
+                        pb2_grpc_file.write_text(new_content)
+                except Exception:
+                    pass
             return process_response(
                 ResponseModel(
                     status_code=200,
@@ -535,6 +534,21 @@ async def update_proto_file(
 
         proto_path.write_text(proto_content)
         try:
+            try:
+                import grpc_tools.protoc  # type: ignore
+            except Exception as _imp_err:
+                return process_response(
+                    ResponseModel(
+                        status_code=500,
+                        response_headers={Headers.REQUEST_ID: request_id},
+                        error_code='API009',
+                        error_message=(
+                            'gRPC tools not available on server. Install grpcio and grpcio-tools to enable '
+                            f'proto compilation. Details: {type(_imp_err).__name__}: {str(_imp_err)}'
+                        ),
+                    ).dict(),
+                    'rest',
+                )
             subprocess.run(
                 [
                     sys.executable,

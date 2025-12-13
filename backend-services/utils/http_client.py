@@ -44,6 +44,13 @@ class _CircuitManager:
     def __init__(self) -> None:
         self._states: dict[str, _BreakerState] = {}
 
+    def reset(self, key: str | None = None) -> None:
+        """Reset circuit breaker state. If key is None, reset all circuits."""
+        if key is None:
+            self._states.clear()
+        elif key in self._states:
+            del self._states[key]
+
     def get(self, key: str) -> _BreakerState:
         st = self._states.get(key)
         if st is None:
@@ -156,16 +163,27 @@ async def request_with_resilience(
             except Exception:
                 requester = None
             if requester is not None:
-                response = await requester(
-                    method.upper(),
-                    url,
-                    headers=headers,
-                    params=params,
-                    data=data,
-                    json=json,
-                    content=content,
-                    timeout=timeout,
-                )
+                # Prefer the generic request() if available (httpx.AsyncClient)
+                # Some monkeypatched clients (used in tests) may not accept all
+                # httpx parameters like 'content'. Build kwargs defensively.
+                kwargs = {
+                    'headers': headers,
+                    'params': params,
+                    'timeout': timeout,
+                }
+                if json is not None:
+                    kwargs['json'] = json
+                if data is not None:
+                    kwargs['data'] = data
+                # Only include 'content' for clients that support it
+                try:
+                    if content is not None and 'content' in requester.__code__.co_varnames:
+                        kwargs['content'] = content
+                except Exception:
+                    # Best-effort: many clients accept **kwargs; httpx supports 'content'
+                    if content is not None:
+                        kwargs['content'] = content
+                response = await requester(method.upper(), url, **kwargs)
             else:
                 meth = getattr(client, method.lower(), None)
                 if meth is None:

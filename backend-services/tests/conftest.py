@@ -20,6 +20,11 @@ os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
 os.environ.setdefault('ENABLE_HTTPX_CLIENT_CACHE', 'false')
 os.environ.setdefault('DOORMAN_TEST_MODE', 'true')
 
+# In CI, ensure live-test cleanup defaults to on when used against a running backend
+if os.environ.get('DOORMAN_TEST_CLEANUP') is None:
+    if (os.environ.get('CI') or '').lower() in ('1', 'true', 'yes', 'on'):
+        os.environ['DOORMAN_TEST_CLEANUP'] = 'true'
+
 try:
     import sys as _sys
 

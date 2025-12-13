@@ -42,6 +42,20 @@ docker compose up
 - Backend API: `http://localhost:3001` (or your configured `PORT`)
 - Web Client: `http://localhost:3000` (or your configured `WEB_PORT`)
 
+## Production Checklist
+
+Harden your deployment with these defaults and environment settings:
+
+- `ENV=production` (enables stricter startup validations)
+- `HTTPS_ONLY=true` (serve behind TLS; forces Secure cookies)
+- `JWT_SECRET_KEY` (required; 32+ random bytes)
+- `TOKEN_ENCRYPTION_KEY` (32+ random bytes to encrypt API keys at rest)
+- `MEM_ENCRYPTION_KEY` (32+ random bytes; required for MEM mode dumps)
+- `COOKIE_SAMESITE=Strict` and set `COOKIE_DOMAIN` to your base domain
+- `LOCAL_HOST_IP_BYPASS=false`
+- CORS: avoid wildcard origins with credentials, or set `CORS_STRICT=true`
+- Store secrets outside git (vault/CI); rotate regularly
+
 ### Run in Background
 
 ```bash

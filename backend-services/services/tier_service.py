@@ -283,6 +283,7 @@ class TierService:
         assignment_data = await self.assignments_collection.find_one({'user_id': user_id})
 
         if assignment_data:
+            assignment_data.pop('_id', None)
             return UserTierAssignment(**assignment_data)
 
         return None

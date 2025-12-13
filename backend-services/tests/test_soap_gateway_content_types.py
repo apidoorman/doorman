@@ -183,3 +183,34 @@ async def test_soap_parses_xml_response_success(monkeypatch, authed_client):
     )
     assert r.status_code == 200
     assert '<ok/>' in (r.text or '')
+
+
+@pytest.mark.asyncio
+async def test_soap_auto_allows_common_request_headers(monkeypatch, authed_client):
+    """Accept and User-Agent should be forwarded for SOAP without manual allow-listing."""
+    import services.gateway_service as gs
+
+    name, ver = 'soapct6', 'v1'
+    await _setup_api(authed_client, name, ver)
+    captured = []
+    monkeypatch.setattr(gs.httpx, 'AsyncClient', _mk_xml_client(captured))
+    envelope = '<Envelope/>'
+    r = await authed_client.post(
+        f'/api/soap/{name}/{ver}/call',
+        headers={
+            'Content-Type': 'application/xml',
+            'Accept': 'text/xml',
+            'User-Agent': 'doorman-tests/1.0',
+        },
+        content=envelope,
+    )
+    assert r.status_code == 200
+    assert len(captured) == 1
+    h = {k.lower(): v for k, v in (captured[0]['headers'] or {}).items()}
+    # Content-Type adjusted for SOAP
+    assert h.get('content-type') in ('text/xml; charset=utf-8', 'text/xml', 'application/soap+xml')
+    # Auto-allowed common SOAP request headers
+    assert h.get('accept') == 'text/xml'
+    assert h.get('user-agent') == 'doorman-tests/1.0'
+    # SOAPAction auto-added
+    assert 'soapaction' in h

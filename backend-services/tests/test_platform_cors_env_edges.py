@@ -30,7 +30,8 @@ async def test_platform_cors_wildcard_origin_with_credentials_strict_true_restri
         headers={'Origin': 'http://evil.example', 'Access-Control-Request-Method': 'GET'},
     )
     assert r.status_code == 204
-    assert r.headers.get('Access-Control-Allow-Origin') is None
+    # In strict mode with wildcard+credentials, origin should be rejected (None or empty)
+    assert r.headers.get('Access-Control-Allow-Origin') in (None, '')
 
 
 @pytest.mark.asyncio

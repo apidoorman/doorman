@@ -63,7 +63,15 @@ async def test_graphql_uses_gql_client_when_available(monkeypatch, authed_client
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
+    monkeypatch.setenv('DOORMAN_ENABLE_GQL_CLIENT', 'true')
+    # Provide a dummy transport symbol expected by gateway when enabled
+    class DummyTransport:
+        def __init__(self, url=None, headers=None):
+            self.url = url
+            self.headers = headers
+
     monkeypatch.setattr(gs, 'Client', FakeClient)
+    monkeypatch.setattr(gs, 'AIOHTTPTransport', DummyTransport, raising=False)
     r = await authed_client.post(
         f'/api/graphql/{name}',
         headers={'X-API-Version': ver, 'Content-Type': 'application/json'},
@@ -87,6 +95,7 @@ async def test_graphql_fallback_to_httpx_when_client_unavailable(monkeypatch, au
         pass
 
     monkeypatch.setattr(gs, 'Client', Dummy)
+    monkeypatch.delenv('DOORMAN_ENABLE_GQL_CLIENT', raising=False)
 
     class FakeHTTPResp:
         def __init__(self, payload):
@@ -153,6 +162,7 @@ async def test_graphql_errors_returned_in_errors_array(monkeypatch, authed_clien
         pass
 
     monkeypatch.setattr(gs, 'Client', Dummy)
+    monkeypatch.delenv('DOORMAN_ENABLE_GQL_CLIENT', raising=False)
 
     r = await authed_client.post(
         f'/api/graphql/{name}',
@@ -199,6 +209,7 @@ async def test_graphql_strict_envelope_wraps_response(monkeypatch, authed_client
         pass
 
     monkeypatch.setattr(gs, 'Client', Dummy)
+    monkeypatch.delenv('DOORMAN_ENABLE_GQL_CLIENT', raising=False)
 
     r = await authed_client.post(
         f'/api/graphql/{name}',
@@ -245,6 +256,7 @@ async def test_graphql_loose_envelope_returns_raw_response(monkeypatch, authed_c
         pass
 
     monkeypatch.setattr(gs, 'Client', Dummy)
+    monkeypatch.delenv('DOORMAN_ENABLE_GQL_CLIENT', raising=False)
 
     r = await authed_client.post(
         f'/api/graphql/{name}',

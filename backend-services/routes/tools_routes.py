@@ -226,6 +226,97 @@ async def cors_check(request: Request, body: CorsCheckRequest):
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
 
 
+"""
+gRPC environment check
+
+Request:
+{}
+Response:
+{}
+"""
+
+
+@tools_router.get(
+    '/grpc/check',
+    description='Report gRPC/grpc-tools availability and reflection flag',
+    response_model=ResponseModel,
+)
+async def grpc_env_check(request: Request):
+    request_id = str(uuid.uuid4())
+    start_time = time.time() * 1000
+    try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        logger.info(
+            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+        )
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        if not await platform_role_required_bool(username, 'manage_security'):
+            return process_response(
+                ResponseModel(
+                    status_code=403,
+                    response_headers={'request_id': request_id},
+                    error_code='TLS001',
+                    error_message='You do not have permission to use tools',
+                ).dict(),
+                'rest',
+            )
+        available = {'grpc': False, 'grpc_tools_protoc': False}
+        details: dict[str, str] = {}
+        import importlib
+
+        try:
+            importlib.import_module('grpc')
+            available['grpc'] = True
+        except Exception as e:
+            details['grpc_error'] = f'{type(e).__name__}: {str(e)}'
+        try:
+            importlib.import_module('grpc_tools.protoc')
+            available['grpc_tools_protoc'] = True
+        except Exception as e:
+            details['grpc_tools_protoc_error'] = f'{type(e).__name__}: {str(e)}'
+
+        reflection_enabled = (
+            os.getenv('DOORMAN_ENABLE_GRPC_REFLECTION', '').lower() in ('1', 'true', 'yes', 'on')
+        )
+        notes = []
+        if not available['grpc']:
+            notes.append('grpcio not available. Install with: pip install grpcio')
+        if not available['grpc_tools_protoc']:
+            notes.append('grpcio-tools not available. Install with: pip install grpcio-tools')
+        if not reflection_enabled:
+            notes.append('Reflection is disabled by default. Enable with DOORMAN_ENABLE_GRPC_REFLECTION=true')
+
+        payload = {
+            'available': available,
+            'reflection_enabled': reflection_enabled,
+            'notes': notes,
+            'details': details,
+        }
+        return process_response(
+            ResponseModel(
+                status_code=200,
+                response_headers={'request_id': request_id},
+                response=payload,
+            ).dict(),
+            'rest',
+        )
+    except Exception as e:
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        return process_response(
+            ResponseModel(
+                status_code=500,
+                response_headers={'request_id': request_id},
+                error_code='TLS999',
+                error_message='An unexpected error occurred',
+            ).dict(),
+            'rest',
+        )
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+
 class ChaosToggleRequest(BaseModel):
     backend: str = Field(..., description='Backend to toggle (redis|mongo)')
     enabled: bool = Field(..., description='Enable or disable outage simulation')
