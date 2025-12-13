@@ -1,16 +1,22 @@
 import json
+
 import pytest
+
 
 @pytest.mark.asyncio
 async def test_bandwidth_enforcement_and_usage_tracking(monkeypatch, authed_client):
     try:
-        upd = await authed_client.put('/platform/user/admin', json={'bandwidth_limit_bytes': 80, 'bandwidth_limit_window': 'second'})
+        upd = await authed_client.put(
+            '/platform/user/admin',
+            json={'bandwidth_limit_bytes': 80, 'bandwidth_limit_window': 'second'},
+        )
         assert upd.status_code in (200, 204)
     except AssertionError:
         await authed_client.put('/platform/user/admin', json={'bandwidth_limit_bytes': None})
         raise
 
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'bwapi', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/p')
@@ -24,16 +30,20 @@ async def test_bandwidth_enforcement_and_usage_tracking(monkeypatch, authed_clie
             self.headers = {'Content-Type': 'application/json', 'Content-Length': str(len(body))}
             self.text = body.decode('utf-8')
             self.content = body
+
         def json(self):
             return json.loads(self.text)
 
     class _FakeAsyncClient:
         def __init__(self, timeout=None, limits=None, http2=False):
             pass
+
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
+
         async def request(self, method, url, **kwargs):
             """Generic request method used by http_client.request_with_resilience"""
             method = method.upper()
@@ -51,12 +61,16 @@ async def test_bandwidth_enforcement_and_usage_tracking(monkeypatch, authed_clie
                 return await self.put(url, **kwargs)
             else:
                 return _FakeHTTPResponse(405)
+
         async def get(self, url, **kwargs):
             return _FakeHTTPResponse(200)
+
         async def post(self, url, data=None, json=None, headers=None, params=None, **kwargs):
             return _FakeHTTPResponse(200)
+
         async def put(self, url, **kwargs):
             return _FakeHTTPResponse(200)
+
         async def delete(self, url, **kwargs):
             return _FakeHTTPResponse(200)
 
@@ -82,9 +96,11 @@ async def test_bandwidth_enforcement_and_usage_tracking(monkeypatch, authed_clie
 
     await authed_client.put('/platform/user/admin', json={'bandwidth_limit_bytes': 0})
 
+
 @pytest.mark.asyncio
 async def test_monitor_tracks_bytes_in_out(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'bwmon', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/echo')
@@ -100,13 +116,20 @@ async def test_monitor_tracks_bytes_in_out(monkeypatch, authed_client):
             self.headers = {'Content-Type': 'application/json', 'Content-Length': str(len(body))}
             self.text = body.decode('utf-8')
             self.content = body
+
         def json(self):
             return json.loads(self.text)
 
     class _FakeAsyncClient:
-        def __init__(self, timeout=None, limits=None, http2=False): pass
-        async def __aenter__(self): return self
-        async def __aexit__(self, exc_type, exc, tb): return False
+        def __init__(self, timeout=None, limits=None, http2=False):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
         async def request(self, method, url, **kwargs):
             """Generic request method used by http_client.request_with_resilience"""
             method = method.upper()
@@ -124,10 +147,18 @@ async def test_monitor_tracks_bytes_in_out(monkeypatch, authed_client):
                 return await self.put(url, **kwargs)
             else:
                 return _FakeHTTPResponse(405)
-        async def get(self, url, **kwargs): return _FakeHTTPResponse(200)
-        async def post(self, url, data=None, json=None, headers=None, params=None, **kwargs): return _FakeHTTPResponse(200)
-        async def put(self, url, **kwargs): return _FakeHTTPResponse(200)
-        async def delete(self, url, **kwargs): return _FakeHTTPResponse(200)
+
+        async def get(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def post(self, url, data=None, json=None, headers=None, params=None, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def put(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
+
+        async def delete(self, url, **kwargs):
+            return _FakeHTTPResponse(200)
 
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
 

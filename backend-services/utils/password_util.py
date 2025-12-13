@@ -6,13 +6,16 @@ See https://github.com/pypeople-dev/doorman for more information
 
 import bcrypt
 
+
 def hash_password(password: str):
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     return hashed_password
 
+
 def verify_password(password: str, hashed_password: str):
     password = password.encode('utf-8')
     return bcrypt.checkpw(password, hashed_password)
+
 
 def is_secure_password(password: str):
     if len(password) < 16:

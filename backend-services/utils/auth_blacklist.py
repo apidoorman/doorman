@@ -44,11 +44,10 @@ see limit_throttle_util.py which uses the async Redis client (app.state.redis).
 - doorman.py app_lifespan() for production Redis requirement enforcement
 """
 
-from datetime import datetime, timedelta
 import heapq
 import os
-from typing import Optional
 import time
+from datetime import datetime, timedelta
 
 try:
     from utils.database import database, revocations_collection
@@ -67,6 +66,7 @@ revoked_all_users = set()
 _redis_client = None
 _redis_enabled = False
 
+
 def _init_redis_if_possible():
     global _redis_client, _redis_enabled
     if _redis_client is not None:
@@ -84,7 +84,9 @@ def _init_redis_if_possible():
         host = os.getenv('REDIS_HOST', 'localhost')
         port = int(os.getenv('REDIS_PORT', 6379))
         db = int(os.getenv('REDIS_DB', 0))
-        pool = redis.ConnectionPool(host=host, port=port, db=db, decode_responses=True, max_connections=100)
+        pool = redis.ConnectionPool(
+            host=host, port=port, db=db, decode_responses=True, max_connections=100
+        )
         _redis_client = redis.StrictRedis(connection_pool=pool)
         try:
             _redis_client.ping()
@@ -96,23 +98,36 @@ def _init_redis_if_possible():
         _redis_client = None
         _redis_enabled = False
 
+
 def _revoked_jti_key(username: str, jti: str) -> str:
     return f'jwt:revoked:{username}:{jti}'
 
+
 def _revoke_all_key(username: str) -> str:
     return f'jwt:revoke_all:{username}'
+
 
 def revoke_all_for_user(username: str):
     """Mark all tokens for a user as revoked (durable if Redis is enabled)."""
     _init_redis_if_possible()
     try:
-        if database is not None and getattr(database, 'memory_only', False) and revocations_collection is not None:
+        if (
+            database is not None
+            and getattr(database, 'memory_only', False)
+            and revocations_collection is not None
+        ):
             try:
-                existing = revocations_collection.find_one({'type': 'revoke_all', 'username': username})
+                existing = revocations_collection.find_one(
+                    {'type': 'revoke_all', 'username': username}
+                )
                 if existing:
-                    revocations_collection.update_one({'_id': existing.get('_id')}, {'$set': {'revoke_all': True}})
+                    revocations_collection.update_one(
+                        {'_id': existing.get('_id')}, {'$set': {'revoke_all': True}}
+                    )
                 else:
-                    revocations_collection.insert_one({'type': 'revoke_all', 'username': username, 'revoke_all': True})
+                    revocations_collection.insert_one(
+                        {'type': 'revoke_all', 'username': username, 'revoke_all': True}
+                    )
             except Exception:
                 revoked_all_users.add(username)
             return
@@ -123,11 +138,16 @@ def revoke_all_for_user(username: str):
     except Exception:
         revoked_all_users.add(username)
 
+
 def unrevoke_all_for_user(username: str):
     """Clear 'revoke all' for a user (durable if Redis is enabled)."""
     _init_redis_if_possible()
     try:
-        if database is not None and getattr(database, 'memory_only', False) and revocations_collection is not None:
+        if (
+            database is not None
+            and getattr(database, 'memory_only', False)
+            and revocations_collection is not None
+        ):
             try:
                 revocations_collection.delete_one({'type': 'revoke_all', 'username': username})
             except Exception:
@@ -140,11 +160,16 @@ def unrevoke_all_for_user(username: str):
     except Exception:
         revoked_all_users.discard(username)
 
+
 def is_user_revoked(username: str) -> bool:
     """Return True if user is under 'revoke all' (durable check if Redis enabled)."""
     _init_redis_if_possible()
     try:
-        if database is not None and getattr(database, 'memory_only', False) and revocations_collection is not None:
+        if (
+            database is not None
+            and getattr(database, 'memory_only', False)
+            and revocations_collection is not None
+        ):
             try:
                 doc = revocations_collection.find_one({'type': 'revoke_all', 'username': username})
                 return bool(doc and doc.get('revoke_all'))
@@ -155,6 +180,7 @@ def is_user_revoked(username: str) -> bool:
         return username in revoked_all_users
     except Exception:
         return username in revoked_all_users
+
 
 class TimedHeap:
     def __init__(self, purge_after=timedelta(hours=1)):
@@ -182,7 +208,8 @@ class TimedHeap:
             return self.heap[0][1]
         return None
 
-def add_revoked_jti(username: str, jti: str, ttl_seconds: Optional[int] = None):
+
+def add_revoked_jti(username: str, jti: str, ttl_seconds: int | None = None):
     """Add a specific JTI to the revocation list.
 
     - If Redis is enabled, store key with TTL so it auto-expires.
@@ -192,14 +219,26 @@ def add_revoked_jti(username: str, jti: str, ttl_seconds: Optional[int] = None):
         return
     _init_redis_if_possible()
     try:
-        if database is not None and getattr(database, 'memory_only', False) and revocations_collection is not None:
+        if (
+            database is not None
+            and getattr(database, 'memory_only', False)
+            and revocations_collection is not None
+        ):
             try:
-                exp = int(time.time()) + (max(1, int(ttl_seconds)) if ttl_seconds is not None else 3600)
-                existing = revocations_collection.find_one({'type': 'jti', 'username': username, 'jti': jti})
+                exp = int(time.time()) + (
+                    max(1, int(ttl_seconds)) if ttl_seconds is not None else 3600
+                )
+                existing = revocations_collection.find_one(
+                    {'type': 'jti', 'username': username, 'jti': jti}
+                )
                 if existing:
-                    revocations_collection.update_one({'_id': existing.get('_id')}, {'$set': {'expires_at': exp}})
+                    revocations_collection.update_one(
+                        {'_id': existing.get('_id')}, {'$set': {'expires_at': exp}}
+                    )
                 else:
-                    revocations_collection.insert_one({'type': 'jti', 'username': username, 'jti': jti, 'expires_at': exp})
+                    revocations_collection.insert_one(
+                        {'type': 'jti', 'username': username, 'jti': jti, 'expires_at': exp}
+                    )
                 return
             except Exception:
                 pass
@@ -215,15 +254,22 @@ def add_revoked_jti(username: str, jti: str, ttl_seconds: Optional[int] = None):
         jwt_blacklist[username] = th
     th.push(jti)
 
+
 def is_jti_revoked(username: str, jti: str) -> bool:
     """Check whether a specific JTI is revoked (durable if Redis enabled)."""
     if not username or not jti:
         return False
     _init_redis_if_possible()
     try:
-        if database is not None and getattr(database, 'memory_only', False) and revocations_collection is not None:
+        if (
+            database is not None
+            and getattr(database, 'memory_only', False)
+            and revocations_collection is not None
+        ):
             try:
-                doc = revocations_collection.find_one({'type': 'jti', 'username': username, 'jti': jti})
+                doc = revocations_collection.find_one(
+                    {'type': 'jti', 'username': username, 'jti': jti}
+                )
                 if not doc:
                     pass
                 else:
@@ -248,13 +294,18 @@ def is_jti_revoked(username: str, jti: str) -> bool:
             return True
     return False
 
+
 async def purge_expired_tokens():
     """No-op when Redis-backed; purge DB/in-memory when memory-only."""
     _init_redis_if_possible()
     if _redis_enabled:
         return
     try:
-        if database is not None and getattr(database, 'memory_only', False) and revocations_collection is not None:
+        if (
+            database is not None
+            and getattr(database, 'memory_only', False)
+            and revocations_collection is not None
+        ):
             now = int(time.time())
             to_delete = []
             for d in revocations_collection.find({'type': 'jti'}):

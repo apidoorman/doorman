@@ -4,23 +4,24 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-import psutil
-import time
 import logging
-from datetime import timedelta
-from redis.asyncio import Redis
 import os
+import time
+from datetime import timedelta
 
-from utils.database import mongodb_client, database
+import psutil
+from redis.asyncio import Redis
+
+from utils.database import database, mongodb_client
 from utils.doorman_cache_util import doorman_cache
 
 logger = logging.getLogger('doorman.gateway')
 
 START_TIME = time.time()
 
+
 async def check_mongodb():
     try:
-
         if database.memory_only:
             return True
         if mongodb_client is None:
@@ -31,14 +32,14 @@ async def check_mongodb():
         logger.error(f'MongoDB health check failed: {str(e)}')
         return False
 
+
 async def check_redis():
     try:
-
         if not getattr(doorman_cache, 'is_redis', False):
             return True
         redis = Redis.from_url(
             f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
-            decode_responses=True
+            decode_responses=True,
         )
 
         await redis.ping()
@@ -46,6 +47,7 @@ async def check_redis():
     except Exception as e:
         logger.error(f'Redis health check failed: {str(e)}')
         return False
+
 
 def get_memory_usage():
     try:
@@ -58,6 +60,7 @@ def get_memory_usage():
         logger.error(f'Memory usage check failed: {str(e)}')
         return 'unknown'
 
+
 def get_active_connections():
     try:
         process = psutil.Process(os.getpid())
@@ -66,6 +69,7 @@ def get_active_connections():
     except Exception as e:
         logger.error(f'Active connections check failed: {str(e)}')
         return 0
+
 
 def get_uptime():
     try:

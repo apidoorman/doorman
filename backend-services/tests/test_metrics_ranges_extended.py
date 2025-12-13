@@ -1,25 +1,37 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_metrics_range_parameters(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'mrange', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'GET', '/p')
     await subscribe_self(authed_client, name, ver)
 
     import services.gateway_service as gs
+
     class _FakeHTTPResponse:
         def __init__(self):
             self.status_code = 200
             self.headers = {'Content-Type': 'application/json'}
             self.text = '{}'
             self.content = b'{}'
-        def json(self): return {'ok': True}
+
+        def json(self):
+            return {'ok': True}
+
     class _FakeAsyncClient:
-        def __init__(self, timeout=None, limits=None, http2=False): pass
-        async def __aenter__(self): return self
-        async def __aexit__(self, exc_type, exc, tb): return False
+        def __init__(self, timeout=None, limits=None, http2=False):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
         async def request(self, method, url, **kwargs):
             """Generic request method used by http_client.request_with_resilience"""
             method = method.upper()
@@ -37,10 +49,19 @@ async def test_metrics_range_parameters(monkeypatch, authed_client):
                 return await self.put(url, **kwargs)
             else:
                 return _FakeHTTPResponse(405)
-        async def get(self, url, params=None, headers=None, **kwargs): return _FakeHTTPResponse()
-        async def post(self, url, **kwargs): return _FakeHTTPResponse()
-        async def put(self, url, **kwargs): return _FakeHTTPResponse()
-        async def delete(self, url, **kwargs): return _FakeHTTPResponse()
+
+        async def get(self, url, params=None, headers=None, **kwargs):
+            return _FakeHTTPResponse()
+
+        async def post(self, url, **kwargs):
+            return _FakeHTTPResponse()
+
+        async def put(self, url, **kwargs):
+            return _FakeHTTPResponse()
+
+        async def delete(self, url, **kwargs):
+            return _FakeHTTPResponse()
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
 
     await authed_client.get(f'/api/rest/{name}/{ver}/p')

@@ -1,8 +1,8 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_security_settings_requires_permission(authed_client):
-
     r = await authed_client.put('/platform/role/admin', json={'manage_security': False})
     assert r.status_code in (200, 201)
 
@@ -17,4 +17,3 @@ async def test_security_settings_requires_permission(authed_client):
 
     gs2 = await authed_client.get('/platform/security/settings')
     assert gs2.status_code == 200
-

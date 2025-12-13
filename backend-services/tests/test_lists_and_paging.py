@@ -1,8 +1,8 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_list_endpoints_roles_groups_apis(authed_client):
-
     await authed_client.post(
         '/platform/api',
         json={
@@ -17,12 +17,10 @@ async def test_list_endpoints_roles_groups_apis(authed_client):
         },
     )
     await authed_client.post(
-        '/platform/group',
-        json={'group_name': 'glist', 'group_description': 'gd', 'api_access': []},
+        '/platform/group', json={'group_name': 'glist', 'group_description': 'gd', 'api_access': []}
     )
     await authed_client.post(
-        '/platform/role',
-        json={'role_name': 'rlist', 'role_description': 'rd'},
+        '/platform/role', json={'role_name': 'rlist', 'role_description': 'rd'}
     )
 
     ra = await authed_client.get('/platform/api/all?page=1&page_size=5')
@@ -31,4 +29,3 @@ async def test_list_endpoints_roles_groups_apis(authed_client):
     assert rg.status_code == 200
     rr = await authed_client.get('/platform/role/all?page=1&page_size=5')
     assert rr.status_code == 200
-

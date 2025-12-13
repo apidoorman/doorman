@@ -95,10 +95,9 @@ const ApiDetailPage = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const toast = useToast()
-  const [useProtobuf, setUseProtobufState] = useState<boolean>(false)
 
-  type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean }
-  const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false })
+  type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean; enabled?: boolean }
+  const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false, enabled: true })
 
   const fetchWithCsrf = async (input: RequestInfo, init: RequestInit = {}) => {
     const csrf = getCookie('csrf_token')
@@ -169,10 +168,6 @@ const ApiDetailPage = () => {
       try {
         const parsedApi = JSON.parse(apiData)
         setApi(parsedApi)
-        try {
-          const { getUseProtobuf } = require('@/utils/proto')
-          setUseProtobufState(getUseProtobuf(parsedApi.api_name, parsedApi.api_version))
-        } catch {}
         setEditData({
           api_name: parsedApi.api_name,
           api_version: parsedApi.api_version,
@@ -209,10 +204,6 @@ const ApiDetailPage = () => {
           const found = (list as any[]).find((a: any) => String(a.api_id) === String(apiId))
           if (found) {
             setApi(found)
-            try {
-              const { getUseProtobuf } = require('@/utils/proto')
-              setUseProtobufState(getUseProtobuf(found.api_name, found.api_version))
-            } catch {}
             setEditData({
               api_name: found.api_name,
               api_version: found.api_version,
@@ -288,6 +279,12 @@ const ApiDetailPage = () => {
       }
     }
     loadEndpoints()
+  }, [api])
+
+  useEffect(() => {
+    if (api) {
+      checkProto()
+    }
   }, [api])
 
   const handleBack = () => {
@@ -371,10 +368,6 @@ const ApiDetailPage = () => {
         setApi(merged as any)
         sessionStorage.setItem('selectedApi', JSON.stringify(merged))
       }
-      try {
-        const { setUseProtobuf } = await import('@/utils/proto')
-        setUseProtobuf(targetName, targetVersion, useProtobuf)
-      } catch {}
       setIsEditing(false)
       setSuccess('API updated successfully!')
       setTimeout(() => setSuccess(null), 3000)
@@ -711,14 +704,15 @@ const ApiDetailPage = () => {
         )}
 
         {api && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            {/* Basic Information */}
             <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Basic Information</h3>
+              <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 py-4">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Basic Information</h3>
               </div>
               <div className="p-6 space-y-4">
                 {(((isEditing ? (editData as any)?.api_public : (api as any)?.api_public) ?? false) && ((isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false)) && (
-                  <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                  <div className="rounded-sm bg-warning-50 border border-warning-500/40 p-3 text-[13px] text-warning-800 dark:bg-warning-500/10 dark:text-warning-300">
                     Public + Credits: Anyone can call this API and the group API key will be injected. Per-user deductions/keys are skipped.
                   </div>
                 )}
@@ -727,14 +721,15 @@ const ApiDetailPage = () => {
                   ((isEditing ? (editData as any)?.api_auth_required : (api as any)?.api_auth_required) ?? true) === false &&
                   ((isEditing ? (editData as any)?.api_credits_enabled : (api as any)?.api_credits_enabled) ?? false) === true
                 ) && (
-                  <div className="rounded-lg bg-warning-50 border border-warning-200 p-3 text-warning-800 dark:bg-warning-900/20 dark:border-warning-800 dark:text-warning-200">
+                  <div className="rounded-sm bg-warning-50 border border-warning-500/40 p-3 text-[13px] text-warning-800 dark:bg-warning-500/10 dark:text-warning-300">
                     No Auth + Credits: Unauthenticated requests are allowed and the group API key will be injected. Per-user deductions/keys are skipped. Consider enabling Auth Required or disabling Credits.
                   </div>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    API Name
-                  </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      API Name
+                    </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -743,15 +738,15 @@ const ApiDetailPage = () => {
                       className="input"
                       placeholder="Enter API name"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{api.api_name}</p>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{api.api_name}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Version
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Version
+                    </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -760,15 +755,39 @@ const ApiDetailPage = () => {
                       className="input"
                       placeholder="Enter API version"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{api.api_version}</p>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{api.api_version}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Type
-                  </label>
+                  <div className="md:col-span-2">
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      API URL
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-[13px] bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white px-3 py-2 rounded-sm border border-gray-200 dark:border-white/10 font-mono">
+                        {SERVER_URL}/api/{api.api_type?.toLowerCase() || 'rest'}/{api.api_name}/{api.api_version}
+                      </code>
+                      <button
+                        onClick={() => {
+                          const url = `${SERVER_URL}/api/${api.api_type?.toLowerCase() || 'rest'}/${api.api_name}/${api.api_version}`
+                          navigator.clipboard.writeText(url)
+                          toast.success('URL copied to clipboard')
+                        }}
+                        className="btn btn-ghost px-3"
+                        title="Copy URL"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Type
+                    </label>
                   {isEditing ? (
                     <select
                       value={editData.api_type || ''}
@@ -780,15 +799,15 @@ const ApiDetailPage = () => {
                       <option value="SOAP">SOAP</option>
                       <option value="gRPC">gRPC</option>
                     </select>
-                  ) : (
-                    <span className="badge badge-primary">{api.api_type}</span>
-                  )}
-                </div>
+                    ) : (
+                      <span className="badge badge-primary">{api.api_type}</span>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Description
-                  </label>
+                  <div className="md:col-span-2">
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Description
+                    </label>
                   {isEditing ? (
                     <textarea
                       value={editData.api_description || ''}
@@ -797,15 +816,15 @@ const ApiDetailPage = () => {
                       rows={3}
                       placeholder="Enter API description"
                     />
-                  ) : (
-                    <p className="text-gray-600 dark:text-gray-400">{api.api_description || 'No description'}</p>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-[13px] text-gray-600 dark:text-gray-400">{api.api_description || 'No description'}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Retry Count
-                  </label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Retry Count
+                    </label>
                   {isEditing ? (
                     <input
                       type="number"
@@ -814,20 +833,23 @@ const ApiDetailPage = () => {
                       className="input"
                       min="0"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-white">{api.api_allowed_retry_count}</p>
-                  )}
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{api.api_allowed_retry_count}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
+            {/* Configuration */}
             <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Configuration</h3>
+              <div className="border-b border-gray-200 dark:border-white/[0.08] px-6 py-4">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Configuration</h3>
               </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Active</label>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">Active</label>
                   {isEditing ? (
                     <div className="flex items-center">
                       <input
@@ -836,34 +858,36 @@ const ApiDetailPage = () => {
                         onChange={(e) => handleInputChange('active' as any, e.target.checked)}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enable this API</label>
-                    </div>
-                  ) : (
-                    <span className={`badge ${((api as any).active ?? true) ? 'badge-success' : 'badge-error'}`}>
-                      {((api as any).active ?? true) ? 'Active' : 'Disabled'}
-                    </span>
-                  )}
-                </div>
+                        <label className="ml-2 text-[13px] text-gray-700 dark:text-gray-300">Enable this API</label>
+                      </div>
+                    ) : (
+                      <span className={`badge ${((api as any).active ?? true) ? 'badge-success' : 'badge-error'}`}>
+                        {((api as any).active ?? true) ? 'Active' : 'Disabled'}
+                      </span>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">Public API <InfoTooltip text="Anyone with the URL can call this API. Auth, subscription, and group checks are skipped." /></label>
                   {isEditing ? (
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={!!(editData as any).api_public}
-                        onChange={(e) => handleInputChange('api_public' as any, e.target.checked)}
-                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        disabled={!!(editData as any).api_credits_enabled}
-                      />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Anyone with the URL can call this API</label>
-                    </div>
+                    <>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={!!(editData as any).api_public}
+                          onChange={(e) => handleInputChange('api_public' as any, e.target.checked)}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                          disabled={!!(editData as any).api_credits_enabled}
+                        />
+                        <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Anyone with the URL can call this API</label>
+                      </div>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
+                    </>
                   ) : (
                     <span className={`badge ${((api as any).api_public ?? false) ? 'badge-warning' : 'badge-secondary'}`}>
                       {((api as any).api_public ?? false) ? 'Public' : 'Private'}
                     </span>
                   )}
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Use with care. Authentication, subscriptions, and group checks are skipped.</p>
                 </div>
 
                 <div>
@@ -946,47 +970,18 @@ const ApiDetailPage = () => {
                     <p className="text-gray-900 dark:text-white">{api.api_authorization_field_swap || 'None'}</p>
                   )}
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Use Protobuf
-                    <InfoTooltip text="Frontend preference; enables proto-aware UI only. Does not change gateway behavior." />
-                  </label>
-                  {isEditing ? (
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={useProtobuf}
-                        onChange={async (e) => {
-                          const next = e.target.checked
-                          setUseProtobufState(next)
-                          try {
-                            const { setUseProtobuf } = await import('@/utils/proto')
-                            setUseProtobuf(api?.api_name, api?.api_version, next)
-                          } catch {}
-                        }}
-                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                      />
-                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                        Enable proto-based features for this API
-                      </label>
-                    </div>
-                  ) : (
-                    <span className={`badge ${useProtobuf ? 'badge-success' : 'badge-gray'}`}>
-                      {useProtobuf ? 'Enabled' : 'Disabled'}
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
 
+          {/* IP Access Control */}
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">IP Access Control</h3>
             </div>
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600 dark:text-gray-400">Manage IP policy for this API</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Manage IP policy for this API (whitelist or deny specific IPs/CIDRs).</div>
                 <button type="button" className="btn btn-ghost btn-xs" onClick={addMyIpToWhitelist}>Add My IP</button>
               </div>
               {(() => {
@@ -1031,10 +1026,16 @@ const ApiDetailPage = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Policy</label>
                     {isEditing ? (
-                      <select className="input" value={(editData.api_ip_mode as any) || 'allow_all'} onChange={(e)=>handleInputChange('api_ip_mode', e.target.value as any)}>
-                        <option value="allow_all">Allow All</option>
-                        <option value="whitelist">Whitelist</option>
-                      </select>
+                      <>
+                        <select className="input" value={(editData.api_ip_mode as any) || 'allow_all'} onChange={(e)=>handleInputChange('api_ip_mode', e.target.value as any)}>
+                          <option value="allow_all">Allow All</option>
+                          <option value="whitelist">Whitelist</option>
+                        </select>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          When set to <span className="font-semibold">Whitelist</span>, only IPs/CIDRs in the whitelist can call this API. The blacklist below is
+                          <span className="font-semibold"> always evaluated first</span> and will deny matching IPs regardless of policy.
+                        </p>
+                      </>
                     ) : (
                       <p className="text-gray-900 dark:text-white">{(api as any).api_ip_mode || 'allow_all'}</p>
                     )}
@@ -1056,17 +1057,37 @@ const ApiDetailPage = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist (IPs/CIDRs; one per line or comma-separated)</label>
                     {isEditing ? (
-                      <textarea className="input min-h-[120px]" value={ipWhitelistText} onChange={(e)=>setIpWhitelistText(e.target.value)} />
+                      <>
+                        <textarea
+                          className="input min-h-[120px]"
+                          value={ipWhitelistText}
+                          onChange={(e)=>setIpWhitelistText(e.target.value)}
+                          placeholder={"10.0.0.0/8\n192.168.1.100"}
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Used only when Policy is <span className="font-semibold">Whitelist</span>. Clients must match one of these IPs/CIDRs (after global platform IP rules).
+                        </p>
+                      </>
                     ) : (
                       <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{((api as any).api_ip_whitelist || []).join('\n') || '—'}</pre>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist (IPs/CIDRs; one per line or comma-separated)</label>
                     {isEditing ? (
-                      <textarea className="input min-h-[120px]" value={ipBlacklistText} onChange={(e)=>setIpBlacklistText(e.target.value)} />
+                      <>
+                        <textarea
+                          className="input min-h-[120px]"
+                          value={ipBlacklistText}
+                          onChange={(e)=>setIpBlacklistText(e.target.value)}
+                          placeholder={"203.0.113.0/24\n203.0.113.50"}
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Always evaluated first. Any matching IP/CIDR is denied before whitelist or other checks.
+                        </p>
+                      </>
                     ) : (
                       <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{((api as any).api_ip_blacklist || []).join('\n') || '—'}</pre>
                     )}
@@ -1075,51 +1096,162 @@ const ApiDetailPage = () => {
               </div>
             </div>
 
-            {useProtobuf ? (
-              <div className="card">
-                <div className="card-header">
-                  <h3 className="card-title">Proto</h3>
-                </div>
-                <div className="p-6 space-y-4">
-                  {proto.error && (
-                    <div className="rounded bg-error-50 border border-error-200 p-2 text-error-700 text-sm">{proto.error}</div>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <button className="btn btn-secondary" onClick={checkProto} disabled={proto.loading}> {proto.loading ? 'Checking...' : 'Check Status'} </button>
-                    {proto.exists === true && <span className="text-success-700 dark:text-success-400">Present</span>}
-                    {proto.exists === false && <span className="text-error-700 dark:text-error-400">Missing</span>}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label className="btn btn-secondary">
-                      Upload
-                      <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
-                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'create'); e.currentTarget.value = '' } }} />
-                    </label>
-                    <label className="btn btn-secondary">
-                      Replace
-                      <input type="file" accept=".proto,text/plain" style={{ display: 'none' }} disabled={proto.working}
-                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await uploadOrUpdateProto(f, 'update'); e.currentTarget.value = '' } }} />
-                    </label>
-                    <button className="btn btn-error" onClick={deleteProto} disabled={proto.working || proto.exists !== true}>Delete</button>
-                    <button className="btn btn-ghost" onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} disabled={!proto.content}>{proto.show ? 'Hide' : 'View'}</button>
-                  </div>
-                  {proto.show && proto.content && (
-                    <pre className="text-xs whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 p-3 rounded max-h-64 overflow-auto">{proto.content}</pre>
-                  )}
-                </div>
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">gRPC Proto Configuration</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage Protocol Buffer definitions for gRPC APIs</p>
               </div>
-            ) : (
-              <div className="card">
-                <div className="card-header">
-                  <h3 className="card-title">Proto</h3>
-                </div>
-                <div className="p-6 space-y-4">
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Protobuf features are disabled for this API. Enable "Use Protobuf" in the Configuration section to upload or manage proto files.
+              <div className="p-6 space-y-4">
+                {/* Enable/Disable Proto - Edit Mode Only */}
+                {isEditing && (
+                  <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <input
+                      type="checkbox"
+                      id="proto_enabled"
+                      checked={proto.enabled ?? true}
+                      onChange={(e) => setProto(prev => ({ ...prev, enabled: e.target.checked }))}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="proto_enabled" className="flex-1 cursor-pointer">
+                      <p className="font-medium text-gray-900 dark:text-white">Enable Proto Support</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Allow gRPC Protocol Buffer file management for this API
+                      </p>
+                    </label>
                   </div>
+                )}
+
+                {/* Status Display - View Mode */}
+                {!isEditing && (
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${proto.exists === true ? 'bg-success-500' : 'bg-gray-400'}`}></div>
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white">Proto File Status</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {proto.loading ? 'Checking...' : proto.exists === true ? 'Proto file is active' : 'No proto file uploaded'}
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      onClick={checkProto} 
+                      disabled={proto.loading}
+                    >
+                      <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Refresh
+                    </button>
+                  </div>
+                )}
+
+                {proto.error && (
+                  <div className="rounded-lg bg-error-50 border border-error-200 p-3 text-error-700 dark:bg-error-900/20 dark:border-error-800 dark:text-error-300">
+                    <div className="flex items-start gap-2">
+                      <svg className="h-5 w-5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-sm">{proto.error}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Proto Actions */}
+                {proto.enabled && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Proto File Management</label>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="btn btn-primary">
+                      <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      {proto.exists ? 'Replace Proto' : 'Upload Proto'}
+                      <input 
+                        type="file" 
+                        accept=".proto,text/plain" 
+                        style={{ display: 'none' }} 
+                        disabled={proto.working}
+                        onChange={async (e) => { 
+                          const f = e.target.files?.[0]; 
+                          if (f) { 
+                            await uploadOrUpdateProto(f, proto.exists ? 'update' : 'create'); 
+                            e.currentTarget.value = '' 
+                          } 
+                        }} 
+                      />
+                    </label>
+                    
+                    {proto.exists && (
+                      <>
+                        <button 
+                          className="btn btn-secondary" 
+                          onClick={() => setProto(prev => ({ ...prev, show: !prev.show }))} 
+                          disabled={!proto.content}
+                        >
+                          <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          {proto.show ? 'Hide Content' : 'View Content'}
+                        </button>
+                        
+                        <button 
+                          className="btn btn-error" 
+                          onClick={deleteProto} 
+                          disabled={proto.working}
+                        >
+                          <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete Proto
+                        </button>
+                      </>
+                    )}
+                    
+                    {proto.working && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="spinner"></div>
+                        <span>Processing...</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Upload a .proto file to enable gRPC support for this API. The file will be compiled and validated automatically.
+                  </p>
                 </div>
+                )}
+
+                {!proto.enabled && (
+                  <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-center">
+                    <svg className="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Proto support is currently disabled for this API.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Enable the toggle above to manage proto files.</p>
+                  </div>
+                )}
+
+                {/* Proto Content Viewer */}
+                {proto.show && proto.content && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Proto File Content</label>
+                      <button 
+                        className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        onClick={() => {
+                          navigator.clipboard.writeText(proto.content || '')
+                          toast.success('Proto content copied to clipboard')
+                        }}
+                      >
+                        Copy to clipboard
+                      </button>
+                    </div>
+                    <pre className="text-xs whitespace-pre-wrap bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg max-h-96 overflow-auto border border-gray-700 font-mono">{proto.content}</pre>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             <div className="card">
               <div className="card-header">
@@ -1337,6 +1469,13 @@ const ApiDetailPage = () => {
                 <FormHelp docHref="/docs/using-fields.html#header-forwarding">Forward only selected upstream response headers.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
+                <div className="text-xs text-gray-600 dark:text-gray-400">
+                  {((isEditing ? (editData.api_type || api.api_type) : api.api_type) || '').toUpperCase() === 'SOAP' && (
+                    <span>
+                      Tip: For SOAP APIs, Doorman auto-allows common request headers (Content-Type, SOAPAction, Accept, User-Agent). You typically don’t need to add them here.
+                    </span>
+                  )}
+                </div>
                 {isEditing && (
                   <div className="flex gap-2">
                     <input

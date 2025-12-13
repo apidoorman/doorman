@@ -6,15 +6,17 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
-import redis.asyncio as aioredis
 import json
-import os
-from typing import Dict, Any, Optional
 import logging
+import os
+from typing import Any
+
+import redis.asyncio as aioredis
 
 from utils.doorman_cache_util import MemoryCache
 
 logger = logging.getLogger('doorman.gateway')
+
 
 class AsyncDoormanCacheManager:
     """Async cache manager supporting both Redis (async) and in-memory modes."""
@@ -52,7 +54,7 @@ class AsyncDoormanCacheManager:
             'endpoint_server_cache': 'endpoint_server_cache:',
             'client_routing_cache': 'client_routing_cache:',
             'token_def_cache': 'token_def_cache:',
-            'credit_def_cache': 'credit_def_cache:'
+            'credit_def_cache': 'credit_def_cache:',
         }
 
         self.default_ttls = {
@@ -70,8 +72,27 @@ class AsyncDoormanCacheManager:
             'endpoint_server_cache': 86400,
             'client_routing_cache': 86400,
             'token_def_cache': 86400,
-            'credit_def_cache': 86400
+            'credit_def_cache': 86400,
         }
+
+    def _to_json_serializable(self, value):
+        """Recursively convert bytes and non-JSON types into serializable forms.
+
+        Mirrors the sync cache utility behavior so cached values are portable.
+        """
+        try:
+            if isinstance(value, bytes):
+                try:
+                    return value.decode('utf-8')
+                except Exception:
+                    return value.decode('latin-1', errors='ignore')
+            if isinstance(value, dict):
+                return {k: self._to_json_serializable(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [self._to_json_serializable(v) for v in value]
+            return value
+        except Exception:
+            return value
 
     async def _ensure_redis_connection(self):
         """Lazy initialize Redis connection (async)."""
@@ -80,6 +101,7 @@ class AsyncDoormanCacheManager:
 
         if self._init_lock:
             import asyncio
+
             while self._init_lock:
                 await asyncio.sleep(0.01)
             return
@@ -95,7 +117,7 @@ class AsyncDoormanCacheManager:
                 port=redis_port,
                 db=redis_db,
                 decode_responses=True,
-                max_connections=100
+                max_connections=100,
             )
             self.cache = aioredis.Redis(connection_pool=self._redis_pool)
 
@@ -123,12 +145,13 @@ class AsyncDoormanCacheManager:
         ttl = self.default_ttls.get(cache_name, 86400)
         cache_key = self._get_key(cache_name, key)
 
+        payload = json.dumps(self._to_json_serializable(value))
         if self.is_redis:
-            await self.cache.setex(cache_key, ttl, json.dumps(value))
+            await self.cache.setex(cache_key, ttl, payload)
         else:
-            self.cache.setex(cache_key, ttl, json.dumps(value))
+            self.cache.setex(cache_key, ttl, payload)
 
-    async def get_cache(self, cache_name: str, key: str) -> Optional[Any]:
+    async def get_cache(self, cache_name: str, key: str) -> Any | None:
         """Get cache value (async)."""
         if self.is_redis:
             await self._ensure_redis_connection()
@@ -180,13 +203,13 @@ class AsyncDoormanCacheManager:
         for cache_name in self.prefixes.keys():
             await self.clear_cache(cache_name)
 
-    async def get_cache_info(self) -> Dict[str, Any]:
+    async def get_cache_info(self) -> dict[str, Any]:
         """Get cache information (async)."""
         info = {
             'type': self.cache_type,
             'is_redis': self.is_redis,
             'prefixes': list(self.prefixes.keys()),
-            'default_ttl': self.default_ttls
+            'default_ttl': self.default_ttls,
         }
 
         if not self.is_redis and hasattr(self.cache, 'get_cache_stats'):
@@ -237,6 +260,7 @@ class AsyncDoormanCacheManager:
         """
         try:
             import inspect
+
             if inspect.iscoroutine(operation):
                 result = await operation
             else:
@@ -248,7 +272,7 @@ class AsyncDoormanCacheManager:
                 await self.delete_cache(cache_name, key)
 
             return result
-        except Exception as e:
+        except Exception:
             await self.delete_cache(cache_name, key)
             raise
 
@@ -258,9 +282,11 @@ class AsyncDoormanCacheManager:
             await self.cache.close()
             if self._redis_pool:
                 await self._redis_pool.disconnect()
-            logger.info("Async Redis connections closed")
+            logger.info('Async Redis connections closed')
+
 
 async_doorman_cache = AsyncDoormanCacheManager()
+
 
 async def close_async_cache_connections():
     """Close all async cache connections for graceful shutdown."""

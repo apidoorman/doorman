@@ -1,5 +1,6 @@
 import pytest
 
+
 class _FakeHTTPResponse:
     def __init__(self, status_code=200, json_body=None, text_body=None, headers=None):
         self.status_code = status_code
@@ -12,9 +13,11 @@ class _FakeHTTPResponse:
 
     def json(self):
         import json as _json
+
         if self._json_body is None:
             return _json.loads(self.text or '{}')
         return self._json_body
+
 
 class _FakeAsyncClient:
     def __init__(self, *args, **kwargs):
@@ -26,41 +29,87 @@ class _FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def request(self, method, url, **kwargs):
+    async def request(self, method, url, *, content=None, **kwargs):
         """Generic request method used by http_client.request_with_resilience"""
         method = method.upper()
         if method == 'GET':
             return await self.get(url, **kwargs)
         elif method == 'POST':
-            return await self.post(url, **kwargs)
+            return await self.post(url, content=content, **kwargs)
         elif method == 'PUT':
-            return await self.put(url, **kwargs)
+            return await self.put(url, content=content, **kwargs)
         elif method == 'DELETE':
             return await self.delete(url, **kwargs)
         elif method == 'HEAD':
             return await self.get(url, **kwargs)
         elif method == 'PATCH':
-            return await self.put(url, **kwargs)
+            return await self.put(url, content=content, **kwargs)
         else:
             return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
 
     async def get(self, url, params=None, headers=None, **kwargs):
-        return _FakeHTTPResponse(200, json_body={'method': 'GET', 'url': url, 'params': dict(params or {}), 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
+        return _FakeHTTPResponse(
+            200,
+            json_body={
+                'method': 'GET',
+                'url': url,
+                'params': dict(params or {}),
+                'headers': headers or {},
+            },
+            headers={'X-Upstream': 'yes'},
+        )
 
     async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs):
-        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
-        return _FakeHTTPResponse(200, json_body={'method': 'POST', 'url': url, 'params': dict(params or {}), 'body': body, 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
+        body = (
+            json
+            if json is not None
+            else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
+        )
+        return _FakeHTTPResponse(
+            200,
+            json_body={
+                'method': 'POST',
+                'url': url,
+                'params': dict(params or {}),
+                'body': body,
+                'headers': headers or {},
+            },
+            headers={'X-Upstream': 'yes'},
+        )
 
     async def put(self, url, json=None, params=None, headers=None, content=None, **kwargs):
-        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
-        return _FakeHTTPResponse(200, json_body={'method': 'PUT', 'url': url, 'params': dict(params or {}), 'body': body, 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
+        body = (
+            json
+            if json is not None
+            else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
+        )
+        return _FakeHTTPResponse(
+            200,
+            json_body={
+                'method': 'PUT',
+                'url': url,
+                'params': dict(params or {}),
+                'body': body,
+                'headers': headers or {},
+            },
+            headers={'X-Upstream': 'yes'},
+        )
 
     async def delete(self, url, json=None, params=None, headers=None, content=None, **kwargs):
-        return _FakeHTTPResponse(200, json_body={'method': 'DELETE', 'url': url, 'params': dict(params or {}), 'headers': headers or {}}, headers={'X-Upstream': 'yes'})
+        return _FakeHTTPResponse(
+            200,
+            json_body={
+                'method': 'DELETE',
+                'url': url,
+                'params': dict(params or {}),
+                'headers': headers or {},
+            },
+            headers={'X-Upstream': 'yes'},
+        )
+
 
 @pytest.mark.asyncio
 async def test_subscription_required_blocks_without_subscription(monkeypatch, authed_client):
-
     name, ver = 'nosub', 'v1'
     await authed_client.post(
         '/platform/api',
@@ -87,13 +136,14 @@ async def test_subscription_required_blocks_without_subscription(monkeypatch, au
     )
 
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.get(f'/api/rest/{name}/{ver}/x')
     assert r.status_code == 403
 
+
 @pytest.mark.asyncio
 async def test_group_required_blocks_when_disallowed_group(monkeypatch, authed_client):
-
     name, ver = 'nogroup', 'v1'
     await authed_client.post(
         '/platform/api',
@@ -120,17 +170,22 @@ async def test_group_required_blocks_when_disallowed_group(monkeypatch, authed_c
     )
 
     import routes.gateway_routes as gr
+
     async def _pass_sub(req):
         return {'sub': 'admin'}
+
     monkeypatch.setattr(gr, 'subscription_required', _pass_sub)
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.get(f'/api/rest/{name}/{ver}/y')
     assert r.status_code == 401
 
+
 @pytest.mark.asyncio
 async def test_path_template_matching(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'pathapi', 'v1'
     await create_api(authed_client, name, ver)
 
@@ -138,33 +193,35 @@ async def test_path_template_matching(monkeypatch, authed_client):
     await subscribe_self(authed_client, name, ver)
 
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.get(f'/api/rest/{name}/{ver}/res/abc123')
     assert r.status_code == 200
     assert r.json().get('url', '').endswith('/res/abc123')
 
+
 @pytest.mark.asyncio
 async def test_text_body_forwarding(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'textapi', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/echo')
     await subscribe_self(authed_client, name, ver)
 
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     payload = b'hello-world'
     r = await authed_client.post(
-        f'/api/rest/{name}/{ver}/echo',
-        headers={'Content-Type': 'text/plain'},
-        content=payload,
+        f'/api/rest/{name}/{ver}/echo', headers={'Content-Type': 'text/plain'}, content=payload
     )
     assert r.status_code == 200
     assert r.json().get('body') == payload.decode('utf-8')
 
+
 @pytest.mark.asyncio
 async def test_response_header_filtering_excludes_unlisted(monkeypatch, authed_client):
-
     name, ver = 'hdrfilter', 'v1'
     await authed_client.post(
         '/platform/api',
@@ -196,15 +253,16 @@ async def test_response_header_filtering_excludes_unlisted(monkeypatch, authed_c
     )
 
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.get(f'/api/rest/{name}/{ver}/p')
     assert r.status_code == 200
 
     assert r.headers.get('X-Upstream') is None
 
+
 @pytest.mark.asyncio
 async def test_authorization_field_swap(monkeypatch, authed_client):
-
     name, ver = 'authswap', 'v1'
     await authed_client.post(
         '/platform/api',
@@ -237,6 +295,7 @@ async def test_authorization_field_swap(monkeypatch, authed_client):
     )
 
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.get(f'/api/rest/{name}/{ver}/s', headers={'x-token': 'ABC123'})
     assert r.status_code == 200

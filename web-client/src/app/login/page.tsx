@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { SERVER_URL } from '@/utils/config'
-import { postJson } from '@/utils/api'
+import { postJson, getJson } from '@/utils/api'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -41,16 +41,21 @@ const LoginPage = () => {
         return
       }
       try {
-        const me = await fetch(`${SERVER_URL}/platform/user/me`, { credentials: 'include' })
-        const meJson = await me.json().catch(() => ({}))
-        const meData = meJson && meJson.response ? meJson.response : meJson
-        if (!me.ok || !meData || meData.ui_access !== true) {
+        const meData: any = await getJson(`${SERVER_URL}/platform/user/me`)
+        const isSuperAdmin = meData && (meData.username === 'admin' || meData.role === 'admin')
+        if (!meData || (!isSuperAdmin && meData.ui_access !== true)) {
           setErrorMessage('Your account does not have UI access. Contact an administrator.')
           try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
           setIsLoading(false)
           return
         }
-      } catch {}
+      } catch (e: any) {
+        // If we cannot fetch account details, surface a clearer error
+        setErrorMessage(e?.message || 'Unable to verify account access. Please try again.')
+        try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
+        setIsLoading(false)
+        return
+      }
       await checkAuth()
       router.push('/dashboard')
     } catch (error) {
@@ -69,125 +74,87 @@ const LoginPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100 dark:from-dark-bg dark:via-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-gradient-to-br from-primary-400/20 to-primary-600/20 blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-gradient-to-tr from-purple-400/20 to-purple-600/20 blur-3xl"></div>
-      </div>
-
+    <div className="min-h-screen bg-gray-50 dark:bg-dark-bg text-gray-900 dark:text-white flex items-center justify-center p-6">
       <button
         onClick={toggleTheme}
-        className="absolute top-6 right-6 rounded-lg p-2 text-gray-500 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-dark-surface/50 transition-colors"
+        className="absolute top-6 right-6 rounded-sm p-2 text-gray-500 hover:bg-gray-100 dark:text-white/60 dark:hover:bg-white/5 transition-colors"
         aria-label="Toggle theme"
       >
         {theme === 'light' ? (
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
           </svg>
         ) : (
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         )}
       </button>
 
-      <div className="relative w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-lg">
-            <span className="text-white font-bold text-2xl">D</span>
+      <div className="w-full max-w-md">
+        <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-white/[0.08] rounded-lg p-8 shadow-xl">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="mx-auto mb-4 w-12 h-12 bg-primary-600 dark:bg-[#e5e5e5] rounded flex items-center justify-center">
+              <span className="text-white dark:text-[#1a1a1a] font-semibold">D</span>
+            </div>
+            <h1 className="text-[22px] font-medium text-gray-900 dark:text-white/90 mb-1">Welcome to Doorman</h1>
+            <p className="text-gray-600 dark:text-white/40 text-[13px]">Sign in to manage your API gateway</p>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Welcome back
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Sign in to your Doorman account
-          </p>
-        </div>
 
-        <div className="card animate-fade-in">
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Email address
-              </label>
+          {/* Form */}
+          <form onSubmit={handleLogin}>
+            <div className="mb-4">
+              <label className="block mb-2 text-[12px] text-gray-600 dark:text-white/60 font-medium">Email</label>
               <input
                 id="email"
                 type="email"
-                required
-                className="input"
-                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                placeholder="you@company.com"
+                className="input"
                 disabled={isLoading}
               />
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Password
-              </label>
+            <div className="mb-5">
+              <label className="block mb-2 text-[12px] text-gray-600 dark:text-white/60 font-medium">Password</label>
               <input
                 id="password"
                 type="password"
-                required
-                className="input"
-                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                className="input"
                 disabled={isLoading}
               />
             </div>
 
             {errorMessage && (
-              <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
-                <div className="flex">
-                  <svg className="h-5 w-5 text-error-400 dark:text-error-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div className="ml-3">
-                    <p className="text-sm text-error-700 dark:text-error-300">{errorMessage}</p>
-                  </div>
-                </div>
+              <div className="mb-4 text-[13px] px-3 py-2 rounded-sm border border-error-500/40 bg-error-50 dark:bg-error-500/10 text-error-700 dark:text-error-300">
+                {errorMessage}
               </div>
             )}
 
             <button
               type="submit"
               disabled={isLoading}
-              className="btn btn-primary w-full py-3 text-base font-medium"
+              className={`w-full px-4 py-2.5 rounded-sm text-[14px] font-medium transition border ${isLoading ? 'bg-gray-200 dark:bg-white/20 text-gray-600 dark:text-white/60 border-gray-300 dark:border-white/10 cursor-not-allowed' : 'bg-primary-600 dark:bg-[#e5e5e5] text-white dark:text-[#1a1a1a] hover:bg-primary-700 dark:hover:bg-white border-transparent'}`}
             >
-              {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <div className="spinner mr-2"></div>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign in'
-              )}
+              {isLoading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              By signing in, you agree to our{' '}
-              <a href="/terms" className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300 font-medium">
-                Terms of Service
-              </a>{' '}
-              and{' '}
-              <a href="/privacy" className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300 font-medium">
-                Privacy Policy
-              </a>
+          {/* Footer */}
+          <div className="text-center mt-6 pt-6 border-t border-gray-200 dark:border-white/[0.08]">
+            <p className="text-[11px] text-gray-500 dark:text-white/40">
+              By signing in, you agree to our <a href="/terms" className="text-gray-700 dark:text-white/60 hover:text-gray-900 dark:hover:text-white/80">Terms</a> and <a href="/privacy" className="text-gray-700 dark:text-white/60 hover:text-gray-900 dark:hover:text-white/80">Privacy Policy</a>
             </p>
           </div>
-        </div>
-
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Need help?{' '}
-            <a href="/support" className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300 font-medium">
-              Contact support
-            </a>
-          </p>
         </div>
       </div>
     </div>

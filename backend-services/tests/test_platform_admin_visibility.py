@@ -1,22 +1,25 @@
-import os
 import uuid
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+
 
 @pytest_asyncio.fixture
 async def login_client():
     async def _login(username: str, password: str, email: str = None) -> AsyncClient:
         from doorman import doorman
+
         client = AsyncClient(app=doorman, base_url='http://testserver')
         cred = {'email': email or f'{username}@example.com', 'password': password}
         r = await client.post('/platform/authorization', json=cred)
         assert r.status_code == 200, r.text
         return client
+
     return _login
 
-async def _ensure_manager_role(authed_client: AsyncClient):
 
+async def _ensure_manager_role(authed_client: AsyncClient):
     payload = {
         'role_name': 'manager',
         'role_description': 'Manager role',
@@ -31,10 +34,11 @@ async def _ensure_manager_role(authed_client: AsyncClient):
         'manage_credits': True,
         'manage_auth': True,
         'view_logs': True,
-        'export_logs': True
+        'export_logs': True,
     }
     r = await authed_client.post('/platform/role', json=payload)
     assert r.status_code in (200, 201, 400), r.text
+
 
 async def _create_manager_user(authed_client: AsyncClient) -> dict:
     await _ensure_manager_role(authed_client)
@@ -46,11 +50,12 @@ async def _create_manager_user(authed_client: AsyncClient) -> dict:
         'role': 'manager',
         'groups': ['ALL'],
         'active': True,
-        'ui_access': True
+        'ui_access': True,
     }
     r = await authed_client.post('/platform/user', json=payload)
     assert r.status_code in (200, 201), r.text
     return payload
+
 
 @pytest.mark.asyncio
 async def test_non_admin_cannot_see_admin_role(authed_client, login_client):
@@ -68,9 +73,9 @@ async def test_non_admin_cannot_see_admin_role(authed_client, login_client):
 
     await client.aclose()
 
+
 @pytest.mark.asyncio
 async def test_non_admin_cannot_see_or_modify_admin_users(authed_client, login_client):
-
     mgr = await _create_manager_user(authed_client)
     client = await login_client(mgr['username'], 'StrongManagerPwd!1234', mgr['email'])
 
@@ -89,27 +94,32 @@ async def test_non_admin_cannot_see_or_modify_admin_users(authed_client, login_c
 
     await client.aclose()
 
+
 @pytest.mark.asyncio
 async def test_non_admin_cannot_assign_admin_role(authed_client, login_client):
     mgr = await _create_manager_user(authed_client)
     client = await login_client(mgr['username'], 'StrongManagerPwd!1234', mgr['email'])
 
     newu = f'np_{uuid.uuid4().hex[:8]}'
-    r_create = await client.post('/platform/user', json={
-        'username': newu,
-        'email': f'{newu}@example.com',
-        'password': 'StrongPwd!1234XYZ',
-        'role': 'admin',
-        'groups': ['ALL'],
-        'active': True,
-        'ui_access': True
-    })
+    r_create = await client.post(
+        '/platform/user',
+        json={
+            'username': newu,
+            'email': f'{newu}@example.com',
+            'password': 'StrongPwd!1234XYZ',
+            'role': 'admin',
+            'groups': ['ALL'],
+            'active': True,
+            'ui_access': True,
+        },
+    )
     assert r_create.status_code in (403, 404)
 
-    r_update = await client.put(f"/platform/user/{mgr['username']}", json={'role': 'admin'})
+    r_update = await client.put(f'/platform/user/{mgr["username"]}', json={'role': 'admin'})
     assert r_update.status_code in (403, 404)
 
     await client.aclose()
+
 
 @pytest.mark.asyncio
 async def test_non_admin_auth_admin_ops_hidden(authed_client, login_client):
@@ -127,6 +137,8 @@ async def test_non_admin_auth_admin_ops_hidden(authed_client, login_client):
             r = await client.get(path)
         else:
             r = await client.post(path)
-        assert r.status_code in (404, 403), f'Expected 404/403 for {path}, got {r.status_code}: {r.text}'
+        assert r.status_code in (404, 403), (
+            f'Expected 404/403 for {path}, got {r.status_code}: {r.text}'
+        )
 
     await client.aclose()

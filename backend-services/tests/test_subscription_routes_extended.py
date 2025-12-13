@@ -1,8 +1,8 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_subscriptions_happy_and_invalid_payload(authed_client):
-
     c = await authed_client.post(
         '/platform/api',
         json={
@@ -35,4 +35,3 @@ async def test_subscriptions_happy_and_invalid_payload(authed_client):
 
     bad = await authed_client.post('/platform/subscription/subscribe', json={'username': 'admin'})
     assert bad.status_code in (400, 422)
-

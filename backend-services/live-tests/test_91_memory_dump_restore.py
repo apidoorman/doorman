@@ -1,10 +1,14 @@
 import os
+
 import pytest
 
 pytestmark = [pytest.mark.security]
 
+
 def test_memory_dump_restore_conditionally(client):
-    mem_mode = os.environ.get('MEM_OR_EXTERNAL', os.environ.get('MEM_OR_REDIS', 'MEM')).upper() == 'MEM'
+    mem_mode = (
+        os.environ.get('MEM_OR_EXTERNAL', os.environ.get('MEM_OR_REDIS', 'MEM')).upper() == 'MEM'
+    )
     key = os.environ.get('MEM_ENCRYPTION_KEY')
     if not mem_mode or not key:
         pytest.skip('Memory dump/restore only in memory mode with MEM_ENCRYPTION_KEY set')

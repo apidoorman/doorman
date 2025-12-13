@@ -2,29 +2,27 @@
 Utilities to dump and restore in-memory database state with encryption.
 """
 
-import os
-from pathlib import Path
-import json
 import base64
-from typing import Optional, Any
-from datetime import datetime, timezone
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+import json
+import os
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .database import database
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DUMP_PATH = os.getenv('MEM_DUMP_PATH', str(_PROJECT_ROOT / 'generated' / 'memory_dump.bin'))
 
+
 def _derive_key(key_material: str, salt: bytes) -> bytes:
-    hkdf = HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        info=b'doorman-mem-dump-v1',
-    )
+    hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=salt, info=b'doorman-mem-dump-v1')
     return hkdf.derive(key_material.encode('utf-8'))
+
 
 def _encrypt_blob(plaintext: bytes, key_str: str) -> bytes:
     if not key_str or len(key_str) < 8:
@@ -36,6 +34,7 @@ def _encrypt_blob(plaintext: bytes, key_str: str) -> bytes:
     ct = aesgcm.encrypt(nonce, plaintext, None)
 
     return b'DMP1' + salt + nonce + ct
+
 
 def _decrypt_blob(blob: bytes, key_str: str) -> bytes:
     if not key_str or len(key_str) < 8:
@@ -51,7 +50,8 @@ def _decrypt_blob(blob: bytes, key_str: str) -> bytes:
     aesgcm = AESGCM(key)
     return aesgcm.decrypt(nonce, ct, None)
 
-def _split_dir_and_stem(path_hint: Optional[str]) -> tuple[str, str]:
+
+def _split_dir_and_stem(path_hint: str | None) -> tuple[str, str]:
     """Return (directory, stem) for naming timestamped dump files.
 
     - If hint is a directory (or endswith '/'), use it and default stem 'memory_dump'.
@@ -73,7 +73,9 @@ def _split_dir_and_stem(path_hint: Optional[str]) -> tuple[str, str]:
         stem = stem or 'memory_dump'
     return dump_dir, stem
 
+
 BYTES_KEY_PREFIX = '__byteskey__:'
+
 
 def _to_jsonable(obj: Any) -> Any:
     """Recursively convert arbitrary objects to JSON-serializable structures.
@@ -90,7 +92,6 @@ def _to_jsonable(obj: Any) -> Any:
     if isinstance(obj, dict):
         out = {}
         for k, v in obj.items():
-
             if isinstance(k, bytes):
                 sk = BYTES_KEY_PREFIX + base64.b64encode(k).decode('ascii')
             elif isinstance(k, (str, int, float, bool)) or k is None:
@@ -112,14 +113,15 @@ def _to_jsonable(obj: Any) -> Any:
     except Exception:
         return None
 
+
 def _json_default(o: Any) -> Any:
     if isinstance(o, bytes):
         return {'__type__': 'bytes', 'data': base64.b64encode(o).decode('ascii')}
     try:
-
         return str(o)
     except Exception:
         return None
+
 
 def _from_jsonable(obj: Any) -> Any:
     """Inverse of _to_jsonable for the specific encodings we apply."""
@@ -133,7 +135,7 @@ def _from_jsonable(obj: Any) -> Any:
         for k, v in obj.items():
             rk: Any = k
             if isinstance(k, str) and k.startswith(BYTES_KEY_PREFIX):
-                b64 = k[len(BYTES_KEY_PREFIX):]
+                b64 = k[len(BYTES_KEY_PREFIX) :]
                 try:
                     rk = base64.b64decode(b64)
                 except Exception:
@@ -144,23 +146,41 @@ def _from_jsonable(obj: Any) -> Any:
         return [_from_jsonable(v) for v in obj]
     return obj
 
+
 def _sanitize_for_dump(data: Any) -> Any:
     """
     Remove sensitive data before dumping to prevent secret exposure.
     """
     SENSITIVE_KEYS = {
-        'password', 'secret', 'token', 'key', 'api_key',
-        'access_token', 'refresh_token', 'jwt', 'jwt_secret',
-        'csrf_token', 'session', 'cookie',
-        'credential', 'auth', 'authorization',
-        'ssn', 'credit_card', 'cvv', 'private_key',
-        'encryption_key', 'signing_key'
+        'password',
+        'secret',
+        'token',
+        'key',
+        'api_key',
+        'access_token',
+        'refresh_token',
+        'jwt',
+        'jwt_secret',
+        'csrf_token',
+        'session',
+        'cookie',
+        'credential',
+        'auth',
+        'authorization',
+        'ssn',
+        'credit_card',
+        'cvv',
+        'private_key',
+        'encryption_key',
+        'signing_key',
     }
+
     def should_redact(key: str) -> bool:
         if not isinstance(key, str):
             return False
         key_lower = key.lower()
         return any(s in key_lower for s in SENSITIVE_KEYS)
+
     def redact_value(obj: Any) -> Any:
         if isinstance(obj, dict):
             return {
@@ -175,20 +195,22 @@ def _sanitize_for_dump(data: Any) -> Any:
                 if cleaned.isalnum():
                     return '[REDACTED-TOKEN]'
         return obj
+
     return redact_value(data)
 
-def dump_memory_to_file(path: Optional[str] = None) -> str:
+
+def dump_memory_to_file(path: str | None = None) -> str:
     if not database.memory_only:
         raise RuntimeError('Memory dump is only available in memory-only mode')
     dump_dir, stem = _split_dir_and_stem(path)
     os.makedirs(dump_dir, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    ts = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')
     dump_path = os.path.join(dump_dir, f'{stem}-{ts}.bin')
     raw_data = database.db.dump_data()
     sanitized_data = _sanitize_for_dump(_to_jsonable(raw_data))
     payload = {
         'version': 1,
-        'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+        'created_at': datetime.now(UTC).isoformat().replace('+00:00', 'Z'),
         'sanitized': True,
         'note': 'Sensitive fields (passwords, tokens, secrets) have been redacted',
         'data': sanitized_data,
@@ -200,7 +222,8 @@ def dump_memory_to_file(path: Optional[str] = None) -> str:
         f.write(blob)
     return dump_path
 
-def restore_memory_from_file(path: Optional[str] = None) -> dict:
+
+def restore_memory_from_file(path: str | None = None) -> dict:
     if not database.memory_only:
         raise RuntimeError('Memory restore is only available in memory-only mode')
     dump_path = path or DEFAULT_DUMP_PATH
@@ -215,34 +238,41 @@ def restore_memory_from_file(path: Optional[str] = None) -> dict:
     data = _from_jsonable(payload.get('data', {}))
     database.db.load_data(data)
     try:
-        from utils.database import user_collection
-        from utils import password_util as _pw
         import os as _os
+
+        from utils import password_util as _pw
+        from utils.database import user_collection
+
         admin = user_collection.find_one({'username': 'admin'})
         if admin is not None and not isinstance(admin.get('password'), (bytes, bytearray)):
             pwd = _os.getenv('DOORMAN_ADMIN_PASSWORD')
             if not pwd:
                 raise RuntimeError('DOORMAN_ADMIN_PASSWORD must be set in environment')
-            user_collection.update_one({'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}})
+            user_collection.update_one(
+                {'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}}
+            )
     except Exception:
         pass
     return {'version': payload.get('version', 1), 'created_at': payload.get('created_at')}
 
-def find_latest_dump_path(path_hint: Optional[str] = None) -> Optional[str]:
+
+def find_latest_dump_path(path_hint: str | None = None) -> str | None:
     """Return the most recent dump file path based on a hint.
 
     - If `path_hint` is a file and exists, return it.
     - If `path_hint` is a directory, search for .bin files and pick the newest.
     - If no hint or not found, try DEFAULT_DUMP_PATH, or its directory for .bin files.
     """
-    def newest_bin_in_dir(d: str, stem: Optional[str] = None) -> Optional[str]:
+
+    def newest_bin_in_dir(d: str, stem: str | None = None) -> str | None:
         try:
             if not os.path.isdir(d):
                 return None
             candidates = [
                 os.path.join(d, f)
                 for f in os.listdir(d)
-                if f.lower().endswith('.bin') and os.path.isfile(os.path.join(d, f))
+                if f.lower().endswith('.bin')
+                and os.path.isfile(os.path.join(d, f))
                 and (stem is None or f.startswith(stem + '-'))
             ]
             if not candidates:

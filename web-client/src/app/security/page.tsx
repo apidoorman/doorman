@@ -533,35 +533,40 @@ const SecurityPage = () => {
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gateway</label>
                       <div className="flex gap-3">
-                        <button onClick={handleClearCaches} className="btn btn-secondary">Clear All Caches</button>
-                        <button onClick={handleRestartGateway} className="btn btn-danger">Restart Gateway</button>
+                        {permissions?.manage_gateway && (
+                          <button onClick={handleClearCaches} className="btn btn-secondary">Clear All Caches</button>
+                        )}
+                        {permissions?.manage_security && (
+                          <button onClick={handleRestartGateway} className="btn btn-danger">Restart Gateway</button>
+                        )}
                       </div>
                     </div>
                   )}
                 </div>
               </div>
             </div>
-            <div className="card">
-              <div className="border-b border-gray-200 dark:border-gray-700">
-                <nav className="-mb-px flex space-x-8">
-                  {tabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === tab.id
-                          ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                      }`}
-                    >
-                      <span className="mr-2">{tab.icon}</span>
-                      {tab.label}
-                    </button>
-                  ))}
-                </nav>
-              </div>
+            {tabs.length > 0 && (
+              <div className="card">
+                <div className="border-b border-gray-200 dark:border-gray-700">
+                  <nav className="-mb-px flex space-x-8">
+                    {tabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                          activeTab === tab.id
+                            ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                        }`}
+                      >
+                        <span className="mr-2">{tab.icon}</span>
+                        {tab.label}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
 
-              <div className="p-6">
+                <div className="p-6">
                 {activeTab === 'settings' && (
                   <div className="space-y-6">
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white">Memory & Security Settings</h3>
@@ -703,52 +708,6 @@ const SecurityPage = () => {
                   </div>
                 )}
 
-                {activeTab === 'rate-limits' && (
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white">Rate Limits</h3>
-                      <button onClick={handleAddRateLimit} className="btn btn-primary">
-                        <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        Add Rate Limit
-                      </button>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th>Path</th>
-                            <th>Limit</th>
-                            <th>Window</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rateLimits.map((limit) => (
-                            <tr key={limit.id} className="hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors">
-                              <td>
-                                <p className="font-medium text-gray-900 dark:text-white">{limit.path}</p>
-                              </td>
-                              <td>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">{limit.limit}</p>
-                              </td>
-                              <td>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">{limit.window}</p>
-                              </td>
-                              <td>
-                                <span className={`badge ${limit.status === 'active' ? 'badge-success' : 'badge-gray'}`}>
-                                  {limit.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
                 {activeTab === 'ip-whitelist' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -840,8 +799,9 @@ const SecurityPage = () => {
                     </div>
                   </div>
                 )}
+                </div>
               </div>
-            </div>
+            )}
           </>
         )}
       </div>

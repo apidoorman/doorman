@@ -76,20 +76,17 @@ def test_encryption_key_validation():
 def test_https_validation():
     """Test HTTPS enforcement validation"""
     test_cases = [
-        ('true', 'true', True, 'both enabled'),
-        ('true', 'false', True, 'HTTPS_ONLY enabled'),
-        ('false', 'true', True, 'HTTPS_ENABLED enabled'),
-        ('false', 'false', False, 'both disabled'),
-        ('', '', False, 'both unset'),
+        ('true', True, 'HTTPS_ONLY enabled'),
+        ('false', False, 'HTTPS_ONLY disabled'),
+        ('', False, 'HTTPS_ONLY unset'),
     ]
 
     print("Testing HTTPS Enforcement Validation:")
-    for https_only, https_enabled, should_pass, description in test_cases:
+    for https_only, should_pass, description in test_cases:
         only = https_only.lower() == 'true' if https_only else False
-        enabled = https_enabled.lower() == 'true' if https_enabled else False
-        is_valid = only or enabled
+        is_valid = only
         status = '✓' if is_valid == should_pass else '✗'
-        print(f"  {status} HTTPS_ONLY={https_only}, HTTPS_ENABLED={https_enabled} ({description}): {'VALID' if is_valid else 'INVALID'}")
+        print(f"  {status} HTTPS_ONLY={https_only} ({description}): {'VALID' if is_valid else 'INVALID'}")
     print()
 
 def test_redis_validation():

@@ -27,42 +27,46 @@ A lightweight, Python-based API gateway for managing REST, SOAP, GraphQL, gRPC, 
 - Docker installed
 - Environment file (`.env`) at repo root (use `./.env.example` as template)
 
-### Run with Docker
+### Run with Docker Compose (Recommended)
 
 ```bash
-# Build the image
-docker build -t doorman:latest .
-
 # Prepare env (first time)
 cp .env.example .env
 # Edit .env and set at least: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
-# The example defaults backend PORT to 3001 to match the image.
 
-# Run the container (backend:3001, web:3000)
-docker run --rm --name doorman \
-  -p 3001:3001 -p 3000:3000 \
-  --env-file .env \
-  doorman:latest
+# Start services (builds automatically)
+docker compose up
 ```
 
 **Access Points:**
-- Backend API: http://localhost:3001
-- Web Client: http://localhost:3000
+- Backend API: `http://localhost:3001` (or your configured `PORT`)
+- Web Client: `http://localhost:3000` (or your configured `WEB_PORT`)
+
+## Production Checklist
+
+Harden your deployment with these defaults and environment settings:
+
+- `ENV=production` (enables stricter startup validations)
+- `HTTPS_ONLY=true` (serve behind TLS; forces Secure cookies)
+- `JWT_SECRET_KEY` (required; 32+ random bytes)
+- `TOKEN_ENCRYPTION_KEY` (32+ random bytes to encrypt API keys at rest)
+- `MEM_ENCRYPTION_KEY` (32+ random bytes; required for MEM mode dumps)
+- `COOKIE_SAMESITE=Strict` and set `COOKIE_DOMAIN` to your base domain
+- `LOCAL_HOST_IP_BYPASS=false`
+- CORS: avoid wildcard origins with credentials, or set `CORS_STRICT=true`
+- Store secrets outside git (vault/CI); rotate regularly
 
 ### Run in Background
 
 ```bash
 # Start detached
-docker run -d --name doorman \
-  -p 3001:3001 -p 3000:3000 \
-  --env-file .env \
-  doorman:latest
+docker compose up -d
 
 # View logs
-docker logs -f doorman
+docker compose logs -f
 
-# Stop container
-docker stop doorman
+# Stop services
+docker compose down
 ```
 
 ## Configuration
@@ -73,32 +77,29 @@ docker stop doorman
 - `JWT_SECRET_KEY`: Secret key for JWT tokens (32+ chars)
 
 ### High Availability Setup
-For production/HA environments:
-- Set `MEM_OR_EXTERNAL=REDIS`
-- Configure Redis connection details in `.env`
-- Use MongoDB replica set for persistence (`MONGO_DB_HOSTS`, `MONGO_REPLICA_SET_NAME`)
 
-### Custom Ports
+For production/HA environments with Redis and MongoDB:
 
 ```bash
-# Change web client port
-docker run --rm --name doorman \
-  -p 3001:3001 -p 3002:3002 \
-  -e WEB_PORT=3002 \
-  --env-file .env \
-  doorman:latest
+# Set in .env:
+MEM_OR_EXTERNAL=REDIS
+
+# Start with production profile (includes Redis + MongoDB)
+docker compose --profile production up -d
 ```
 
-### Alternative: Mount Environment Folder
+### Alternative: Manual Docker Commands
+
+If you prefer not to use Docker Compose:
 
 ```bash
-# Create env folder with config files
-mkdir -p env
+# Build the image
+docker build -t doorman:latest .
 
-# Run with mounted env folder
+# Run the container
 docker run --rm --name doorman \
   -p 3001:3001 -p 3000:3000 \
-  -v "$(pwd)/env:/env:ro" \
+  --env-file .env \
   doorman:latest
 ```
 

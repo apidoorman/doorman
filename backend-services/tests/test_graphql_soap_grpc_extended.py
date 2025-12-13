@@ -1,5 +1,6 @@
 import pytest
 
+
 class _FakeHTTPResponse:
     def __init__(self, status_code=200, json_body=None, text_body=None, headers=None):
         self.status_code = status_code
@@ -13,9 +14,11 @@ class _FakeHTTPResponse:
 
     def json(self):
         import json as _json
+
         if self._json_body is None:
             return _json.loads(self.text or '{}')
         return self._json_body
+
 
 class _FakeAsyncClient:
     def __init__(self, *args, **kwargs):
@@ -46,26 +49,43 @@ class _FakeAsyncClient:
             return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
 
     async def get(self, url, params=None, headers=None, **kwargs):
-        return _FakeHTTPResponse(200, json_body={'ok': True, 'url': url}, headers={'X-Upstream': 'yes'})
+        return _FakeHTTPResponse(
+            200, json_body={'ok': True, 'url': url}, headers={'X-Upstream': 'yes'}
+        )
 
     async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs):
-        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
-        return _FakeHTTPResponse(200, json_body={'ok': True, 'url': url, 'body': body}, headers={'X-Upstream': 'yes'})
+        body = (
+            json
+            if json is not None
+            else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
+        )
+        return _FakeHTTPResponse(
+            200, json_body={'ok': True, 'url': url, 'body': body}, headers={'X-Upstream': 'yes'}
+        )
 
     async def put(self, url, json=None, params=None, headers=None, content=None, **kwargs):
-        body = json if json is not None else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
-        return _FakeHTTPResponse(200, json_body={'ok': True, 'url': url, 'body': body}, headers={'X-Upstream': 'yes'})
+        body = (
+            json
+            if json is not None
+            else (content.decode('utf-8') if isinstance(content, (bytes, bytearray)) else content)
+        )
+        return _FakeHTTPResponse(
+            200, json_body={'ok': True, 'url': url, 'body': body}, headers={'X-Upstream': 'yes'}
+        )
 
     async def delete(self, url, **kwargs):
         return _FakeHTTPResponse(200, json_body={'ok': True}, headers={'X-Upstream': 'yes'})
+
 
 class _NotFoundAsyncClient(_FakeAsyncClient):
     async def post(self, url, json=None, params=None, headers=None, content=None, **kwargs):
         return _FakeHTTPResponse(404, json_body={'ok': False}, headers={'X-Upstream': 'no'})
 
+
 @pytest.mark.asyncio
 async def test_grpc_missing_version_header_returns_400(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'grpcver', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/grpc')
@@ -73,10 +93,11 @@ async def test_grpc_missing_version_header_returns_400(monkeypatch, authed_clien
     r = await authed_client.post(f'/api/grpc/{name}', json={'method': 'Svc.M', 'message': {}})
     assert r.status_code == 400
 
+
 @pytest.mark.asyncio
 async def test_graphql_lowercase_version_header_works(monkeypatch, authed_client):
-
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'gqllower', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/graphql')
@@ -85,20 +106,25 @@ async def test_graphql_lowercase_version_header_works(monkeypatch, authed_client
     class FakeSession:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
+
         async def execute(self, *args, **kwargs):
             return {'ping': 'pong'}
 
     class FakeClient:
         def __init__(self, transport=None, fetch_schema_from_transport=False):
             pass
+
         async def __aenter__(self):
             return FakeSession()
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
     import services.gateway_service as gw
+
     monkeypatch.setattr(gw, 'Client', FakeClient)
 
     r = await authed_client.post(
@@ -108,9 +134,11 @@ async def test_graphql_lowercase_version_header_works(monkeypatch, authed_client
     )
     assert r.status_code == 200
 
+
 @pytest.mark.asyncio
 async def test_soap_text_xml_validation_allows_good_request(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'soaptext', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/call')
@@ -126,8 +154,8 @@ async def test_soap_text_xml_validation_allows_good_request(monkeypatch, authed_
     )
 
     envelope = (
-        '<?xml version=\"1.0\" encoding=\"UTF-8\"?>'
-        '<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">'
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">'
         '<soapenv:Body>'
         '<Request><name>Ab</name></Request>'
         '</soapenv:Body>'
@@ -144,30 +172,35 @@ async def test_soap_text_xml_validation_allows_good_request(monkeypatch, authed_
     class _FakeXMLClient:
         def __init__(self, *args, **kwargs):
             pass
+
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
+
         async def post(self, url, content=None, params=None, headers=None):
             return _FakeXMLResponse()
 
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeXMLClient)
     r = await authed_client.post(
-        f'/api/soap/{name}/{ver}/call',
-        headers={'Content-Type': 'text/xml'},
-        content=envelope,
+        f'/api/soap/{name}/{ver}/call', headers={'Content-Type': 'text/xml'}, content=envelope
     )
     assert r.status_code == 200
+
 
 @pytest.mark.asyncio
 async def test_soap_upstream_404_maps_to_404(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'soap404', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/call')
     await subscribe_self(authed_client, name, ver)
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _NotFoundAsyncClient)
     r = await authed_client.post(
         f'/api/soap/{name}/{ver}/call',
@@ -176,14 +209,17 @@ async def test_soap_upstream_404_maps_to_404(monkeypatch, authed_client):
     )
     assert r.status_code == 404
 
+
 @pytest.mark.asyncio
 async def test_grpc_upstream_404_maps_to_404(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     name, ver = 'grpc404', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/grpc')
     await subscribe_self(authed_client, name, ver)
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _NotFoundAsyncClient)
     r = await authed_client.post(
         f'/api/grpc/{name}',
@@ -192,14 +228,16 @@ async def test_grpc_upstream_404_maps_to_404(monkeypatch, authed_client):
     )
     assert r.status_code == 404
 
+
 @pytest.mark.asyncio
 async def test_grpc_subscription_required(monkeypatch, authed_client):
-
     from conftest import create_api, create_endpoint
+
     name, ver = 'grpcsub', 'v1'
     await create_api(authed_client, name, ver)
     await create_endpoint(authed_client, name, ver, 'POST', '/grpc')
     import services.gateway_service as gs
+
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     r = await authed_client.post(
         f'/api/grpc/{name}',
@@ -208,9 +246,9 @@ async def test_grpc_subscription_required(monkeypatch, authed_client):
     )
     assert r.status_code == 403
 
+
 @pytest.mark.asyncio
 async def test_graphql_group_enforcement(monkeypatch, authed_client):
-
     name, ver = 'gqlgrp', 'v1'
     await authed_client.post(
         '/platform/api',
@@ -237,8 +275,10 @@ async def test_graphql_group_enforcement(monkeypatch, authed_client):
     )
 
     import routes.gateway_routes as gr
+
     async def _pass_sub(req):
         return {'sub': 'admin'}
+
     monkeypatch.setattr(gr, 'subscription_required', _pass_sub)
 
     await authed_client.delete('/api/caches')
@@ -246,20 +286,25 @@ async def test_graphql_group_enforcement(monkeypatch, authed_client):
     class FakeSession:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
+
         async def execute(self, *args, **kwargs):
             return {'ok': True}
 
     class FakeClient:
         def __init__(self, transport=None, fetch_schema_from_transport=False):
             pass
+
         async def __aenter__(self):
             return FakeSession()
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
     import services.gateway_service as gw
+
     monkeypatch.setattr(gw, 'Client', FakeClient)
 
     r = await authed_client.post(

@@ -1,9 +1,10 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_rest_payload_validation_blocks_bad_request(authed_client):
-
     from conftest import create_api, create_endpoint, subscribe_self
+
     api_name = 'valrest'
     version = 'v1'
     await create_api(authed_client, api_name, version)
@@ -26,15 +27,14 @@ async def test_rest_payload_validation_blocks_bad_request(authed_client):
     )
     assert cv.status_code in (200, 201, 400)
 
-    r = await authed_client.post(
-        f'/api/rest/{api_name}/{version}/do',
-        json={'user': {'name': 'A'}},
-    )
+    r = await authed_client.post(f'/api/rest/{api_name}/{version}/do', json={'user': {'name': 'A'}})
     assert r.status_code == 400
+
 
 @pytest.mark.asyncio
 async def test_graphql_payload_validation_blocks_bad_request(authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     api_name = 'valgql'
     version = 'v1'
     await create_api(authed_client, api_name, version)
@@ -49,7 +49,6 @@ async def test_graphql_payload_validation_blocks_bad_request(authed_client):
 
     schema = {
         'validation_schema': {
-
             'CreateUser.input.name': {'required': True, 'type': 'string', 'min': 2, 'max': 50}
         }
     }
@@ -68,9 +67,11 @@ async def test_graphql_payload_validation_blocks_bad_request(authed_client):
     )
     assert r.status_code == 400
 
+
 @pytest.mark.asyncio
 async def test_soap_payload_validation_blocks_bad_request(authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     api_name = 'valsoap'
     version = 'v1'
     await create_api(authed_client, api_name, version)
@@ -94,8 +95,8 @@ async def test_soap_payload_validation_blocks_bad_request(authed_client):
     assert cv.status_code in (200, 201, 400)
 
     envelope = (
-        '<?xml version=\"1.0\" encoding=\"UTF-8\"?>'
-        '<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">'
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">'
         '<soapenv:Body>'
         '<Request><name>A</name></Request>'
         '</soapenv:Body>'
@@ -108,9 +109,11 @@ async def test_soap_payload_validation_blocks_bad_request(authed_client):
     )
     assert r.status_code == 400
 
+
 @pytest.mark.asyncio
 async def test_grpc_payload_validation_blocks_bad_request(authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     api_name = 'valgrpc'
     version = 'v1'
     await create_api(authed_client, api_name, version)
@@ -141,9 +144,11 @@ async def test_grpc_payload_validation_blocks_bad_request(authed_client):
     )
     assert r.status_code == 400
 
+
 @pytest.mark.asyncio
 async def test_rest_payload_validation_allows_good_request(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     api_name = 'okrest'
     version = 'v1'
     await create_api(authed_client, api_name, version)
@@ -182,14 +187,19 @@ async def test_rest_payload_validation_allows_good_request(monkeypatch, authed_c
             return FakeResp()
 
     import services.gateway_service as gw
+
     monkeypatch.setattr(gw.httpx, 'AsyncClient', FakeClient)
 
-    r = await authed_client.post(f'/api/rest/{api_name}/{version}/do', json={'user': {'name': 'Ab'}})
+    r = await authed_client.post(
+        f'/api/rest/{api_name}/{version}/do', json={'user': {'name': 'Ab'}}
+    )
     assert r.status_code == 200
+
 
 @pytest.mark.asyncio
 async def test_soap_payload_validation_allows_good_request(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     api_name = 'oksoap'
     version = 'v1'
     await create_api(authed_client, api_name, version)
@@ -224,11 +234,12 @@ async def test_soap_payload_validation_allows_good_request(monkeypatch, authed_c
             return FakeResp()
 
     import services.gateway_service as gw
+
     monkeypatch.setattr(gw.httpx, 'AsyncClient', FakeClient)
 
     envelope = (
-        '<?xml version=\"1.0\" encoding=\"UTF-8\"?>'
-        '<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">'
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">'
         '<soapenv:Body>'
         '<Request><name>Ab</name></Request>'
         '</soapenv:Body>'
@@ -241,9 +252,11 @@ async def test_soap_payload_validation_allows_good_request(monkeypatch, authed_c
     )
     assert r.status_code == 200
 
+
 @pytest.mark.asyncio
 async def test_graphql_payload_validation_allows_good_request(monkeypatch, authed_client):
     from conftest import create_api, create_endpoint, subscribe_self
+
     api_name = 'okgql'
     version = 'v1'
     await create_api(authed_client, api_name, version)
@@ -252,7 +265,11 @@ async def test_graphql_payload_validation_allows_good_request(monkeypatch, authe
 
     g = await authed_client.get(f'/platform/endpoint/POST/{api_name}/{version}/graphql')
     eid = g.json().get('endpoint_id') or g.json().get('response', {}).get('endpoint_id')
-    schema = {'validation_schema': {'CreateUser.input.name': {'required': True, 'type': 'string', 'min': 2}}}
+    schema = {
+        'validation_schema': {
+            'CreateUser.input.name': {'required': True, 'type': 'string', 'min': 2}
+        }
+    }
     await authed_client.post(
         '/platform/endpoint/endpoint/validation',
         json={'endpoint_id': eid, 'validation_enabled': True, 'validation_schema': schema},
@@ -279,6 +296,7 @@ async def test_graphql_payload_validation_allows_good_request(monkeypatch, authe
             return False
 
     import services.gateway_service as gw
+
     monkeypatch.setattr(gw, 'Client', FakeClient)
 
     query = 'mutation CreateUser($input: UserInput!){ createUser(input: $input){ id } }'
@@ -290,9 +308,13 @@ async def test_graphql_payload_validation_allows_good_request(monkeypatch, authe
     )
     assert r.status_code == 200
 
+
 @pytest.mark.asyncio
-async def test_grpc_payload_validation_allows_good_request_progresses(monkeypatch, authed_client, tmp_path):
+async def test_grpc_payload_validation_allows_good_request_progresses(
+    monkeypatch, authed_client, tmp_path
+):
     from conftest import create_api, create_endpoint, subscribe_self
+
     api_name = 'okgrpc'
     version = 'v1'
     await create_api(authed_client, api_name, version)
@@ -308,7 +330,9 @@ async def test_grpc_payload_validation_allows_good_request_progresses(monkeypatc
     )
 
     import os as _os
+
     import services.gateway_service as gw
+
     project_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
     proto_dir = _os.path.join(project_root, 'proto')
     _os.makedirs(proto_dir, exist_ok=True)
@@ -318,7 +342,9 @@ async def test_grpc_payload_validation_allows_good_request_progresses(monkeypatc
     def fake_import(name):
         raise ImportError('fake')
 
-    monkeypatch.setattr(gw.importlib, 'import_module', lambda n: (_ for _ in ()).throw(ImportError('fake')))
+    monkeypatch.setattr(
+        gw.importlib, 'import_module', lambda n: (_ for _ in ()).throw(ImportError('fake'))
+    )
 
     payload = {'method': 'Service.Method', 'message': {'user': {'name': 'Ab'}}}
     r = await authed_client.post(

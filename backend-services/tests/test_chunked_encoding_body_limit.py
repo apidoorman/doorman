@@ -7,19 +7,22 @@ vulnerability where attackers could stream unlimited data without a
 Content-Length header.
 """
 
-import pytest
-from fastapi.testclient import TestClient
 import os
 import sys
+
+import pytest
+from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from doorman import doorman
 
+
 @pytest.fixture
 def client():
     """Test client fixture."""
     return TestClient(doorman)
+
 
 class TestChunkedEncodingBodyLimit:
     """Test suite for chunked encoding body size limit enforcement."""
@@ -31,10 +34,7 @@ class TestChunkedEncodingBodyLimit:
         response = client.post(
             '/platform/authorization',
             data=small_payload,
-            headers={
-                'Transfer-Encoding': 'chunked',
-                'Content-Type': 'application/json'
-            }
+            headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
         )
 
         assert response.status_code != 413
@@ -49,10 +49,7 @@ class TestChunkedEncodingBodyLimit:
             response = client.post(
                 '/platform/authorization',
                 data=large_payload,
-                headers={
-                    'Transfer-Encoding': 'chunked',
-                    'Content-Type': 'application/json'
-                }
+                headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
             assert response.status_code == 413
@@ -71,10 +68,7 @@ class TestChunkedEncodingBodyLimit:
             response = client.post(
                 '/api/rest/test/v1/endpoint',
                 data=large_payload,
-                headers={
-                    'Transfer-Encoding': 'chunked',
-                    'Content-Type': 'application/json'
-                }
+                headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
             assert response.status_code == 413
@@ -93,10 +87,7 @@ class TestChunkedEncodingBodyLimit:
             response = client.post(
                 '/api/soap/test/v1/service',
                 data=medium_payload,
-                headers={
-                    'Transfer-Encoding': 'chunked',
-                    'Content-Type': 'text/xml'
-                }
+                headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'text/xml'},
             )
 
             assert response.status_code != 413
@@ -115,9 +106,7 @@ class TestChunkedEncodingBodyLimit:
             response = client.post(
                 '/platform/authorization',
                 data=large_payload,
-                headers={
-                    'Content-Type': 'application/json'
-                }
+                headers={'Content-Type': 'application/json'},
             )
 
             assert response.status_code == 413
@@ -139,8 +128,8 @@ class TestChunkedEncodingBodyLimit:
                 headers={
                     'Transfer-Encoding': 'chunked',
                     'Content-Length': '100',
-                    'Content-Type': 'application/json'
-                }
+                    'Content-Type': 'application/json',
+                },
             )
 
             assert response.status_code == 413
@@ -151,10 +140,7 @@ class TestChunkedEncodingBodyLimit:
     def test_get_request_with_chunked_ignored(self, client):
         """Test that GET requests with Transfer-Encoding: chunked are not limited."""
         response = client.get(
-            '/platform/authorization/status',
-            headers={
-                'Transfer-Encoding': 'chunked'
-            }
+            '/platform/authorization/status', headers={'Transfer-Encoding': 'chunked'}
         )
 
         assert response.status_code != 413
@@ -169,10 +155,7 @@ class TestChunkedEncodingBodyLimit:
             response = client.put(
                 '/platform/user/testuser',
                 data=large_payload,
-                headers={
-                    'Transfer-Encoding': 'chunked',
-                    'Content-Type': 'application/json'
-                }
+                headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
             assert response.status_code == 413
@@ -190,10 +173,7 @@ class TestChunkedEncodingBodyLimit:
             response = client.patch(
                 '/platform/user/testuser',
                 data=large_payload,
-                headers={
-                    'Transfer-Encoding': 'chunked',
-                    'Content-Type': 'application/json'
-                }
+                headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
             assert response.status_code == 413
@@ -211,10 +191,7 @@ class TestChunkedEncodingBodyLimit:
             response = client.post(
                 '/api/graphql/test',
                 data=large_query.encode(),
-                headers={
-                    'Transfer-Encoding': 'chunked',
-                    'Content-Type': 'application/json'
-                }
+                headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
             assert response.status_code == 413
@@ -241,10 +218,7 @@ class TestChunkedEncodingBodyLimit:
                 response = client.post(
                     route,
                     data=large_payload,
-                    headers={
-                        'Transfer-Encoding': 'chunked',
-                        'Content-Type': 'application/json'
-                    }
+                    headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
                 )
 
                 assert response.status_code == 413, f'Route {route} not protected'
@@ -262,16 +236,14 @@ class TestChunkedEncodingBodyLimit:
             response = client.post(
                 '/platform/authorization',
                 data=large_payload,
-                headers={
-                    'Transfer-Encoding': 'chunked',
-                    'Content-Type': 'application/json'
-                }
+                headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
             assert response.status_code == 413
 
         finally:
             os.environ['MAX_BODY_SIZE_BYTES'] = '1048576'
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

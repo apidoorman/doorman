@@ -32,7 +32,6 @@ const AddApiPage = () => {
     api_auth_required: true,
     api_ip_mode: 'allow_all' as 'allow_all' | 'whitelist',
     api_trust_x_forwarded_for: false,
-    use_protobuf: false,
     validation_enabled: false
   })
   const [publicConfirmOpen, setPublicConfirmOpen] = useState(false)
@@ -47,6 +46,8 @@ const AddApiPage = () => {
   const [ipBlacklistText, setIpBlacklistText] = useState('')
   const [clientIp, setClientIp] = useState('')
   const [clientIpXff, setClientIpXff] = useState('')
+  const [protoFile, setProtoFile] = useState<File | null>(null)
+  const [uploadProto, setUploadProto] = useState(false)
 
   React.useEffect(() => {
     (async () => {
@@ -83,10 +84,25 @@ const AddApiPage = () => {
         payload.api_allowed_groups = ['ALL']
       }
       await postJson(`${SERVER_URL}/platform/api`, payload)
-      try {
-        const { setUseProtobuf } = await import('@/utils/proto')
-        setUseProtobuf(formData.api_name, formData.api_version, !!formData.use_protobuf)
-      } catch {}
+      
+      // Upload proto file if provided
+      if (uploadProto && protoFile) {
+        try {
+          const formData = new FormData()
+          formData.append('file', protoFile)
+          const csrf = document.cookie.split('; ').find(row => row.startsWith('csrf_token='))?.split('=')[1]
+          await fetch(`${SERVER_URL}/platform/proto/${encodeURIComponent(payload.api_name)}/${encodeURIComponent(payload.api_version)}`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: csrf ? { 'X-CSRF-Token': csrf } : {},
+            body: formData
+          })
+        } catch (protoErr) {
+          console.error('Proto upload failed:', protoErr)
+          // Don't fail the whole operation if proto upload fails
+        }
+      }
+      
       router.push('/apis')
     } catch (err) {
       setError('Network error. Please try again.')
@@ -338,7 +354,7 @@ const AddApiPage = () => {
           <div className="card">
             <div className="card-header flex items-center justify-between">
               <h3 className="card-title">IP Access Control</h3>
-              <FormHelp docHref="/docs/using-fields.html#api-ip-policy">Control IP access per API.</FormHelp>
+              <FormHelp docHref="/docs/using-fields.html#api-ip-policy">Control IP access per API (whitelist or deny specific IPs/CIDRs).</FormHelp>
             </div>
             <div className="p-6 space-y-4">
               {(() => {
@@ -386,7 +402,10 @@ const AddApiPage = () => {
                     <option value="allow_all">Allow All</option>
                     <option value="whitelist">Whitelist</option>
                   </select>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">When Whitelist is selected, only listed IPs/CIDRs can call this API. Blacklist applies always.</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    When set to <span className="font-semibold">Whitelist</span>, only IPs/CIDRs in the whitelist can call this API. The blacklist below is
+                    <span className="font-semibold"> always evaluated first</span> and will deny matching IPs regardless of policy.
+                  </p>
                 </div>
                 <div className="md:col-span-2 flex items-center gap-2">
                   <input id="api_trust_x_forwarded_for" type="checkbox" className="h-4 w-4" checked={!!(formData as any).api_trust_x_forwarded_for} onChange={(e)=>setFormData(p=>({...p, api_trust_x_forwarded_for: e.target.checked}))} />
@@ -397,14 +416,30 @@ const AddApiPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist (one per line or comma-separated)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Whitelist (IPs/CIDRs; one per line or comma-separated)</label>
                     <button type="button" className="btn btn-ghost btn-xs" onClick={addMyIpToWhitelist}>Add My IP</button>
                   </div>
-                  <textarea className="input min-h-[120px]" value={ipWhitelistText} onChange={(e)=>setIpWhitelistText(e.target.value)} placeholder="192.168.1.10\n10.0.0.0/8" />
+                  <textarea
+                    className="input min-h-[120px]"
+                    value={ipWhitelistText}
+                    onChange={(e)=>setIpWhitelistText(e.target.value)}
+                    placeholder={"10.0.0.0/8\n192.168.1.100"}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Used only when Policy is <span className="font-semibold">Whitelist</span>. Clients must match one of these IPs/CIDRs (after global platform IP rules).
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist (one per line or comma-separated)</label>
-                  <textarea className="input min-h-[120px]" value={ipBlacklistText} onChange={(e)=>setIpBlacklistText(e.target.value)} placeholder="203.0.113.0/24" />
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Blacklist (IPs/CIDRs; one per line or comma-separated)</label>
+                  <textarea
+                    className="input min-h-[120px]"
+                    value={ipBlacklistText}
+                    onChange={(e)=>setIpBlacklistText(e.target.value)}
+                    placeholder={"203.0.113.0/24\n203.0.113.50"}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Always evaluated first. Any matching IP/CIDR is denied before whitelist or other checks.
+                  </p>
                 </div>
               </div>
             </div>
@@ -555,27 +590,6 @@ const AddApiPage = () => {
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Use Protobuf
-                  <InfoTooltip text="Frontend preference enabling proto-aware features (e.g., proto editor). Does not affect gateway behavior." />
-                </label>
-                <div className="flex items-center">
-                  <input
-                    id="use_protobuf"
-                    name="use_protobuf"
-                    type="checkbox"
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                    checked={formData.use_protobuf}
-                    onChange={handleChange}
-                    disabled={loading}
-                  />
-                  <label htmlFor="use_protobuf" className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                    Enable proto-based features for this API
-                  </label>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Frontend setting; controls proto UI and client behavior.</p>
-              </div>
             </div>
           </div>
 
@@ -619,7 +633,7 @@ const AddApiPage = () => {
           </div>
 
           <div className="card">
-            <div className="card-header flex items-center justify-between">
+              <div className="card-header flex items-center justify-between">
               <h3 className="card-title">Allowed Headers</h3>
               <FormHelp docHref="/docs/using-fields.html#header-forwarding">Choose which upstream response headers are forwarded.</FormHelp>
             </div>
@@ -627,7 +641,11 @@ const AddApiPage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Allowed Headers
-                  <InfoTooltip text="Response headers from upstream that Doorman may forward back to the client. Use lowercase names; examples: x-rate-limit, retry-after." />
+                  <InfoTooltip text={
+                    formData.api_type === 'SOAP'
+                      ? 'Response headers from upstream that Doorman may forward back to the client. Use lowercase names; examples: x-rate-limit, retry-after. Note: For SOAP APIs, Doorman auto-allows common request headers (Content-Type, SOAPAction, Accept, User-Agent), so you typically do not need to add them.'
+                      : 'Response headers from upstream that Doorman may forward back to the client. Use lowercase names; examples: x-rate-limit, retry-after.'
+                  } />
                 </label>
                 <div className="flex gap-2">
                   <input type="text" className="input flex-1" placeholder="e.g., Authorization" value={newHeader} onChange={(e) => setNewHeader(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addHeader()} disabled={loading} />
@@ -646,6 +664,85 @@ const AddApiPage = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">gRPC Proto Configuration (Optional)</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Upload a Protocol Buffer definition for gRPC APIs</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="upload_proto"
+                  checked={uploadProto}
+                  onChange={(e) => {
+                    setUploadProto(e.target.checked)
+                    if (!e.target.checked) setProtoFile(null)
+                  }}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+                <label htmlFor="upload_proto" className="flex-1 cursor-pointer">
+                  <p className="font-medium text-gray-900 dark:text-white">Upload Proto File</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Enable gRPC support by uploading a .proto file after API creation
+                  </p>
+                </label>
+              </div>
+
+              {uploadProto && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Select Proto File
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="btn btn-secondary cursor-pointer">
+                      <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      Choose File
+                      <input
+                        type="file"
+                        accept=".proto,text/plain"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            if (!file.name.endsWith('.proto')) {
+                              alert('Please select a .proto file')
+                              e.target.value = ''
+                              return
+                            }
+                            setProtoFile(file)
+                          }
+                        }}
+                      />
+                    </label>
+                    {protoFile && (
+                      <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <svg className="h-5 w-5 text-success-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="font-medium">{protoFile.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setProtoFile(null)}
+                          className="text-error-600 hover:text-error-800 dark:text-error-400"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    The proto file will be uploaded and compiled automatically after the API is created successfully.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

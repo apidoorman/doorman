@@ -4,26 +4,28 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
-from contextvars import ContextVar
-from typing import Optional
-import uuid
 import logging
+import uuid
+from contextvars import ContextVar
 
-correlation_id: ContextVar[Optional[str]] = ContextVar('correlation_id', default=None)
+correlation_id: ContextVar[str | None] = ContextVar('correlation_id', default=None)
 
 logger = logging.getLogger('doorman.gateway')
 
-def get_correlation_id() -> Optional[str]:
+
+def get_correlation_id() -> str | None:
     """
     Get the current correlation ID from context.
     """
     return correlation_id.get()
+
 
 def set_correlation_id(value: str) -> None:
     """
     Set the correlation ID in the current context.
     """
     correlation_id.set(value)
+
 
 def ensure_correlation_id() -> str:
     """
@@ -35,16 +37,18 @@ def ensure_correlation_id() -> str:
         correlation_id.set(cid)
     return cid
 
+
 def log_with_correlation(level: str, message: str, **kwargs) -> None:
     """
     Log a message with the correlation ID automatically prepended.
     """
     cid = get_correlation_id() or 'no-correlation-id'
-    log_message = f"{cid} | {message}"
+    log_message = f'{cid} | {message}'
     log_func = getattr(logger, level.lower(), logger.info)
     log_func(log_message, **kwargs)
 
-async def run_with_correlation(coro, correlation_id_value: Optional[str] = None):
+
+async def run_with_correlation(coro, correlation_id_value: str | None = None):
     """
     Run an async coroutine with a correlation ID.
     """
@@ -56,10 +60,12 @@ async def run_with_correlation(coro, correlation_id_value: Optional[str] = None)
     finally:
         pass
 
+
 class CorrelationContext:
     """
     Context manager for setting correlation ID in a scope.
     """
+
     def __init__(self, correlation_id_value: str):
         self.correlation_id_value = correlation_id_value
         self.token = None
@@ -72,7 +78,10 @@ class CorrelationContext:
         if self.token:
             correlation_id.reset(self.token)
 
-async def run_async_with_correlation(func, *args, correlation_id_value: Optional[str] = None, **kwargs):
+
+async def run_async_with_correlation(
+    func, *args, correlation_id_value: str | None = None, **kwargs
+):
     """
     Run an async function with correlation ID.
     """
