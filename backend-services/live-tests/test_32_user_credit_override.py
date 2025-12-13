@@ -3,7 +3,24 @@ import time
 from servers import start_rest_echo_server
 
 
+def _reset_user_limits(client):
+    """Restore generous rate limits for admin user."""
+    client.put(
+        '/platform/user/admin',
+        json={
+            'rate_limit_duration': 1000000,
+            'rate_limit_duration_type': 'second',
+            'throttle_duration': 1000000,
+            'throttle_duration_type': 'second',
+            'throttle_queue_limit': 1000000,
+            'throttle_wait_duration': 0,
+            'throttle_wait_duration_type': 'second',
+        },
+    )
+
+
 def test_user_specific_credit_api_key_overrides_group_key(client):
+    _reset_user_limits(client)
     srv = start_rest_echo_server()
     try:
         ts = int(time.time())

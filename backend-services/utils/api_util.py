@@ -13,6 +13,7 @@ async def get_api(api_key: str | None, api_name_version: str) -> dict | None:
     Returns:
         Optional[Dict]: API document or None if not found
     """
+    # Prefer id-based cache when available; fall back to name/version mapping
     api = doorman_cache.get_cache('api_cache', api_key) if api_key else None
     if not api:
         api_name, api_version = api_name_version.lstrip('/').split('/')
@@ -20,8 +21,13 @@ async def get_api(api_key: str | None, api_name_version: str) -> dict | None:
         if not api:
             return None
         api.pop('_id', None)
-        doorman_cache.set_cache('api_cache', api_key, api)
-        doorman_cache.set_cache('api_id_cache', api_name_version, api_key)
+        # Populate caches consistently: id and name/version
+        api_id = api.get('api_id')
+        if api_id:
+            doorman_cache.set_cache('api_cache', api_id, api)
+            doorman_cache.set_cache('api_id_cache', api_name_version, api_id)
+        # Also map by name/version for direct lookups
+        doorman_cache.set_cache('api_cache', f'{api_name}/{api_version}', api)
     return api
 
 

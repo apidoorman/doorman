@@ -29,21 +29,21 @@ class _FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def request(self, method, url, **kwargs):
+    async def request(self, method, url, *, content=None, **kwargs):
         """Generic request method used by http_client.request_with_resilience"""
         method = method.upper()
         if method == 'GET':
             return await self.get(url, **kwargs)
         elif method == 'POST':
-            return await self.post(url, **kwargs)
+            return await self.post(url, content=content, **kwargs)
         elif method == 'PUT':
-            return await self.put(url, **kwargs)
+            return await self.put(url, content=content, **kwargs)
         elif method == 'DELETE':
             return await self.delete(url, **kwargs)
         elif method == 'HEAD':
             return await self.get(url, **kwargs)
         elif method == 'PATCH':
-            return await self.put(url, **kwargs)
+            return await self.put(url, content=content, **kwargs)
         else:
             return _FakeHTTPResponse(405, json_body={'error': 'Method not allowed'})
 

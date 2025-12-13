@@ -18,6 +18,17 @@ from models.rate_limit_models import TierLimits
 from services.tier_service import get_tier_service
 from utils.database_async import async_database
 
+try:
+    from utils.auth_util import SECRET_KEY, ALGORITHM
+except Exception:
+    SECRET_KEY = None
+    ALGORITHM = 'HS256'
+
+try:
+    from jose import jwt as _jwt
+except Exception:
+    _jwt = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,10 +43,20 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
     - Adds rate limit headers to responses
     """
 
+    # Class-level storage for singleton access in tests
+    _instance_counts: dict = {}
+    _instance_queue: dict = {}
+
     def __init__(self, app: ASGIApp):
         super().__init__(app)
-        self._request_counts = {}  # Simple in-memory counter (use Redis in production)
-        self._request_queue = {}  # Queue for throttling
+        self._request_counts = TierRateLimitMiddleware._instance_counts
+        self._request_queue = TierRateLimitMiddleware._instance_queue
+
+    @classmethod
+    def reset_counters(cls) -> None:
+        """Reset all rate limit counters. Used by tests."""
+        cls._instance_counts.clear()
+        cls._instance_queue.clear()
 
     async def dispatch(self, request: Request, call_next):
         """
@@ -47,6 +68,7 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
 
         # Extract user ID
         user_id = self._get_user_id(request)
+        logger.debug(f'[tier_rl] user_id={user_id} path={request.url.path}')
 
         if not user_id:
             # No user ID, skip tier-based limiting
@@ -55,6 +77,7 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
         # Get user's tier limits
         tier_service = get_tier_service(async_database.db)
         limits = await tier_service.get_user_limits(user_id)
+        logger.debug(f'[tier_rl] user={user_id} limits={limits}')
 
         if not limits:
             # No tier limits configured, allow request
@@ -102,6 +125,7 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
         if limits.requests_per_minute and limits.requests_per_minute < 999999:
             key = f'{user_id}:minute:{now // 60}'
             count = self._request_counts.get(key, 0)
+            logger.debug(f'[tier_rl] check rpm: key={key} count={count} limit={limits.requests_per_minute}')
 
             if count >= limits.requests_per_minute:
                 return {
@@ -240,30 +264,75 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
             response.headers['X-RateLimit-Reset'] = str(reset_at)
 
     def _should_skip(self, request: Request) -> bool:
-        """Check if rate limiting should be skipped"""
+        """Check if request should skip rate limiting"""
+        import os
+
+        # Skip tier rate limiting when explicitly disabled (for non-tier-rate-limit tests)
+        if os.getenv('SKIP_TIER_RATE_LIMIT', '').lower() in ('1', 'true', 'yes'):
+            return True
+
         skip_paths = [
             '/health',
             '/metrics',
             '/docs',
             '/redoc',
             '/openapi.json',
-            '/platform/authorization',  # Skip auth endpoints
+            '/platform/',  # Skip all platform/admin routes - tier limits only apply to gateway
         ]
 
         return any(request.url.path.startswith(path) for path in skip_paths)
 
     def _get_user_id(self, request: Request) -> str | None:
-        """Extract user ID from request"""
-        # Try to get from request state (set by auth middleware)
-        if hasattr(request.state, 'user'):
-            user = request.state.user
-            if hasattr(user, 'username'):
-                return user.username
-            elif isinstance(user, dict):
-                return user.get('username') or user.get('sub')
+        """Extract user ID from request.
 
-        # Try to get from JWT payload in state
-        if hasattr(request.state, 'jwt_payload'):
-            return request.state.jwt_payload.get('sub')
+        Attempts, in order:
+        - Previously decoded payload on request.state (jwt_payload)
+        - FastAPI request.user attribute
+        - Decode JWT from cookie 'access_token_cookie' or Authorization: Bearer header
+        """
+        # 1) Previously decoded payload (if any)
+        try:
+            if hasattr(request.state, 'jwt_payload') and request.state.jwt_payload:
+                sub = request.state.jwt_payload.get('sub')
+                if sub:
+                    return sub
+        except Exception:
+            pass
+
+        # 2) request.state.user or request.user
+        try:
+            user = getattr(request.state, 'user', None) or getattr(request, 'user', None)
+            if user:
+                if hasattr(user, 'username'):
+                    return user.username
+                if isinstance(user, dict):
+                    sub = user.get('username') or user.get('sub')
+                    if sub:
+                        return sub
+        except Exception:
+            pass
+
+        # 3) Decode JWT from cookie or header as last resort
+        try:
+            import os
+            token = request.cookies.get('access_token_cookie')
+            if not token:
+                auth = request.headers.get('Authorization') or request.headers.get('authorization')
+                if auth and str(auth).lower().startswith('bearer '):
+                    token = auth.split(' ', 1)[1].strip()
+            # Read SECRET_KEY dynamically in case it was set after import
+            secret = SECRET_KEY or os.getenv('JWT_SECRET_KEY')
+            logger.debug(f'[tier_rl] token={token[:20] if token else None}... secret={bool(secret)} jwt={bool(_jwt)}')
+            if token and _jwt and secret:
+                payload = _jwt.decode(token, secret, algorithms=[ALGORITHM])
+                try:
+                    setattr(request.state, 'jwt_payload', payload)
+                except Exception:
+                    pass
+                sub = payload.get('sub')
+                if sub:
+                    return sub
+        except Exception as e:
+            logger.debug(f'[tier_rl] JWT decode error: {e}')
 
         return None

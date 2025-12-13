@@ -6,6 +6,7 @@ User-facing endpoints for checking current usage and limits.
 """
 
 import logging
+from typing import Any, Dict, List
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -219,7 +220,7 @@ async def get_quota_status(
         )
 
 
-@quota_router.get('/status/{quota_type}')
+@quota_router.get('/status/{quota_type}', response_model=QuotaStatusResponse)
 async def get_specific_quota_status(
     quota_type: str,
     user_id: str = Depends(get_current_user_id),
@@ -285,7 +286,7 @@ async def get_specific_quota_status(
         )
 
 
-@quota_router.get('/usage/history')
+@quota_router.get('/usage/history', response_model=Dict[str, Any])
 async def get_usage_history(
     user_id: str = Depends(get_current_user_id),
     quota_tracker: QuotaTracker = Depends(get_quota_tracker_dep),
@@ -312,7 +313,7 @@ async def get_usage_history(
         )
 
 
-@quota_router.post('/usage/export')
+@quota_router.post('/usage/export', response_model=Dict[str, Any])
 async def export_usage_data(
     format: str = 'json',
     user_id: str = Depends(get_current_user_id),
@@ -392,7 +393,7 @@ async def export_usage_data(
         )
 
 
-@quota_router.get('/tier/info')
+@quota_router.get('/tier/info', response_model=Dict[str, Any])
 async def get_tier_info(
     user_id: str = Depends(get_current_user_id),
     tier_service: TierService = Depends(get_tier_service_dep),
@@ -447,7 +448,7 @@ async def get_tier_info(
         )
 
 
-@quota_router.get('/burst/status')
+@quota_router.get('/burst/status', response_model=Dict[str, Any])
 async def get_burst_status(
     user_id: str = Depends(get_current_user_id),
     tier_service: TierService = Depends(get_tier_service_dep),

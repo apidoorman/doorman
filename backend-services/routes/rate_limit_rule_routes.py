@@ -5,6 +5,7 @@ FastAPI routes for managing rate limit rules.
 """
 
 import logging
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -155,7 +156,7 @@ async def list_rules(
         )
 
 
-@rate_limit_rule_router.get('/search')
+@rate_limit_rule_router.get('/search', response_model=List[RuleResponse])
 async def search_rules(
     q: str = Query(..., description='Search term'),
     rule_service: RateLimitRuleService = Depends(get_rule_service_dep),
@@ -224,7 +225,7 @@ async def update_rule(
         )
 
 
-@rate_limit_rule_router.delete('/{rule_id}', status_code=status.HTTP_204_NO_CONTENT)
+@rate_limit_rule_router.delete('/{rule_id}', status_code=status.HTTP_200_OK, response_model=Dict[str, Any])
 async def delete_rule(
     rule_id: str, rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
 ):
@@ -236,7 +237,7 @@ async def delete_rule(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail=f'Rule {rule_id} not found'
             )
-
+        return {"deleted": True, "rule_id": rule_id}
     except HTTPException:
         raise
     except Exception as e:
@@ -299,7 +300,7 @@ async def disable_rule(
 # ============================================================================
 
 
-@rate_limit_rule_router.post('/bulk/delete')
+@rate_limit_rule_router.post('/bulk/delete', response_model=Dict[str, int])
 async def bulk_delete_rules(
     request: BulkRuleRequest, rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
 ):
@@ -315,7 +316,7 @@ async def bulk_delete_rules(
         )
 
 
-@rate_limit_rule_router.post('/bulk/enable')
+@rate_limit_rule_router.post('/bulk/enable', response_model=Dict[str, int])
 async def bulk_enable_rules(
     request: BulkRuleRequest, rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
 ):
@@ -331,7 +332,7 @@ async def bulk_enable_rules(
         )
 
 
-@rate_limit_rule_router.post('/bulk/disable')
+@rate_limit_rule_router.post('/bulk/disable', response_model=Dict[str, int])
 async def bulk_disable_rules(
     request: BulkRuleRequest, rule_service: RateLimitRuleService = Depends(get_rule_service_dep)
 ):
@@ -379,7 +380,7 @@ async def duplicate_rule(
 # ============================================================================
 
 
-@rate_limit_rule_router.get('/statistics/summary')
+@rate_limit_rule_router.get('/statistics/summary', response_model=Dict[str, Any])
 async def get_rule_statistics(rule_service: RateLimitRuleService = Depends(get_rule_service_dep)):
     """Get statistics about rate limit rules"""
     try:
@@ -398,7 +399,7 @@ async def get_rule_statistics(rule_service: RateLimitRuleService = Depends(get_r
 # ============================================================================
 
 
-@rate_limit_rule_router.get('/status')
+@rate_limit_rule_router.get('/status', response_model=Dict[str, Any])
 async def get_rate_limit_status(rule_service: RateLimitRuleService = Depends(get_rule_service_dep)):
     """
     Get current rate limit status for the authenticated user

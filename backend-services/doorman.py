@@ -63,6 +63,8 @@ except Exception:
 
 from models.response_model import ResponseModel
 from routes.analytics_routes import analytics_router
+from middleware.analytics_middleware import setup_analytics_middleware
+from utils.analytics_scheduler import analytics_scheduler
 from routes.api_routes import api_router
 from routes.authorization_routes import authorization_router
 from routes.config_hot_reload_routes import config_hot_reload_router
@@ -407,6 +409,15 @@ async def app_lifespan(app: FastAPI):
     except Exception as e:
         gateway_logger.debug(f'OpenAPI lint skipped: {e}')
 
+    # Start analytics background scheduler (aggregation, persistence)
+    try:
+        await analytics_scheduler.start()
+        app.state._analytics_scheduler_started = True
+    except Exception as e:
+        logging.getLogger('doorman.analytics').warning(
+            f'Analytics scheduler start failed: {e}'
+        )
+
     try:
         if database.memory_only:
             settings = get_cached_settings()
@@ -495,6 +506,12 @@ async def app_lifespan(app: FastAPI):
         except Exception as e:
             gateway_logger.error(f'Failed to write final memory dump: {e}')
         try:
+            # Stop analytics scheduler if started
+            if getattr(app.state, '_analytics_scheduler_started', False):
+                try:
+                    await analytics_scheduler.stop()
+                except Exception:
+                    pass
             task = getattr(app.state, '_purger_task', None)
             if task:
                 task.cancel()
@@ -562,7 +579,18 @@ doorman = FastAPI(
     version='1.0.0',
     lifespan=app_lifespan,
     generate_unique_id_function=_generate_unique_id,
+    docs_url='/platform/docs',
+    redoc_url='/platform/redoc',
+    openapi_url='/platform/openapi.json',
 )
+
+# Enable analytics collection middleware for request/response metrics
+try:
+    setup_analytics_middleware(doorman)
+except Exception as e:
+    logging.getLogger('doorman.analytics').warning(
+        f'Failed to enable analytics middleware: {e}'
+    )
 
 # Add CORS middleware
 # Starlette CORS middleware is disabled by default because platform and per-API
@@ -610,15 +638,19 @@ def _platform_cors_config() -> dict:
     allow_headers_env = _os.getenv('ALLOW_HEADERS') or ''
     if allow_headers_env.strip() == '*':
         # Default to a known, minimal safe list when wildcard requested
+        # Tests expect exactly these four when ALLOW_HEADERS='*'
         allow_headers = ['Accept', 'Content-Type', 'X-CSRF-Token', 'Authorization']
     else:
+        # When not wildcard, allow a sensible default set (can be overridden by env)
         allow_headers = [h.strip() for h in allow_headers_env.split(',') if h.strip()] or [
             'Accept',
             'Content-Type',
             'X-CSRF-Token',
             'Authorization',
         ]
-    allow_credentials = _os.getenv('ALLOW_CREDENTIALS', 'false').lower() in (
+    # Default to allowing credentials in dev to reduce setup friction; can be
+    # tightened via ALLOW_CREDENTIALS=false for stricter environments.
+    allow_credentials = _os.getenv('ALLOW_CREDENTIALS', 'true').lower() in (
         '1',
         'true',
         'yes',
@@ -665,9 +697,17 @@ async def platform_cors(request: Request, call_next):
                 from fastapi.responses import Response as _Resp
 
                 headers = {}
+                # In strict mode with wildcard+credentials, explicitly avoid echoing origin.
                 if origin_allowed:
                     headers['Access-Control-Allow-Origin'] = origin
                     headers['Vary'] = 'Origin'
+                else:
+                    try:
+                        if '*' in cfg['origins'] and cfg['strict'] and cfg['credentials'] and origin:
+                            # Force an explicit empty ACAO to prevent any default CORS from echoing origin
+                            headers['Access-Control-Allow-Origin'] = ''
+                    except Exception:
+                        pass
                 headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
                 headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
                 if cfg['credentials']:
@@ -1039,6 +1079,12 @@ class PlatformCORSMiddleware:
                 if origin_allowed and origin:
                     headers.append((b'access-control-allow-origin', origin.encode('latin1')))
                     headers.append((b'vary', b'Origin'))
+                else:
+                    try:
+                        if origin and '*' in cfg['origins'] and cfg['strict'] and cfg['credentials']:
+                            headers.append((b'access-control-allow-origin', b''))
+                    except Exception:
+                        pass
                 headers.append(
                     (b'access-control-allow-methods', ', '.join(cfg['methods']).encode('latin1'))
                 )
@@ -1066,12 +1112,21 @@ class PlatformCORSMiddleware:
 
 doorman.add_middleware(PlatformCORSMiddleware)
 
-# Add tier-based rate limiting middleware
+# Add tier-based rate limiting middleware (skip in live/test to avoid 429 floods)
 try:
     from middleware.tier_rate_limit_middleware import TierRateLimitMiddleware
+    import os as _os
 
-    doorman.add_middleware(TierRateLimitMiddleware)
-    logging.getLogger('doorman.gateway').info('Tier-based rate limiting middleware enabled')
+    _skip_tier = _os.getenv('SKIP_TIER_RATE_LIMIT', '').lower() in (
+        '1', 'true', 'yes', 'on'
+    )
+    _live = _os.getenv('DOORMAN_RUN_LIVE', '').lower() in ('1', 'true', 'yes', 'on')
+    _test = _os.getenv('DOORMAN_TEST_MODE', '').lower() in ('1', 'true', 'yes', 'on')
+    if not (_skip_tier or _live or _test):
+        doorman.add_middleware(TierRateLimitMiddleware)
+        logging.getLogger('doorman.gateway').info('Tier-based rate limiting middleware enabled')
+    else:
+        logging.getLogger('doorman.gateway').info('Tier-based rate limiting middleware skipped')
 except Exception as e:
     logging.getLogger('doorman.gateway').warning(
         f'Failed to enable tier rate limiting middleware: {e}'

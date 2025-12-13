@@ -1,22 +1,16 @@
-import os
-import platform
-
-import pytest
-
-_RUN_LIVE = os.getenv('DOORMAN_RUN_LIVE', '0') in ('1', 'true', 'True')
-if not _RUN_LIVE:
-    pytestmark = pytest.mark.skip(
-        reason='Requires live backend service; set DOORMAN_RUN_LIVE=1 to enable'
-    )
-
-
-@pytest.mark.skipif(platform.system() == 'Windows', reason='SIGUSR1 not available on Windows')
-def test_sigusr1_dump_in_memory_mode_live(client, monkeypatch, tmp_path):
-    monkeypatch.setenv('MEM_ENCRYPTION_KEY', 'live-secret-xyz')
-    monkeypatch.setenv('MEM_DUMP_PATH', str(tmp_path / 'live' / 'memory_dump.bin'))
-    import signal
-    import time
-
-    os.kill(os.getpid(), signal.SIGUSR1)
-    time.sleep(0.5)
-    assert True
+def test_memory_dump_via_route_live(client, tmp_path):
+    dest = str(tmp_path / 'live' / 'memory_dump.bin')
+    r = client.post('/platform/memory/dump', json={'path': dest})
+    # Expect success when server is in MEM mode with MEM_ENCRYPTION_KEY set
+    # 400 is expected when not in memory mode or encryption key not set
+    assert r.status_code in (200, 400), r.text
+    if r.status_code == 200:
+        body = r.json()
+        # Response structure: {response: {response: {path: ...}}} or {response: {path: ...}}
+        resp = body.get('response', body)
+        if isinstance(resp, dict):
+            inner = resp.get('response', resp)
+            path = inner.get('path') if isinstance(inner, dict) else None
+        else:
+            path = None
+        assert isinstance(path, str) and len(path) > 0, f'Expected path in response: {body}'

@@ -1443,6 +1443,13 @@ const ApiDetailPage = () => {
                 <FormHelp docHref="/docs/using-fields.html#header-forwarding">Forward only selected upstream response headers.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
+                <div className="text-xs text-gray-600 dark:text-gray-400">
+                  {((isEditing ? (editData.api_type || api.api_type) : api.api_type) || '').toUpperCase() === 'SOAP' && (
+                    <span>
+                      Tip: For SOAP APIs, Doorman auto-allows common request headers (Content-Type, SOAPAction, Accept, User-Agent). You typically don’t need to add them here.
+                    </span>
+                  )}
+                </div>
                 {isEditing && (
                   <div className="flex gap-2">
                     <input

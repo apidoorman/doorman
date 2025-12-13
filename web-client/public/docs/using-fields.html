@@ -24,6 +24,19 @@
   <main>
     <p>This guide explains sensitive fields and common configurations with examples.</p>
 
+    <h2 id="production">Production Hardening</h2>
+    <ul>
+      <li><strong>ENV=production</strong>: enables stricter security validations at startup.</li>
+      <li><strong>HTTPS_ONLY=true</strong>: forces Secure cookies and HTTPS checks (use a TLS terminator in front).</li>
+      <li><strong>JWT_SECRET_KEY</strong>: required; 32+ random bytes. Rotate regularly.</li>
+      <li><strong>TOKEN_ENCRYPTION_KEY</strong>: 32+ bytes to encrypt API keys at rest.</li>
+      <li><strong>MEM_ENCRYPTION_KEY</strong>: 32+ bytes (required in MEM mode) to protect memory dumps.</li>
+      <li><strong>COOKIE_SAMESITE=Strict</strong> and set <strong>COOKIE_DOMAIN</strong> appropriately for your hostname.</li>
+      <li><strong>LOCAL_HOST_IP_BYPASS=false</strong>: disable localhost bypass in production.</li>
+      <li><strong>CORS</strong>: avoid wildcard origins when credentials are used; prefer explicit origins or set <strong>CORS_STRICT=true</strong>.</li>
+      <li><strong>Secrets</strong>: do not commit real secrets; use a vault/CI secrets store and environment injection.</li>
+    </ul>
+
     <h2 id="apis">APIs</h2>
     <p><strong>API Name/Version</strong> define the base path clients call: <code>/api/rest/&lt;name&gt;/&lt;version&gt;/...</code>.</p>
     <div class="tip">Example: name <code>users</code>, version <code>v1</code> → client calls <code>/api/rest/users/v1/list</code></div>
@@ -32,7 +45,7 @@
     <ul>
       <li><strong>Credits Enabled</strong>: deducts credits before proxying; configure a <em>Credit Group</em> that injects an API key header.</li>
       <li><strong>Authorization Field Swap</strong>: maps inbound <code>Authorization</code> into a custom upstream header (e.g., <code>X-Api-Key</code>).</li>
-      <li><strong>Allowed Headers</strong>: restrict which upstream response headers are forwarded back (use lowercase names).</li>
+      <li><strong>Allowed Headers</strong>: restrict which upstream <em>response</em> headers are forwarded back (use lowercase names). See Headers &amp; Forwarding below.</li>
     </ul>
     <pre>
 # Example curl
@@ -53,6 +66,38 @@ curl -H "Authorization: Bearer ..." \
 
     <h2 id="routing">Routing</h2>
     <p>Create named routing sets with an ordered list of upstreams. Doorman may choose an upstream based on client key, method, and policies.</p>
+
+    <h2 id="headers">Headers &amp; Forwarding</h2>
+    <p>
+      Doorman forwards a conservative subset of <em>request</em> headers to upstreams and a configurable subset of
+      <em>response</em> headers back to clients.
+    </p>
+    <h3>Sensitive headers (never forwarded by allow‑list)</h3>
+    <ul>
+      <li><code>authorization</code> (Bearer/Basic/etc); use <strong>Authorization Field Swap</strong> to map into a custom upstream header</li>
+      <li><code>cookie</code>, <code>set-cookie</code></li>
+      <li>Common API key names (e.g., <code>x-api-key</code>, <code>api-key</code>)</li>
+      <li><code>x-csrf-token</code></li>
+    </ul>
+    <p class="tip">Even if you list a sensitive header under <strong>Allowed Headers</strong>, it is not forwarded by the allow‑list.
+      To send credentials upstream, configure <strong>Authorization Field Swap</strong> or use Credit Groups (which inject a safe API key header).</p>
+
+    <h3>SOAP defaults</h3>
+    <p>
+      For SOAP APIs, Doorman automatically allows common <em>request</em> headers to make onboarding easier:
+      <code>Content-Type</code>, <code>SOAPAction</code>, <code>Accept</code>, <code>User-Agent</code>, <code>Accept-Encoding</code>.
+      You do not need to add these to the allow‑list.
+    </p>
+    <p>
+      Response headers for SOAP remain governed by your APIs <strong>Allowed Headers</strong> list (only those will be forwarded back).
+    </p>
+
+    <h3>Per‑API behavior</h3>
+    <ul>
+      <li><strong>Request headers → upstream</strong>: REST/GraphQL/gRPC forward only headers listed in <strong>Allowed Headers</strong> (minus sensitive headers). SOAP also includes the defaults above.</li>
+      <li><strong>Response headers → client</strong>: Only headers listed in <strong>Allowed Headers</strong> are forwarded back for all protocols.</li>
+      <li><strong>CORS</strong>: Controlled per‑API; preflight/response headers are computed from API CORS fields.</li>
+    </ul>
 
     <h2 id="users">Users</h2>
     <ul>

@@ -50,5 +50,6 @@ pytz>=2024.1  # For timezone handling
 # gRPC dependencies
 grpcio==1.75.0
 grpcio-tools==1.75.0
+grpcio-reflection==1.75.0
 protobuf==6.32.1
 googleapis-common-protos>=1.63.0

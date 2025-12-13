@@ -1,6 +1,4 @@
 
         syntax = "proto3";
-
-package myapi_v1;
         message Hello { string name = 1; }
     
