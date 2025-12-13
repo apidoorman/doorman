@@ -149,7 +149,16 @@ async def test_metrics_top_apis_aggregate(monkeypatch, authed_client):
     body = r.json().get('response') or r.json()
     top_apis = body.get('top_apis') or []
 
-    assert any(isinstance(a, list) and a[0].startswith('rest:') for a in top_apis)
+    def _api_name(a):
+        if isinstance(a, (list, tuple)) and a:
+            return str(a[0])
+        if isinstance(a, dict):
+            return str(a.get('api') or a.get('name') or '')
+        if isinstance(a, str):
+            return a
+        return ''
+
+    assert any(_api_name(a).startswith('rest:') for a in top_apis)
 
 
 @pytest.mark.asyncio

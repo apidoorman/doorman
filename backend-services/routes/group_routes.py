@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from models.create_group_model import CreateGroupModel
 from models.group_model_response import GroupModelResponse
@@ -65,6 +65,8 @@ async def create_group(api_data: CreateGroupModel, request: Request):
                 )
             )
         return respond_rest(await GroupService.create_group(api_data, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -121,6 +123,8 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
                 )
             )
         return respond_rest(await GroupService.update_group(group_name, api_data, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -177,6 +181,8 @@ async def delete_group(group_name: str, request: Request):
                 )
             )
         return respond_rest(await GroupService.delete_group(group_name, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
@@ -216,6 +222,8 @@ async def get_groups(
         )
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await GroupService.get_groups(page, page_size, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -254,6 +262,8 @@ async def get_group(group_name: str, request: Request):
         )
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await GroupService.get_group(group_name, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(

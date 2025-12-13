@@ -56,6 +56,20 @@ async def list_credit_definitions(request: Request, page: int = 1, page_size: in
                 )
             )
         return respond_rest(await CreditService.list_credit_defs(page, page_size, request_id))
+    except HTTPException as e:
+        raise e
+    except HTTPException as e:
+        raise e
+    except HTTPException as e:
+        raise e
+    except HTTPException as e:
+        raise e
+    except HTTPException as e:
+        raise e
+    except HTTPException as e:
+        raise e
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -473,6 +487,8 @@ async def get_credits(username: str, request: Request):
                 )
             )
         return respond_rest(await CreditService.get_user_credits(username, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(

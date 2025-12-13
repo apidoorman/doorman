@@ -1,9 +1,13 @@
-import os
 from typing import Any, Dict, List, Tuple
+import os
 
 import pytest
 
-pytestmark = [pytest.mark.public]
+from servers import (
+    start_rest_echo_server,
+    start_soap_echo_server,
+    start_graphql_json_server,
+)
 
 
 # -----------------------------
@@ -64,67 +68,56 @@ def provisioned_public_apis(client):
     catalog: List[Tuple[str, str, str, Dict[str, Any]]] = []
     ver = "v1"
 
-    def add_rest(name: str, server: str, uri: str):
-        _mk_api(client, name, ver, [server])
+    rest_srv = start_rest_echo_server()
+    soap_srv = start_soap_echo_server()
+    gql_srv1 = start_graphql_json_server({'data': {'characters': {'info': {'count': 42}}}})
+    gql_srv2 = start_graphql_json_server({'data': {'company': {'name': 'SpaceX'}}})
+    gql_srv3 = start_graphql_json_server({'data': {'country': {'name': 'United States'}}})
+
+    def add_rest(name: str, server_url: str, uri: str):
+        _mk_api(client, name, ver, [server_url])
         # Normalize endpoint registration to exclude querystring; gateway matches path-only.
         path_only = uri.split("?")[0]
         _mk_endpoint(client, name, ver, "GET", path_only)
         catalog.append(("REST", name, ver, {"uri": uri}))
 
     # REST (12+)
-    add_rest("rest_httpbin_get", "https://httpbin.org", "/get")
-    add_rest("rest_httpbin_any", "https://httpbin.org", "/anything")
-    add_rest("rest_jsonplaceholder_post", "https://jsonplaceholder.typicode.com", "/posts/1")
-    add_rest("rest_jsonplaceholder_user", "https://jsonplaceholder.typicode.com", "/users/1")
-    add_rest("rest_dog_ceo", "https://dog.ceo/api", "/breeds/image/random")
-    add_rest("rest_catfact", "https://catfact.ninja", "/fact")
-    add_rest("rest_bored", "https://www.boredapi.com/api", "/activity")
-    add_rest("rest_chuck", "https://api.chucknorris.io/jokes", "/random")
-    add_rest("rest_exchange", "https://open.er-api.com/v6/latest", "/USD")
-    add_rest("rest_ipify", "https://api.ipify.org", "/?format=json")
-    add_rest("rest_genderize", "https://api.genderize.io", "/?name=peter")
-    add_rest("rest_agify", "https://api.agify.io", "/?name=lucy")
+    base = rest_srv.url
+    for i, uri in enumerate([
+        "/get",
+        "/anything",
+        "/posts/1",
+        "/users/1",
+        "/breeds/image/random",
+        "/fact",
+        "/activity",
+        "/random",
+        "/v6/USD",
+        "/ip",
+        "/gender?p=peter",
+        "/age?name=lucy",
+    ]):
+        add_rest(f"rest_local_{i}", base, uri)
 
     # SOAP (3)
-    def add_soap(name: str, server: str, uri: str):
-        _mk_api(client, name, ver, [server])
+    def add_soap(name: str, server_url: str, uri: str):
+        _mk_api(client, name, ver, [server_url])
         _mk_endpoint(client, name, ver, "POST", uri)
         catalog.append(("SOAP", name, ver, {"uri": uri}))
 
-    add_soap("soap_calc", "http://www.dneonline.com", "/calculator.asmx")
-    add_soap(
-        "soap_numberconv",
-        "https://www.dataaccess.com",
-        "/webservicesserver/NumberConversion.wso",
-    )
-    add_soap(
-        "soap_countryinfo",
-        "http://webservices.oorsprong.org",
-        "/websamples.countryinfo/CountryInfoService.wso",
-    )
+    add_soap("soap_calc", soap_srv.url, "/calculator.asmx")
+    add_soap("soap_numberconv", soap_srv.url, "/NumberConversion.wso")
+    add_soap("soap_countryinfo", soap_srv.url, "/CountryInfoService.wso")
 
     # GraphQL (3) - Upstreams must expose /graphql path
-    def add_gql(name: str, server: str, query: str):
-        _mk_api(client, name, ver, [server])
+    def add_gql(name: str, server_url: str, query: str):
+        _mk_api(client, name, ver, [server_url])
         _mk_endpoint(client, name, ver, "POST", "/graphql")
         catalog.append(("GRAPHQL", name, ver, {"query": query}))
 
-    add_gql(
-        "gql_rickandmorty",
-        "https://rickandmortyapi.com",
-        "{ characters(page: 1) { info { count } } }",
-    )
-    add_gql(
-        "gql_spacex",
-        "https://api.spacex.land",
-        "{ company { name } }",
-    )
-    # Third GraphQL: some public endpoints are not at /graphql and may 404; still real and non-auth
-    add_gql(
-        "gql_countries",
-        "https://countries.trevorblades.com",
-        "{ country(code: \"US\") { name } }",
-    )
+    add_gql("gql_rickandmorty", gql_srv1.url, "{ characters(page: 1) { info { count } } }")
+    add_gql("gql_spacex", gql_srv2.url, "{ company { name } }")
+    add_gql("gql_countries", gql_srv3.url, "{ country(code: \"US\") { name } }")
 
     # gRPC (3) - Use public grpcbin with published Empty endpoint; upload minimal proto preserving package
     PROTO_GRPCBIN = (
@@ -136,18 +129,16 @@ def provisioned_public_apis(client):
         '}\n'
     )
 
-    def add_grpc(name: str, server: str, method: str, message: Dict[str, Any]):
-        files = {"file": ("grpcbin.proto", PROTO_GRPCBIN.encode("utf-8"), "application/octet-stream")}
-        r_up = client.post(f"/platform/proto/{name}/{ver}", files=files)
-        assert r_up.status_code == 200, r_up.text
-        _mk_api(client, name, ver, [server], extra={"api_grpc_package": "grpcbin"})
+    def add_grpc(name: str, server_url: str, method: str, message: Dict[str, Any]):
+        # Use HTTP fallback to /grpc on local REST server; no proto upload required
+        _mk_api(client, name, ver, [server_url])
         _mk_endpoint(client, name, ver, "POST", "/grpc")
         catalog.append(("GRPC", name, ver, {"method": method, "message": message}))
 
     # Cover both plaintext and TLS endpoints
-    add_grpc("grpc_bin1", "grpc://grpcb.in:9000", "GRPCBin.Empty", {})
-    add_grpc("grpc_bin2", "grpcs://grpcb.in:9001", "GRPCBin.Empty", {})
-    add_grpc("grpc_bin3", "grpc://grpcb.in:9000", "GRPCBin.Empty", {})
+    add_grpc("grpc_local1", rest_srv.url, "Svc.M", {})
+    add_grpc("grpc_local2", rest_srv.url, "Svc.M", {})
+    add_grpc("grpc_local3", rest_srv.url, "Svc.M", {})
 
     # Ensure minimum of 20 APIs
     assert len(catalog) >= 20

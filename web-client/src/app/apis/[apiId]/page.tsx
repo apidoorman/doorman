@@ -760,6 +760,30 @@ const ApiDetailPage = () => {
                     )}
                   </div>
 
+                  <div className="md:col-span-2">
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      API URL
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-[13px] bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white px-3 py-2 rounded-sm border border-gray-200 dark:border-white/10 font-mono">
+                        {SERVER_URL}/api/{api.api_type?.toLowerCase() || 'rest'}/{api.api_name}/{api.api_version}
+                      </code>
+                      <button
+                        onClick={() => {
+                          const url = `${SERVER_URL}/api/${api.api_type?.toLowerCase() || 'rest'}/${api.api_name}/${api.api_version}`
+                          navigator.clipboard.writeText(url)
+                          toast.success('URL copied to clipboard')
+                        }}
+                        className="btn btn-ghost px-3"
+                        title="Copy URL"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
                       Type

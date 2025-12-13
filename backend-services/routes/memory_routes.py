@@ -7,7 +7,7 @@ import os
 import time
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
 from models.response_model import ResponseModel
@@ -97,6 +97,8 @@ async def memory_dump(request: Request, body: DumpRequest | None = None):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -199,6 +201,8 @@ async def memory_restore(request: Request, body: RestoreRequest | None = None):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(

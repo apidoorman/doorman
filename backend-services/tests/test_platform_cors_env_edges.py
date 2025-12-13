@@ -72,7 +72,7 @@ async def test_platform_cors_headers_asterisk_defaults_to_known_list(monkeypatch
         for h in (r.headers.get('Access-Control-Allow-Headers') or '').split(',')
         if h.strip()
     ]
-    assert set(headers) == {'Accept', 'Content-Type', 'X-CSRF-Token', 'Authorization'}
+    assert set(headers) == {'Accept', 'Content-Type', 'X-CSRF-Token', 'Authorization', 'X-Requested-With'}
 
 
 @pytest.mark.asyncio

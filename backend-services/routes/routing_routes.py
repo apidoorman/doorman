@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from models.create_routing_model import CreateRoutingModel
 from models.response_model import ResponseModel
@@ -66,6 +66,8 @@ async def create_routing(api_data: CreateRoutingModel, request: Request):
                 )
             )
         return respond_rest(await RoutingService.create_routing(api_data, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -125,6 +127,8 @@ async def update_routing(client_key: str, api_data: UpdateRoutingModel, request:
                 )
             )
         return respond_rest(await RoutingService.update_routing(client_key, api_data, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -184,6 +188,8 @@ async def delete_routing(client_key: str, request: Request):
                 )
             )
         return respond_rest(await RoutingService.delete_routing(client_key, request_id))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return process_response(

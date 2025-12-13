@@ -3,8 +3,13 @@ import types
 import pytest
 
 
+async def _allow_tools(client):
+    await client.put('/platform/user/admin', json={'manage_security': True})
+
+
 @pytest.mark.asyncio
 async def test_grpc_check_reports_all_present(monkeypatch, authed_client):
+    await _allow_tools(authed_client)
     # Fake modules for grpc and grpc_tools.protoc
     fake_grpc = types.ModuleType('grpc')
     fake_tools = types.ModuleType('grpc_tools')
@@ -27,6 +32,7 @@ async def test_grpc_check_reports_all_present(monkeypatch, authed_client):
 
 @pytest.mark.asyncio
 async def test_grpc_check_reports_missing_protoc(monkeypatch, authed_client):
+    await _allow_tools(authed_client)
     # Ensure grpc present, but grpc_tools.protoc missing
     import sys
     fake_grpc = types.ModuleType('grpc')

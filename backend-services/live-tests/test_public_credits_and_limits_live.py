@@ -7,7 +7,13 @@ import pytest
 
 from client import LiveClient
 
-pytestmark = [pytest.mark.public, pytest.mark.credits, pytest.mark.gateway]
+_RUN_EXT = os.getenv('DOORMAN_TEST_EXTERNAL', '0') in ('1', 'true', 'True')
+pytestmark = [
+    pytest.mark.public,
+    pytest.mark.credits,
+    pytest.mark.gateway,
+    pytest.mark.skipif(not _RUN_EXT, reason='Requires external network (DOORMAN_TEST_EXTERNAL=1)')
+]
 
 
 def _rest_targets() -> List[Tuple[str, str]]:

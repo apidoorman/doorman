@@ -8,7 +8,7 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from models.response_model import ResponseModel
 from utils.audit_util import audit
@@ -93,6 +93,8 @@ async def export_all(request: Request):
             ).dict(),
             'rest',
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | export_all error: {e}')
         return process_response(
@@ -177,6 +179,8 @@ async def export_apis(
         return process_response(
             ResponseModel(status_code=200, response={'apis': apis}).dict(), 'rest'
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | export_apis error: {e}')
         return process_response(
@@ -246,6 +250,8 @@ async def export_roles(request: Request, role_name: str | None = None):
         return process_response(
             ResponseModel(status_code=200, response={'roles': roles}).dict(), 'rest'
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | export_roles error: {e}')
         return process_response(
@@ -315,6 +321,8 @@ async def export_groups(request: Request, group_name: str | None = None):
         return process_response(
             ResponseModel(status_code=200, response={'groups': groups}).dict(), 'rest'
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | export_groups error: {e}')
         return process_response(
@@ -385,6 +393,8 @@ async def export_routings(request: Request, client_key: str | None = None):
         return process_response(
             ResponseModel(status_code=200, response={'routings': routings}).dict(), 'rest'
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | export_routings error: {e}')
         return process_response(
@@ -434,6 +444,8 @@ async def export_endpoints(
         return process_response(
             ResponseModel(status_code=200, response={'endpoints': eps}).dict(), 'rest'
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | export_endpoints error: {e}')
         return process_response(
@@ -599,6 +611,8 @@ async def import_all(request: Request, body: dict[str, Any]):
         return process_response(
             ResponseModel(status_code=200, response={'imported': counts}).dict(), 'rest'
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | import_all error: {e}')
         return process_response(

@@ -7,7 +7,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required
@@ -69,6 +69,8 @@ async def demo_seed(
             seed=seed,
         )
         return respond_rest(ResponseModel(status_code=200, response=res, message='Seed completed'))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f'{request_id} | Demo seed error: {str(e)}', exc_info=True)
         return respond_rest(

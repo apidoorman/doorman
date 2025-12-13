@@ -206,6 +206,13 @@ async def reset_http_client():
     except Exception:
         pass
 
+    try:
+        from utils.metrics_util import metrics_store
+        metrics_store.api_counts.clear()
+        metrics_store.username_counts.clear()
+    except Exception:
+        pass
+
     yield
     try:
         from services.gateway_service import GatewayService

@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import pytest
@@ -51,7 +52,7 @@ async def test_throttle_queue_limit_exceeded_returns_429(monkeypatch, authed_cli
     reset_counters()
     now_ms = int(time.time() * 1000)
     wait_ms = 1000 - (now_ms % 1000) + 350
-    time.sleep(wait_ms / 1000.0)
+    await asyncio.sleep(wait_ms / 1000.0)
 
     import services.gateway_service as gs
 
@@ -97,7 +98,7 @@ async def test_throttle_dynamic_wait_increases_latency(monkeypatch, authed_clien
     reset_counters()
     now_ms = int(time.time() * 1000)
     wait_ms = 1000 - (now_ms % 1000) + 350
-    time.sleep(wait_ms / 1000.0)
+    await asyncio.sleep(wait_ms / 1000.0)
 
     import services.gateway_service as gs
 
@@ -144,6 +145,6 @@ async def test_rate_limit_window_rollover_allows_requests(monkeypatch, authed_cl
     r2 = await authed_client.get(f'/api/rest/{name}/{ver}/x')
     assert r2.status_code == 429
 
-    time.sleep(1.1)
+    await asyncio.sleep(1.1)
     r3 = await authed_client.get(f'/api/rest/{name}/{ver}/x')
     assert r3.status_code == 200
