@@ -33,13 +33,17 @@ async def test_grpc_check_reports_all_present(monkeypatch, authed_client):
 @pytest.mark.asyncio
 async def test_grpc_check_reports_missing_protoc(monkeypatch, authed_client):
     await _allow_tools(authed_client)
-    # Ensure grpc present, but grpc_tools.protoc missing
-    import sys
-    fake_grpc = types.ModuleType('grpc')
-    sys.modules['grpc'] = fake_grpc
-    for mod in list(sys.modules.keys()):
-        if mod.startswith('grpc_tools'):
-            del sys.modules[mod]
+    
+    # Mock importlib.import_module to simulate grpc_tools.protoc missing
+    import importlib
+    original_import = importlib.import_module
+    
+    def mock_import(name, *args, **kwargs):
+        if name == 'grpc_tools.protoc':
+            raise ModuleNotFoundError(f"No module named '{name}'")
+        return original_import(name, *args, **kwargs)
+    
+    monkeypatch.setattr('importlib.import_module', mock_import)
 
     r = await authed_client.get('/platform/tools/grpc/check')
     assert r.status_code == 200
