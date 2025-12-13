@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 def _find_free_port() -> int:
     s = socket.socket()
-    s.bind(('0.0.0.0', 0))
+    s.bind(('127.0.0.1', 0))
     port = s.getsockname()[1]
     s.close()
     return port
@@ -43,7 +43,7 @@ def _get_host_from_container() -> str:
 
 
 class _ThreadedHTTPServer:
-    def __init__(self, handler_cls, host='0.0.0.0', port=None):
+    def __init__(self, handler_cls, host='127.0.0.1', port=None):
         self.bind_host = host
         self.port = port or _find_free_port()
         self._server = HTTPServer((self.bind_host, self.port), handler_cls)

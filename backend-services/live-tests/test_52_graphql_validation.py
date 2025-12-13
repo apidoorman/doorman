@@ -34,7 +34,7 @@ def test_graphql_validation_blocks_invalid_variables(client):
 
     def _free_port():
         s = socket.socket()
-        s.bind(('0.0.0.0', 0))
+        s.bind(('127.0.0.1', 0))
         p = s.getsockname()[1]
         s.close()
         return p
@@ -54,7 +54,7 @@ def test_graphql_validation_blocks_invalid_variables(client):
     port = _free_port()
     host = _get_host_from_container()
     server = uvicorn.Server(
-        uvicorn.Config(GraphQL(schema), host='0.0.0.0', port=port, log_level='warning')
+        uvicorn.Config(GraphQL(schema), host='127.0.0.1', port=port, log_level='warning')
     )
     t = threading.Thread(target=server.run, daemon=True)
     t.start()

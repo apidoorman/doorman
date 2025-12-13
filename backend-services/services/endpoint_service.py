@@ -113,9 +113,14 @@ class EndpointService:
                 generated_dir.mkdir(exist_ok=True)
                 proto_path = (proto_dir / f'{module_base}.proto').resolve()
                 # Validate path stays within proto directory
-                if not str(proto_path).startswith(str(proto_dir.resolve())):
-                    logger.error(f'{request_id} | Invalid proto path: {proto_path}')
+                proto_dir_resolved = proto_dir.resolve()
+                if not str(proto_path).startswith(str(proto_dir_resolved)):
+                    logger.error(f'{request_id} | Invalid proto path detected')
                     raise ValueError('Proto path must be within proto directory')
+                # Additional validation before file operations
+                if not str(proto_path).startswith(str(project_root.resolve())):
+                    logger.error(f'{request_id} | Proto path outside project root')
+                    raise ValueError('Proto path must be within project root')
                 if not proto_path.exists():
                     proto_content = (
                         'syntax = "proto3";\n'
@@ -150,8 +155,9 @@ class EndpointService:
                         f'{request_id} | Pre-gen gRPC stubs returned {code} for {module_base}'
                     )
                 try:
-                    init_path = generated_dir / '__init__.py'
-                    if not init_path.exists():
+                    init_path = (generated_dir / '__init__.py').resolve()
+                    # Validate init path is within generated directory
+                    if str(init_path).startswith(str(generated_dir.resolve())) and not init_path.exists():
                         init_path.write_text('"""Generated gRPC code."""\n', encoding='utf-8')
                 except Exception:
                     pass
