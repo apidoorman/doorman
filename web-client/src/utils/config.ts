@@ -1,14 +1,22 @@
-const fromGlobal = typeof window !== 'undefined' ? (window as any).__SERVER_URL : undefined
-const fromStorage = typeof window !== 'undefined' ? window.localStorage.getItem('SERVER_URL') : null
-const fromEnv = process.env.NEXT_PUBLIC_SERVER_URL || process.env.NEXT_PUBLIC_API_URL
-const guessFromWindow = typeof window !== 'undefined'
-  ? (() => {
-      const origin = window.location.origin
-      return origin.includes(':3000') ? origin.replace(':3000', ':3001') : origin
-    })()
-  : undefined
+// Runtime URL detection - domain agnostic
+const getApiUrl = (): string => {
+  // 1. Check localStorage override (user can manually set for custom setups)
+  if (typeof window !== 'undefined') {
+    const stored = window.localStorage.getItem('API_URL')
+    if (stored) return stored
+  }
+  
+  // 2. Use same origin as the web client (works for reverse proxy)
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  
+  // 3. SSR fallback
+  return 'http://localhost:3001'
+}
 
-export const SERVER_URL = (fromGlobal || fromStorage || fromEnv || guessFromWindow || 'http://localhost:3001') as string
+export const SERVER_URL = getApiUrl()
+export const WEB_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
 
 if (typeof window !== 'undefined') {
   const DEBUG = process.env.NODE_ENV !== 'production'

@@ -1,19 +1,10 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import OpenApiViewer from '@/components/OpenApiViewer'
-
-function computeApiBase(): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL
-  if (envUrl && envUrl.trim() !== '') return envUrl.replace(/\/$/, '')
-  if (typeof window !== 'undefined') {
-    const origin = window.location.origin
-    return origin.includes(':3000') ? origin.replace(':3000', ':3001') : origin
-  }
-  return 'http://localhost:3001'
-}
+import { SERVER_URL } from '@/utils/config'
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
   <button
@@ -29,10 +20,9 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 )
 
 export default function ApiReferencePage() {
-  const apiBase = useMemo(() => computeApiBase(), [])
-  const redocUrl = `${apiBase}/platform/redoc`
-  const swaggerUrl = `${apiBase}/platform/docs`
-  const openapiUrl = `${apiBase}/platform/openapi.json`
+  const redocUrl = `${SERVER_URL}/platform/redoc`
+  const swaggerUrl = `${SERVER_URL}/platform/docs`
+  const openapiUrl = `${SERVER_URL}/platform/openapi.json`
   const [active, setActive] = useState<'branded' | 'redoc' | 'swagger'>('branded')
 
   return (
