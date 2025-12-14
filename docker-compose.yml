@@ -16,9 +16,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        PORT: ${PORT:-3001}
-        WEB_PORT: ${WEB_PORT:-3000}
-        HTTPS_ONLY: ${HTTPS_ONLY:-false}
+        NEXT_PUBLIC_PROTECTED_USERS: ${NEXT_PUBLIC_PROTECTED_USERS:-}
     image: doorman:latest
     container_name: doorman
     ports:

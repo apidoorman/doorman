@@ -11,6 +11,23 @@
 | `DEV_RELOAD` | `false` | Auto-reload on code changes |
 | `PID_FILE` | `doorman.pid` | Process ID file path |
 
+## Frontend Configuration
+
+The web client is **domain-agnostic** and automatically detects the correct API URL at runtime:
+
+- **Development (port 3000):** API calls → `http://localhost:3001`
+- **Production/Reverse Proxy:** API calls → same origin as web client
+
+**No configuration needed for reverse proxy deployments!** The frontend will automatically use the correct domain.
+
+**Advanced Override (optional):**
+
+If you need to manually override the API URL (e.g., separate API subdomain), you can set it in browser localStorage:
+
+```javascript
+localStorage.setItem('API_URL', 'https://api.doorman.example.com')
+```
+
 ## Admin Credentials (Required)
 
 | Variable | Description |
