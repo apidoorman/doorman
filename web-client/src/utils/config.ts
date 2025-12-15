@@ -11,7 +11,15 @@ const getApiUrl = (): string => {
   // 2. Check localStorage override (user can manually set for custom setups)
   if (typeof window !== 'undefined') {
     const stored = window.localStorage.getItem('API_URL')
-    if (stored) return stored
+    if (stored) {
+      // If current page is HTTPS, ensure API URL is also HTTPS
+      if (window.location.protocol === 'https:' && stored.startsWith('http://')) {
+        const httpsUrl = stored.replace('http://', 'https://')
+        window.localStorage.setItem('API_URL', httpsUrl)
+        return httpsUrl
+      }
+      return stored
+    }
   }
   
   // 3. Fallback to same origin (for reverse proxy setups)
