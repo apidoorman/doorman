@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from models.rate_limit_models import RateLimitRule, RuleType, TimeWindow
 from services.rate_limit_rule_service import RateLimitRuleService, get_rate_limit_rule_service
 from utils.database_async import async_database
+from utils.auth_util import auth_required
 
 logger = logging.getLogger(__name__)
 
@@ -399,8 +400,27 @@ async def get_rule_statistics(rule_service: RateLimitRuleService = Depends(get_r
 # ============================================================================
 
 
+async def get_current_user_id(payload: dict = Depends(auth_required)) -> str:
+    """
+    Get current user ID from JWT token
+    
+    Args:
+        payload: JWT payload from auth_required dependency
+        
+    Returns:
+        str: Username from JWT 'sub' claim
+    """
+    username = payload.get('sub')
+    if not username:
+        raise HTTPException(status_code=401, detail='Invalid token: missing user ID')
+    return username
+
+
 @rate_limit_rule_router.get('/status', response_model=Dict[str, Any])
-async def get_rate_limit_status(rule_service: RateLimitRuleService = Depends(get_rule_service_dep)):
+async def get_rate_limit_status(
+    user_id: str = Depends(get_current_user_id),
+    rule_service: RateLimitRuleService = Depends(get_rule_service_dep),
+):
     """
     Get current rate limit status for the authenticated user
 
@@ -408,8 +428,6 @@ async def get_rate_limit_status(rule_service: RateLimitRuleService = Depends(get
     This is a user-facing endpoint showing their current limits.
     """
     try:
-        # TODO: Get user_id from auth middleware
-        user_id = 'current_user'
 
         # Get applicable rules for user
         rules = await rule_service.get_applicable_rules(user_id=user_id)
