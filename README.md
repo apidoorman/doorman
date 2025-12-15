@@ -42,6 +42,24 @@ docker compose up
 - Backend API: `http://localhost:3001` (or your configured `PORT`)
 - Web Client: `http://localhost:3000` (or your configured `WEB_PORT`)
 
+## Frontend Gateway Configuration
+
+The web client needs to know the backend gateway URL. Set `NEXT_PUBLIC_GATEWAY_URL` in the root `.env` file:
+
+```bash
+# For Docker Compose (default - both services in same container)
+NEXT_PUBLIC_GATEWAY_URL=http://localhost:3001
+
+# For production reverse proxy (frontend and API on same domain)
+# Leave unset - frontend will use same origin
+```
+
+**Behavior:**
+- If `NEXT_PUBLIC_GATEWAY_URL` is set → uses that URL for API calls
+- If not set → uses same origin (for reverse proxy deployments where frontend and API share the same domain)
+
+**Note:** When using Docker Compose, the variable is passed as a build arg and baked into the Next.js bundle.
+
 ## Production Checklist
 
 Harden your deployment with these defaults and environment settings:
