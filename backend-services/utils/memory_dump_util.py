@@ -207,13 +207,16 @@ def dump_memory_to_file(path: str | None = None) -> str:
     ts = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')
     dump_path = os.path.join(dump_dir, f'{stem}-{ts}.bin')
     raw_data = database.db.dump_data()
-    sanitized_data = _sanitize_for_dump(_to_jsonable(raw_data))
+    # Do NOT sanitize here: the dump is encrypted and must be restorable.
+    # Sanitizing would replace secrets (e.g., password hashes) with placeholders
+    # and corrupt the restored state. Keep full data and rely on encryption.
+    jsonable_data = _to_jsonable(raw_data)
     payload = {
         'version': 1,
         'created_at': datetime.now(UTC).isoformat().replace('+00:00', 'Z'),
-        'sanitized': True,
-        'note': 'Sensitive fields (passwords, tokens, secrets) have been redacted',
-        'data': sanitized_data,
+        'sanitized': False,
+        'note': 'Contains sensitive data; encrypted at rest with MEM_ENCRYPTION_KEY',
+        'data': jsonable_data,
     }
     plaintext = json.dumps(payload, separators=(',', ':'), default=_json_default).encode('utf-8')
     key = os.getenv('MEM_ENCRYPTION_KEY', '')
