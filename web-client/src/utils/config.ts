@@ -1,6 +1,13 @@
 // Gateway URL from environment - required for API calls
 // Set NEXT_PUBLIC_GATEWAY_URL in root .env file (loaded via dotenv-cli for dev, build arg for Docker)
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
+let GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
+
+// Auto-upgrade HTTP to HTTPS if the page is loaded over HTTPS
+// This must happen BEFORE any module evaluation
+if (typeof window !== 'undefined' && window.location.protocol === 'https:' && GATEWAY_URL.startsWith('http://')) {
+  GATEWAY_URL = GATEWAY_URL.replace('http://', 'https://')
+  console.log('[CONFIG] Auto-upgraded GATEWAY_URL to HTTPS:', GATEWAY_URL)
+}
 
 let _cachedUrl: string | null = null
 
@@ -13,13 +20,6 @@ const getApiUrl = (): string => {
   // 1. Use gateway URL from env if set
   if (GATEWAY_URL) {
     console.log('[CONFIG] Using GATEWAY_URL from env:', GATEWAY_URL)
-    // Auto-upgrade to HTTPS if page is HTTPS
-    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && GATEWAY_URL.startsWith('http://')) {
-      const httpsUrl = GATEWAY_URL.replace('http://', 'https://')
-      console.log('[CONFIG] Upgrading env URL to HTTPS:', httpsUrl)
-      _cachedUrl = httpsUrl
-      return httpsUrl
-    }
     _cachedUrl = GATEWAY_URL
     return GATEWAY_URL
   }
