@@ -6,7 +6,8 @@ import Layout from '@/components/Layout'
 import ConfirmModal from '@/components/ConfirmModal'
 import { SERVER_URL } from '@/utils/config'
 import { fetchJson } from '@/utils/http'
-import { postJson } from '@/utils/api'
+import { postJson, getJson } from '@/utils/api'
+import SearchableSelect from '@/components/SearchableSelect'
 
 interface Subscription {
   api_name: string
@@ -60,6 +61,12 @@ const UserSubscriptionsPage = () => {
     } catch (err) {
       setError('Failed to load available APIs.')
     }
+  }
+
+  const fetchApiOptions = async (): Promise<string[]> => {
+    const data = await getJson<any>(`${SERVER_URL}/platform/subscription/available-apis/${encodeURIComponent(username)}`)
+    const apis = data.apis || []
+    return apis.map((api: Api) => `${api.api_name}/${api.api_version}`)
   }
 
   useEffect(() => {
@@ -223,20 +230,13 @@ const UserSubscriptionsPage = () => {
                   <label htmlFor="api-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Available APIs
                   </label>
-                  <select
-                    id="api-select"
-                    className="input"
+                  <SearchableSelect
                     value={selectedApi}
-                    onChange={e => setSelectedApi(e.target.value)}
-                    disabled={availableApis.length === 0}
-                  >
-                    <option value="" disabled>{availableApis.length > 0 ? 'Select an API' : 'No available APIs'}</option>
-                    {availableApis.map(api => (
-                      <option key={`${api.api_name}/${api.api_version}`} value={`${api.api_name}/${api.api_version}`}>
-                        {api.api_name} ({api.api_version})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedApi}
+                    placeholder="Select or search for an API"
+                    fetchOptions={fetchApiOptions}
+                    disabled={isAdding}
+                  />
                 </div>
                 <button type="submit" className="btn btn-primary w-full" disabled={isAdding || !selectedApi}>
                   {isAdding ? 'Adding...' : 'Add Subscription'}

@@ -10,6 +10,7 @@ import { SERVER_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 import ConfirmModal from '@/components/ConfirmModal'
 import { getJson } from '@/utils/api'
+import SearchableSelect from '@/components/SearchableSelect'
 
 const AddApiPage = () => {
   const router = useRouter()
@@ -58,6 +59,18 @@ const AddApiPage = () => {
       } catch {}
     })()
   }, [])
+
+  const fetchRoles = async (): Promise<string[]> => {
+    const data = await getJson<any>(`${SERVER_URL}/platform/role/all`)
+    const roles = Array.isArray(data) ? data : (data.roles || data.response?.roles || [])
+    return roles.map((r: any) => r.role_name || r.name || r).filter(Boolean)
+  }
+
+  const fetchGroups = async (): Promise<string[]> => {
+    const data = await getJson<any>(`${SERVER_URL}/platform/group/all`)
+    const groups = Array.isArray(data) ? data : (data.groups || data.response?.groups || [])
+    return groups.map((g: any) => g.group_name || g.name || g).filter(Boolean)
+  }
 
   const addMyIpToWhitelist = () => {
     const effectiveIp = (((formData as any).api_trust_x_forwarded_for && clientIpXff) ? clientIpXff : clientIp)
@@ -565,18 +578,16 @@ const AddApiPage = () => {
                   Allowed Roles
                   <InfoTooltip text="Only enforced when Auth Required is enabled. Users must have any of these platform roles." />
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="input flex-1"
-                    placeholder="admin"
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && addRole()}
-                    disabled={loading}
-                  />
-                  <button type="button" onClick={addRole} className="btn btn-secondary" disabled={loading}>Add</button>
-                </div>
+                <SearchableSelect
+                  value={newRole}
+                  onChange={setNewRole}
+                  onAdd={addRole}
+                  onKeyPress={(e) => e.key === 'Enter' && addRole()}
+                  placeholder="Select or type role name"
+                  fetchOptions={fetchRoles}
+                  disabled={loading}
+                  addButtonText="Add"
+                />
                 <div className="flex flex-wrap gap-2 mt-2">
                   {formData.api_allowed_roles.map((r, i) => (
                     <div key={i} className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full">
@@ -604,18 +615,16 @@ const AddApiPage = () => {
                   Allowed Groups
                   <InfoTooltip text="Only enforced when Auth Required is enabled. User must belong to any listed group (e.g., ALL)." />
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="input flex-1"
-                    placeholder="ALL"
-                    value={newGroup}
-                    onChange={(e) => setNewGroup(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && addGroup()}
-                    disabled={loading}
-                  />
-                  <button type="button" onClick={addGroup} className="btn btn-secondary" disabled={loading}>Add</button>
-                </div>
+                <SearchableSelect
+                  value={newGroup}
+                  onChange={setNewGroup}
+                  onAdd={addGroup}
+                  onKeyPress={(e) => e.key === 'Enter' && addGroup()}
+                  placeholder="Select or type group name"
+                  fetchOptions={fetchGroups}
+                  disabled={loading}
+                  addButtonText="Add"
+                />
                 <div className="flex flex-wrap gap-2 mt-2">
                   {formData.api_allowed_groups.map((g, i) => (
                     <div key={i} className="flex items-center gap-2 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-3 py-1 rounded-full">
