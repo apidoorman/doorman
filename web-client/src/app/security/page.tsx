@@ -197,10 +197,13 @@ const SecurityPage = () => {
   const handleClearCaches = async () => {
     try {
       setError(null)
-      await delJson<any>(`${SERVER_URL}/api/caches`)
-      setSuccess('All gateway caches cleared')
+      console.log('[Security] Clearing caches at:', `${SERVER_URL}/api/caches`)
+      const response = await delJson<any>(`${SERVER_URL}/api/caches`)
+      console.log('[Security] Clear caches response:', response)
+      setSuccess(response?.message || 'All gateway caches cleared')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
+      console.error('[Security] Clear caches error:', err)
       setError(err instanceof Error ? err.message : 'Failed to clear caches')
     }
   }
