@@ -5,6 +5,7 @@ See https://github.com/pypeople-dev/doorman for more information
 """
 
 import logging
+import os
 
 from fastapi import HTTPException, Request
 from jose import JWTError
@@ -23,6 +24,12 @@ async def subscription_required(request: Request):
         username = payload.get('sub')
         if not username:
             raise HTTPException(status_code=401, detail='Invalid token')
+        
+        # Admin user bypasses subscription requirements
+        admin_email = os.getenv('DOORMAN_ADMIN_EMAIL', '')
+        if username == admin_email:
+            logger.debug(f'Admin user {username} bypassing subscription check')
+            return payload
         full_path = request.url.path
         if full_path.startswith('/api/rest/'):
             prefix = '/api/rest/'
