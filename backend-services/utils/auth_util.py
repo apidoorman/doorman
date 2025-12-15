@@ -108,7 +108,9 @@ async def auth_required(request: Request) -> dict:
         raise HTTPException(status_code=401, detail='Unauthorized')
 
     https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
-    if https_only:
+    # Skip CSRF validation for gateway API routes (/api/*) - they use API keys, not session cookies
+    is_gateway_route = request.url.path.startswith('/api/')
+    if https_only and not is_gateway_route:
         csrf_header = request.headers.get('X-CSRF-Token')
         csrf_cookie = request.cookies.get('csrf_token')
         if not await validate_csrf_double_submit(csrf_header, csrf_cookie):
