@@ -265,9 +265,11 @@ async def gateway(request: Request, path: str):
         api_public = False
         api_auth_required = True
         resolved_api = None
-        if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
-            key1 = f'/{parts[0]}/{parts[1]}'
-            key2 = f'{parts[0]}/{parts[1]}'
+
+        async def _resolve_api_by(name: str, version: str, endpoint_parts: list[str]):
+            nonlocal resolved_api, api_public, api_auth_required
+            key1 = f'/{name}/{version}'
+            key2 = f'{name}/{version}'
             api_key = doorman_cache.get_cache('api_id_cache', key1) or doorman_cache.get_cache(
                 'api_id_cache', key2
             )
@@ -290,7 +292,7 @@ async def gateway(request: Request, path: str):
                         ).dict(),
                         'rest',
                     )
-                endpoint_uri = '/' + '/'.join(parts[2:]) if len(parts) > 2 else '/'
+                endpoint_uri = '/' + '/'.join(endpoint_parts) if endpoint_parts else '/'
                 try:
                     endpoints = await api_util.get_api_endpoints(resolved_api.get('api_id'))
                     import re as _re
@@ -315,14 +317,27 @@ async def gateway(request: Request, path: str):
                         )
                 except Exception:
                     pass
-            api_public = bool(resolved_api.get('api_public')) if resolved_api else False
-            api_auth_required = (
-                bool(resolved_api.get('api_auth_required'))
-                if resolved_api and resolved_api.get('api_auth_required') is not None
-                else True
-            )
+                api_public = bool(resolved_api.get('api_public'))
+                api_auth_required = (
+                    bool(resolved_api.get('api_auth_required'))
+                    if resolved_api.get('api_auth_required') is not None
+                    else True
+                )
+            return None
+
+        # Case 1: Version is embedded in path (/{api}/{vN}/...)
+        if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+            _maybe_resp = await _resolve_api_by(parts[0], parts[1], parts[2:])
+            if _maybe_resp is not None:
+                return _maybe_resp
+        # Case 2: Support X-API-Version header for REST if version not present in path
+        elif len(parts) >= 1 and (request.headers.get('X-API-Version')):
+            ver = request.headers.get('X-API-Version')
+            _maybe_resp = await _resolve_api_by(parts[0], ver, parts[1:])
+            if _maybe_resp is not None:
+                return _maybe_resp
         username = None
-        if not api_public:
+        if resolved_api and not api_public:
             if api_auth_required:
                 await subscription_required(request)
                 await group_required(request)
@@ -610,7 +625,7 @@ async def soap_gateway(request: Request, path: str):
                         'soap',
                     )
         username = None
-        if not api_public:
+        if api and not api_public:
             if api_auth_required:
                 await subscription_required(request)
                 await group_required(request)
@@ -790,7 +805,7 @@ async def graphql_gateway(request: Request, path: str):
             else True
         )
         username = None
-        if not api_public:
+        if api and not api_public:
             if api_auth_required:
                 await subscription_required(request)
                 await group_required(request)
@@ -1064,7 +1079,7 @@ async def grpc_gateway(request: Request, path: str):
         test_mode = str(os.getenv('DOORMAN_TEST_GRPC', '')).lower() in (
             '1', 'true', 'yes', 'on'
         )
-        if not api_public and not test_mode:
+        if api and not api_public and not test_mode:
             if api_auth_required:
                 await subscription_required(request)
                 await group_required(request)

@@ -6,11 +6,12 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { fetchJson, getCookie } from '@/utils/http'
-import { putJson } from '@/utils/api'
+import { putJson, getJson } from '@/utils/api'
 import { useToast } from '@/contexts/ToastContext'
 import { SERVER_URL } from '@/utils/config'
 import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
+import SearchableSelect from '@/components/SearchableSelect'
 
 interface API {
   api_id: string
@@ -98,6 +99,18 @@ const ApiDetailPage = () => {
 
   type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean; enabled?: boolean }
   const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false, enabled: true })
+
+  const fetchRoles = async (): Promise<string[]> => {
+    const data = await getJson<any>(`${SERVER_URL}/platform/role/all`)
+    const roles = Array.isArray(data) ? data : (data.roles || data.response?.roles || [])
+    return roles.map((r: any) => r.role_name || r.name || r).filter(Boolean)
+  }
+
+  const fetchGroups = async (): Promise<string[]> => {
+    const data = await getJson<any>(`${SERVER_URL}/platform/group/all`)
+    const groups = Array.isArray(data) ? data : (data.groups || data.response?.groups || [])
+    return groups.map((g: any) => g.group_name || g.name || g).filter(Boolean)
+  }
 
   const fetchWithCsrf = async (input: RequestInfo, init: RequestInit = {}) => {
     const csrf = getCookie('csrf_token')
@@ -354,6 +367,17 @@ const ApiDetailPage = () => {
       const payload: any = { ...editData }
       if (typeof ipWhitelistText === 'string') payload.api_ip_whitelist = ipWhitelistText.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
       if (typeof ipBlacklistText === 'string') payload.api_ip_blacklist = ipBlacklistText.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
+      
+      // Ensure boolean fields are actual booleans, not strings
+      if ('api_auth_required' in payload) payload.api_auth_required = Boolean(payload.api_auth_required)
+      if ('api_public' in payload) payload.api_public = Boolean(payload.api_public)
+      if ('api_credits_enabled' in payload) payload.api_credits_enabled = Boolean(payload.api_credits_enabled)
+      if ('active' in payload) payload.active = Boolean(payload.active)
+      if ('api_trust_x_forwarded_for' in payload) payload.api_trust_x_forwarded_for = Boolean(payload.api_trust_x_forwarded_for)
+      
+      // Allow empty description
+      if (payload.api_description === '') payload.api_description = ''
+      
       await putJson(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, payload)
 
       try {
@@ -1259,19 +1283,16 @@ const ApiDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newRole}
-                      onChange={(e) => setNewRole(e.target.value)}
-                      className="input flex-1"
-                      placeholder="Enter role name"
-                      onKeyPress={(e) => e.key === 'Enter' && addRole()}
-                    />
-                    <button onClick={addRole} className="btn btn-primary">
-                      Add
-                    </button>
-                  </div>
+                  <SearchableSelect
+                    value={newRole}
+                    onChange={setNewRole}
+                    onAdd={addRole}
+                    onKeyPress={(e) => e.key === 'Enter' && addRole()}
+                    placeholder="Select or type role name"
+                    fetchOptions={fetchRoles}
+                    disabled={saving}
+                    addButtonText="Add"
+                  />
                 )}
 
                 <div className="flex flex-wrap gap-2">
@@ -1305,19 +1326,16 @@ const ApiDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newGroup}
-                      onChange={(e) => setNewGroup(e.target.value)}
-                      className="input flex-1"
-                      placeholder="Enter group name"
-                      onKeyPress={(e) => e.key === 'Enter' && addGroup()}
-                    />
-                    <button onClick={addGroup} className="btn btn-primary">
-                      Add
-                    </button>
-                  </div>
+                  <SearchableSelect
+                    value={newGroup}
+                    onChange={setNewGroup}
+                    onAdd={addGroup}
+                    onKeyPress={(e) => e.key === 'Enter' && addGroup()}
+                    placeholder="Select or type group name"
+                    fetchOptions={fetchGroups}
+                    disabled={saving}
+                    addButtonText="Add"
+                  />
                 )}
 
                 <div className="flex flex-wrap gap-2">

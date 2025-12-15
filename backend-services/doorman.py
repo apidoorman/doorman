@@ -1301,10 +1301,29 @@ try:
         else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     )
 except Exception as _e:
-    logging.getLogger('doorman.gateway').warning(
-        f'File logging disabled ({_e}); using console logging only'
-    )
-    _file_handler = None
+    # Attempt fallback to /tmp which is commonly writable on containers
+    try:
+        _tmp_dir = '/tmp/doorman-logs'
+        os.makedirs(_tmp_dir, exist_ok=True)
+        _file_handler = RotatingFileHandler(
+            filename=os.path.join(_tmp_dir, 'doorman.log'),
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        _file_handler.setFormatter(
+            JSONFormatter()
+            if _fmt_is_json
+            else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        )
+        logging.getLogger('doorman.gateway').warning(
+            f'Primary LOGS_DIR={LOGS_DIR} not writable ({_e}); falling back to {_tmp_dir}'
+        )
+    except Exception as _e2:
+        logging.getLogger('doorman.gateway').warning(
+            f'File logging disabled ({_e2}); using console logging only'
+        )
+        _file_handler = None
 
 
 # Configure all doorman loggers to use the same handler and prevent propagation
@@ -1412,6 +1431,34 @@ def configure_logger(logger_name: str) -> logging.Logger:
 
 gateway_logger = configure_logger('doorman.gateway')
 logging_logger = configure_logger('doorman.logging')
+
+# Attach in-memory logging handler so logs remain queryable when file logging
+# is not available (e.g., AWS deployments writing to stdout only).
+try:
+    from utils.memory_log import MemoryLogHandler
+
+    _mem_enabled = os.getenv('MEMORY_LOG_ENABLED', 'true').lower() != 'false'
+    if _mem_enabled:
+        _mem_handler = MemoryLogHandler()
+        for _name in (
+            'doorman.gateway',
+            'doorman.logging',
+            'doorman.analytics',
+            'doorman.audit',
+        ):
+            try:
+                _lg = logging.getLogger(_name)
+                _lg.addHandler(_mem_handler)
+            except Exception:
+                pass
+        gateway_logger.info('In-memory log handler enabled for UI log queries')
+    else:
+        gateway_logger.info('In-memory log handler disabled (MEMORY_LOG_ENABLED=false)')
+except Exception as _e:
+    try:
+        gateway_logger.warning(f'Failed to enable in-memory log handler: {_e}')
+    except Exception:
+        pass
 
 # Add GZip compression middleware (configurable via environment variables)
 # This should be added early in the middleware stack so it compresses final responses

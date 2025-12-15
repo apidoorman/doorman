@@ -9,6 +9,8 @@ import { SERVER_URL } from '@/utils/config'
 import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
+import { getJson } from '@/utils/api'
+import SearchableSelect from '@/components/SearchableSelect'
 
 interface Group {
   group_name: string
@@ -31,11 +33,32 @@ const GroupDetailPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
-  const [newApi, setNewApi] = useState('')
+  const [grantedApis, setGrantedApis] = useState<string[]>([])
 
   useEffect(() => {
     fetchGroup()
+    fetchGrantedApis()
   }, [groupName])
+
+  const fetchGrantedApis = async () => {
+    try {
+      // Fetch all APIs and filter those that include this group
+      const data = await getJson<any>(`${SERVER_URL}/platform/api/all`)
+      const apis = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
+      
+      // Filter APIs that have this group in their allowed_groups
+      const apisWithAccess = apis
+        .filter((api: any) => {
+          const allowedGroups = api.api_allowed_groups || []
+          return allowedGroups.includes(groupName) || allowedGroups.includes('ALL')
+        })
+        .map((api: any) => `${api.api_name}/${api.api_version}`)
+      
+      setGrantedApis(apisWithAccess)
+    } catch (err) {
+      console.error('Failed to fetch granted APIs:', err)
+    }
+  }
 
   const fetchGroup = async () => {
     try {
@@ -150,30 +173,6 @@ const GroupDetailPage = () => {
 
   const handleInputChange = (field: keyof Group, value: any) => {
     setEditData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleApiAccessChange = (index: number, value: string) => {
-    setEditData(prev => ({
-      ...prev,
-      api_access: prev.api_access?.map((api, i) => i === index ? value : api) || []
-    }))
-  }
-
-  const addApiAccess = () => {
-    if (newApi.trim() && !editData.api_access?.includes(newApi.trim())) {
-      setEditData(prev => ({
-        ...prev,
-        api_access: [...(prev.api_access || []), newApi.trim()]
-      }))
-      setNewApi('')
-    }
-  }
-
-  const removeApiAccess = (index: number) => {
-    setEditData(prev => ({
-      ...prev,
-      api_access: prev.api_access?.filter((_, i) => i !== index) || []
-    }))
   }
 
   if (loading) {
@@ -351,57 +350,21 @@ const GroupDetailPage = () => {
             <div className="card">
               <div className="card-header flex items-center justify-between">
                 <h3 className="card-title">API Access</h3>
-                <FormHelp docHref="/docs/using-fields.html#access-control">Grant access to API name/version pairs (e.g., users/v1).</FormHelp>
+                <FormHelp docHref="/docs/using-fields.html#access-control">APIs that have granted access to this group. Manage from the API settings page.</FormHelp>
               </div>
               <div className="p-6 space-y-4">
-                {isEditing && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newApi}
-                      onChange={(e) => setNewApi(e.target.value)}
-                      className="input flex-1"
-                      placeholder="Enter API name to grant access"
-                      onKeyPress={(e) => e.key === 'Enter' && addApiAccess()}
-                    />
-                    <button onClick={addApiAccess} className="btn btn-primary">
-                      Add
-                    </button>
-                  </div>
-                )}
-
                 <div className="space-y-2">
-                  {(isEditing ? editData.api_access : group.api_access)?.map((api, index) => (
+                  {grantedApis.map((api, index) => (
                     <div key={index} className="flex items-center gap-2">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={api}
-                          onChange={(e) => handleApiAccessChange(index, e.target.value)}
-                          className="input flex-1"
-                          placeholder="Enter API name"
-                        />
-                      ) : (
-                        <span className="text-sm bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full flex-1">
-                          {api}
-                        </span>
-                      )}
-                      {isEditing && (
-                        <button
-                          onClick={() => removeApiAccess(index)}
-                          className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
+                      <span className="text-sm bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full flex-1">
+                        {api}
+                      </span>
                     </div>
                   ))}
                 </div>
 
-                {(!isEditing ? group.api_access : editData.api_access)?.length === 0 && (
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">No APIs assigned</p>
+                {grantedApis.length === 0 && (
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">No APIs have granted access to this group yet. Configure API access from the API settings page.</p>
                 )}
               </div>
             </div>

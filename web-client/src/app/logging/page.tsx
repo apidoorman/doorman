@@ -168,37 +168,8 @@ export default function LogsPage() {
       setLogs(logList)
       setLogsHasNext(!!hasMore)
 
-      const uniqueRequestIds: string[] = Array.from(
-        new Set<string>(
-          logList
-            .map((log: Log): string | undefined => log.request_id)
-            .filter((id: string | undefined): id is string => typeof id === 'string' && id.length > 0)
-        )
-      )
-
-      const completeLogs: Log[] = []
-      for (const requestId of uniqueRequestIds) {
-        if (requestId && requestId !== responseRequestId) {
-          try {
-            const completeQueryParams = new URLSearchParams()
-            completeQueryParams.append('request_id', requestId)
-            completeQueryParams.append('limit', '1000')
-
-            const csrf2 = getCookie('csrf_token')
-            const completeResponse = await fetch(`${SERVER_URL}/platform/logging/logs?${completeQueryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf2 ? { 'X-CSRF-Token': csrf2 } : {}) }})
-
-            if (completeResponse.ok) {
-              const completeData = await completeResponse.json()
-              const requestLogs = completeData.response?.logs || completeData.logs || []
-              completeLogs.push(...requestLogs)
-            }
-          } catch (error) {
-            console.error(`Failed to fetch complete logs for request ${requestId}:`, error)
-          }
-        }
-      }
-
-      const grouped = groupLogsByRequestId(completeLogs)
+      // Group from the initial page of logs only; fetch per-request details lazily on expand
+      const grouped = groupLogsByRequestId(logList)
       setGroupedLogs(grouped)
     } catch (error) {
       setError('Failed to fetch logs. Please try again later.')
