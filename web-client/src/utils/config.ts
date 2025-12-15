@@ -1,5 +1,5 @@
 // Gateway URL from environment - required for API calls
-// Set NEXT_PUBLIC_GATEWAY_URL in .env.local (dev) or at build time (prod)
+// Set NEXT_PUBLIC_GATEWAY_URL in root .env file (loaded via dotenv-cli for dev, build arg for Docker)
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
 
 const getApiUrl = (): string => {
@@ -23,18 +23,8 @@ const getApiUrl = (): string => {
   return ''
 }
 
-// Debug: log what env var was read
-if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
-  console.log('[Config] NEXT_PUBLIC_GATEWAY_URL =', GATEWAY_URL || '(not set)')
-}
-
 export const SERVER_URL = getApiUrl()
 export const WEB_URL = typeof window !== 'undefined' ? window.location.origin : ''
-
-if (typeof window !== 'undefined') {
-  const DEBUG = process.env.NODE_ENV !== 'production'
-  if (DEBUG) console.log('[Config] SERVER_URL =', SERVER_URL)
-}
 export const PROTECTED_USERS = (process.env.NEXT_PUBLIC_PROTECTED_USERS || '')
   .split(',')
   .map(u => u.trim().toLowerCase())
