@@ -56,7 +56,7 @@ const AddRoutingPage = () => {
       setLoading(true)
       setError(null)
 
-      await postJson(`${SERVER_URL}/platform/routing/`, formData)
+      await postJson(`${SERVER_URL}/platform/routing`, formData)
 
       router.push('/routings')
     } catch (err) {

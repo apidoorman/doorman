@@ -584,6 +584,20 @@ doorman = FastAPI(
     openapi_url='/platform/openapi.json',
 )
 
+# Middleware to handle X-Forwarded-Proto for correct HTTPS redirects behind reverse proxy
+@doorman.middleware('http')
+async def forwarded_proto_middleware(request: Request, call_next):
+    """Handle X-Forwarded-Proto header to fix FastAPI redirects behind reverse proxy.
+    
+    When behind Nginx/reverse proxy, FastAPI sees requests as HTTP even when they're HTTPS.
+    This causes automatic trailing slash redirects to use http:// instead of https://.
+    This middleware updates the request scope to use the forwarded protocol.
+    """
+    forwarded_proto = request.headers.get('x-forwarded-proto')
+    if forwarded_proto:
+        request.scope['scheme'] = forwarded_proto
+    return await call_next(request)
+
 # Enable analytics collection middleware for request/response metrics
 try:
     setup_analytics_middleware(doorman)

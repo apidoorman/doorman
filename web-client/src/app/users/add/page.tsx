@@ -140,7 +140,7 @@ const AddUserPage = () => {
       setLoading(true)
       setError(null)
 
-      await postJson(`${SERVER_URL}/platform/user/`, formData)
+      await postJson(`${SERVER_URL}/platform/user`, formData)
 
       router.push('/users')
     } catch (err) {
