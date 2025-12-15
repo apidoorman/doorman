@@ -37,9 +37,11 @@ COPY web-client/ .
 # Build web client (Next.js)
 # Build-time args for frontend env (baked into Next.js bundle)
 ARG NEXT_PUBLIC_PROTECTED_USERS=
+ARG NEXT_PUBLIC_GATEWAY_URL=
 
 # Build Next.js - domain agnostic, no hardcoded URLs
 RUN echo "export NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS}" > /tmp/build-env.sh && \
+    echo "export NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL}" >> /tmp/build-env.sh && \
     echo "export NODE_ENV=production" >> /tmp/build-env.sh && \
     echo "export NEXT_TELEMETRY_DISABLED=1" >> /tmp/build-env.sh && \
     . /tmp/build-env.sh && \

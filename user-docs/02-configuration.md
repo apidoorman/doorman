@@ -62,17 +62,6 @@ localStorage.setItem('API_URL', 'https://api.doorman.example.com')
 | `TOKEN_ENCRYPTION_KEY` | - | Encrypt API keys at rest (recommended) |
 | `HTTPS_ONLY` | `false` | **Required in production.** Enforces HTTPS, secure cookies, CSRF |
 
-## CORS
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ALLOWED_ORIGINS` | `*` | Comma-separated origins. **No `*` in production** |
-| `ALLOW_CREDENTIALS` | `false` | Allow cookies/auth headers |
-| `ALLOW_METHODS` | `GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD` | Allowed HTTP methods |
-| `ALLOW_HEADERS` | `*` | Allowed request headers |
-| `CORS_STRICT` | `false` | Disallow wildcards with credentials (production) |
-| `COOKIE_DOMAIN` | `localhost` | Cookie domain |
-
 ## IP Access Control
 
 | Variable | Default | Description |
