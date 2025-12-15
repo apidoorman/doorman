@@ -122,35 +122,38 @@ async def authorization(request: Request):
             response.headers['X-RateLimit-Remaining'] = str(rate_limit_info['remaining'])
             response.headers['X-RateLimit-Reset'] = str(rate_limit_info['reset'])
 
+        # Clear any prior cookies to avoid conflicts
         response.delete_cookie('access_token_cookie')
 
         import uuid as _uuid
 
         csrf_token = str(_uuid.uuid4())
 
+        # Decide cookie security based on env and proxy headers
         _secure_env = os.getenv('COOKIE_SECURE')
+        xf_proto = (request.headers.get('x-forwarded-proto') or request.headers.get('X-Forwarded-Proto') or '').lower()
         if _secure_env is not None:
             _secure = str(_secure_env).lower() == 'true'
         else:
-            _secure = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+            _secure = (os.getenv('HTTPS_ONLY', 'false').lower() == 'true') or (xf_proto == 'https')
 
-        # Security warning: cookies should be secure in production
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
             logger.warning(
                 f'{request_id} | SECURITY WARNING: Secure cookies disabled in production environment'
             )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
-        _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
+        _samesite = (os.getenv('COOKIE_SAMESITE', 'Lax') or 'Lax').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
-            _samesite = 'strict'
-        host = request.url.hostname or (request.client.host if request.client else None)
+            _samesite = 'lax'
 
+        host = request.headers.get('x-forwarded-host') or request.url.hostname or (request.client.host if request.client else None)
         if _domain and host and (host == _domain or host.endswith('.' + _domain)):
-            safe_domain = _domain
+            cookie_domain = _domain
         else:
-            safe_domain = None
+            cookie_domain = None  # Host-only cookie by default for maximum compatibility
 
+        # Set CSRF + Access cookies once with computed attributes
         response.set_cookie(
             key='csrf_token',
             value=csrf_token,
@@ -158,17 +161,7 @@ async def authorization(request: Request):
             secure=_secure,
             samesite=_samesite,
             path='/',
-            domain=safe_domain,
-            max_age=1800,
-        )
-
-        response.set_cookie(
-            key='csrf_token',
-            value=csrf_token,
-            httponly=False,
-            secure=_secure,
-            samesite=_samesite,
-            path='/',
+            domain=cookie_domain,
             max_age=1800,
         )
 
@@ -179,17 +172,7 @@ async def authorization(request: Request):
             secure=_secure,
             samesite=_samesite,
             path='/',
-            domain=safe_domain,
-            max_age=1800,
-        )
-
-        response.set_cookie(
-            key='access_token_cookie',
-            value=access_token,
-            httponly=True,
-            secure=_secure,
-            samesite=_samesite,
-            path='/',
+            domain=cookie_domain,
             max_age=1800,
         )
         return response
@@ -205,6 +188,20 @@ async def authorization(request: Request):
                     error_message=str(detail.get('message') or 'Too many requests'),
                 )
             )
+        # Preserve validation errors from password check as 400 Invalid email or password
+        try:
+            detail = getattr(e, 'detail', '')
+            if getattr(e, 'status_code', None) in (400,):
+                return respond_rest(
+                    ResponseModel(
+                        status_code=400,
+                        response_headers={'request_id': request_id},
+                        error_code='AUTH002',
+                        error_message='Invalid email or password',
+                    )
+                )
+        except Exception:
+            pass
         return respond_rest(
             ResponseModel(
                 status_code=401,
@@ -721,27 +718,26 @@ async def extended_authorization(request: Request):
         csrf_token = str(_uuid.uuid4())
 
         _secure_env = os.getenv('COOKIE_SECURE')
+        xf_proto = (request.headers.get('x-forwarded-proto') or request.headers.get('X-Forwarded-Proto') or '').lower()
         if _secure_env is not None:
             _secure = str(_secure_env).lower() == 'true'
         else:
-            _secure = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
+            _secure = (os.getenv('HTTPS_ONLY', 'false').lower() == 'true') or (xf_proto == 'https')
 
-        # Security warning: cookies should be secure in production
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
             logger.warning(
                 f'{request_id} | SECURITY WARNING: Secure cookies disabled in production environment'
             )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
-        _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
+        _samesite = (os.getenv('COOKIE_SAMESITE', 'Lax') or 'Lax').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
-            _samesite = 'strict'
-        host = request.url.hostname or (request.client.host if request.client else None)
-
+            _samesite = 'lax'
+        host = request.headers.get('x-forwarded-host') or request.url.hostname or (request.client.host if request.client else None)
         if _domain and host and (host == _domain or host.endswith('.' + _domain)):
-            safe_domain = _domain
+            cookie_domain = _domain
         else:
-            safe_domain = None
+            cookie_domain = None
 
         response.set_cookie(
             key='csrf_token',
@@ -750,17 +746,7 @@ async def extended_authorization(request: Request):
             secure=_secure,
             samesite=_samesite,
             path='/',
-            domain=safe_domain,
-            max_age=604800,
-        )
-
-        response.set_cookie(
-            key='csrf_token',
-            value=csrf_token,
-            httponly=False,
-            secure=_secure,
-            samesite=_samesite,
-            path='/',
+            domain=cookie_domain,
             max_age=604800,
         )
 
@@ -771,17 +757,7 @@ async def extended_authorization(request: Request):
             secure=_secure,
             samesite=_samesite,
             path='/',
-            domain=safe_domain,
-            max_age=604800,
-        )
-
-        response.set_cookie(
-            key='access_token_cookie',
-            value=refresh_token,
-            httponly=True,
-            secure=_secure,
-            samesite=_samesite,
-            path='/',
+            domain=cookie_domain,
             max_age=604800,
         )
         return response
