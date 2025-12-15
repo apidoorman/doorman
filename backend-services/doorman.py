@@ -434,29 +434,52 @@ async def app_lifespan(app: FastAPI):
         gateway_logger.error(f'Memory mode restore failed: {e}')
 
     try:
-        if hasattr(signal, 'SIGUSR1'):
-            loop = asyncio.get_event_loop()
+        loop = asyncio.get_event_loop()
 
-            async def _sigusr1_dump():
+        async def _perform_dump(reason: str):
+            """Write a memory dump if in memory-only mode and key is configured.
+
+            Uses a simple guard to avoid duplicate dumps when multiple signals fire.
+            """
+            try:
+                if getattr(app.state, '_mem_dumping', False):
+                    return
+                app.state._mem_dumping = True
+                if not database.memory_only:
+                    gateway_logger.info(f'{reason}: ignored (not in memory-only mode)')
+                    return
+                if not os.getenv('MEM_ENCRYPTION_KEY'):
+                    gateway_logger.error(f'{reason}: MEM_ENCRYPTION_KEY not configured; dump skipped')
+                    return
+                settings = get_cached_settings()
+                path_hint = settings.get('dump_path')
+                dump_path = await asyncio.to_thread(dump_memory_to_file, path_hint)
+                gateway_logger.info(f'{reason}: memory dump written to {dump_path}')
+            except Exception as e:
+                gateway_logger.error(f'{reason}: memory dump failed: {e}')
+            finally:
                 try:
-                    if not database.memory_only:
-                        gateway_logger.info('SIGUSR1 ignored: not in memory-only mode')
-                        return
-                    if not os.getenv('MEM_ENCRYPTION_KEY'):
-                        gateway_logger.error(
-                            'SIGUSR1 dump skipped: MEM_ENCRYPTION_KEY not configured'
-                        )
-                        return
-                    settings = get_cached_settings()
-                    path_hint = settings.get('dump_path')
-                    dump_path = await asyncio.to_thread(dump_memory_to_file, path_hint)
-                    gateway_logger.info(f'SIGUSR1: memory dump written to {dump_path}')
-                except Exception as e:
-                    gateway_logger.error(f'SIGUSR1 dump failed: {e}')
+                    app.state._mem_dumping = False
+                except Exception:
+                    pass
 
-            loop.add_signal_handler(signal.SIGUSR1, lambda: asyncio.create_task(_sigusr1_dump()))
+        if hasattr(signal, 'SIGUSR1'):
+            loop.add_signal_handler(
+                signal.SIGUSR1, lambda: asyncio.create_task(_perform_dump('SIGUSR1'))
+            )
             gateway_logger.info('SIGUSR1 handler registered for on-demand memory dumps')
-    except NotImplementedError:
+
+        # Also try to dump on SIGTERM/SIGINT as an extra safety net
+        if hasattr(signal, 'SIGTERM'):
+            loop.add_signal_handler(
+                signal.SIGTERM, lambda: asyncio.create_task(_perform_dump('SIGTERM'))
+            )
+        if hasattr(signal, 'SIGINT'):
+            loop.add_signal_handler(
+                signal.SIGINT, lambda: asyncio.create_task(_perform_dump('SIGINT'))
+            )
+    except (NotImplementedError, RuntimeError, AttributeError):
+        # Signal handlers may be unsupported on some platforms or when no running loop
         pass
 
     try:
@@ -501,7 +524,8 @@ async def app_lifespan(app: FastAPI):
             if database.memory_only:
                 settings = get_cached_settings()
                 path = settings.get('dump_path')
-                dump_memory_to_file(path)
+                # Offload to thread to avoid blocking event loop teardown
+                await asyncio.to_thread(dump_memory_to_file, path)
                 gateway_logger.info(f'Final memory dump written to {path}')
         except Exception as e:
             gateway_logger.error(f'Failed to write final memory dump: {e}')
