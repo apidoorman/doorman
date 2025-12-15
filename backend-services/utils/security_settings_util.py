@@ -20,10 +20,32 @@ _STOP_EVENT: asyncio.Event | None = None
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _GEN_DIR = _PROJECT_ROOT / 'generated'
 
+def _env_bool(name: str, default: bool) -> bool:
+    try:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        return str(raw).strip().lower() in ('1', 'true', 'yes', 'on')
+    except Exception:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        v = int(str(raw).strip())
+        return v if v > 0 else default
+    except Exception:
+        return default
+
+
 DEFAULTS = {
     'type': 'security_settings',
-    'enable_auto_save': False,
-    'auto_save_frequency_seconds': 900,
+    # Allow env overrides so deployments can enable autosave without API calls
+    'enable_auto_save': _env_bool('MEM_AUTO_SAVE_ENABLED', False),
+    'auto_save_frequency_seconds': _env_int('MEM_AUTO_SAVE_FREQ', 900),
     'dump_path': os.getenv('MEM_DUMP_PATH', str(_GEN_DIR / 'memory_dump.bin')),
     'ip_whitelist': [],
     'ip_blacklist': [],
