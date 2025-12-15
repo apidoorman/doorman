@@ -704,17 +704,17 @@ async def platform_cors(request: Request, call_next):
                 from fastapi.responses import Response as _Resp
 
                 headers = {}
-                # In strict mode with wildcard+credentials, explicitly avoid echoing origin.
-                if origin_allowed:
+                # Platform CORS is permissive - echo origin unless strict mode blocks it
+                if origin_allowed and origin:
                     headers['Access-Control-Allow-Origin'] = origin
                     headers['Vary'] = 'Origin'
-                else:
-                    try:
-                        if '*' in cfg['origins'] and cfg['strict'] and cfg['credentials'] and origin:
-                            # Force an explicit empty ACAO to prevent any default CORS from echoing origin
-                            headers['Access-Control-Allow-Origin'] = ''
-                    except Exception:
-                        pass
+                elif '*' in cfg['origins'] and not cfg['strict'] and origin:
+                    # Wildcard without strict mode - echo the origin for credentials support
+                    headers['Access-Control-Allow-Origin'] = origin
+                    headers['Vary'] = 'Origin'
+                elif '*' in cfg['origins'] and cfg['strict'] and cfg['credentials'] and origin:
+                    # Strict mode with credentials - explicitly block non-localhost
+                    headers['Access-Control-Allow-Origin'] = ''
                 headers['Access-Control-Allow-Methods'] = ', '.join(cfg['methods'])
                 headers['Access-Control-Allow-Headers'] = ', '.join(cfg['headers'])
                 if cfg['credentials']:
@@ -728,12 +728,13 @@ async def platform_cors(request: Request, call_next):
             try:
                 if cfg['credentials']:
                     response.headers['Access-Control-Allow-Credentials'] = 'true'
-                if origin_allowed:
+                # Platform CORS is permissive - echo origin unless strict mode blocks it
+                if origin_allowed and origin:
                     response.headers['Access-Control-Allow-Origin'] = origin
-                    try:
-                        _ = response.headers.pop('Vary', None)
-                    except Exception:
-                        pass
+                    response.headers['Vary'] = 'Origin'
+                elif '*' in cfg['origins'] and not cfg['strict'] and origin:
+                    # Wildcard without strict mode - echo the origin for credentials support
+                    response.headers['Access-Control-Allow-Origin'] = origin
                     response.headers['Vary'] = 'Origin'
             except Exception:
                 pass
