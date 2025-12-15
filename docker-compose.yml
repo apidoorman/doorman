@@ -25,6 +25,13 @@ services:
       - "${WEB_PORT:-3000}:${WEB_PORT:-3000}"  # Web UI
     env_file:
       - .env
+    environment:
+      # Memory-mode dump settings (work for localhost and Docker on AWS)
+      MEM_DUMP_PATH: ${MEM_DUMP_PATH:-/app/backend-services/generated/memory_dump.bin}
+      MEM_AUTO_SAVE_ENABLED: ${MEM_AUTO_SAVE_ENABLED:-true}
+      MEM_AUTO_SAVE_FREQ: ${MEM_AUTO_SAVE_FREQ:-300}
+      # Encryption key for dumps (set a strong value in .env for real use)
+      MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY:-change-me-in-prod}
     volumes:
       - ./generated:/app/backend-services/generated
       - ./logs:/app/backend-services/logs
