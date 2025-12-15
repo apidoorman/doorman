@@ -167,7 +167,7 @@ async def clear_all_caches(request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         if not await platform_role_required_bool(username, 'manage_gateway'):
-            return process_response(
+            resp = process_response(
                 ResponseModel(
                     status_code=403,
                     response_headers={'request_id': request_id},
@@ -176,6 +176,13 @@ async def clear_all_caches(request: Request):
                 ).dict(),
                 'rest',
             )
+            # Add CORS headers
+            origin = request.headers.get('origin') or request.headers.get('Origin')
+            if origin:
+                resp.headers['Access-Control-Allow-Origin'] = origin
+                resp.headers['Access-Control-Allow-Credentials'] = 'true'
+                resp.headers['Vary'] = 'Origin'
+            return resp
         doorman_cache.clear_all_caches()
         try:
             from utils.limit_throttle_util import reset_counters as _reset_rate
@@ -197,7 +204,7 @@ async def clear_all_caches(request: Request):
             status='success',
             details=None,
         )
-        return process_response(
+        resp = process_response(
             ResponseModel(
                 status_code=200,
                 response_headers={'request_id': request_id},
@@ -205,8 +212,15 @@ async def clear_all_caches(request: Request):
             ).dict(),
             'rest',
         )
+        # Add CORS headers
+        origin = request.headers.get('origin') or request.headers.get('Origin')
+        if origin:
+            resp.headers['Access-Control-Allow-Origin'] = origin
+            resp.headers['Access-Control-Allow-Credentials'] = 'true'
+            resp.headers['Vary'] = 'Origin'
+        return resp
     except Exception:
-        return process_response(
+        resp = process_response(
             ResponseModel(
                 status_code=500,
                 response_headers={'request_id': request_id},
@@ -215,6 +229,13 @@ async def clear_all_caches(request: Request):
             ).dict(),
             'rest',
         )
+        # Add CORS headers
+        origin = request.headers.get('origin') or request.headers.get('Origin')
+        if origin:
+            resp.headers['Access-Control-Allow-Origin'] = origin
+            resp.headers['Access-Control-Allow-Credentials'] = 'true'
+            resp.headers['Vary'] = 'Origin'
+        return resp
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Clear caches took {end_time - start_time:.2f}ms')
