@@ -114,11 +114,24 @@ async def load_settings() -> dict[str, Any]:
         if file_obj:
             try:
                 to_set = _merge_settings(file_obj)
-                coll.update_one({'type': 'security_settings'}, {'$set': to_set})
+                coll.update_one({'type': 'security_settings'}, {'$set': to_set}, upsert=True)
                 doc = to_set
             except Exception:
                 doc = file_obj
-    settings = _merge_settings(doc or {})
+    
+    # If still no doc, initialize with defaults (including env vars)
+    if not doc:
+        settings = _merge_settings({})
+        try:
+            coll.insert_one(settings)
+            logger.info('Initialized security settings from environment variables and defaults')
+        except Exception as e:
+            logger.warning(f'Failed to persist initial security settings: {e}')
+        _CACHE.update(settings)
+        _save_to_file(settings)
+        return settings
+    
+    settings = _merge_settings(doc)
     _CACHE.update(settings)
     return settings
 
