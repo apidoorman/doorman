@@ -26,3 +26,17 @@ export async function fetchJson<T = any>(url: string, init: RequestInit = {}): P
   }
   return unwrapped as T
 }
+
+export async function fetchWithCsrf(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers: Record<string, string> = {
+    ...(init.headers as any)
+  }
+  const csrf = getCookie('csrf_token')
+  if (csrf) headers['X-CSRF-Token'] = csrf
+
+  return fetch(url, {
+    credentials: 'include',
+    ...init,
+    headers
+  })
+}

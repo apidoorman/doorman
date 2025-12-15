@@ -16,7 +16,6 @@ class ApiModelResponse(BaseModel):
     )
     api_description: str | None = Field(
         None,
-        min_length=1,
         max_length=127,
         description='Description of the API',
         example='New customer onboarding API',
