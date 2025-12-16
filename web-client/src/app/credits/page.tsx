@@ -75,17 +75,18 @@ export default function CreditsPage() {
 
   const fetchUserOptions = async (): Promise<string[]> => {
     try {
-      const res = await getJson<any>(`${SERVER_URL}/platform/user/all?page=1&page_size=1000`)
+      const res = await getJson<any>(`${SERVER_URL}/platform/user/all?page=1&page_size=200`)
       const users = res?.users || res?.response?.users || []
       return users.map((u: any) => u.username).filter(Boolean)
     } catch (e) {
+      console.error('Failed to fetch users:', e)
       return []
     }
   }
 
   const loadDefs = async () => {
     try {
-      const res = await getJson<any>(`${SERVER_URL}/platform/credit/defs?page=1&page_size=1000`)
+      const res = await getJson<any>(`${SERVER_URL}/platform/credit/defs?page=1&page_size=200`)
       const items = res?.items || res?.response?.items || []
       const map: Record<string, { [tier: string]: TierMeta }> = {}
       for (const it of items) {
