@@ -23,7 +23,6 @@ class CreateRoutingModel(BaseModel):
     )
     routing_description: str = Field(
         None,
-        min_length=1,
         max_length=255,
         description='Description of the routing',
         example='Routing for customer API',
