@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
+import SearchableSelect from '@/components/SearchableSelect'
 import { SERVER_URL } from '@/utils/config'
 import { getJson, postJson, putJson, delJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -72,6 +73,16 @@ export default function CreditsPage() {
   type TierMeta = { credits: number; reset_frequency?: string }
   const [defs, setDefs] = useState<Record<string, { [tier: string]: TierMeta }>>({})
 
+  const fetchUserOptions = async (): Promise<string[]> => {
+    try {
+      const res = await getJson<any>(`${SERVER_URL}/platform/user/all?page=1&page_size=1000`)
+      const users = res?.users || res?.response?.users || []
+      return users.map((u: any) => u.username).filter(Boolean)
+    } catch (e) {
+      return []
+    }
+  }
+
   const loadDefs = async () => {
     try {
       const res = await getJson<any>(`${SERVER_URL}/platform/credit/defs?page=1&page_size=1000`)
@@ -85,6 +96,7 @@ export default function CreditsPage() {
       }
       setDefs(map)
     } catch (e) {
+      console.error('Failed to load credit definitions:', e)
     }
   }
 
@@ -344,12 +356,11 @@ export default function CreditsPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Username *
                   </label>
-                  <input
-                    type="text"
+                  <SearchableSelect
                     value={assignForm.username}
-                    onChange={(e) => setAssignForm({ ...assignForm, username: e.target.value })}
-                    className="input"
-                    placeholder="Enter username"
+                    onChange={(val: string) => setAssignForm({ ...assignForm, username: val })}
+                    fetchOptions={fetchUserOptions}
+                    placeholder="Select or type username"
                   />
                 </div>
                 

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class ResponseModel(BaseModel):
-    status_code: int = Field(None)
+    status_code: int | None = Field(None)
 
     response_headers: dict | None = Field(None)
 
