@@ -54,7 +54,7 @@ export default function QuotaDashboardPage() {
   const fetchQuotaStatus = async () => {
     try {
       setLoading(true)
-      const response = await getJson('/platform/quota/status')
+      const response = await getJson(`${SERVER_URL}/platform/quota/status`)
       setData(response)
       setError(null)
     } catch (err) {

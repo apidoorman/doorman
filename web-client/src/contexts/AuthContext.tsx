@@ -89,6 +89,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       if (DEBUG) console.warn('Logout invalidate failed (continuing):', e)
     }
+    try {
+      // Clear any local/session storage and best-effort cookie removal
+      localStorage.clear()
+      sessionStorage.clear()
+      document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+    } catch {}
     setAuthState({
       isAuthenticated: false,
       hasUIAccess: false,

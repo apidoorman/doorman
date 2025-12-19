@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const PUBLIC_PATH_PREFIXES = [
   '/login',
+  '/403',
   '/public',
   '/_next',
   '/api',

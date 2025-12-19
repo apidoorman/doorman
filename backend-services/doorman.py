@@ -469,15 +469,32 @@ async def app_lifespan(app: FastAPI):
             )
             gateway_logger.info('SIGUSR1 handler registered for on-demand memory dumps')
 
-        # Also try to dump on SIGTERM/SIGINT as an extra safety net
-        if hasattr(signal, 'SIGTERM'):
-            loop.add_signal_handler(
-                signal.SIGTERM, lambda: asyncio.create_task(_perform_dump('SIGTERM'))
-            )
-        if hasattr(signal, 'SIGINT'):
-            loop.add_signal_handler(
-                signal.SIGINT, lambda: asyncio.create_task(_perform_dump('SIGINT'))
-            )
+        # Also try to dump on SIGTERM/SIGINT, then forward the signal so Uvicorn can shutdown
+        def _register_forwarding_signal(sig: signal.Signals, reason: str):
+            async def _handler():
+                # Catch BaseException to avoid noisy "Task exception was never retrieved"
+                try:
+                    try:
+                        await _perform_dump(reason)
+                    finally:
+                        try:
+                            # Remove our handler to avoid recursion, then re-send
+                            loop.remove_signal_handler(sig)
+                        except Exception:
+                            pass
+                        try:
+                            os.kill(os.getpid(), sig)
+                        except BaseException:
+                            # Suppress KeyboardInterrupt/Cancel noise in this task
+                            pass
+                except BaseException:
+                    # Ensure no unhandled BaseException bubbles from the task
+                    pass
+
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(_handler()))
+
+        # Let Uvicorn handle SIGINT/SIGTERM for clean shutdown; we write a final
+        # dump in the lifespan 'finally' block. Keep only SIGUSR1 for ad-hoc dumps.
     except (NotImplementedError, RuntimeError, AttributeError):
         # Signal handlers may be unsupported on some platforms or when no running loop
         pass
@@ -514,21 +531,33 @@ async def app_lifespan(app: FastAPI):
     finally:
         gateway_logger.info('Starting graceful shutdown...')
         app.state.shutting_down = True
+        # Immediate memory dump on shutdown initiation (Ctrl+C/SIGTERM)
+        immediate_dump_ok = False
+        try:
+            if database.memory_only:
+                settings = get_cached_settings()
+                path = settings.get('dump_path')
+                await asyncio.to_thread(dump_memory_to_file, path)
+                gateway_logger.info(f'Immediate memory dump written to {path}')
+                immediate_dump_ok = True
+        except Exception as e:
+            gateway_logger.error(f'Failed to write immediate memory dump: {e}')
         gateway_logger.info('Waiting for in-flight requests to complete (5s grace period)...')
         await asyncio.sleep(5)
         try:
             await stop_auto_save_task()
         except Exception as e:
             gateway_logger.error(f'Failed to stop auto-save task: {e}')
-        try:
-            if database.memory_only:
-                settings = get_cached_settings()
-                path = settings.get('dump_path')
-                # Offload to thread to avoid blocking event loop teardown
-                await asyncio.to_thread(dump_memory_to_file, path)
-                gateway_logger.info(f'Final memory dump written to {path}')
-        except Exception as e:
-            gateway_logger.error(f'Failed to write final memory dump: {e}')
+        # Optionally write a final dump if immediate failed
+        if not immediate_dump_ok:
+            try:
+                if database.memory_only:
+                    settings = get_cached_settings()
+                    path = settings.get('dump_path')
+                    await asyncio.to_thread(dump_memory_to_file, path)
+                    gateway_logger.info(f'Final memory dump written to {path}')
+            except Exception as e:
+                gateway_logger.error(f'Failed to write final memory dump: {e}')
         try:
             # Stop analytics scheduler if started
             if getattr(app.state, '_analytics_scheduler_started', False):
@@ -597,6 +626,237 @@ def _generate_unique_id(route: dict) -> str:
         return (getattr(route, 'name', 'op') or 'op').lower()
 
 
+# Custom Swagger UI CSS for light/dark mode
+SWAGGER_CUSTOM_CSS = r"""
+/* Improve readability for dark mode (high contrast, clear borders) */
+:root { color-scheme: light dark; }
+
+/* Shared dark-mode rules as a mixin via a class selector */
+.swagger-dark {
+  /* Background */
+  background-color: #0d1117 !important;
+
+  /* Force high-contrast text by default */
+  /* Ensures any hardcoded dark grays (e.g., #3b4151) become white */
+}
+.swagger-dark .swagger-ui,
+.swagger-dark .swagger-ui * {
+  color: #ffffff !important;
+}
+
+.swagger-dark .swagger-ui p,
+.swagger-dark .swagger-ui div,
+.swagger-dark .swagger-ui span,
+.swagger-dark .swagger-ui a,
+.swagger-dark .swagger-ui li,
+.swagger-dark .swagger-ui h1,
+.swagger-dark .swagger-ui h2,
+.swagger-dark .swagger-ui h3,
+.swagger-dark .swagger-ui h4,
+.swagger-dark .swagger-ui h5,
+.swagger-dark .swagger-ui h6 { color: #ffffff !important; }
+
+.swagger-dark .swagger-ui .renderedMarkdown,
+.swagger-dark .swagger-ui .renderedMarkdown *,
+.swagger-dark .swagger-ui .markdown,
+.swagger-dark .swagger-ui .markdown *,
+.swagger-dark .swagger-ui .info,
+.swagger-dark .swagger-ui .info *,
+.swagger-dark .swagger-ui .opblock-summary-path,
+.swagger-dark .swagger-ui .opblock-summary-description,
+.swagger-dark .swagger-ui .opblock-summary-method,
+.swagger-dark .swagger-ui .model,
+.swagger-dark .swagger-ui .model *,
+.swagger-dark .swagger-ui .parameters,
+.swagger-dark .swagger-ui .parameters *,
+.swagger-dark .swagger-ui .responses-wrapper,
+.swagger-dark .swagger-ui .responses-wrapper *,
+.swagger-dark .swagger-ui .response-col_description,
+.swagger-dark .swagger-ui .response-col_description *,
+.swagger-dark .swagger-ui .response-col_status { color: #ffffff !important; }
+
+/* Icons and svgs */
+.swagger-dark .swagger-ui svg,
+.swagger-dark .swagger-ui svg * { fill: #e5e7eb !important; stroke: #e5e7eb !important; }
+
+/* Top bar */
+.swagger-dark .swagger-ui .topbar { background-color: #0d1117 !important; border-bottom: 1px solid #1f2937 !important; }
+.swagger-dark .swagger-ui .topbar .download-url-wrapper .select-label select { background:#0b1220 !important; color:#e6edf3 !important; border-color:#334155 !important; }
+
+/* General panels */
+.swagger-dark .swagger-ui .scheme-container,
+.swagger-dark .swagger-ui .information-container,
+.swagger-dark .swagger-ui .opblock,
+.swagger-dark .swagger-ui .model,
+.swagger-dark .swagger-ui .model-box,
+.swagger-dark .swagger-ui .parameters,
+.swagger-dark .swagger-ui .responses-wrapper,
+.swagger-dark .swagger-ui .response-col_description__inner,
+.swagger-dark .swagger-ui .table-container {
+  background: #0f172a !important;
+  border-color: #1f2937 !important;
+  color: #ffffff !important;
+}
+
+/* Section headers */
+.swagger-dark .swagger-ui .opblock .opblock-section-header,
+.swagger-dark .swagger-ui .opblock-summary {
+  background: #0b1220 !important;
+  border-color: #1f2937 !important;
+  color: #ffffff !important;
+}
+.swagger-dark .swagger-ui .opblock-tag { color:#ffffff !important; }
+
+/* Inputs and selects */
+.swagger-dark .swagger-ui select,
+.swagger-dark .swagger-ui input,
+.swagger-dark .swagger-ui textarea {
+  background:#0b1220 !important;
+  color:#ffffff !important;
+  border: 1px solid #334155 !important;
+}
+.swagger-dark .swagger-ui ::placeholder { color:#94a3b8 !important; opacity:1; }
+
+/* Tables */
+.swagger-dark .swagger-ui table thead tr th { color:#ffffff !important; background:#0b1220 !important; border-color:#1f2937 !important; }
+.swagger-dark .swagger-ui table tbody tr { background:#0f172a !important; border-color:#1f2937 !important; }
+.swagger-dark .swagger-ui table tbody tr td { color:#ffffff !important; }
+.swagger-dark .swagger-ui table tbody tr:nth-child(2n) { background:#111827 !important; }
+
+/* Code blocks */
+.swagger-dark .swagger-ui .markdown,
+.swagger-dark .swagger-ui .markdown p,
+.swagger-dark .swagger-ui .markdown li,
+.swagger-dark .swagger-ui .model-title,
+.swagger-dark .swagger-ui .parameter__name,
+.swagger-dark .swagger-ui .parameter__type,
+.swagger-dark .swagger-ui .parameter__in,
+.swagger-dark .swagger-ui .response-col_status,
+.swagger-dark .swagger-ui .opblock-summary-description,
+.swagger-dark .swagger-ui .model .property,
+.swagger-dark .swagger-ui .markdown code,
+.swagger-dark .swagger-ui code,
+.swagger-dark .swagger-ui pre
+{
+  color:#ffffff !important;
+  background:#0b1220 !important;
+  border: 1px solid #1f2937 !important;
+}
+
+/* Links and actions */
+.swagger-dark .swagger-ui .info a,
+.swagger-dark .swagger-ui a { color:#bfdbfe !important; }
+.swagger-dark .swagger-ui a:hover { color:#dbeafe !important; text-decoration: underline !important; }
+
+/* Buttons */
+.swagger-dark .swagger-ui .btn,
+.swagger-dark .swagger-ui .btn.execute {
+  background:#2563eb !important;
+  color:#ffffff !important;
+  border-color: transparent !important;
+}
+.swagger-dark .swagger-ui .authorization__btn,
+.swagger-dark .swagger-ui .try-out { color:#e6edf3 !important; border-color:#334155 !important; }
+
+/* Copy icon and misc */
+.swagger-dark .swagger-ui .copy-to-clipboard { filter: invert(1) hue-rotate(180deg); }
+
+/* Apply in OS dark mode */
+@media (prefers-color-scheme: dark) {
+  body { background-color: #0d1117 !important; }
+  body, html { color: #ffffff !important; }
+  body { /* namespace rules under a helper class to avoid leaking */ }
+  body:where(*) { }
+  /* Scope Swagger with a helper class at runtime */
+  body:where(*) .swagger-ui { }
+  /* Use the shared rule-set by attaching the helper class to body */
+  body.swagger-dark & {}
+}
+
+/* Apply when a parent sets .dark (e.g., app-level theme toggle) */
+/* We attach the shared rule-set via .dark on html/body. */
+html.dark, body.dark { background-color: #0d1117 !important; }
+html.dark .swagger-ui,
+body.dark .swagger-ui { }
+
+/* Minimal glue: add the helper class automatically so rules above apply */
+/* This ensures the strong overrides are scoped to Swagger only. */
+/* The helper class is added via the default Swagger container id (#swagger-ui). */
+#swagger-ui { color: inherit; }
+body { }
+/* Attach the helper class to body for specificity without JS */
+/* We rely on the cascade: the selectors above start with .swagger-dark. */
+/* Mirror them by qualifying #swagger-ui's ancestor chain. */
+body:has(#swagger-ui) { }
+
+/* Finally, map body with #swagger-ui present to the swager-dark scope. */
+body:has(#swagger-ui) { }
+/* Since not all browsers support :has in our target, also repeat a direct scoped class: */
+/* The Swagger template includes <div id="swagger-ui">; we can scope via descendant selectors. */
+/* Use the class on body via attribute selector to maximize compat without JS. */
+/* As a pragmatic approach, duplicate the shared rules under media + .dark below. */
+
+/* Duplicate rules for OS dark mode without relying on :has */
+@media (prefers-color-scheme: dark) {
+  /* Wrap Swagger rules under an ancestor with the id to limit scope */
+  #swagger-ui { background-color: #0d1117 !important; }
+  #swagger-ui .swagger-ui,
+  #swagger-ui .swagger-ui * { color:#ffffff !important; }
+  #swagger-ui .swagger-ui svg, #swagger-ui .swagger-ui svg * { fill:#e5e7eb !important; stroke:#e5e7eb !important; }
+  #swagger-ui .swagger-ui .topbar { background-color:#0d1117 !important; border-bottom:1px solid #1f2937 !important; }
+  #swagger-ui .swagger-ui .topbar .download-url-wrapper .select-label select { background:#0b1220 !important; color:#e6edf3 !important; border-color:#334155 !important; }
+  #swagger-ui .swagger-ui .scheme-container,
+  #swagger-ui .swagger-ui .information-container,
+  #swagger-ui .swagger-ui .opblock,
+  #swagger-ui .swagger-ui .model,
+  #swagger-ui .swagger-ui .model-box,
+  #swagger-ui .swagger-ui .parameters,
+  #swagger-ui .swagger-ui .responses-wrapper,
+  #swagger-ui .swagger-ui .response-col_description__inner,
+  #swagger-ui .swagger-ui .table-container { background:#0f172a !important; border-color:#1f2937 !important; color:#ffffff !important; }
+  #swagger-ui .swagger-ui .opblock .opblock-section-header,
+  #swagger-ui .swagger-ui .opblock-summary { background:#0b1220 !important; border-color:#1f2937 !important; color:#ffffff !important; }
+  #swagger-ui .swagger-ui .opblock-tag { color:#ffffff !important; }
+  #swagger-ui .swagger-ui select,
+  #swagger-ui .swagger-ui input,
+  #swagger-ui .swagger-ui textarea { background:#0b1220 !important; color:#ffffff !important; border:1px solid #334155 !important; }
+  #swagger-ui .swagger-ui ::placeholder { color:#94a3b8 !important; opacity:1; }
+  #swagger-ui .swagger-ui table thead tr th { color:#ffffff !important; background:#0b1220 !important; border-color:#1f2937 !important; }
+  #swagger-ui .swagger-ui table tbody tr { background:#0f172a !important; border-color:#1f2937 !important; }
+  #swagger-ui .swagger-ui table tbody tr td { color:#ffffff !important; }
+  #swagger-ui .swagger-ui table tbody tr:nth-child(2n) { background:#111827 !important; }
+  #swagger-ui .swagger-ui .markdown,
+  #swagger-ui .swagger-ui .markdown p,
+  #swagger-ui .swagger-ui .markdown li,
+  #swagger-ui .swagger-ui .model-title,
+  #swagger-ui .swagger-ui .parameter__name,
+  #swagger-ui .swagger-ui .parameter__type,
+  #swagger-ui .swagger-ui .parameter__in,
+  #swagger-ui .swagger-ui .response-col_status,
+  #swagger-ui .swagger-ui .opblock-summary-description,
+  #swagger-ui .swagger-ui .model .property,
+  #swagger-ui .swagger-ui .markdown code,
+  #swagger-ui .swagger-ui code,
+  #swagger-ui .swagger-ui pre { color:#ffffff !important; background:#0b1220 !important; border:1px solid #1f2937 !important; }
+  #swagger-ui .swagger-ui .info a,
+  #swagger-ui .swagger-ui a { color:#bfdbfe !important; }
+  #swagger-ui .swagger-ui a:hover { color:#dbeafe !important; text-decoration: underline !important; }
+  #swagger-ui .swagger-ui .btn,
+  #swagger-ui .swagger-ui .btn.execute { background:#2563eb !important; color:#ffffff !important; border-color: transparent !important; }
+  #swagger-ui .swagger-ui .authorization__btn,
+  #swagger-ui .swagger-ui .try-out { color:#e6edf3 !important; border-color:#334155 !important; }
+  #swagger-ui .swagger-ui .copy-to-clipboard { filter: invert(1) hue-rotate(180deg); }
+}
+
+/* Duplicate rules for app-level .dark class */
+html.dark #swagger-ui,
+body.dark #swagger-ui { background-color:#0d1117 !important; }
+html.dark #swagger-ui .swagger-ui,
+body.dark #swagger-ui .swagger-ui,
+html.dark #swagger-ui .swagger-ui *,
+body.dark #swagger-ui .swagger-ui * { color:#ffffff !important; }
+"""
+
 doorman = FastAPI(
     title='doorman',
     description="A lightweight API gateway for AI, REST, SOAP, GraphQL, gRPC, and WebSocket APIs — fully managed with built-in RESTful APIs for configuration and control. This is your application's gateway to the world.",
@@ -606,6 +866,12 @@ doorman = FastAPI(
     docs_url='/platform/docs',
     redoc_url='/platform/redoc',
     openapi_url='/platform/openapi.json',
+    swagger_ui_parameters={
+        'docExpansion': 'none',
+        'defaultModelsExpandDepth': -1,
+        'displayRequestDuration': True,
+        'customCss': SWAGGER_CUSTOM_CSS,
+    },
 )
 
 # Middleware to handle X-Forwarded-Proto for correct HTTPS redirects behind reverse proxy
@@ -1705,7 +1971,13 @@ async def metrics_middleware(request: Request, call_next):
         except Exception:
             return 0
 
-    bytes_in = _parse_len(request.headers.get('content-length'))
+    # Include request headers size plus body length if present
+    try:
+        _req_hdr_bytes = sum(len(k) + len(v) for k, v in (request.headers or {}).items())
+    except Exception:
+        _req_hdr_bytes = 0
+    _req_body_len = _parse_len(request.headers.get('content-length'))
+    bytes_in = _req_hdr_bytes + _req_body_len
     response = None
     try:
         response = await call_next(request)
@@ -1745,9 +2017,11 @@ async def metrics_middleware(request: Request, call_next):
                 elif p.startswith('/api/soap/'):
                     seg = p.rsplit('/', 1)[-1] or 'unknown'
                     api_key = f'soap:{seg}'
+                # Include response headers size plus body length if present
                 clen = 0
                 try:
                     headers = getattr(response, 'headers', {}) or {}
+                    _resp_hdr_bytes = sum(len(k) + len(v) for k, v in headers.items())
                     clen = _parse_len(headers.get('content-length'))
                     if clen == 0:
                         # Fallback to explicit body length header set by response_util
@@ -1756,17 +2030,20 @@ async def metrics_middleware(request: Request, call_next):
                         body = getattr(response, 'body', None)
                         if isinstance(body, (bytes, bytearray)):
                             clen = len(body)
+                    clen = _resp_hdr_bytes + clen
                 except Exception:
                     clen = 0
 
-                metrics_store.record(
-                    status=status,
-                    duration_ms=duration_ms,
-                    username=username,
-                    api_key=api_key,
-                    bytes_in=bytes_in,
-                    bytes_out=clen,
-                )
+                # Only record monitor metrics for API traffic; exclude platform endpoints
+                if p.startswith('/api/'):
+                    metrics_store.record(
+                        status=status,
+                        duration_ms=duration_ms,
+                        username=username,
+                        api_key=api_key,
+                        bytes_in=bytes_in,
+                        bytes_out=clen,
+                    )
                 try:
                     if username:
                         from utils.bandwidth_util import _get_user, add_usage

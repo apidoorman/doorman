@@ -138,12 +138,13 @@ export default function AnalyticsPageContent({ searchParams }: AnalyticsPageCont
       // Fetch overview
       const overviewUrl = `${SERVER_URL}/platform/analytics/overview?range=${timeRange}`
       const overviewData = await getJson<any>(overviewUrl)
-      setOverview(overviewData.response)
+      // getJson already unwraps envelopes; use directly
+      setOverview(overviewData)
 
       // Fetch time-series data
       const timeSeriesUrl = `${SERVER_URL}/platform/analytics/timeseries?range=${timeRange}`
       const timeSeriesData = await getJson<any>(timeSeriesUrl)
-      setTimeSeries(timeSeriesData.response)
+      setTimeSeries(timeSeriesData)
     } catch (err) {
       console.error('Failed to fetch analytics:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch analytics data')

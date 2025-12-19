@@ -89,18 +89,19 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         # Parse API and endpoint from path
         api_key, endpoint_uri = self._parse_api_endpoint(path)
 
-        # Record metrics
+        # Record metrics only for API traffic; exclude platform endpoints
         try:
-            enhanced_metrics_store.record(
-                status=status_code,
-                duration_ms=duration_ms,
-                username=username,
-                api_key=api_key,
-                endpoint_uri=endpoint_uri,
-                method=method,
-                bytes_in=request_size,
-                bytes_out=response_size,
-            )
+            if path.startswith('/api/'):
+                enhanced_metrics_store.record(
+                    status=status_code,
+                    duration_ms=duration_ms,
+                    username=username,
+                    api_key=api_key,
+                    endpoint_uri=endpoint_uri,
+                    method=method,
+                    bytes_in=request_size,
+                    bytes_out=response_size,
+                )
         except Exception as e:
             logger.error(f'Failed to record analytics: {str(e)}')
 

@@ -15,6 +15,7 @@ from utils.constants import ErrorCodes, Messages
 from utils.database import group_collection
 from utils.doorman_cache_util import doorman_cache
 from utils.paging_util import validate_page_params
+from utils.async_db import db_find_paginated, db_find_list
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -159,13 +160,36 @@ class GroupService:
                 ),
             ).dict()
         skip = (page - 1) * page_size
-        cursor = group_collection.find().sort('group_name', 1).skip(skip).limit(page_size)
-        groups = cursor.to_list(length=None)
+        groups = await db_find_paginated(
+            group_collection, {}, skip=skip, limit=page_size, sort=[('group_name', 1)]
+        )
+        # Metadata
+        has_next = False
+        try:
+            extra = await db_find_paginated(
+                group_collection, {}, skip=skip, limit=page_size + 1, sort=[('group_name', 1)]
+            )
+            has_next = len(extra) > page_size
+        except Exception:
+            pass
+        try:
+            total = len(await db_find_list(group_collection, {}))
+        except Exception:
+            total = None
         for group in groups:
             if group.get('_id'):
                 del group['_id']
         logger.info(request_id + ' | Groups retrieval successful')
-        return ResponseModel(status_code=200, response={'groups': groups}).dict()
+        return ResponseModel(
+            status_code=200,
+            response={
+                'groups': groups,
+                'page': page,
+                'page_size': page_size,
+                'has_next': has_next,
+                **({'total': total} if total is not None else {}),
+            },
+        ).dict()
 
     @staticmethod
     async def get_group(group_name, request_id):

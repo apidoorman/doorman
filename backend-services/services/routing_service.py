@@ -174,10 +174,42 @@ class RoutingService:
                 ),
             ).dict()
         skip = (page - 1) * page_size
-        cursor = routing_collection.find().sort('client_key', 1).skip(skip).limit(page_size)
-        routings = cursor.to_list(length=None)
+        try:
+            from utils.async_db import db_find_paginated, db_count
+            docs = await db_find_paginated(
+                routing_collection, {}, skip=skip, limit=page_size, sort=[('client_key', 1)]
+            )
+            try:
+                extra = await db_find_paginated(
+                    routing_collection, {}, skip=skip, limit=page_size + 1, sort=[('client_key', 1)]
+                )
+                has_next = len(extra) > page_size
+            except Exception:
+                has_next = False
+            try:
+                total = await db_count(routing_collection, {})
+            except Exception:
+                total = None
+        except Exception:
+            cursor = routing_collection.find().sort('client_key', 1).skip(skip).limit(page_size)
+            docs = await cursor.to_list(length=None)
+            has_next = len(docs) >= page_size
+            try:
+                total = await routing_collection.count_documents({})
+            except Exception:
+                total = None
+        routings = docs
         for route in routings:
             if route.get('_id'):
                 del route['_id']
         logger.info(request_id + ' | Routing retrieval successful')
-        return ResponseModel(status_code=200, response={'routings': routings}).dict()
+        return ResponseModel(
+            status_code=200,
+            response={
+                'routings': routings,
+                'page': page,
+                'page_size': page_size,
+                'has_next': has_next,
+                **({'total': total} if total is not None else {}),
+            },
+        ).dict()

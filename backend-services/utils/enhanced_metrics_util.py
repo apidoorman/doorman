@@ -185,20 +185,30 @@ class EnhancedMetricsStore:
         Automatically selects best aggregation level based on range.
         """
         # Determine which buckets to use
+        use_aggregated = False
         if granularity == 'auto':
             range_seconds = end_ts - start_ts
             if range_seconds <= 86400:  # <= 24 hours
                 # Use minute-level buckets
                 buckets = [b for b in self._buckets if start_ts <= b.start_ts <= end_ts]
             else:
-                # Use aggregated buckets
-                buckets = analytics_aggregator.get_buckets_for_range(start_ts, end_ts)
+                # Use aggregated buckets when available; fallback to minute-level if empty
+                agg = analytics_aggregator.get_buckets_for_range(start_ts, end_ts)
+                if agg:
+                    buckets = agg
+                    use_aggregated = True
+                else:
+                    buckets = [
+                        b for b in self._buckets if start_ts <= b.start_ts <= end_ts
+                    ]
         else:
             # Use specified granularity
             if granularity == 'minute':
                 buckets = [b for b in self._buckets if start_ts <= b.start_ts <= end_ts]
             else:
-                buckets = analytics_aggregator.get_buckets_for_range(start_ts, end_ts)
+                agg = analytics_aggregator.get_buckets_for_range(start_ts, end_ts)
+                buckets = agg
+                use_aggregated = True if agg else False
 
         if not buckets:
             # Return empty snapshot
@@ -220,6 +230,14 @@ class EnhancedMetricsStore:
                 status_distribution={},
             )
 
+        # If data coverage is shorter than requested range (e.g., fallback), clamp start
+        try:
+            first_ts = min(getattr(b, 'start_ts', start_ts) for b in buckets)
+            if first_ts > start_ts:
+                start_ts = first_ts
+        except Exception:
+            pass
+
         # Aggregate data from buckets
         total_requests = sum(b.count for b in buckets)
         total_errors = sum(b.error_count for b in buckets)
@@ -227,14 +245,24 @@ class EnhancedMetricsStore:
         total_bytes_in = sum(b.bytes_in for b in buckets)
         total_bytes_out = sum(b.bytes_out for b in buckets)
 
-        # Collect all latencies for percentile calculation
-        all_latencies: list[float] = []
-        for bucket in buckets:
-            all_latencies.extend(list(bucket.latencies))
-
-        percentiles = (
-            PercentileMetrics.calculate(all_latencies) if all_latencies else PercentileMetrics()
-        )
+        # Percentiles
+        if use_aggregated:
+            try:
+                # Weighted average from aggregated buckets
+                percentiles = (
+                    analytics_aggregator._weighted_average_percentiles(buckets)  # type: ignore[attr-defined]
+                    or PercentileMetrics()
+                )
+            except Exception:
+                percentiles = PercentileMetrics()
+        else:
+            # Collect all latencies for percentile calculation from minute buckets
+            all_latencies: list[float] = []
+            for bucket in buckets:
+                all_latencies.extend(list(bucket.latencies))
+            percentiles = (
+                PercentileMetrics.calculate(all_latencies) if all_latencies else PercentileMetrics()
+            )
 
         # Count unique users
         unique_users = set()
@@ -301,22 +329,38 @@ class EnhancedMetricsStore:
         # Build time-series data
         series = []
         for bucket in buckets:
-            avg_ms = bucket.total_ms / bucket.count if bucket.count > 0 else 0.0
-            bucket_percentiles = bucket.get_percentiles()
-
-            series.append(
-                {
-                    'timestamp': bucket.start_ts,
-                    'count': bucket.count,
-                    'error_count': bucket.error_count,
-                    'error_rate': bucket.error_count / bucket.count if bucket.count > 0 else 0.0,
-                    'avg_ms': avg_ms,
-                    'percentiles': bucket_percentiles.to_dict(),
-                    'bytes_in': bucket.bytes_in,
-                    'bytes_out': bucket.bytes_out,
-                    'unique_users': bucket.get_unique_user_count(),
-                }
-            )
+            if use_aggregated:
+                avg_ms = (bucket.total_ms / bucket.count) if bucket.count > 0 else 0.0
+                pct = bucket.percentiles.to_dict() if getattr(bucket, 'percentiles', None) else None
+                series.append(
+                    {
+                        'timestamp': bucket.start_ts,
+                        'count': bucket.count,
+                        'error_count': bucket.error_count,
+                        'error_rate': (bucket.error_count / bucket.count) if bucket.count > 0 else 0.0,
+                        'avg_ms': avg_ms,
+                        'percentiles': pct,
+                        'bytes_in': bucket.bytes_in,
+                        'bytes_out': bucket.bytes_out,
+                        'unique_users': getattr(bucket, 'unique_users', 0),
+                    }
+                )
+            else:
+                avg_ms = bucket.total_ms / bucket.count if bucket.count > 0 else 0.0
+                bucket_percentiles = bucket.get_percentiles()
+                series.append(
+                    {
+                        'timestamp': bucket.start_ts,
+                        'count': bucket.count,
+                        'error_count': bucket.error_count,
+                        'error_rate': bucket.error_count / bucket.count if bucket.count > 0 else 0.0,
+                        'avg_ms': avg_ms,
+                        'percentiles': bucket_percentiles.to_dict(),
+                        'bytes_in': bucket.bytes_in,
+                        'bytes_out': bucket.bytes_out,
+                        'unique_users': bucket.get_unique_user_count(),
+                    }
+                )
 
         # Create snapshot
         return AnalyticsSnapshot(

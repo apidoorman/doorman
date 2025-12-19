@@ -32,6 +32,7 @@ interface FilterState {
   startTime: string
   endTime: string
   user: string
+  api?: string
   endpoint: string
   request_id: string
   method: string
@@ -80,9 +81,11 @@ export default function LogsPage() {
     return {
       startDate: today,
       endDate: today,
-      startTime: '',
-      endTime: '',
+      // Default to full-day range: 12:00 AM to 11:59 PM
+      startTime: '00:00',
+      endTime: '23:59',
       user: '',
+      api: '',
       endpoint: '',
       request_id: '',
       method: '',
@@ -128,6 +131,7 @@ export default function LogsPage() {
       minResponseTime: 'min_response_time',
       maxResponseTime: 'max_response_time',
       user: 'user',
+      api: 'api',
       endpoint: 'endpoint',
       method: 'method',
       level: 'level'
@@ -190,15 +194,9 @@ export default function LogsPage() {
       queryParams.append('request_id', requestId)
       queryParams.append('limit', '1000')
 
-      const csrf3 = getCookie('csrf_token')
-      const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf3 ? { 'X-CSRF-Token': csrf3 } : {}) }})
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch logs for request ID')
-      }
-
-      const data = await response.json()
-      const allLogsForRequest = data.response?.logs || data.logs || []
+      const { fetchJson } = await import('@/utils/http')
+      const data: any = await fetchJson(`${SERVER_URL}/platform/logging/logs?${queryParams}`)
+      const allLogsForRequest = data.logs || []
 
       setGroupedLogs(prev => prev.map(group => {
         if (group.request_id === requestId) {
@@ -307,15 +305,13 @@ export default function LogsPage() {
   const clearFilters = () => {
     const now = new Date()
     const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0')
-    const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000)
-    const startTime = thirtyMinutesAgo.toTimeString().slice(0, 5)
-    const endTime = now.toTimeString().slice(0, 5)
 
+    // Reset to full-day by default
     setFilters({
       startDate: today,
       endDate: today,
-      startTime: startTime,
-      endTime: endTime,
+      startTime: '00:00',
+      endTime: '23:59',
       user: '',
       endpoint: '',
       request_id: '',
@@ -504,19 +500,32 @@ export default function LogsPage() {
 
             {showMoreFilters && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    User
-                  </label>
-                  <input
-                    type="text"
-                    name="user"
-                    value={filters.user}
-                    onChange={handleFilterChange}
-                    placeholder="Filter by user"
-                    className="input"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  User
+                </label>
+                <input
+                  type="text"
+                  name="user"
+                  value={filters.user}
+                  onChange={handleFilterChange}
+                  placeholder="Filter by user"
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  API
+                </label>
+                <input
+                  type="text"
+                  name="api"
+                  value={filters.api || ''}
+                  onChange={handleFilterChange}
+                  placeholder="Filter by API (e.g., rest:orders)"
+                  className="input"
+                />
+              </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Endpoint
