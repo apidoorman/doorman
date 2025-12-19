@@ -238,9 +238,33 @@ async def test_compression_transfer_savings_calculation(client):
     r_auth = await client.post('/platform/authorization', json=login_payload)
     assert r_auth.status_code == 200
 
-    # Simulate typical API usage
-    r = await client.get('/platform/api')
-    assert r.status_code == 200
+    # Ensure we have enough data so compression is meaningful
+    created_apis = []
+    try:
+        for i in range(5):
+            api_payload = {
+                'api_name': f'compression-savings-{i}',
+                'api_version': 'v1',
+                'api_description': ('Compression savings filler ' + str(i) + ' ') * 4,  # < 127 chars
+                'api_allowed_roles': ['admin'],
+                'api_allowed_groups': ['ALL'],
+                'api_servers': ['http://example.com'],
+                'api_type': 'REST',
+                'active': True,
+            }
+            r_create = await client.post('/platform/api', json=api_payload)
+            if r_create.status_code in (200, 201):
+                created_apis.append(api_payload['api_name'])
+
+        # Simulate typical API usage
+        r = await client.get('/platform/api')
+        assert r.status_code == 200
+    finally:
+        for api_name in created_apis:
+            try:
+                await client.delete(f'/platform/api/{api_name}/v1')
+            except Exception:
+                pass
 
     json_data = r.json()
     json_str = json.dumps(json_data, separators=(',', ':'))
@@ -253,7 +277,7 @@ async def test_compression_transfer_savings_calculation(client):
     compressed_size = len(compressed_buffer.getvalue())
 
     # Calculate savings
-    bytes_saved_per_request = uncompressed_size - compressed_size
+    bytes_saved_per_request = max(0, uncompressed_size - compressed_size)
     compression_ratio = (1 - (compressed_size / uncompressed_size)) * 100
 
     # Estimate monthly savings (example: 1M requests/month)
