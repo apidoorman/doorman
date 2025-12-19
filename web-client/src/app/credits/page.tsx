@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
+import SearchableSelect from '@/components/SearchableSelect'
 import { SERVER_URL } from '@/utils/config'
-import { getJson, postJson, putJson, delJson } from '@/utils/api'
+import { getJson, postJson, putJson, delJson, fetchAllPaginated } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 interface CreditTier {
@@ -72,10 +73,31 @@ export default function CreditsPage() {
   type TierMeta = { credits: number; reset_frequency?: string }
   const [defs, setDefs] = useState<Record<string, { [tier: string]: TierMeta }>>({})
 
+  const fetchUserOptions = async (): Promise<string[]> => {
+    try {
+      const users = await fetchAllPaginated<any>(
+        (page, size) => `${SERVER_URL}/platform/user/all?page=${page}&page_size=${size}`,
+        (data) => (data?.users || data?.response?.users || []),
+        undefined,
+        undefined,
+        'cache:users:all'
+      )
+      return users.map((u: any) => u?.username).filter(Boolean)
+    } catch (e) {
+      console.error('Failed to fetch users:', e)
+      return []
+    }
+  }
+
   const loadDefs = async () => {
     try {
-      const res = await getJson<any>(`${SERVER_URL}/platform/credit/defs?page=1&page_size=1000`)
-      const items = res?.items || res?.response?.items || []
+      const items = await fetchAllPaginated<any>(
+        (page, size) => `${SERVER_URL}/platform/credit/defs?page=${page}&page_size=${size}`,
+        (data) => (data?.items || data?.response?.items || []),
+        undefined,
+        undefined,
+        'cache:credit_defs:all'
+      )
       const map: Record<string, { [tier: string]: TierMeta }> = {}
       for (const it of items) {
         const tiers = it.credit_tiers || []
@@ -85,6 +107,7 @@ export default function CreditsPage() {
       }
       setDefs(map)
     } catch (e) {
+      console.error('Failed to load credit definitions:', e)
     }
   }
 
@@ -128,7 +151,8 @@ export default function CreditsPage() {
       const items = payload?.items || payload?.user_credits || []
       setAllUserRows(items)
       setUserRows(items)
-      setUsersHasNext((items || []).length === usersPageSize)
+      const hn = (payload?.has_next ?? payload?.response?.has_next)
+      setUsersHasNext(typeof hn === 'boolean' ? hn : (items || []).length === usersPageSize)
     } catch (e:any) {
       setUserError(e?.message || 'Failed to load user credits')
       setUserRows([])
@@ -182,6 +206,15 @@ export default function CreditsPage() {
     loadDefs()
   }, [usersPage, usersPageSize])
 
+  // Debounced search to request server-side filtering
+  useEffect(() => {
+    const h = setTimeout(() => {
+      setUsersPage(1)
+      loadAllUserTokens()
+    }, 300)
+    return () => clearTimeout(h)
+  }, [userSearch])
+
   return (
     <ProtectedRoute requiredPermission="manage_credits">
     <Layout>
@@ -217,17 +250,7 @@ export default function CreditsPage() {
                 className="search-input"
                 placeholder="Search users by username or group..."
                 value={userSearch}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setUserSearch(val)
-                  const term = val.trim().toLowerCase()
-                  if (!term) { setUserRows(allUserRows); return }
-                  const filtered = allUserRows.filter(r =>
-                    r.username.toLowerCase().includes(term) ||
-                    Object.keys(r.users_credits || {}).some(g => g.toLowerCase().includes(term))
-                  )
-                  setUserRows(filtered)
-                }}
+                onChange={(e) => setUserSearch(e.target.value)}
               />
             </div>
           </form>
@@ -344,12 +367,11 @@ export default function CreditsPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Username *
                   </label>
-                  <input
-                    type="text"
+                  <SearchableSelect
                     value={assignForm.username}
-                    onChange={(e) => setAssignForm({ ...assignForm, username: e.target.value })}
-                    className="input"
-                    placeholder="Enter username"
+                    onChange={(val: string) => setAssignForm({ ...assignForm, username: val })}
+                    fetchOptions={fetchUserOptions}
+                    placeholder="Select or type username"
                   />
                 </div>
                 

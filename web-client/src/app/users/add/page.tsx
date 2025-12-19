@@ -7,7 +7,8 @@ import Layout from '@/components/Layout'
 import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
-import { postJson } from '@/utils/api'
+import { postJson, getJson, fetchAllPaginated } from '@/utils/api'
+import SearchableSelect from '@/components/SearchableSelect'
 
 interface CreateUserData {
   username: string
@@ -63,6 +64,28 @@ const AddUserPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, message: '' })
   const customAttrCount = Object.keys(formData.custom_attributes || {}).length
+
+  const fetchRoles = async (): Promise<string[]> => {
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/role/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.roles || data.response?.roles || [])),
+      undefined,
+      undefined,
+      'cache:roles:all'
+    )
+    return items.map((r: any) => r.role_name || r.name || r).filter(Boolean)
+  }
+
+  const fetchGroups = async (): Promise<string[]> => {
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/group/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.groups || data.response?.groups || [])),
+      undefined,
+      undefined,
+      'cache:groups:all'
+    )
+    return items.map((g: any) => g.group_name || g.name || g).filter(Boolean)
+  }
 
   const handleInputChange = (field: keyof CreateUserData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -140,7 +163,7 @@ const AddUserPage = () => {
       setLoading(true)
       setError(null)
 
-      await postJson(`${SERVER_URL}/platform/user/`, formData)
+      await postJson(`${SERVER_URL}/platform/user`, formData)
 
       router.push('/users')
     } catch (err) {
@@ -249,16 +272,11 @@ const AddUserPage = () => {
                     Role *
                     <InfoTooltip text="Platform role controls permissions (e.g., manage_apis, view_logs)." />
                   </label>
-                  <input
-                    type="text"
-                    id="role"
-                    className="input"
-                    placeholder="Enter role"
+                  <SearchableSelect
                     value={formData.role}
-                    onChange={(e) => handleInputChange('role', e.target.value)}
-                    minLength={2}
-                    maxLength={50}
-                    required
+                    onChange={(value) => handleInputChange('role', value)}
+                    placeholder="Select or type role name"
+                    fetchOptions={fetchRoles}
                     disabled={loading}
                   />
                 </div>
@@ -320,20 +338,16 @@ const AddUserPage = () => {
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="input flex-1"
-                    placeholder="Enter group name"
-                    value={newGroup}
-                    onChange={(e) => setNewGroup(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addGroup())}
-                    disabled={loading}
-                  />
-                  <button type="button" className="btn btn-primary" onClick={addGroup} disabled={loading}>
-                    Add Group
-                  </button>
-                </div>
+                <SearchableSelect
+                  value={newGroup}
+                  onChange={setNewGroup}
+                  onAdd={addGroup}
+                  onKeyPress={(e) => e.key === 'Enter' && addGroup()}
+                  placeholder="Select or type group name"
+                  fetchOptions={fetchGroups}
+                  disabled={loading}
+                  addButtonText="Add Group"
+                />
               </div>
             </div>
 

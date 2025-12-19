@@ -36,18 +36,12 @@ COPY web-client/ .
 
 # Build web client (Next.js)
 # Build-time args for frontend env (baked into Next.js bundle)
-# URLs are constructed from PORT, WEB_PORT, and HTTPS_ONLY
-ARG PORT=3001
-ARG WEB_PORT=3000
-ARG HTTPS_ONLY=false
 ARG NEXT_PUBLIC_PROTECTED_USERS=
+ARG NEXT_PUBLIC_GATEWAY_URL=
 
-# Construct URLs based on protocol and ports
-RUN PROTOCOL=$([ "$HTTPS_ONLY" = "true" ] && echo "https" || echo "http") && \
-    echo "export NEXT_PUBLIC_SERVER_URL=${PROTOCOL}://localhost:${PORT}" > /tmp/build-env.sh && \
-    echo "export NEXT_PUBLIC_API_URL=${PROTOCOL}://localhost:${PORT}" >> /tmp/build-env.sh && \
-    echo "export NEXT_PUBLIC_APP_URL=${PROTOCOL}://localhost:${WEB_PORT}" >> /tmp/build-env.sh && \
-    echo "export NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS}" >> /tmp/build-env.sh && \
+# Build Next.js - domain agnostic, no hardcoded URLs
+RUN echo "export NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS}" > /tmp/build-env.sh && \
+    echo "export NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL}" >> /tmp/build-env.sh && \
     echo "export NODE_ENV=production" >> /tmp/build-env.sh && \
     echo "export NEXT_TELEMETRY_DISABLED=1" >> /tmp/build-env.sh && \
     . /tmp/build-env.sh && \

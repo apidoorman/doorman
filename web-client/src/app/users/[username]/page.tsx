@@ -9,6 +9,8 @@ import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
 import { PROTECTED_USERS, SERVER_URL } from '@/utils/config'
+import { getJson, fetchAllPaginated } from '@/utils/api'
+import SearchableSelect from '@/components/SearchableSelect'
 
 interface User {
   username: string
@@ -75,9 +77,32 @@ const UserDetailPage = () => {
   const [deleting, setDeleting] = useState(false)
   const [availableTiers, setAvailableTiers] = useState<any[]>([])
   const [currentTier, setCurrentTier] = useState<any>(null)
+  const [newGroup, setNewGroup] = useState('')
   const isProtected = PROTECTED_USERS.includes((username || '').toLowerCase())
   const currentCustomAttrs = (isEditing ? (editData.custom_attributes || {}) : (user?.custom_attributes || {})) as Record<string, string>
   const editCustomAttrCount = Object.keys(currentCustomAttrs).length
+
+  const fetchRoles = async (): Promise<string[]> => {
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/role/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.roles || data.response?.roles || [])),
+      undefined,
+      undefined,
+      'cache:roles:all'
+    )
+    return items.map((r: any) => r.role_name || r.name || r).filter(Boolean)
+  }
+
+  const fetchGroups = async (): Promise<string[]> => {
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/group/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.groups || data.response?.groups || [])),
+      undefined,
+      undefined,
+      'cache:groups:all'
+    )
+    return items.map((g: any) => g.group_name || g.name || g).filter(Boolean)
+  }
 
   useEffect(() => {
     // Fetch available tiers
@@ -255,12 +280,12 @@ const UserDetailPage = () => {
   }
 
   const addGroup = () => {
-    const newGroup = prompt('Enter group name:')
     if (newGroup && newGroup.trim() && !editData.groups?.includes(newGroup.trim())) {
       setEditData(prev => ({
         ...prev,
         groups: [...(prev.groups || []), newGroup.trim()]
       }))
+      setNewGroup('')
     }
   }
 
@@ -532,12 +557,12 @@ const UserDetailPage = () => {
                       <InfoTooltip text="Platform role controls permissions (e.g., manage_apis, view_logs)." />
                     </label>
                   {isEditing ? (
-                    <input
-                      type="text"
+                    <SearchableSelect
                       value={editData.role || ''}
-                      onChange={(e) => handleInputChange('role', e.target.value)}
-                      className="input"
-                      placeholder="Enter role"
+                      onChange={(value) => handleInputChange('role', value)}
+                      placeholder="Select or type role name"
+                      fetchOptions={fetchRoles}
+                      disabled={saving}
                     />
                     ) : (
                       <span className="badge badge-primary">{user.role}</span>
@@ -712,14 +737,16 @@ const UserDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
-                  <div>
-                    <button onClick={addGroup} className="btn btn-primary">
-                      <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Add Group
-                    </button>
-                  </div>
+                  <SearchableSelect
+                    value={newGroup}
+                    onChange={setNewGroup}
+                    onAdd={addGroup}
+                    onKeyPress={(e) => e.key === 'Enter' && addGroup()}
+                    placeholder="Select or type group name"
+                    fetchOptions={fetchGroups}
+                    disabled={saving}
+                    addButtonText="Add Group"
+                  />
                 )}
 
                 <div className="space-y-2">

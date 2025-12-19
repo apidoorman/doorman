@@ -14,10 +14,14 @@ interface Group {
   api_access?: string[]
 }
 
+interface GroupWithApiCount extends Group {
+  apiCount: number
+}
+
 const GroupsPage = () => {
   const router = useRouter()
-  const [groups, setGroups] = useState<Group[]>([])
-  const [allGroups, setAllGroups] = useState<Group[]>([])
+  const [groups, setGroups] = useState<GroupWithApiCount[]>([])
+  const [allGroups, setAllGroups] = useState<GroupWithApiCount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -34,18 +38,39 @@ const GroupsPage = () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await getJson<any>(`${SERVER_URL}/platform/group/all?page=${page}&page_size=${pageSize}`)
-      const items: any[] = Array.isArray(data) ? data : (data.groups || data.response?.groups || [])
+      
+      // Fetch groups
+      const groupData = await getJson<any>(`${SERVER_URL}/platform/group/all?page=${page}&page_size=${pageSize}`)
+      const items: any[] = Array.isArray(groupData) ? groupData : (groupData.groups || groupData.response?.groups || [])
       const seen = new Set<string>()
-      const unique = items.filter((g: any) => {
+      const uniqueGroups = items.filter((g: any) => {
         const key = String(g.group_name)
         if (seen.has(key)) return false
         seen.add(key)
         return true
       }).sort((a: any, b: any) => String(a.group_name).localeCompare(String(b.group_name)))
-      setAllGroups(unique)
-      setGroups(unique)
-      setHasNext((items || []).length === pageSize)
+      
+      // Fetch all APIs to calculate actual access counts
+      const apiData = await getJson<any>(`${SERVER_URL}/platform/api/all`)
+      const apis = Array.isArray(apiData) ? apiData : (apiData.apis || apiData.response?.apis || [])
+      
+      // Calculate API count for each group
+      const groupsWithCounts: GroupWithApiCount[] = uniqueGroups.map((group: Group) => {
+        const apiCount = apis.filter((api: any) => {
+          const allowedGroups = api.api_allowed_groups || []
+          return allowedGroups.includes(group.group_name) || allowedGroups.includes('ALL')
+        }).length
+        
+        return {
+          ...group,
+          apiCount
+        }
+      })
+      
+      setAllGroups(groupsWithCounts)
+      setGroups(groupsWithCounts)
+      const hn = (groupData?.has_next ?? groupData?.response?.has_next)
+      setHasNext(typeof hn === 'boolean' ? hn : (items || []).length === pageSize)
     } catch (err) {
       setError('Failed to load groups. Please try again later.')
       setGroups([])
@@ -202,7 +227,7 @@ const GroupsPage = () => {
                       </td>
                       <td>
                         <span className="badge badge-success">
-                          {group.api_access?.length || 0} API{(group.api_access?.length || 0) !== 1 ? 's' : ''}
+                          {group.apiCount} API{group.apiCount !== 1 ? 's' : ''}
                         </span>
                       </td>
                       <td>

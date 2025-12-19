@@ -16,16 +16,22 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        PORT: ${PORT:-3001}
-        WEB_PORT: ${WEB_PORT:-3000}
-        HTTPS_ONLY: ${HTTPS_ONLY:-false}
+        NEXT_PUBLIC_PROTECTED_USERS: ${NEXT_PUBLIC_PROTECTED_USERS:-}
+        NEXT_PUBLIC_GATEWAY_URL: ${NEXT_PUBLIC_GATEWAY_URL:-}
     image: doorman:latest
     container_name: doorman
     ports:
-      - "3001:3001"  # Backend API
-      - "3000:3000"  # Web UI
+      - "${PORT:-3001}:${PORT:-3001}"  # Backend API
+      - "${WEB_PORT:-3000}:${WEB_PORT:-3000}"  # Web UI
     env_file:
       - .env
+    environment:
+      # Memory-mode dump settings (work for localhost and Docker on AWS)
+      MEM_DUMP_PATH: ${MEM_DUMP_PATH:-/app/backend-services/generated/memory_dump.bin}
+      MEM_AUTO_SAVE_ENABLED: ${MEM_AUTO_SAVE_ENABLED:-true}
+      MEM_AUTO_SAVE_FREQ: ${MEM_AUTO_SAVE_FREQ:-300}
+      # Encryption key for dumps (set a strong value in .env for real use)
+      MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY:-change-me-in-prod}
     volumes:
       - ./generated:/app/backend-services/generated
       - ./logs:/app/backend-services/logs
@@ -43,7 +49,7 @@ services:
     container_name: doorman-redis
     profiles: ["production"]
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     restart: unless-stopped
@@ -60,14 +66,14 @@ services:
     container_name: doorman-mongo
     profiles: ["production"]
     ports:
-      - "27017:27017"
+      - "${MONGO_PORT:-27017}:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_DB_USER:-doorman_admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_DB_PASSWORD:-changeme}
     volumes:
       - mongo-data:/data/db
     restart: unless-stopped
-    command: --replSet rs0 --bind_ip_all
+    command: --replSet ${MONGO_REPLICA_SET_NAME:-rs0} --bind_ip_all
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s

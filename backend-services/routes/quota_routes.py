@@ -9,13 +9,14 @@ import logging
 from typing import Any, Dict, List
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from models.rate_limit_models import QuotaType
 from services.tier_service import TierService, get_tier_service
 from utils.database_async import async_database
 from utils.quota_tracker import QuotaTracker, get_quota_tracker
+from utils.auth_util import auth_required
 
 logger = logging.getLogger(__name__)
 
@@ -80,15 +81,20 @@ async def get_tier_service_dep() -> TierService:
     return get_tier_service(db)
 
 
-def get_current_user_id() -> str:
+async def get_current_user_id(payload: dict = Depends(auth_required)) -> str:
     """
-    Get current user ID from request context
-
-    In production, this should extract from JWT token or session.
-    For now, returns a placeholder.
+    Get current user ID from JWT token
+    
+    Args:
+        payload: JWT payload from auth_required dependency
+        
+    Returns:
+        str: Username from JWT 'sub' claim
     """
-    # TODO: Extract from auth middleware
-    return 'current_user'
+    username = payload.get('sub')
+    if not username:
+        raise HTTPException(status_code=401, detail='Invalid token: missing user ID')
+    return username
 
 
 # ============================================================================

@@ -38,3 +38,50 @@ export async function delJson<T = any>(url: string, body?: any, headers: Record<
     ...(body ? { body: JSON.stringify(body) } : {})
   })
 }
+
+/**
+ * Fetch all pages from a paginated endpoint with graceful page-size fallback.
+ *
+ * Usage example:
+ *   const items = await fetchAllPaginated(
+ *     (page, size) => `${SERVER_URL}/platform/user/all?page=${page}&page_size=${size}`,
+ *     (data) => (Array.isArray(data) ? data : (data.users || data.response?.users || []))
+ *   )
+ */
+const __paginatedCache: Map<string, any[]> = new Map()
+
+export async function fetchAllPaginated<T = any>(
+  buildUrl: (page: number, size: number) => string,
+  extractItems: (data: any) => T[],
+  pageSizes: number[] = [50, 25, 10, 5, 3, 2, 1],
+  maxPages: number = 50,
+  cacheKey?: string
+): Promise<T[]> {
+  if (cacheKey && __paginatedCache.has(cacheKey)) {
+    return (__paginatedCache.get(cacheKey) as T[]) || []
+  }
+  for (const size of pageSizes) {
+    const out: T[] = []
+    try {
+      let page = 1
+      while (true) {
+        const url = buildUrl(page, size)
+        const data = await getJson<any>(url)
+        const batch = extractItems(data) || []
+        out.push(...batch)
+        if (!Array.isArray(batch) || batch.length < size) break
+        page += 1
+        if (page > maxPages) break
+      }
+      if (cacheKey) __paginatedCache.set(cacheKey, out)
+      return out
+    } catch (e: any) {
+      const msg = String(e?.message || '').toLowerCase()
+      // Try next smaller size on paging validation failures
+      if (msg.includes('page') || msg.includes('size')) continue
+      // Non-paging failure: bubble up
+      throw e
+    }
+  }
+  return []
+}

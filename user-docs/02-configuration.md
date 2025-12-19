@@ -11,6 +11,23 @@
 | `DEV_RELOAD` | `false` | Auto-reload on code changes |
 | `PID_FILE` | `doorman.pid` | Process ID file path |
 
+## Frontend Configuration
+
+The web client is **domain-agnostic** and automatically detects the correct API URL at runtime:
+
+- **Development (port 3000):** API calls → `http://localhost:3001`
+- **Production/Reverse Proxy:** API calls → same origin as web client
+
+**No configuration needed for reverse proxy deployments!** The frontend will automatically use the correct domain.
+
+**Advanced Override (optional):**
+
+If you need to manually override the API URL (e.g., separate API subdomain), you can set it in browser localStorage:
+
+```javascript
+localStorage.setItem('API_URL', 'https://api.doorman.example.com')
+```
+
 ## Admin Credentials (Required)
 
 | Variable | Description |
@@ -44,17 +61,6 @@
 | `AUTH_REFRESH_EXPIRE_FREQ` | `days` | `seconds`, `minutes`, `hours`, `days` |
 | `TOKEN_ENCRYPTION_KEY` | - | Encrypt API keys at rest (recommended) |
 | `HTTPS_ONLY` | `false` | **Required in production.** Enforces HTTPS, secure cookies, CSRF |
-
-## CORS
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ALLOWED_ORIGINS` | `*` | Comma-separated origins. **No `*` in production** |
-| `ALLOW_CREDENTIALS` | `false` | Allow cookies/auth headers |
-| `ALLOW_METHODS` | `GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD` | Allowed HTTP methods |
-| `ALLOW_HEADERS` | `*` | Allowed request headers |
-| `CORS_STRICT` | `false` | Disallow wildcards with credentials (production) |
-| `COOKIE_DOMAIN` | `localhost` | Cookie domain |
 
 ## IP Access Control
 

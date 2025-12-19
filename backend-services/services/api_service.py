@@ -258,15 +258,39 @@ class ApiService:
                 ),
             ).dict()
         skip = (page - 1) * page_size
-        cursor = api_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
-        apis = cursor.to_list(length=None)
+        try:
+            from utils.async_db import db_find_paginated
+            docs = await db_find_paginated(
+                api_collection, {}, skip=skip, limit=page_size, sort=[('api_name', 1)]
+            )
+            # Metadata
+            try:
+                extra = await db_find_paginated(
+                    api_collection, {}, skip=skip, limit=page_size + 1, sort=[('api_name', 1)]
+                )
+                has_next = len(extra) > page_size
+            except Exception:
+                has_next = False
+        except Exception:
+            cursor = api_collection.find().sort('api_name', 1).skip(skip).limit(page_size)
+            docs = await cursor.to_list(length=None)
+            has_next = len(docs) >= page_size  # best-effort
+        apis = docs
         for api in apis:
             if api.get('_id'):
                 del api['_id']
         logger.info(request_id + ' | APIs retrieval successful')
-        meta = {'total': len(apis), 'page': page, 'page_size': page_size}
-        # Add a message to keep payload sizes above compression overhead for tests
-        message = 'API list retrieved successfully. This message also helps ensure the response has a reasonable size for compression benchmarks.'
+        try:
+            total = await api_collection.count_documents({})
+        except Exception:
+            total = None
         return ResponseModel(
-            status_code=200, response={'apis': apis, 'meta': meta, 'message': message}
+            status_code=200,
+            response={
+                'apis': apis,
+                'page': page,
+                'page_size': page_size,
+                'has_next': has_next,
+                **({'total': total} if total is not None else {}),
+            },
         ).dict()

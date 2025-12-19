@@ -72,9 +72,7 @@ const RoutingDetailPage = () => {
     try {
       const key = routing?.client_key || clientKey
       if (!key) throw new Error('Missing client key')
-      const res = await fetch(`${SERVER_URL}/platform/config/export/routings?client_key=${encodeURIComponent(String(key))}`, { credentials: 'include' })
-      const data = await res.json()
-      const payload = data?.response || data
+      const payload = await fetchJson(`${SERVER_URL}/platform/config/export/routings?client_key=${encodeURIComponent(String(key))}`)
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)

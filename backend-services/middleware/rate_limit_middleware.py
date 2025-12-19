@@ -242,27 +242,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return None
 
     async def _default_get_rules(
-        self,
-        request: Request,
-        user_id: str | None,
-        api_name: str | None,
-        endpoint_uri: str,
-        ip_address: str,
+        self, request: Request, user_id: str | None, api_name: str | None, endpoint_uri: str, ip_address: str
     ) -> list[RateLimitRule]:
         """
-        Default function to get applicable rules
-
-        Priority order:
-        1. If user has tier assigned → Use tier limits ONLY
-        2. If user has NO tier → Use per-user rate limit rules
-        3. Fall back to global rules
-
-        In production, this should query MongoDB for rules.
-        This is a placeholder that returns default rules.
+        Default implementation to get applicable rules
 
         Args:
-            request: Incoming request
-            user_id: User ID
+            request: Request object
+            user_id: User identifier
             api_name: API name
             endpoint_uri: Endpoint URI
             ip_address: IP address
@@ -314,21 +301,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     )
                 )
 
-        # Always add global rule as fallback
-        rules.append(
-            RateLimitRule(
-                rule_id='default_global',
-                rule_type=RuleType.GLOBAL,
-                time_window=TimeWindow.MINUTE,
-                limit=1000,
-                priority=0,
-                enabled=True,
-                description='Global rate limit',
+        # Add global rule as fallback if no rules were loaded
+        if not rules:
+            rules.append(
+                RateLimitRule(
+                    rule_id='default_global',
+                    rule_type=RuleType.GLOBAL,
+                    time_window=TimeWindow.MINUTE,
+                    limit=1000,
+                    priority=0,
+                    enabled=True,
+                    description='Global rate limit',
+                )
             )
-        )
-
-        # Sort by priority (highest first)
-        rules.sort(key=lambda r: r.priority, reverse=True)
 
         return rules
 

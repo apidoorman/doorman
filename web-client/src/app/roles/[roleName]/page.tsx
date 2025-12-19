@@ -84,9 +84,7 @@ const RoleDetailPage = () => {
     try {
       const name = role?.role_name || roleName
       if (!name) throw new Error('Missing role name')
-      const res = await fetch(`${SERVER_URL}/platform/config/export/roles?role_name=${encodeURIComponent(String(name))}`, { credentials: 'include' })
-      const data = await res.json()
-      const payload = data?.response || data
+      const payload = await fetchJson(`${SERVER_URL}/platform/config/export/roles?role_name=${encodeURIComponent(String(name))}`)
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)

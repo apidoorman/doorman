@@ -20,15 +20,25 @@ logger = logging.getLogger('doorman.logging')
 class LoggingService:
     def __init__(self):
         env_dir = os.getenv('LOGS_DIR')
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        backend_root = os.path.normpath(os.path.join(base_dir, '..'))
+
+        # Build a prioritized list of candidate directories to search for log files
+        candidates: list[str] = []
         if env_dir and str(env_dir).strip():
-            self.log_directory = os.path.abspath(env_dir)
-        else:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            backend_root = os.path.normpath(os.path.join(base_dir, '..'))
-            candidate = os.path.join(backend_root, 'platform-logs')
-            self.log_directory = (
-                candidate if os.path.isdir(candidate) else os.path.join(backend_root, 'logs')
-            )
+            candidates.append(os.path.abspath(env_dir))
+
+        # Repo-default locations
+        candidates.append(os.path.join(backend_root, 'platform-logs'))
+        candidates.append(os.path.join(backend_root, 'logs'))
+
+        # Container fallback where doorman.py may write if LOGS_DIR isn't writable
+        candidates.append('/tmp/doorman-logs')
+
+        # Dedupe while preserving order
+        seen = set()
+        self.log_directories = [c for c in candidates if not (c in seen or seen.add(c))]
+
         self.log_file_patterns = ['doorman.log*', 'doorman-trail.log*']
         self.max_logs_per_request = 1000
 
@@ -39,6 +49,7 @@ class LoggingService:
         start_time: str | None = None,
         end_time: str | None = None,
         user: str | None = None,
+        api: str | None = None,
         endpoint: str | None = None,
         request_id: str | None = None,
         method: str | None = None,
@@ -54,56 +65,97 @@ class LoggingService:
         Retrieve and filter logs based on various criteria
         """
         try:
-            log_files: list[str] = []
-            for pat in self.log_file_patterns:
-                log_files.extend(glob.glob(os.path.join(self.log_directory, pat)))
+            # Prefer fast in-memory buffer if available and non-empty
+            try:
+                from utils.memory_log import memory_log_snapshot
 
-            if not log_files:
-                return {'logs': [], 'total': 0, 'has_more': False}
+                buffer_lines = memory_log_snapshot()
+            except Exception:
+                buffer_lines = []
+
+            log_files: list[str] = []
+            for d in self.log_directories:
+                for pat in self.log_file_patterns:
+                    log_files.extend(glob.glob(os.path.join(d, pat)))
 
             logs = []
             total_count = 0
 
-            log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            # Case A: Use in-memory buffer when it has content; it's fastest and covers both envs
+            if buffer_lines:
+                for line in reversed(buffer_lines):
+                    log_entry = self._parse_log_line(line)
+                    if log_entry and self._matches_filters(
+                        log_entry,
+                        {
+                            'start_date': start_date,
+                            'end_date': end_date,
+                            'start_time': start_time,
+                            'end_time': end_time,
+                            'user': user,
+                            'api': api,
+                            'endpoint': endpoint,
+                            'request_id': request_id,
+                            'method': method,
+                            'ip_address': ip_address,
+                            'min_response_time': min_response_time,
+                            'max_response_time': max_response_time,
+                            'level': level,
+                        },
+                    ):
+                        total_count += 1
+                        if total_count > offset and len(logs) < limit:
+                            logs.append(log_entry)
+                        if len(logs) >= limit:
+                            break
+                logs.reverse()
+            elif log_files:
+                log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                # Cap file scanning to a few recent files for performance
+                log_files = log_files[:3]
 
-            for log_file in log_files:
-                if not os.path.exists(log_file):
-                    continue
+                for log_file in log_files:
+                    if not os.path.exists(log_file):
+                        continue
 
-                try:
-                    with open(log_file, encoding='utf-8') as file:
-                        for line in file:
-                            log_entry = self._parse_log_line(line)
-                            if log_entry and self._matches_filters(
-                                log_entry,
-                                {
-                                    'start_date': start_date,
-                                    'end_date': end_date,
-                                    'start_time': start_time,
-                                    'end_time': end_time,
-                                    'user': user,
-                                    'endpoint': endpoint,
-                                    'request_id': request_id,
-                                    'method': method,
-                                    'ip_address': ip_address,
-                                    'min_response_time': min_response_time,
-                                    'max_response_time': max_response_time,
-                                    'level': level,
-                                },
-                            ):
-                                total_count += 1
-                                if len(logs) < limit and total_count > offset:
-                                    logs.append(log_entry)
+                    try:
+                        with open(log_file, encoding='utf-8') as file:
+                            for line in file:
+                                log_entry = self._parse_log_line(line)
+                                if log_entry and self._matches_filters(
+                                    log_entry,
+                                    {
+                                        'start_date': start_date,
+                                        'end_date': end_date,
+                                        'start_time': start_time,
+                                        'end_time': end_time,
+                                        'user': user,
+                                        'api': api,
+                                        'endpoint': endpoint,
+                                        'request_id': request_id,
+                                        'method': method,
+                                        'ip_address': ip_address,
+                                        'min_response_time': min_response_time,
+                                        'max_response_time': max_response_time,
+                                        'level': level,
+                                    },
+                                ):
+                                    total_count += 1
+                                    if len(logs) < limit and total_count > offset:
+                                        logs.append(log_entry)
 
-                                if len(logs) >= limit:
-                                    break
+                                    if len(logs) >= limit:
+                                        break
 
-                    if len(logs) >= limit:
-                        break
+                        if len(logs) >= limit:
+                            break
 
-                except Exception as e:
-                    logger.warning(f'Error reading log file {log_file}: {str(e)}')
-                    continue
+                    except Exception as e:
+                        logger.warning(f'Error reading log file {log_file}: {str(e)}')
+                        continue
+            else:
+                # Nothing to read
+                pass
 
             return {'logs': logs, 'total': total_count, 'has_more': total_count > offset + limit}
 
@@ -116,8 +168,9 @@ class LoggingService:
         Get list of available log files for debugging
         """
         log_files: list[str] = []
-        for pat in self.log_file_patterns:
-            log_files.extend(glob.glob(os.path.join(self.log_directory, pat)))
+        for d in self.log_directories:
+            for pat in self.log_file_patterns:
+                log_files.extend(glob.glob(os.path.join(d, pat)))
         log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
         return log_files
 
@@ -126,22 +179,18 @@ class LoggingService:
         Get log statistics for dashboard
         """
         try:
-            log_files: list[str] = []
-            for pat in self.log_file_patterns:
-                log_files.extend(glob.glob(os.path.join(self.log_directory, pat)))
+            # Prefer in-memory stats if available
+            try:
+                from utils.memory_log import memory_log_snapshot
 
-            if not log_files:
-                return {
-                    'total_logs': 0,
-                    'error_count': 0,
-                    'warning_count': 0,
-                    'info_count': 0,
-                    'debug_count': 0,
-                    'avg_response_time': 0,
-                    'top_apis': [],
-                    'top_users': [],
-                    'top_endpoints': [],
-                }
+                buffer_lines = memory_log_snapshot()
+            except Exception:
+                buffer_lines = []
+
+            log_files: list[str] = []
+            for d in self.log_directories:
+                for pat in self.log_file_patterns:
+                    log_files.extend(glob.glob(os.path.join(d, pat)))
 
             stats = {
                 'total_logs': 0,
@@ -154,54 +203,29 @@ class LoggingService:
                 'users': {},
                 'endpoints': {},
             }
+            if buffer_lines:
+                for line in buffer_lines:
+                    self._accumulate_stats_line(line, stats)
+            elif log_files:
+                for log_file in log_files:
+                    if not os.path.exists(log_file):
+                        continue
 
-            for log_file in log_files:
-                if not os.path.exists(log_file):
-                    continue
-
+                    try:
+                        with open(log_file, encoding='utf-8') as file:
+                            for line in file:
+                                self._accumulate_stats_line(line, stats)
+                    except Exception as e:
+                        logger.warning(f'Error reading log file {log_file} for statistics: {str(e)}')
+                        continue
+            else:
                 try:
-                    with open(log_file, encoding='utf-8') as file:
-                        for line in file:
-                            log_entry = self._parse_log_line(line)
-                            if log_entry:
-                                stats['total_logs'] += 1
+                    from utils.memory_log import memory_log_snapshot
 
-                                level = log_entry.get('level', '').lower()
-                                if level == 'error':
-                                    stats['error_count'] += 1
-                                elif level == 'warning':
-                                    stats['warning_count'] += 1
-                                elif level == 'info':
-                                    stats['info_count'] += 1
-                                elif level == 'debug':
-                                    stats['debug_count'] += 1
-
-                                if log_entry.get('response_time'):
-                                    try:
-                                        stats['response_times'].append(
-                                            float(log_entry['response_time'])
-                                        )
-                                    except (ValueError, TypeError):
-                                        pass
-
-                                if log_entry.get('api'):
-                                    stats['apis'][log_entry['api']] = (
-                                        stats['apis'].get(log_entry['api'], 0) + 1
-                                    )
-
-                                if log_entry.get('user'):
-                                    stats['users'][log_entry['user']] = (
-                                        stats['users'].get(log_entry['user'], 0) + 1
-                                    )
-
-                                if log_entry.get('endpoint'):
-                                    stats['endpoints'][log_entry['endpoint']] = (
-                                        stats['endpoints'].get(log_entry['endpoint'], 0) + 1
-                                    )
-
+                    for line in memory_log_snapshot():
+                        self._accumulate_stats_line(line, stats)
                 except Exception as e:
-                    logger.warning(f'Error reading log file {log_file} for statistics: {str(e)}')
-                    continue
+                    logger.warning(f'In-memory stats fallback unavailable: {e}')
 
             avg_response_time = (
                 sum(stats['response_times']) / len(stats['response_times'])
@@ -386,6 +410,39 @@ class LoggingService:
 
         return data
 
+    def _accumulate_stats_line(self, line: str, stats: dict[str, Any]) -> None:
+        log_entry = self._parse_log_line(line)
+        if not log_entry:
+            return
+        stats['total_logs'] += 1
+
+        level = log_entry.get('level', '').lower()
+        if level == 'error':
+            stats['error_count'] += 1
+        elif level == 'warning':
+            stats['warning_count'] += 1
+        elif level == 'info':
+            stats['info_count'] += 1
+        elif level == 'debug':
+            stats['debug_count'] += 1
+
+        if log_entry.get('response_time'):
+            try:
+                stats['response_times'].append(float(log_entry['response_time']))
+            except (ValueError, TypeError):
+                pass
+
+        if log_entry.get('api'):
+            stats['apis'][log_entry['api']] = stats['apis'].get(log_entry['api'], 0) + 1
+
+        if log_entry.get('user'):
+            stats['users'][log_entry['user']] = stats['users'].get(log_entry['user'], 0) + 1
+
+        if log_entry.get('endpoint'):
+            stats['endpoints'][log_entry['endpoint']] = (
+                stats['endpoints'].get(log_entry['endpoint'], 0) + 1
+            )
+
     def _matches_filters(self, log_entry: dict[str, Any], filters: dict[str, Any]) -> bool:
         """
         Check if log entry matches all applied filters
@@ -433,7 +490,7 @@ class LoggingService:
                 if timestamp > end_datetime:
                     return False
 
-            for field in ['user', 'endpoint', 'request_id', 'method', 'ip_address', 'level']:
+            for field in ['user', 'api', 'endpoint', 'request_id', 'method', 'ip_address', 'level']:
                 if filters.get(field) and filters[field].strip():
                     filter_value = filters[field].strip().lower()
                     log_value = str(log_entry.get(field, '')).lower()
