@@ -241,12 +241,32 @@ async def list_tiers(
         tiers = await tier_service.list_tiers(
             enabled_only=enabled_only, search_term=search, skip=skip, limit=limit
         )
+        total = await tier_service.count_tiers(enabled_only=enabled_only, search_term=search)
+        has_next = (skip + limit) < total
+        # Normalize paging metadata to page/page_size for consistency
+        try:
+            page = (int(skip) // int(limit)) + 1 if int(limit) > 0 else 1
+        except Exception:
+            page = 1
+        page_size = int(limit) if isinstance(limit, int) else 0
 
         tier_list = [TierResponse(**tier.to_dict()).dict() for tier in tiers]
 
         return respond_rest(
             ResponseModel(
-                status_code=200, response_headers={'request_id': request_id}, response=tier_list
+                status_code=200,
+                response_headers={'request_id': request_id},
+                response={
+                    'tiers': tier_list,
+                    # Deprecated but preserved for backward compatibility
+                    'skip': skip,
+                    'limit': limit,
+                    # Normalized metadata
+                    'page': page,
+                    'page_size': page_size,
+                    'has_next': has_next,
+                    'total': total,
+                },
             )
         )
 

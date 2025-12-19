@@ -53,8 +53,8 @@ export default function ApiEndpointsPage() {
       [eid]: { loading: true, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: null }
     }))
     try {
-      const resp = await fetch(`${SERVER_URL}/platform/endpoint/validation/${encodeURIComponent(eid)}`, {
-        credentials: 'include',
+      const { fetchWithCsrf } = await import('@/utils/http')
+      const resp = await fetchWithCsrf(`${SERVER_URL}/platform/endpoint/validation/${encodeURIComponent(eid)}`, {
         headers: { 'Accept': 'application/json' }
       })
       if (resp.ok) {
@@ -131,9 +131,9 @@ export default function ApiEndpointsPage() {
       let schema: any = {}
       try { schema = JSON.parse(cur.schemaText || '{}') } catch { throw new Error('Schema must be valid JSON') }
       const body = JSON.stringify({ endpoint_id: eid, validation_enabled: !!cur.enabled, validation_schema: schema })
-      const resp = await fetch(`${SERVER_URL}/platform/endpoint/validation`, {
+      const { fetchWithCsrf } = await import('@/utils/http')
+      const resp = await fetchWithCsrf(`${SERVER_URL}/platform/endpoint/validation`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
         body
       })
@@ -156,9 +156,9 @@ export default function ApiEndpointsPage() {
     if (!cur) return
     setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...cur, saving: true, error: null } }))
     try {
-      const resp = await fetch(`${SERVER_URL}/platform/endpoint/validation/${encodeURIComponent(eid)}`, {
+      const { fetchWithCsrf } = await import('@/utils/http')
+      const resp = await fetchWithCsrf(`${SERVER_URL}/platform/endpoint/validation/${encodeURIComponent(eid)}`, {
         method: 'DELETE',
-        credentials: 'include',
         headers: { 'Accept': 'application/json' }
       })
       if (!resp.ok) {
@@ -197,21 +197,11 @@ export default function ApiEndpointsPage() {
           setApiVersion(found.api_version || '')
         }
       }
-      const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(apiName)}/${encodeURIComponent(apiVersion)}` ,{
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      const data = await response.json().catch(() => ({}))
+      const { fetchJson } = await import('@/utils/http')
+      const data = await fetchJson(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(apiName)}/${encodeURIComponent(apiVersion)}`)
       let list: any[] = []
-      if (response.ok) {
+      if (data) {
         list = data.endpoints || data.response?.endpoints || []
-      } else if (response.status === 400 && (data.error_code === 'END005' || data.error_message?.toLowerCase().includes('no endpoints'))) {
-        list = []
-      } else {
-        throw new Error(data.error_message || 'Failed to load endpoints')
       }
       setEndpoints(list)
       setAllEndpoints(list)

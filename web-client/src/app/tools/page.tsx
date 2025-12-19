@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import InfoTooltip from '@/components/InfoTooltip'
 import Layout from '@/components/Layout'
-import { SERVER_URL } from '@/utils/config'
+import { SERVER_URL, WEB_URL } from '@/utils/config'
 import { postJson } from '@/utils/api'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
@@ -38,7 +38,7 @@ interface CorsResult {
 }
 
 const ToolsPage = () => {
-  const [origin, setOrigin] = useState('http://localhost:3000')
+  const [origin, setOrigin] = useState(WEB_URL)
   const [method, setMethod] = useState('GET')
   const [headersText, setHeadersText] = useState('Content-Type, Authorization')
   const [withCredentials, setWithCredentials] = useState(true)

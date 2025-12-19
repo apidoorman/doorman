@@ -36,7 +36,8 @@ export default function CreditDefsPage() {
       const list = Array.isArray(res) ? res : (res.items || res.response?.items || [])
       setItems(list)
       setAllItems(list)
-      setHasNext(list.length === pageSize)
+      const hn = (res?.has_next ?? res?.response?.has_next)
+      setHasNext(typeof hn === 'boolean' ? hn : list.length === pageSize)
     } catch (e: any) {
       setError(e?.message || 'Failed to load credit definitions')
       setItems([])

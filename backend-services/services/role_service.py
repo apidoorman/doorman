@@ -11,7 +11,14 @@ from pymongo.errors import DuplicateKeyError
 from models.create_role_model import CreateRoleModel
 from models.response_model import ResponseModel
 from models.update_role_model import UpdateRoleModel
-from utils.async_db import db_delete_one, db_find_list, db_find_one, db_insert_one, db_update_one
+from utils.async_db import (
+    db_delete_one,
+    db_find_list,
+    db_find_one,
+    db_insert_one,
+    db_update_one,
+    db_find_paginated,
+)
 from utils.constants import ErrorCodes, Messages
 from utils.database_async import role_collection
 from utils.doorman_cache_util import doorman_cache
@@ -184,14 +191,37 @@ class RoleService:
                 ),
             ).dict()
         skip = (page - 1) * page_size
-        roles_all = await db_find_list(role_collection, {})
-        roles_all.sort(key=lambda r: r.get('role_name'))
-        roles = roles_all[skip : skip + page_size]
+        docs = await db_find_paginated(
+            role_collection, {}, skip=skip, limit=page_size, sort=[('role_name', 1)]
+        )
+        has_next = False
+        try:
+            extra = await db_find_paginated(
+                role_collection, {}, skip=skip, limit=page_size + 1, sort=[('role_name', 1)]
+            )
+            has_next = len(extra) > page_size
+        except Exception:
+            pass
+        try:
+            from utils.async_db import db_count
+            total = await db_count(role_collection, {})
+        except Exception:
+            total = None
+        roles = docs
         for role in roles:
             if role.get('_id'):
                 del role['_id']
         logger.info(request_id + ' | Roles retrieval successful')
-        return ResponseModel(status_code=200, response={'roles': roles}).dict()
+        return ResponseModel(
+            status_code=200,
+            response={
+                'roles': roles,
+                'page': page,
+                'page_size': page_size,
+                'has_next': has_next,
+                **({'total': total} if total is not None else {}),
+            },
+        ).dict()
 
     @staticmethod
     async def get_role(role_name, request_id):

@@ -13,7 +13,7 @@ const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [theme, setTheme] = useState('light')
   const router = useRouter()
-  const { checkAuth, isAuthenticated } = useAuth()
+  const { checkAuth, isAuthenticated, hasUIAccess } = useAuth()
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light'
@@ -22,10 +22,19 @@ const LoginPage = () => {
   }, [])
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && hasUIAccess) {
       router.push('/dashboard')
+    } else if (isAuthenticated && !hasUIAccess) {
+      // Authenticated but not allowed to use UI
+      setErrorMessage('Your account does not have UI access. Contact an administrator.')
+      try { void postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
+      try {
+        localStorage.clear(); sessionStorage.clear()
+        // Attempt to clear non-HttpOnly cookie (best-effort)
+        document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+      } catch {}
     }
-  }, [isAuthenticated, router])
+  }, [isAuthenticated, hasUIAccess, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +66,13 @@ const LoginPage = () => {
         return
       }
       await checkAuth()
-      router.push('/dashboard')
+      // Double-check UI access after auth sync
+      if (hasUIAccess) {
+        router.push('/dashboard')
+      } else {
+        setErrorMessage('Your account does not have UI access. Contact an administrator.')
+        try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
+      }
     } catch (error) {
       console.error('Login error:', error)
       setErrorMessage('Network error. Please try again.')

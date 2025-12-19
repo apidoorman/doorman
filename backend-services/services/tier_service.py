@@ -144,6 +144,27 @@ class TierService:
 
         return tiers
 
+    async def count_tiers(self, enabled_only: bool = False, search_term: str | None = None) -> int:
+        """Count tiers matching filters."""
+        query: dict[str, Any] = {}
+        if enabled_only:
+            query['enabled'] = True
+        total = await self.tiers_collection.count_documents(query)
+        if not search_term:
+            return total
+        # If searching, we need to apply search term on name/description
+        # For simplicity, load only fields required for matching
+        cursor = self.tiers_collection.find(query, {'name': 1, 'display_name': 1, 'description': 1})
+        term = (search_term or '').lower()
+        cnt = 0
+        async for doc in cursor:
+            name = str(doc.get('name') or '').lower()
+            dn = str(doc.get('display_name') or '').lower()
+            desc = str(doc.get('description') or '').lower()
+            if (term in name) or (term in dn) or (term in desc):
+                cnt += 1
+        return cnt
+
     async def update_tier(self, tier_id: str, updates: dict[str, Any]) -> Tier | None:
         """
         Update tier

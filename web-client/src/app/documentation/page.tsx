@@ -5,6 +5,7 @@ import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import MarkdownViewer from '@/components/MarkdownViewer'
 import HtmlViewer from '@/components/HtmlViewer'
+import { SERVER_URL } from '@/utils/config'
 
 export default function DocumentationPage() {
   // Serve the gateway documentation (static HTML) from the app public folder
@@ -20,7 +21,8 @@ export default function DocumentationPage() {
     { key: 'fields', label: 'Using Fields', type: 'html', src: '/docs/using-fields.html' },
     { key: 'security', label: 'Security', type: 'md', src: '/docs/security.md' },
     { key: 'troubleshooting', label: 'Troubleshooting', type: 'md', src: '/docs/troubleshooting.md' },
-  ] as const
+    { key: 'openapi', label: 'Open API Docs', type: 'frame', src: `${SERVER_URL}/platform/docs` },
+  ]
   const [active, setActive] = useState<typeof tabs[number]['key']>('guides')
   const [search, setSearch] = useState('')
   const [index, setIndex] = useState<Array<{ key: string; label: string; src: string; headings: Array<{ text: string; id: string }>; text: string }>>([])
@@ -88,9 +90,7 @@ export default function DocumentationPage() {
     return hits.slice(0, 8)
   }, [search, index])
 
-  // Build API reference URL robustly
-  // Internal API reference route within the UI
-  const apiReferenceUrl = '/documentation/reference'
+  // Removed "Open API Reference" button per request
 
   // Intercept clicks on /docs/... links to switch tabs instead of navigating
   function handleDocsLinkClick(e: React.MouseEvent<HTMLDivElement>) {
@@ -129,14 +129,6 @@ export default function DocumentationPage() {
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Guides and field references for configuring and operating the Doorman gateway
               </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <a
-                className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                href={apiReferenceUrl}
-              >
-                Open API Reference
-              </a>
             </div>
           </div>
 
@@ -208,9 +200,13 @@ export default function DocumentationPage() {
                     <div className="p-5" style={{ minHeight: '600px' }}>
                       <MarkdownViewer src={t.src} searchTerm={search} />
                     </div>
-                  ) : (
+                  ) : t.type === 'html' ? (
                     <div className="p-5" style={{ minHeight: '600px' }}>
                       <HtmlViewer src={t.src} />
+                    </div>
+                  ) : (
+                    <div className="p-0" style={{ minHeight: '600px' }}>
+                      <iframe title="OpenAPI Docs" src={t.src as any} className="w-full" style={{ minHeight: 'calc(100vh - 260px)', border: 0 }} />
                     </div>
                   )}
                 </div>

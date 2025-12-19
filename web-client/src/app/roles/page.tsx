@@ -52,7 +52,8 @@ const RolesPage = () => {
       }).sort((a: any, b: any) => String(a.role_name).localeCompare(String(b.role_name)))
       setAllRoles(unique)
       setRoles(unique)
-      setHasNext((items || []).length === pageSize)
+      const hn = (data?.has_next ?? data?.response?.has_next)
+      setHasNext(typeof hn === 'boolean' ? hn : (items || []).length === pageSize)
     } catch (err) {
       setError('Failed to load roles. Please try again later.')
       setRoles([])

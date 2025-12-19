@@ -25,36 +25,38 @@ A lightweight, Python-based API gateway for managing REST, SOAP, GraphQL, gRPC, 
 
 ### Prerequisites
 - Docker installed
-- Environment file (`.env`) at repo root (use `./.env.example` as template)
+- Environment file (`.env`) at repo root (start from `./.env.example`)
 
-### Run with Docker Compose (Recommended)
+### Run with Docker Compose
 
 ```bash
-# Prepare env (first time)
+# 1) Prepare env (first time)
 cp .env.example .env
-# Edit .env and set at least: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
+# Edit .env and set: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
 
-# Start services (builds automatically)
+# 2) Start (builds automatically)
 docker compose up
 ```
 
-**Access Points:**
-- Backend API: `http://localhost:3001` (or your configured `PORT`)
-- Web Client: `http://localhost:3000` (or your configured `WEB_PORT`)
+When ready:
+- Web UI: `http://localhost:3000`
+- Gateway API: `http://localhost:3001`
 
-## Production Checklist
+## Frontend Gateway Configuration
 
-Harden your deployment with these defaults and environment settings:
+The web client needs to know the backend gateway URL. Set `NEXT_PUBLIC_GATEWAY_URL` in the root `.env` file:
 
-- `ENV=production` (enables stricter startup validations)
-- `HTTPS_ONLY=true` (serve behind TLS; forces Secure cookies)
-- `JWT_SECRET_KEY` (required; 32+ random bytes)
-- `TOKEN_ENCRYPTION_KEY` (32+ random bytes to encrypt API keys at rest)
-- `MEM_ENCRYPTION_KEY` (32+ random bytes; required for MEM mode dumps)
-- `COOKIE_SAMESITE=Strict` and set `COOKIE_DOMAIN` to your base domain
-- `LOCAL_HOST_IP_BYPASS=false`
-- CORS: avoid wildcard origins with credentials, or set `CORS_STRICT=true`
-- Store secrets outside git (vault/CI); rotate regularly
+```bash
+# For Docker Compose (default - both services in same container)
+NEXT_PUBLIC_GATEWAY_URL=http://localhost:3001
+
+# For production reverse proxy (frontend and API on same domain)
+# Leave unset - frontend will use same origin
+```
+
+**Behavior:**
+- If `NEXT_PUBLIC_GATEWAY_URL` is set → uses that URL for API calls
+- If not set → uses same origin (for reverse proxy deployments where frontend and API share the same domain)
 
 ### Run in Background
 
@@ -72,9 +74,12 @@ docker compose down
 ## Configuration
 
 ### Required Environment Variables
-- `DOORMAN_ADMIN_EMAIL`: Admin user email
-- `DOORMAN_ADMIN_PASSWORD`: Admin password
-- `JWT_SECRET_KEY`: Secret key for JWT tokens (32+ chars)
+- `DOORMAN_ADMIN_EMAIL` — initial admin user email
+- `DOORMAN_ADMIN_PASSWORD` — initial admin password
+- `JWT_SECRET_KEY` — secret key for JWT tokens (32+ chars)
+
+Optional (recommended in some setups):
+- `NEXT_PUBLIC_GATEWAY_URL` — frontend → gateway base URL (see “Frontend Gateway Configuration”)
 
 ### High Availability Setup
 
@@ -102,25 +107,6 @@ docker run --rm --name doorman \
   --env-file .env \
   doorman:latest
 ```
-
-## Testing
-
-### Testing Against Docker
-
-When testing from your host machine against Doorman running in Docker:
-
-```bash
-# Verbose output
-make live-docker
-
-# Quiet output
-make liveq-docker
-
-# Manual environment variable
-DOORMAN_IN_DOCKER=1 make live
-```
-
-This configures test servers to use `host.docker.internal` (Mac/Windows) or `172.17.0.1` (Linux).
 
 ## Documentation
 

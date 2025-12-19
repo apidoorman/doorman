@@ -6,11 +6,12 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { fetchJson, getCookie } from '@/utils/http'
-import { putJson } from '@/utils/api'
+import { putJson, getJson, fetchAllPaginated } from '@/utils/api'
 import { useToast } from '@/contexts/ToastContext'
 import { SERVER_URL } from '@/utils/config'
 import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
+import SearchableSelect from '@/components/SearchableSelect'
 
 interface API {
   api_id: string
@@ -98,6 +99,28 @@ const ApiDetailPage = () => {
 
   type ProtoState = { loading: boolean; exists: boolean | null; content?: string; error?: string | null; working?: boolean; show?: boolean; enabled?: boolean }
   const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false, enabled: true })
+
+  const fetchRoles = async (): Promise<string[]> => {
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/role/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.roles || data.response?.roles || [])),
+      undefined,
+      undefined,
+      'cache:roles:all'
+    )
+    return items.map((r: any) => r.role_name || r.name || r).filter(Boolean)
+  }
+
+  const fetchGroups = async (): Promise<string[]> => {
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/group/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.groups || data.response?.groups || [])),
+      undefined,
+      undefined,
+      'cache:groups:all'
+    )
+    return items.map((g: any) => g.group_name || g.name || g).filter(Boolean)
+  }
 
   const fetchWithCsrf = async (input: RequestInfo, init: RequestInit = {}) => {
     const csrf = getCookie('csrf_token')
@@ -264,16 +287,8 @@ const ApiDetailPage = () => {
     const loadEndpoints = async () => {
       if (!api) return
       try {
-        const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
-          credentials: 'include',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
-        })
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.error_message || 'Failed to load endpoints')
-        setEndpoints(data.endpoints || [])
+        const data = await (await import('@/utils/http')).fetchJson<any>(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}`)
+        setEndpoints((data && (data.endpoints || data)) || [])
       } catch (e) {
         console.warn('Failed to load endpoints for API', e)
       }
@@ -296,9 +311,7 @@ const ApiDetailPage = () => {
       const name = (api as any)?.api_name || (editData as any)?.api_name
       const version = (api as any)?.api_version || (editData as any)?.api_version
       if (!name || !version) throw new Error('Missing API identity')
-      const res = await fetch(`${SERVER_URL}/platform/config/export/apis?api_name=${encodeURIComponent(String(name))}&api_version=${encodeURIComponent(String(version))}`, { credentials: 'include' })
-      const data = await res.json()
-      const payload = (data && (data.response || data))
+      const payload = await (await import('@/utils/http')).fetchJson<any>(`${SERVER_URL}/platform/config/export/apis?api_name=${encodeURIComponent(String(name))}&api_version=${encodeURIComponent(String(version))}`)
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
@@ -354,6 +367,17 @@ const ApiDetailPage = () => {
       const payload: any = { ...editData }
       if (typeof ipWhitelistText === 'string') payload.api_ip_whitelist = ipWhitelistText.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
       if (typeof ipBlacklistText === 'string') payload.api_ip_blacklist = ipBlacklistText.split(/\r?\n|,/).map(s=>s.trim()).filter(Boolean)
+      
+      // Ensure boolean fields are actual booleans, not strings
+      if ('api_auth_required' in payload) payload.api_auth_required = Boolean(payload.api_auth_required)
+      if ('api_public' in payload) payload.api_public = Boolean(payload.api_public)
+      if ('api_credits_enabled' in payload) payload.api_credits_enabled = Boolean(payload.api_credits_enabled)
+      if ('active' in payload) payload.active = Boolean(payload.active)
+      if ('api_trust_x_forwarded_for' in payload) payload.api_trust_x_forwarded_for = Boolean(payload.api_trust_x_forwarded_for)
+      
+      // Allow empty description
+      if (payload.api_description === '') payload.api_description = ''
+      
       await putJson(`${SERVER_URL}/platform/api/${encodeURIComponent(targetName)}/${encodeURIComponent(targetVersion)}`, payload)
 
       try {
@@ -486,15 +510,8 @@ const ApiDetailPage = () => {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error_message || 'Failed to save endpoint servers')
-      const refreshed = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      const refreshedData = await refreshed.json()
-      setEndpoints(refreshedData.endpoints || [])
+      const refreshedData = await (await import('@/utils/http')).fetchJson<any>(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}`)
+      setEndpoints((refreshedData && (refreshedData.endpoints || refreshedData)) || [])
       setSuccess('Endpoint servers updated')
       setTimeout(() => setSuccess(null), 2000)
     } catch (e:any) {
@@ -1259,19 +1276,16 @@ const ApiDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newRole}
-                      onChange={(e) => setNewRole(e.target.value)}
-                      className="input flex-1"
-                      placeholder="Enter role name"
-                      onKeyPress={(e) => e.key === 'Enter' && addRole()}
-                    />
-                    <button onClick={addRole} className="btn btn-primary">
-                      Add
-                    </button>
-                  </div>
+                  <SearchableSelect
+                    value={newRole}
+                    onChange={setNewRole}
+                    onAdd={addRole}
+                    onKeyPress={(e) => e.key === 'Enter' && addRole()}
+                    placeholder="Select or type role name"
+                    fetchOptions={fetchRoles}
+                    disabled={saving}
+                    addButtonText="Add"
+                  />
                 )}
 
                 <div className="flex flex-wrap gap-2">
@@ -1305,19 +1319,16 @@ const ApiDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newGroup}
-                      onChange={(e) => setNewGroup(e.target.value)}
-                      className="input flex-1"
-                      placeholder="Enter group name"
-                      onKeyPress={(e) => e.key === 'Enter' && addGroup()}
-                    />
-                    <button onClick={addGroup} className="btn btn-primary">
-                      Add
-                    </button>
-                  </div>
+                  <SearchableSelect
+                    value={newGroup}
+                    onChange={setNewGroup}
+                    onAdd={addGroup}
+                    onKeyPress={(e) => e.key === 'Enter' && addGroup()}
+                    placeholder="Select or type group name"
+                    fetchOptions={fetchGroups}
+                    disabled={saving}
+                    addButtonText="Add"
+                  />
                 )}
 
                 <div className="flex flex-wrap gap-2">

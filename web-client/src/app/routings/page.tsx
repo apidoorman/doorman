@@ -39,7 +39,8 @@ const RoutingsPage = () => {
       const routingList = Array.isArray(data) ? data : (data.routings || data.response?.routings || [])
       setAllRoutings(routingList)
       setRoutings(routingList)
-      setHasNext((routingList || []).length === pageSize)
+      const hn = (data?.has_next ?? data?.response?.has_next)
+      setHasNext(typeof hn === 'boolean' ? hn : (routingList || []).length === pageSize)
     } catch (err) {
       setError('Failed to load routings. Please try again later.')
       setRoutings([])

@@ -285,6 +285,9 @@ async def generate_report(request: Request, start: str, end: str):
             ep = str(e.get('endpoint') or '')
             if not ep:
                 continue
+            # Exclude platform endpoints from reports
+            if ep.startswith('/platform/') or ep == '/platform':
+                continue
             total += 1
 
             status_code = None
@@ -317,6 +320,7 @@ async def generate_report(request: Request, start: str, end: str):
 
         if total == 0:
             buckets = list(metrics_store._buckets)
+            # Exclude platform by relying on API-only recording (defensive if any slipped in)
             sel = [b for b in buckets if b.start_ts >= start_ts and b.start_ts <= end_ts]
             total = sum(b.count for b in sel)
             errors = sum(b.error_count for b in sel)
