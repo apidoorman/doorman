@@ -48,8 +48,10 @@ const APIsPage = () => {
       setLoading(true)
       setError(null)
       let fetched: any[] = []
+      let raw: any = null
       try {
         const data = await getJson<any>(`${SERVER_URL}/platform/api/all?page=${page}&page_size=${pageSize}`)
+        raw = data
         fetched = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
       } catch {
         fetched = []
@@ -67,7 +69,8 @@ const APIsPage = () => {
         next = end < total
         setIgnorePagingAllCache(fetched as any)
       } else if (Array.isArray(fetched)) {
-        next = fetched.length === pageSize
+        const hn = (raw?.meta?.has_next ?? raw?.has_next ?? raw?.response?.has_next)
+        next = typeof hn === 'boolean' ? hn : fetched.length === pageSize
         setIgnorePagingAllCache(null)
       }
       const seen = new Set<string>()

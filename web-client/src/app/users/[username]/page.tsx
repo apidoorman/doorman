@@ -9,7 +9,7 @@ import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { fetchJson } from '@/utils/http'
 import { PROTECTED_USERS, SERVER_URL } from '@/utils/config'
-import { getJson } from '@/utils/api'
+import { getJson, fetchAllPaginated } from '@/utils/api'
 import SearchableSelect from '@/components/SearchableSelect'
 
 interface User {
@@ -83,15 +83,25 @@ const UserDetailPage = () => {
   const editCustomAttrCount = Object.keys(currentCustomAttrs).length
 
   const fetchRoles = async (): Promise<string[]> => {
-    const data = await getJson<any>(`${SERVER_URL}/platform/role/all`)
-    const roles = Array.isArray(data) ? data : (data.roles || data.response?.roles || [])
-    return roles.map((r: any) => r.role_name || r.name || r).filter(Boolean)
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/role/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.roles || data.response?.roles || [])),
+      undefined,
+      undefined,
+      'cache:roles:all'
+    )
+    return items.map((r: any) => r.role_name || r.name || r).filter(Boolean)
   }
 
   const fetchGroups = async (): Promise<string[]> => {
-    const data = await getJson<any>(`${SERVER_URL}/platform/group/all`)
-    const groups = Array.isArray(data) ? data : (data.groups || data.response?.groups || [])
-    return groups.map((g: any) => g.group_name || g.name || g).filter(Boolean)
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/group/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.groups || data.response?.groups || [])),
+      undefined,
+      undefined,
+      'cache:groups:all'
+    )
+    return items.map((g: any) => g.group_name || g.name || g).filter(Boolean)
   }
 
   useEffect(() => {

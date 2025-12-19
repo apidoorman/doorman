@@ -245,7 +245,7 @@ class AsyncDatabase:
         await self.db.apis.create_indexes(
             [
                 IndexModel([('api_id', ASCENDING)], unique=True),
-                IndexModel([('name', ASCENDING), ('version', ASCENDING)]),
+                IndexModel([('api_name', ASCENDING), ('api_version', ASCENDING)]),
             ]
         )
 
@@ -283,10 +283,10 @@ class AsyncDatabase:
         )
 
         await self.db.credit_defs.create_indexes(
-            [
-                IndexModel([('api_credit_group', ASCENDING)], unique=True),
-                IndexModel([('username', ASCENDING)], unique=True),
-            ]
+            [IndexModel([('api_credit_group', ASCENDING)], unique=True)]
+        )
+        await self.db.user_credits.create_indexes(
+            [IndexModel([('username', ASCENDING)], unique=True)]
         )
 
         await self.db.endpoint_validations.create_indexes(

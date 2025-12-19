@@ -41,7 +41,8 @@ const UsersPage = () => {
       const userList = Array.isArray(data) ? data : (data.users || data.response?.users || [])
       setAllUsers(userList)
       setUsers(userList)
-      setHasNext((userList || []).length === pageSize)
+      const hn = (data?.has_next ?? data?.response?.has_next)
+      setHasNext(typeof hn === 'boolean' ? hn : (userList || []).length === pageSize)
     } catch (err) {
       setError('Failed to load users. Please try again later.')
       setUsers([])

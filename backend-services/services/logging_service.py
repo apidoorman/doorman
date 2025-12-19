@@ -49,6 +49,7 @@ class LoggingService:
         start_time: str | None = None,
         end_time: str | None = None,
         user: str | None = None,
+        api: str | None = None,
         endpoint: str | None = None,
         request_id: str | None = None,
         method: str | None = None,
@@ -92,6 +93,7 @@ class LoggingService:
                             'start_time': start_time,
                             'end_time': end_time,
                             'user': user,
+                            'api': api,
                             'endpoint': endpoint,
                             'request_id': request_id,
                             'method': method,
@@ -128,6 +130,7 @@ class LoggingService:
                                         'start_time': start_time,
                                         'end_time': end_time,
                                         'user': user,
+                                        'api': api,
                                         'endpoint': endpoint,
                                         'request_id': request_id,
                                         'method': method,
@@ -487,7 +490,7 @@ class LoggingService:
                 if timestamp > end_datetime:
                     return False
 
-            for field in ['user', 'endpoint', 'request_id', 'method', 'ip_address', 'level']:
+            for field in ['user', 'api', 'endpoint', 'request_id', 'method', 'ip_address', 'level']:
                 if filters.get(field) and filters[field].strip():
                     filter_value = filters[field].strip().lower()
                     log_value = str(log_entry.get(field, '')).lower()

@@ -7,7 +7,7 @@ import Layout from '@/components/Layout'
 import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
-import { postJson } from '@/utils/api'
+import { postJson, fetchAllPaginated } from '@/utils/api'
 import ConfirmModal from '@/components/ConfirmModal'
 import { getJson } from '@/utils/api'
 import SearchableSelect from '@/components/SearchableSelect'
@@ -61,15 +61,25 @@ const AddApiPage = () => {
   }, [])
 
   const fetchRoles = async (): Promise<string[]> => {
-    const data = await getJson<any>(`${SERVER_URL}/platform/role/all`)
-    const roles = Array.isArray(data) ? data : (data.roles || data.response?.roles || [])
-    return roles.map((r: any) => r.role_name || r.name || r).filter(Boolean)
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/role/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.roles || data.response?.roles || [])),
+      undefined,
+      undefined,
+      'cache:roles:all'
+    )
+    return items.map((r: any) => r.role_name || r.name || r).filter(Boolean)
   }
 
   const fetchGroups = async (): Promise<string[]> => {
-    const data = await getJson<any>(`${SERVER_URL}/platform/group/all`)
-    const groups = Array.isArray(data) ? data : (data.groups || data.response?.groups || [])
-    return groups.map((g: any) => g.group_name || g.name || g).filter(Boolean)
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/group/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.groups || data.response?.groups || [])),
+      undefined,
+      undefined,
+      'cache:groups:all'
+    )
+    return items.map((g: any) => g.group_name || g.name || g).filter(Boolean)
   }
 
   const addMyIpToWhitelist = () => {

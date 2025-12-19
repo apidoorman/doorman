@@ -12,7 +12,14 @@ from fastapi import HTTPException
 from models.create_user_model import CreateUserModel
 from models.response_model import ResponseModel
 from utils import password_util
-from utils.async_db import db_delete_one, db_find_list, db_find_one, db_insert_one, db_update_one
+from utils.async_db import (
+    db_delete_one,
+    db_find_list,
+    db_find_one,
+    db_insert_one,
+    db_update_one,
+    db_find_paginated,
+)
 from utils.bandwidth_util import get_current_usage
 from utils.constants import ErrorCodes, Messages
 from utils.database_async import api_collection, subscriptions_collection, user_collection
@@ -432,9 +439,26 @@ class UserService:
                 ),
             ).dict()
         skip = (page - 1) * page_size
-        users_all = await db_find_list(user_collection, {})
-        users_all.sort(key=lambda u: u.get('username'))
-        users = users_all[skip : skip + page_size]
+        docs = await db_find_paginated(
+            user_collection, {}, skip=skip, limit=page_size, sort=[('username', 1)]
+        )
+        # Compute metadata
+        has_next = False
+        try:
+            # Fetch one extra to detect next page without a separate query
+            extra = await db_find_paginated(
+                user_collection, {}, skip=skip, limit=page_size + 1, sort=[('username', 1)]
+            )
+            has_next = len(extra) > page_size
+        except Exception:
+            pass
+        try:
+            from utils.async_db import db_count
+            total = await db_count(user_collection, {})
+        except Exception:
+            total = None
+
+        users = docs
         for user in users:
             if user.get('_id'):
                 del user['_id']
@@ -444,4 +468,13 @@ class UserService:
                 if isinstance(value, bytes):
                     user[key] = value.decode('utf-8')
         logger.info(f'{request_id} | User retrieval successful')
-        return ResponseModel(status_code=200, response={'users': users}).dict()
+        return ResponseModel(
+            status_code=200,
+            response={
+                'users': users,
+                'page': page,
+                'page_size': page_size,
+                'has_next': has_next,
+                **({'total': total} if total is not None else {}),
+            },
+        ).dict()

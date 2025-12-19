@@ -69,7 +69,8 @@ const GroupsPage = () => {
       
       setAllGroups(groupsWithCounts)
       setGroups(groupsWithCounts)
-      setHasNext((items || []).length === pageSize)
+      const hn = (groupData?.has_next ?? groupData?.response?.has_next)
+      setHasNext(typeof hn === 'boolean' ? hn : (items || []).length === pageSize)
     } catch (err) {
       setError('Failed to load groups. Please try again later.')
       setGroups([])

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { fetchJson, getCookie } from '@/utils/http'
-import { putJson, getJson } from '@/utils/api'
+import { putJson, getJson, fetchAllPaginated } from '@/utils/api'
 import { useToast } from '@/contexts/ToastContext'
 import { SERVER_URL } from '@/utils/config'
 import InfoTooltip from '@/components/InfoTooltip'
@@ -101,15 +101,25 @@ const ApiDetailPage = () => {
   const [proto, setProto] = useState<ProtoState>({ loading: false, exists: null, content: undefined, error: null, working: false, show: false, enabled: true })
 
   const fetchRoles = async (): Promise<string[]> => {
-    const data = await getJson<any>(`${SERVER_URL}/platform/role/all`)
-    const roles = Array.isArray(data) ? data : (data.roles || data.response?.roles || [])
-    return roles.map((r: any) => r.role_name || r.name || r).filter(Boolean)
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/role/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.roles || data.response?.roles || [])),
+      undefined,
+      undefined,
+      'cache:roles:all'
+    )
+    return items.map((r: any) => r.role_name || r.name || r).filter(Boolean)
   }
 
   const fetchGroups = async (): Promise<string[]> => {
-    const data = await getJson<any>(`${SERVER_URL}/platform/group/all`)
-    const groups = Array.isArray(data) ? data : (data.groups || data.response?.groups || [])
-    return groups.map((g: any) => g.group_name || g.name || g).filter(Boolean)
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/group/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.groups || data.response?.groups || [])),
+      undefined,
+      undefined,
+      'cache:groups:all'
+    )
+    return items.map((g: any) => g.group_name || g.name || g).filter(Boolean)
   }
 
   const fetchWithCsrf = async (input: RequestInfo, init: RequestInit = {}) => {
@@ -277,16 +287,8 @@ const ApiDetailPage = () => {
     const loadEndpoints = async () => {
       if (!api) return
       try {
-        const response = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
-          credentials: 'include',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
-        })
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.error_message || 'Failed to load endpoints')
-        setEndpoints(data.endpoints || [])
+        const data = await (await import('@/utils/http')).fetchJson<any>(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}`)
+        setEndpoints((data && (data.endpoints || data)) || [])
       } catch (e) {
         console.warn('Failed to load endpoints for API', e)
       }
@@ -309,9 +311,7 @@ const ApiDetailPage = () => {
       const name = (api as any)?.api_name || (editData as any)?.api_name
       const version = (api as any)?.api_version || (editData as any)?.api_version
       if (!name || !version) throw new Error('Missing API identity')
-      const res = await fetch(`${SERVER_URL}/platform/config/export/apis?api_name=${encodeURIComponent(String(name))}&api_version=${encodeURIComponent(String(version))}`, { credentials: 'include' })
-      const data = await res.json()
-      const payload = (data && (data.response || data))
+      const payload = await (await import('@/utils/http')).fetchJson<any>(`${SERVER_URL}/platform/config/export/apis?api_name=${encodeURIComponent(String(name))}&api_version=${encodeURIComponent(String(version))}`)
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
@@ -510,15 +510,8 @@ const ApiDetailPage = () => {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error_message || 'Failed to save endpoint servers')
-      const refreshed = await fetch(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}` ,{
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      })
-      const refreshedData = await refreshed.json()
-      setEndpoints(refreshedData.endpoints || [])
+      const refreshedData = await (await import('@/utils/http')).fetchJson<any>(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(api.api_name)}/${encodeURIComponent(api.api_version)}`)
+      setEndpoints((refreshedData && (refreshedData.endpoints || refreshedData)) || [])
       setSuccess('Endpoint servers updated')
       setTimeout(() => setSuccess(null), 2000)
     } catch (e:any) {

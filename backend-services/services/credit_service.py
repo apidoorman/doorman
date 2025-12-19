@@ -12,7 +12,14 @@ from pymongo.errors import PyMongoError
 from models.credit_model import CreditModel
 from models.response_model import ResponseModel
 from models.user_credits_model import UserCreditModel
-from utils.async_db import db_delete_one, db_find_list, db_find_one, db_insert_one, db_update_one
+from utils.async_db import (
+    db_delete_one,
+    db_find_list,
+    db_find_one,
+    db_insert_one,
+    db_update_one,
+    db_find_paginated,
+)
 from utils.constants import ErrorCodes, Messages
 from utils.database_async import credit_def_collection, user_credit_collection
 from utils.doorman_cache_util import doorman_cache
@@ -214,12 +221,25 @@ class CreditService:
                         else Messages.INVALID_PAGING
                     ),
                 ).dict()
-            all_defs = await db_find_list(credit_def_collection, {})
-            all_defs.sort(key=lambda d: d.get('api_credit_group'))
-            start = max((page - 1), 0) * page_size if page and page_size else 0
-            end = start + page_size if page and page_size else None
+            skip = (page - 1) * page_size
+            docs = await db_find_paginated(
+                credit_def_collection, {}, skip=skip, limit=page_size, sort=[('api_credit_group', 1)]
+            )
+            # Metadata
+            try:
+                extra = await db_find_paginated(
+                    credit_def_collection, {}, skip=skip, limit=page_size + 1, sort=[('api_credit_group', 1)]
+                )
+                has_next = len(extra) > page_size
+            except Exception:
+                has_next = False
+            try:
+                from utils.async_db import db_count
+                total = await db_count(credit_def_collection, {})
+            except Exception:
+                total = None
             items = []
-            for doc in all_defs[start:end]:
+            for doc in docs:
                 if doc.get('_id'):
                     del doc['_id']
                 items.append(
@@ -230,7 +250,16 @@ class CreditService:
                         'credit_tiers': doc.get('credit_tiers', []),
                     }
                 )
-            return ResponseModel(status_code=200, response={'items': items}).dict()
+            return ResponseModel(
+                status_code=200,
+                response={
+                    'items': items,
+                    'page': page,
+                    'page_size': page_size,
+                    'has_next': has_next,
+                    **({'total': total} if total is not None else {}),
+                },
+            ).dict()
         except PyMongoError as e:
             logger.error(request_id + f' | Credit list failed with database error: {str(e)}')
             return ResponseModel(
@@ -322,23 +351,58 @@ class CreditService:
                     ),
                 ).dict()
 
-            cursor = user_credit_collection.find().sort('username', 1)
-            all_items = cursor.to_list(length=None)
-            term = (search or '').strip().lower()
-            if term:
-                filtered = []
-                for it in all_items:
-                    uname = str(it.get('username', '')).lower()
-                    groups = list((it.get('users_credits') or {}).keys())
-                    if uname.find(term) != -1 or any(term in str(g).lower() for g in groups):
-                        filtered.append(it)
-                items_src = filtered
+            term = (search or '').strip()
+            # If no search term, use efficient paginated query
+            if not term:
+                items = await db_find_paginated(
+                    user_credit_collection, {}, skip=(page - 1) * page_size, limit=page_size, sort=[('username', 1)]
+                )
+                try:
+                    from utils.async_db import db_count
+                    total = await db_count(user_credit_collection, {})
+                except Exception:
+                    total = None
+                try:
+                    extra = await db_find_paginated(
+                        user_credit_collection, {}, skip=(page - 1) * page_size, limit=page_size + 1, sort=[('username', 1)]
+                    )
+                    has_next = len(extra) > page_size
+                except Exception:
+                    has_next = False
             else:
-                items_src = all_items
+                # Server-side filtering by username or group key via aggregation
+                from utils.async_db import db_aggregate_list
+                ci_regex = {'$regex': term, '$options': 'i'}
+                base_pipeline = [
+                    {
+                        '$addFields': {
+                            'users_credits_array': {'$objectToArray': {'$ifNull': ['$users_credits', {}]}}
+                        }
+                    },
+                    {
+                        '$match': {
+                            '$or': [
+                                {'username': ci_regex},
+                                {'users_credits_array.k': ci_regex},
+                            ]
+                        }
+                    },
+                    {'$sort': {'username': 1}},
+                ]
 
-            start = max((page - 1), 0) * page_size
-            end = start + page_size if page_size else None
-            items = items_src[start:end]
+                # Page of results
+                page_pipeline = base_pipeline + [
+                    {'$skip': max((page - 1), 0) * page_size},
+                    {'$limit': page_size},
+                    {'$project': {'users_credits_array': 0}},
+                ]
+                items = await db_aggregate_list(user_credit_collection, page_pipeline)
+
+                # Total count and has_next
+                count_pipeline = base_pipeline + [{'$count': 'total'}]
+                counts = await db_aggregate_list(user_credit_collection, count_pipeline)
+                total = int(counts[0]['total']) if counts else 0
+                has_next = (page * page_size) < total
             for it in items:
                 if it.get('_id'):
                     del it['_id']
@@ -348,7 +412,16 @@ class CreditService:
                         dec = decrypt_value(info.get('user_api_key'))
                         if dec is not None:
                             info['user_api_key'] = dec
-            return ResponseModel(status_code=200, response={'user_credits': items}).dict()
+            return ResponseModel(
+                status_code=200,
+                response={
+                    'user_credits': items,
+                    'page': page,
+                    'page_size': page_size,
+                    'has_next': has_next,
+                    **({'total': total} if total is not None else {}),
+                },
+            ).dict()
         except PyMongoError as e:
             logger.error(request_id + f' | Get all credits failed with database error: {str(e)}')
             return ResponseModel(

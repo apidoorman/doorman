@@ -21,12 +21,18 @@ export function ProtectedRoute({
   const [redirecting, setRedirecting] = useState(false)
 
   useEffect(() => {
-    if (redirecting) return;
+    if (redirecting) return
 
-    if (!isAuthenticated || !hasUIAccess) {
-      setRedirecting(true);
-      if (DEBUG) console.log('ProtectedRoute - Redirecting to login:', { isAuthenticated, hasUIAccess })
+    if (!isAuthenticated) {
+      setRedirecting(true)
+      if (DEBUG) console.log('ProtectedRoute - Redirecting to login (no auth)')
       router.push('/login')
+      return
+    }
+    if (isAuthenticated && !hasUIAccess) {
+      setRedirecting(true)
+      if (DEBUG) console.log('ProtectedRoute - Redirecting to 403 (no UI access)')
+      router.push('/403')
       return
     }
   }, [isAuthenticated, hasUIAccess, router, redirecting])
@@ -64,7 +70,7 @@ export function ProtectedRoute({
     )
   }
 
-  if (!hasUIAccess) {
+  if (isAuthenticated && !hasUIAccess) {
     return fallback || (
       <div className="min-h-screen bg-gray-50 dark:bg-dark-bg flex items-center justify-center">
         <div className="max-w-md w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6">

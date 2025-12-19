@@ -6,7 +6,7 @@ import Layout from '@/components/Layout'
 import InfoTooltip from '@/components/InfoTooltip'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { SERVER_URL } from '@/utils/config'
-import { getJson, postJson } from '@/utils/api'
+import { getJson, postJson, fetchAllPaginated } from '@/utils/api'
 
 type TierMeta = { credits: number; reset_frequency?: string }
 
@@ -28,8 +28,13 @@ export default function UserCreditsDetailPage() {
 
   const loadDefs = async () => {
     try {
-      const res = await getJson<any>(`${SERVER_URL}/platform/credit/defs?page=1&page_size=1000`)
-      const items = res?.items || res?.response?.items || []
+      const items = await fetchAllPaginated<any>(
+        (page, size) => `${SERVER_URL}/platform/credit/defs?page=${page}&page_size=${size}`,
+        (data) => (data?.items || data?.response?.items || []),
+        undefined,
+        undefined,
+        'cache:credit_defs:all'
+      )
       const map: Record<string, { [tier: string]: TierMeta }> = {}
       for (const it of items) {
         const tierMap: Record<string, TierMeta> = {}

@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
 import { postJson, delJson } from '@/utils/api'
+import { fetchWithCsrf } from '@/utils/http'
 import ConfirmModal from '@/components/ConfirmModal'
 import { useToast } from '@/contexts/ToastContext'
 
@@ -19,9 +20,7 @@ export default function ImportExportPage() {
   const startExport = async (key: string, path: string) => {
     try {
       setExportWorking(key)
-      const res = await fetch(`${SERVER_URL}${path}`, { credentials: 'include' })
-      const data = await res.json()
-      const payload = data?.response || data
+      const payload = await (await import('@/utils/http')).fetchJson<any>(`${SERVER_URL}${path}`)
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
@@ -45,7 +44,7 @@ export default function ImportExportPage() {
       const conflicts: { api_name: string; api_version: string }[] = []
       for (const a of apis) {
         try {
-          const res = await fetch(`${SERVER_URL}/platform/api/${encodeURIComponent(a.api_name)}/${encodeURIComponent(a.api_version)}`, { credentials: 'include' })
+          const res = await fetchWithCsrf(`${SERVER_URL}/platform/api/${encodeURIComponent(a.api_name)}/${encodeURIComponent(a.api_version)}`)
           if (res.ok) conflicts.push(a)
         } catch {}
       }

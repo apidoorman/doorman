@@ -264,22 +264,42 @@ class MetricsStore:
         except Exception:
             pass
 
-        total = self.total_requests
-        avg_total_ms = (self.total_ms / total) if total else 0.0
-        status = {str(k): v for k, v in self.status_counts.items()}
+        # Compute range-scoped aggregates instead of global totals
+        total = sum(b.count for b in buckets)
+        total_ms = sum(b.total_ms for b in buckets)
+        total_bytes_in = sum(b.bytes_in for b in buckets)
+        total_bytes_out = sum(b.bytes_out for b in buckets)
+        # Aggregate status counts over selected buckets
+        status: dict[str, int] = {}
+        for b in buckets:
+            for k, v in (b.status_counts or {}).items():
+                ks = str(k)
+                status[ks] = status.get(ks, 0) + v
+        # Aggregate user/api counts over selected buckets
+        agg_user_counts: dict[str, int] = {}
+        agg_api_counts: dict[str, int] = {}
+        for b in buckets:
+            for u, c in (b.user_counts or {}).items():
+                agg_user_counts[u] = agg_user_counts.get(u, 0) + c
+            for a, c in (b.api_counts or {}).items():
+                agg_api_counts[a] = agg_api_counts.get(a, 0) + c
+        avg_total_ms = (total_ms / total) if total else 0.0
+        # Range-scoped retry/timeout counters
+        range_upstream_timeouts = sum(getattr(b, 'upstream_timeouts', 0) for b in buckets)
+        range_retries = sum(getattr(b, 'retries', 0) for b in buckets)
+
         return {
             'total_requests': total,
             'avg_response_ms': avg_total_ms,
-            'total_bytes_in': self.total_bytes_in,
-            'total_bytes_out': self.total_bytes_out,
-            'total_upstream_timeouts': self.total_upstream_timeouts,
-            'total_retries': self.total_retries,
+            'total_bytes_in': int(total_bytes_in),
+            'total_bytes_out': int(total_bytes_out),
+            'total_upstream_timeouts': int(range_upstream_timeouts),
+            'total_retries': int(range_retries),
+            'unique_users': len(agg_user_counts),
             'status_counts': status,
             'series': series,
-            'top_users': sorted(self.username_counts.items(), key=lambda kv: kv[1], reverse=True)[
-                :10
-            ],
-            'top_apis': sorted(self.api_counts.items(), key=lambda kv: kv[1], reverse=True)[:10],
+            'top_users': sorted(agg_user_counts.items(), key=lambda kv: kv[1], reverse=True)[:10],
+            'top_apis': sorted(agg_api_counts.items(), key=lambda kv: kv[1], reverse=True)[:10],
         }
 
     def to_dict(self) -> dict:

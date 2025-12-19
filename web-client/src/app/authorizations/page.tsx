@@ -51,7 +51,8 @@ const AuthorizationsPage = () => {
       }
       setAllUsers(userList)
       setUsers(userList)
-      setHasNext((userList || []).length === pageSize)
+      const hn = ((data as any)?.has_next ?? (data as any)?.response?.has_next)
+      setHasNext(typeof hn === 'boolean' ? hn : (userList || []).length === pageSize)
     } catch (err) {
       setError('Failed to load users. Please try again later.')
       setUsers([])
