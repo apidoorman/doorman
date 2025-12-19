@@ -9,7 +9,10 @@ from datetime import datetime, timedelta
 try:
     from datetime import UTC
 except Exception:
-    UTC = UTC
+    # Python < 3.11 fallback
+    from datetime import timezone as _timezone
+
+    UTC = _timezone.utc
 import asyncio
 import logging
 import os
@@ -97,6 +100,20 @@ async def validate_csrf_double_submit(header_token: str, cookie_token: str) -> b
         return False
 
 
+def _get_secret_key() -> str:
+    """Return the active JWT secret key with a safe test fallback.
+
+    Ensures encoding and decoding use the same key even when the env var is
+    missing in non-production environments (e.g., local live tests).
+    """
+    key = os.getenv('JWT_SECRET_KEY')
+    if not key:
+        # Keep behavior aligned with create_access_token fallback
+        logger.warning('JWT_SECRET_KEY not set; using insecure test key')
+        return 'insecure-test-key'
+    return key
+
+
 async def auth_required(request: Request) -> dict:
     """Validate JWT token and CSRF for HTTPS
 
@@ -117,7 +134,7 @@ async def auth_required(request: Request) -> dict:
             raise HTTPException(status_code=401, detail='Invalid CSRF token')
     try:
         payload = jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM], options={'verify_signature': True}
+            token, _get_secret_key(), algorithms=[ALGORITHM], options={'verify_signature': True}
         )
         username = payload.get('sub')
         jti = payload.get('jti')
@@ -223,10 +240,6 @@ def create_access_token(data: dict, refresh: bool = False) -> str:
     )
 
     logger.info(f'Creating token for user {username} with accesses: {accesses}')
-    key = SECRET_KEY or os.getenv('JWT_SECRET_KEY')
-    if not key:
-        # Fallback for test/dev environments to avoid 500s when unset
-        logger.warning('JWT_SECRET_KEY not set; using insecure test key')
-        key = 'insecure-test-key'
+    key = _get_secret_key()
     encoded_jwt = jwt.encode(to_encode, key, algorithm=ALGORITHM)
     return encoded_jwt
