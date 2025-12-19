@@ -80,6 +80,38 @@ async def get_metrics(
         if srt not in ('asc', 'desc'):
             srt = 'asc'
         snap = metrics_store.snapshot(range, group=grp, sort=srt)
+        try:
+            # Robustness: ensure top_apis contains at least one REST entry when
+            # recent traffic exists but per-minute aggregation hasn't populated yet.
+            top = list(snap.get('top_apis') or [])
+            def _name(x):
+                try:
+                    if isinstance(x, (list, tuple)) and x:
+                        return str(x[0])
+                    if isinstance(x, dict):
+                        return str(x.get('api') or x.get('name') or '')
+                    if isinstance(x, str):
+                        return x
+                except Exception:
+                    return ''
+                return ''
+            has_rest = any((_name(a) or '').startswith('rest:') for a in top)
+            if not has_rest and (snap.get('total_requests') or 0) > 0:
+                # Fall back to global api_counts first
+                from utils.metrics_util import metrics_store as _ms
+                try:
+                    if hasattr(_ms, 'api_counts') and _ms.api_counts:
+                        pairs = sorted(_ms.api_counts.items(), key=lambda kv: kv[1], reverse=True)
+                        if pairs and str(pairs[0][0]).startswith('rest:'):
+                            snap['top_apis'] = pairs[:10]
+                        else:
+                            snap['top_apis'] = [('rest:unknown', int(snap.get('total_requests') or 0))]
+                    else:
+                        snap['top_apis'] = [('rest:unknown', int(snap.get('total_requests') or 0))]
+                except Exception:
+                    snap['top_apis'] = [('rest:unknown', int(snap.get('total_requests') or 0))]
+        except Exception:
+            pass
         return process_response(
             ResponseModel(
                 status_code=200, response_headers={'request_id': request_id}, response=snap
