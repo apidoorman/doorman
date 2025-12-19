@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { getJson } from '@/utils/api'
+import { SERVER_URL } from '@/utils/config'
 
 interface QuotaStatus {
   quota_type: string
