@@ -131,11 +131,15 @@ async def authorization(request: Request):
 
         # Decide cookie security based on env and proxy headers
         _secure_env = os.getenv('COOKIE_SECURE')
+        https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
         xf_proto = (request.headers.get('x-forwarded-proto') or request.headers.get('X-Forwarded-Proto') or '').lower()
+        scheme = (request.url.scheme or '').lower()
+        inferred_secure = xf_proto == 'https' or scheme == 'https'
         if _secure_env is not None:
             _secure = str(_secure_env).lower() == 'true'
         else:
-            _secure = (os.getenv('HTTPS_ONLY', 'false').lower() == 'true') or (xf_proto == 'https')
+            # Force secure cookies when HTTPS_ONLY is enabled or the connection is HTTPS.
+            _secure = inferred_secure or https_only
 
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
             logger.warning(
@@ -143,12 +147,16 @@ async def authorization(request: Request):
             )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
-        _samesite = (os.getenv('COOKIE_SAMESITE', 'Lax') or 'Lax').strip().lower()
+        _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
             _samesite = 'lax'
 
         host = request.headers.get('x-forwarded-host') or request.url.hostname or (request.client.host if request.client else None)
-        if _domain and host and (host == _domain or host.endswith('.' + _domain)):
+        # Prefer host-only cookies for local/test hosts to maximize compatibility with httpx/ASGI clients
+        _local_hosts = {'localhost', '127.0.0.1', 'testserver'}
+        if host in _local_hosts or (isinstance(host, str) and host.endswith('.localhost')):
+            cookie_domain = None
+        elif _domain and host and (host == _domain or host.endswith('.' + _domain)):
             cookie_domain = _domain
         else:
             cookie_domain = None  # Host-only cookie by default for maximum compatibility
@@ -718,11 +726,14 @@ async def extended_authorization(request: Request):
         csrf_token = str(_uuid.uuid4())
 
         _secure_env = os.getenv('COOKIE_SECURE')
+        https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
         xf_proto = (request.headers.get('x-forwarded-proto') or request.headers.get('X-Forwarded-Proto') or '').lower()
+        scheme = (request.url.scheme or '').lower()
+        inferred_secure = xf_proto == 'https' or scheme == 'https'
         if _secure_env is not None:
             _secure = str(_secure_env).lower() == 'true'
         else:
-            _secure = (os.getenv('HTTPS_ONLY', 'false').lower() == 'true') or (xf_proto == 'https')
+            _secure = inferred_secure or https_only
 
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
             logger.warning(
@@ -730,11 +741,14 @@ async def extended_authorization(request: Request):
             )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
-        _samesite = (os.getenv('COOKIE_SAMESITE', 'Lax') or 'Lax').strip().lower()
+        _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
             _samesite = 'lax'
         host = request.headers.get('x-forwarded-host') or request.url.hostname or (request.client.host if request.client else None)
-        if _domain and host and (host == _domain or host.endswith('.' + _domain)):
+        _local_hosts = {'localhost', '127.0.0.1', 'testserver'}
+        if host in _local_hosts or (isinstance(host, str) and host.endswith('.localhost')):
+            cookie_domain = None
+        elif _domain and host and (host == _domain or host.endswith('.' + _domain)):
             cookie_domain = _domain
         else:
             cookie_domain = None
@@ -921,10 +935,14 @@ async def authorization_invalidate(response: Response, request: Request):
         )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
-        host = request.url.hostname or (request.client.host if request.client else None)
-        safe_domain = (
-            _domain if (_domain and host and (host == _domain or host.endswith(_domain))) else None
-        )
+        host = request.headers.get('x-forwarded-host') or request.url.hostname or (request.client.host if request.client else None)
+        _local_hosts = {'localhost', '127.0.0.1', 'testserver'}
+        if host in _local_hosts or (isinstance(host, str) and host.endswith('.localhost')):
+            safe_domain = None
+        elif _domain and host and (host == _domain or host.endswith(_domain)):
+            safe_domain = _domain
+        else:
+            safe_domain = None
         response.delete_cookie('access_token_cookie', domain=safe_domain, path='/')
         return response
     except Exception as e:
