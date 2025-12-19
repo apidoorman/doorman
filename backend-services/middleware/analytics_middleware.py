@@ -14,6 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from utils.enhanced_metrics_util import enhanced_metrics_store
+from utils.metrics_util import metrics_store
 
 logger = logging.getLogger('doorman.analytics')
 
@@ -99,6 +100,15 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
                     api_key=api_key,
                     endpoint_uri=endpoint_uri,
                     method=method,
+                    bytes_in=request_size,
+                    bytes_out=response_size,
+                )
+                # Maintain legacy monitor metrics (used by /platform/monitor/metrics)
+                metrics_store.record(
+                    status=status_code,
+                    duration_ms=duration_ms,
+                    username=username,
+                    api_key=api_key,
                     bytes_in=request_size,
                     bytes_out=response_size,
                 )
