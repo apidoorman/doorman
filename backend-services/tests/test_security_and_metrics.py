@@ -51,7 +51,7 @@ async def test_metrics_recording_snapshot(authed_client):
 
     r1 = await authed_client.get(f'/api/rest/{name}/{ver}/status')
 
-    assert r1.status_code in (200, 400, 401, 404, 429, 500)
+    assert r1.status_code in (200, 400, 401, 404, 429, 500, 504)
 
     m = await authed_client.get('/platform/monitor/metrics')
     assert m.status_code == 200

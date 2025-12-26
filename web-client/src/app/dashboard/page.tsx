@@ -5,6 +5,7 @@ import { fetchJson } from '@/utils/http'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { SERVER_URL } from '@/utils/config'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface DashboardData {
   totalRequests: number
@@ -24,6 +25,7 @@ interface DashboardData {
 }
 
 const Dashboard = () => {
+  const { isAuthenticated, hasUIAccess } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dashboardData, setDashboardData] = useState<DashboardData>({
@@ -36,8 +38,10 @@ const Dashboard = () => {
   })
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (isAuthenticated && hasUIAccess) {
+      fetchData()
+    }
+  }, [isAuthenticated, hasUIAccess])
 
   const fetchData = async () => {
     try {

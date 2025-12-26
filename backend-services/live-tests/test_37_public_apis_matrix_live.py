@@ -3,10 +3,13 @@ import os
 
 import pytest
 
-from servers import (
-    start_rest_echo_server,
-    start_soap_echo_server,
-    start_graphql_json_server,
+from live_targets import GRAPHQL_TARGETS, GRPC_TARGETS, REST_TARGETS, SOAP_TARGETS
+
+TOTAL_PUBLIC_APIS = (
+    min(10, len(REST_TARGETS))
+    + min(10, len(SOAP_TARGETS))
+    + min(10, len(GRAPHQL_TARGETS))
+    + min(10, len(GRPC_TARGETS))
 )
 
 
@@ -15,7 +18,14 @@ from servers import (
 # -----------------------------
 
 
-def _mk_api(client, name: str, ver: str, servers: List[str], extra: Dict[str, Any] | None = None) -> None:
+def _mk_api(
+    client,
+    name: str,
+    ver: str,
+    servers: List[str],
+    api_type: str,
+    extra: Dict[str, Any] | None = None,
+) -> None:
     r = client.post(
         "/platform/api",
         json={
@@ -23,7 +33,7 @@ def _mk_api(client, name: str, ver: str, servers: List[str], extra: Dict[str, An
             "api_version": ver,
             "api_description": f"Public API {name}",
             "api_servers": servers,
-            "api_type": "REST",
+            "api_type": api_type,
             "api_public": True,
             "api_allowed_roles": ["admin"],
             "api_allowed_groups": ["ALL"],
@@ -68,56 +78,35 @@ def provisioned_public_apis(client):
     catalog: List[Tuple[str, str, str, Dict[str, Any]]] = []
     ver = "v1"
 
-    rest_srv = start_rest_echo_server()
-    soap_srv = start_soap_echo_server()
-    gql_srv1 = start_graphql_json_server({'data': {'characters': {'info': {'count': 42}}}})
-    gql_srv2 = start_graphql_json_server({'data': {'company': {'name': 'SpaceX'}}})
-    gql_srv3 = start_graphql_json_server({'data': {'country': {'name': 'United States'}}})
-
     def add_rest(name: str, server_url: str, uri: str):
-        _mk_api(client, name, ver, [server_url])
+        _mk_api(client, name, ver, [server_url], "REST")
         # Normalize endpoint registration to exclude querystring; gateway matches path-only.
         path_only = uri.split("?")[0]
         _mk_endpoint(client, name, ver, "GET", path_only)
         catalog.append(("REST", name, ver, {"uri": uri}))
 
-    # REST (12+)
-    base = rest_srv.url
-    for i, uri in enumerate([
-        "/get",
-        "/anything",
-        "/posts/1",
-        "/users/1",
-        "/breeds/image/random",
-        "/fact",
-        "/activity",
-        "/random",
-        "/v6/USD",
-        "/ip",
-        "/gender?p=peter",
-        "/age?name=lucy",
-    ]):
-        add_rest(f"rest_local_{i}", base, uri)
+    # REST (3-10)
+    for i, (server_url, uri) in enumerate(REST_TARGETS[:10]):
+        add_rest(f"rest_live_{i}", server_url, uri)
 
-    # SOAP (3)
-    def add_soap(name: str, server_url: str, uri: str):
-        _mk_api(client, name, ver, [server_url])
+    # SOAP (3-10)
+    def add_soap(name: str, server_url: str, uri: str, action: str):
+        _mk_api(client, name, ver, [server_url], "SOAP")
         _mk_endpoint(client, name, ver, "POST", uri)
-        catalog.append(("SOAP", name, ver, {"uri": uri}))
+        catalog.append(("SOAP", name, ver, {"uri": uri, "soap_action": action}))
 
-    add_soap("soap_calc", soap_srv.url, "/calculator.asmx")
-    add_soap("soap_numberconv", soap_srv.url, "/NumberConversion.wso")
-    add_soap("soap_countryinfo", soap_srv.url, "/CountryInfoService.wso")
+    for i, (server_url, uri, kind, action) in enumerate(SOAP_TARGETS[:10]):
+        add_soap(f"soap_live_{i}", server_url, uri, action)
+        catalog[-1][3]["sk"] = kind
 
     # GraphQL (3) - Upstreams must expose /graphql path
     def add_gql(name: str, server_url: str, query: str):
-        _mk_api(client, name, ver, [server_url])
+        _mk_api(client, name, ver, [server_url], "GRAPHQL")
         _mk_endpoint(client, name, ver, "POST", "/graphql")
         catalog.append(("GRAPHQL", name, ver, {"query": query}))
 
-    add_gql("gql_rickandmorty", gql_srv1.url, "{ characters(page: 1) { info { count } } }")
-    add_gql("gql_spacex", gql_srv2.url, "{ company { name } }")
-    add_gql("gql_countries", gql_srv3.url, "{ country(code: \"US\") { name } }")
+    for i, (server_url, query) in enumerate(GRAPHQL_TARGETS[:10]):
+        add_gql(f"gql_live_{i}", server_url, query)
 
     # gRPC (3) - Use public grpcbin with published Empty endpoint; upload minimal proto preserving package
     PROTO_GRPCBIN = (
@@ -130,18 +119,24 @@ def provisioned_public_apis(client):
     )
 
     def add_grpc(name: str, server_url: str, method: str, message: Dict[str, Any]):
-        # Use HTTP fallback to /grpc on local REST server; no proto upload required
-        _mk_api(client, name, ver, [server_url])
+        files = {"file": ("grpcbin.proto", PROTO_GRPCBIN.encode("utf-8"), "application/octet-stream")}
+        up = client.post(f"/platform/proto/{name}/{ver}", files=files)
+        assert up.status_code == 200, up.text
+        _mk_api(
+            client,
+            name,
+            ver,
+            [server_url],
+            "GRPC",
+            extra={"api_grpc_package": "grpcbin"},
+        )
         _mk_endpoint(client, name, ver, "POST", "/grpc")
         catalog.append(("GRPC", name, ver, {"method": method, "message": message}))
 
-    # Cover both plaintext and TLS endpoints
-    add_grpc("grpc_local1", rest_srv.url, "Svc.M", {})
-    add_grpc("grpc_local2", rest_srv.url, "Svc.M", {})
-    add_grpc("grpc_local3", rest_srv.url, "Svc.M", {})
+    for i, (server_url, method) in enumerate(GRPC_TARGETS[:10]):
+        add_grpc(f"grpc_live_{i}", server_url, method, {})
 
-    # Ensure minimum of 20 APIs
-    assert len(catalog) >= 20
+    assert len(catalog) >= TOTAL_PUBLIC_APIS
     try:
         yield catalog
     finally:
@@ -189,8 +184,12 @@ def _call_public(client, kind: str, name: str, ver: str, meta: Dict[str, Any]):
         return client.get(f"/api/rest/{name}/{ver}{uri}")
     if kind == "SOAP":
         uri = meta["uri"]
+        headers = {"Content-Type": "text/xml"}
+        if meta.get("soap_action"):
+            headers["SOAPAction"] = meta["soap_action"]
+        kind_key = meta.get("sk") or ""
         # Minimal SOAP envelopes for public services
-        if "calculator.asmx" in uri:
+        if kind_key == "calc" or "calculator.asmx" in uri:
             envelope = (
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                 "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
@@ -199,7 +198,7 @@ def _call_public(client, kind: str, name: str, ver: str, meta: Dict[str, Any]):
                 "<soap:Body><Add xmlns=\"http://tempuri.org/\"><intA>1</intA><intB>2</intB></Add>"
                 "</soap:Body></soap:Envelope>"
             )
-        elif "NumberConversion" in uri:
+        elif kind_key == "num" or "NumberConversion" in uri:
             envelope = (
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                 "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
@@ -207,6 +206,15 @@ def _call_public(client, kind: str, name: str, ver: str, meta: Dict[str, Any]):
                 "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
                 "<soap:Body><NumberToWords xmlns=\"http://www.dataaccess.com/webservicesserver/\">"
                 "<ubiNum>7</ubiNum></NumberToWords></soap:Body></soap:Envelope>"
+            )
+        elif kind_key == "temp" or "tempconvert" in uri:
+            envelope = (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
+                "xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" "
+                "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+                "<soap:Body><CelsiusToFahrenheit xmlns=\"https://www.w3schools.com/xml/\">"
+                "<Celsius>20</Celsius></CelsiusToFahrenheit></soap:Body></soap:Envelope>"
             )
         else:
             envelope = (
@@ -217,9 +225,7 @@ def _call_public(client, kind: str, name: str, ver: str, meta: Dict[str, Any]):
                 "<soap:Body><CapitalCity xmlns=\"http://www.oorsprong.org/websamples.countryinfo\">"
                 "<sCountryISOCode>US</sCountryISOCode></CapitalCity></soap:Body></soap:Envelope>"
             )
-        return client.post(
-            f"/api/soap/{name}/{ver}{uri}", data=envelope, headers={"Content-Type": "text/xml"}
-        )
+        return client.post(f"/api/soap/{name}/{ver}{uri}", data=envelope, headers=headers)
     if kind == "GRAPHQL":
         q = meta.get("query") or "{ hello }"
         return client.post(
@@ -242,7 +248,7 @@ def _ok_status(code: int) -> bool:
 
 
 @pytest.mark.parametrize("repeat", list(range(1, 2)))
-@pytest.mark.parametrize("idx", list(range(0, 20)))
+@pytest.mark.parametrize("idx", list(range(0, TOTAL_PUBLIC_APIS)))
 def test_public_api_reachability_smoke(client, provisioned_public_apis, idx, repeat):
     kind, name, ver, meta = provisioned_public_apis[idx]
     r = _call_public(client, kind, name, ver, meta)
@@ -250,7 +256,7 @@ def test_public_api_reachability_smoke(client, provisioned_public_apis, idx, rep
     assert _ok_status(r.status_code), r.text
 
 
-@pytest.mark.parametrize("idx", list(range(0, 20)))
+@pytest.mark.parametrize("idx", list(range(0, TOTAL_PUBLIC_APIS)))
 def test_public_api_allows_header_forwarding(client, provisioned_public_apis, idx):
     kind, name, ver, meta = provisioned_public_apis[idx]
     # Do not skip live checks; tolerate upstream variability instead
@@ -259,6 +265,9 @@ def test_public_api_allows_header_forwarding(client, provisioned_public_apis, id
     if kind == "REST":
         r = client.get(f"/api/rest/{name}/{ver}{meta['uri']}", headers={"X-Test": "1"})
     elif kind == "SOAP":
+        headers = {"Content-Type": "text/xml", "X-Test": "1"}
+        if meta.get("soap_action"):
+            headers["SOAPAction"] = meta["soap_action"]
         envelope = (
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
             "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
@@ -268,7 +277,7 @@ def test_public_api_allows_header_forwarding(client, provisioned_public_apis, id
         r = client.post(
             f"/api/soap/{name}/{ver}{meta['uri']}",
             data=envelope,
-            headers={"Content-Type": "text/xml", "X-Test": "1"},
+            headers=headers,
         )
     elif kind == "GRAPHQL":
         q = meta.get("query") or "{ hello }"
@@ -286,7 +295,7 @@ def test_public_api_allows_header_forwarding(client, provisioned_public_apis, id
     assert _ok_status(r.status_code), r.text
 
 
-@pytest.mark.parametrize("idx", list(range(0, 20)))
+@pytest.mark.parametrize("idx", list(range(0, TOTAL_PUBLIC_APIS)))
 def test_public_api_cors_preflight(client, provisioned_public_apis, idx):
     kind, name, ver, meta = provisioned_public_apis[idx]
     if meta.get("skip"):
@@ -338,7 +347,7 @@ def test_public_api_cors_preflight(client, provisioned_public_apis, idx):
         assert _ok_status(r.status_code), r.text
 
 
-@pytest.mark.parametrize("idx", list(range(0, 20)))
+@pytest.mark.parametrize("idx", list(range(0, TOTAL_PUBLIC_APIS)))
 def test_public_api_querystring_passthrough(client, provisioned_public_apis, idx):
     kind, name, ver, meta = provisioned_public_apis[idx]
     if meta.get("skip"):
@@ -374,7 +383,7 @@ def test_public_api_querystring_passthrough(client, provisioned_public_apis, idx
     assert _ok_status(r.status_code), r.text
 
 
-@pytest.mark.parametrize("idx", list(range(0, 20)))
+@pytest.mark.parametrize("idx", list(range(0, TOTAL_PUBLIC_APIS)))
 def test_public_api_multiple_calls_stability(client, provisioned_public_apis, idx):
     kind, name, ver, meta = provisioned_public_apis[idx]
     # Two quick back-to-back calls to catch simple race/limits; only assert not auth failure.
@@ -385,7 +394,7 @@ def test_public_api_multiple_calls_stability(client, provisioned_public_apis, id
     assert _ok_status(r2.status_code), r2.text
 
 
-@pytest.mark.parametrize("idx", list(range(0, 20)))
+@pytest.mark.parametrize("idx", list(range(0, TOTAL_PUBLIC_APIS)))
 def test_public_api_subscribe_and_call(client, provisioned_public_apis, idx):
     kind, name, ver, meta = provisioned_public_apis[idx]
     # Subscribe admin to the API; treat already-subscribed as success

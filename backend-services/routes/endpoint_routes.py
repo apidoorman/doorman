@@ -99,7 +99,7 @@ Response:
 
 
 @endpoint_router.put(
-    '/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}',
+    '/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri:path}',
     description='Update endpoint',
     response_model=ResponseModel,
     responses={
@@ -176,7 +176,7 @@ Response:
 
 
 @endpoint_router.delete(
-    '/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}',
+    '/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri:path}',
     description='Delete endpoint',
     response_model=ResponseModel,
     responses={
@@ -243,7 +243,7 @@ Response:
 
 
 @endpoint_router.get(
-    '/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri}',
+    '/{endpoint_method}/{api_name}/{api_version}/{endpoint_uri:path}',
     description='Get endpoint by API name, API version and endpoint uri',
     response_model=EndpointModelResponse,
 )

@@ -51,7 +51,7 @@ def test_graphql_missing_version_header_returns_400(client):
             'api_allowed_roles': ['admin'],
             'api_allowed_groups': ['ALL'],
             'api_servers': [f'http://127.0.0.1:{port}'],
-            'api_type': 'REST',
+            'api_type': 'GRAPHQL',
             'active': True,
         },
     )

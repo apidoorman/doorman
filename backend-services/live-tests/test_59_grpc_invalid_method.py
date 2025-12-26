@@ -35,7 +35,7 @@ service Greeter {}
             'api_allowed_roles': ['admin'],
             'api_allowed_groups': ['ALL'],
             'api_servers': ['grpc://127.0.0.1:9'],
-            'api_type': 'REST',
+            'api_type': 'GRPC',
             'active': True,
         },
     )

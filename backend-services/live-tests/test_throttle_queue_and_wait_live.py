@@ -100,7 +100,7 @@ def test_throttle_dynamic_wait_live(client):
             '/platform/user/admin',
             json={
                 'throttle_duration': 1,
-                'throttle_duration_type': 'second',
+                'throttle_duration_type': 'minute',
                 'throttle_queue_limit': 10,
                 'throttle_wait_duration': 0.1,
                 'throttle_wait_duration_type': 'second',

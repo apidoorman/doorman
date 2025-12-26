@@ -47,7 +47,7 @@ def test_bulk_public_rest_crud(client):
                     'api_allowed_roles': [],
                     'api_allowed_groups': [],
                     'api_servers': [srv.url],
-                    'api_type': 'REST',
+                    'api_type': 'SOAP',
                     'active': True,
                     'api_public': True,
                 },
@@ -71,6 +71,7 @@ def test_bulk_public_rest_crud(client):
                 )
                 assert r.status_code in (200, 201), r.text
             s = requests.Session()
+            s.headers.update({'X-IS-TEST': 'true'})
             url = f'{base}/api/rest/{api_name}/{api_version}/items'
             assert s.get(url).status_code == 200
             assert s.post(url, json={'name': 'x'}).status_code == 200
@@ -122,6 +123,7 @@ def test_bulk_public_soap_crud(client):
                 )
                 assert r.status_code in (200, 201), r.text
             s = requests.Session()
+            s.headers.update({'X-IS-TEST': 'true'})
             headers = {'Content-Type': 'text/xml'}
             for uri in ['create', 'read', 'update', 'delete']:
                 url = f'{base}/api/soap/{api_name}/{api_version}/{uri}'
@@ -200,7 +202,7 @@ def test_bulk_public_graphql_crud(client):
                     'api_allowed_roles': [],
                     'api_allowed_groups': [],
                     'api_servers': [f'http://{host}:{port}'],
-                    'api_type': 'REST',
+                    'api_type': 'GRAPHQL',
                     'active': True,
                     'api_public': True,
                 },
@@ -218,6 +220,7 @@ def test_bulk_public_graphql_crud(client):
             )
             assert r.status_code in (200, 201), r.text
             s = requests.Session()
+            s.headers.update({'X-IS-TEST': 'true'})
             url = f'{base}/api/graphql/{api_name}'
             q_create = {'query': 'mutation { create(name:"A") }'}
             assert (
@@ -350,7 +353,7 @@ message DeleteReply { bool ok = 1; }
                         'api_allowed_roles': [],
                         'api_allowed_groups': [],
                         'api_servers': [f'grpc://127.0.0.1:{port}'],
-                        'api_type': 'REST',
+                        'api_type': 'GRPC',
                         'active': True,
                         'api_public': True,
                     },

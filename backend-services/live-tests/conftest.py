@@ -62,12 +62,11 @@ def client(base_url) -> LiveClient:
     try:
         yield c
     finally:
-        # Session-level cleanup of created resources when enabled
-        if str(os.getenv('DOORMAN_TEST_CLEANUP', '')).lower() in ('1', 'true', 'yes', 'on'):
-            try:
-                c.cleanup()
-            except Exception:
-                pass
+        # Always perform session-level cleanup of created resources to leave the system pristine
+        try:
+            c.cleanup()
+        except Exception:
+            pass
 
 
 @pytest.fixture(autouse=True)

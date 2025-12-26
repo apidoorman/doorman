@@ -6,6 +6,7 @@ the gateway, including per-endpoint tracking and full performance data.
 """
 
 import logging
+import os
 import time
 from collections.abc import Callable
 
@@ -57,6 +58,21 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         except Exception:
             pass
 
+        # Detect test traffic early (header from live tests)
+        is_test = False
+        try:
+            is_test = (
+                str(
+                    request.headers.get('X-IS-TEST')
+                    or request.headers.get('X-Doorman-Test')
+                    or request.headers.get('X-Test-Request')
+                    or ''
+                ).lower()
+                in ('1', 'true', 'yes', 'on')
+            )
+        except Exception:
+            is_test = False
+
         # Process request
         response = await call_next(request)
 
@@ -93,25 +109,39 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         # Record metrics only for API traffic; exclude platform endpoints
         try:
             if path.startswith('/api/'):
-                enhanced_metrics_store.record(
-                    status=status_code,
-                    duration_ms=duration_ms,
-                    username=username,
-                    api_key=api_key,
-                    endpoint_uri=endpoint_uri,
-                    method=method,
-                    bytes_in=request_size,
-                    bytes_out=response_size,
-                )
-                # Maintain legacy monitor metrics (used by /platform/monitor/metrics)
-                metrics_store.record(
-                    status=status_code,
-                    duration_ms=duration_ms,
-                    username=username,
-                    api_key=api_key,
-                    bytes_in=request_size,
-                    bytes_out=response_size,
-                )
+                # Skip analytics for test traffic to avoid polluting dashboards
+                if not is_test:
+                    enhanced_metrics_store.record(
+                        status=status_code,
+                        duration_ms=duration_ms,
+                        username=username,
+                        api_key=api_key,
+                        endpoint_uri=endpoint_uri,
+                        method=method,
+                        bytes_in=request_size,
+                        bytes_out=response_size,
+                    )
+                    # Maintain legacy monitor metrics (used by /platform/monitor/metrics)
+                    metrics_store.record(
+                        status=status_code,
+                        duration_ms=duration_ms,
+                        username=username,
+                        api_key=api_key,
+                        bytes_in=request_size,
+                        bytes_out=response_size,
+                        is_test=False,
+                    )
+                else:
+                    # Still capture test count in legacy store to keep test-aware totals accurate
+                    metrics_store.record(
+                        status=status_code,
+                        duration_ms=duration_ms,
+                        username=username,
+                        api_key=api_key,
+                        bytes_in=request_size,
+                        bytes_out=response_size,
+                        is_test=True,
+                    )
         except Exception as e:
             logger.error(f'Failed to record analytics: {str(e)}')
 

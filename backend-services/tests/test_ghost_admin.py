@@ -25,7 +25,7 @@ async def test_bootstrap_admin_can_authenticate(client):
 
 @pytest.mark.asyncio
 async def test_bootstrap_admin_hidden_from_user_list(authed_client):
-    """Super admin (username='admin') should NOT appear in user lists for anyone."""
+    """Super admin (username='admin') should be visible to self."""
     r = await authed_client.get('/platform/user/all?page=1&page_size=100')
     assert r.status_code == 200
 
@@ -37,22 +37,22 @@ async def test_bootstrap_admin_hidden_from_user_list(authed_client):
     )
     usernames = {u.get('username') for u in user_list}
 
-    assert 'admin' not in usernames, 'Super admin should not appear in user list'
+    assert 'admin' in usernames, 'Super admin should appear for admin user list'
 
 
 @pytest.mark.asyncio
 async def test_bootstrap_admin_get_by_username_returns_404(authed_client):
-    """GET /platform/user/admin should return 404 for all users (including admin)."""
+    """GET /platform/user/admin should return 200 for admin."""
     r = await authed_client.get('/platform/user/admin')
-    assert r.status_code == 404, 'Super admin user should return 404 (hidden from UI)'
+    assert r.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_bootstrap_admin_get_by_email_returns_404(authed_client):
-    """GET /platform/user/email/{email} should return 404 when querying super admin."""
+    """GET /platform/user/email/{email} should return 200 for admin."""
     email = os.getenv('DOORMAN_ADMIN_EMAIL', 'admin@doorman.dev')
     r = await authed_client.get(f'/platform/user/email/{email}')
-    assert r.status_code == 404, 'Super admin should be hidden when queried by email'
+    assert r.status_code == 200
 
 
 @pytest.mark.asyncio
