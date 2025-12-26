@@ -19,7 +19,7 @@ def test_grpc_reflection_no_proto(client):
             'api_allowed_roles': ['admin'],
             'api_allowed_groups': ['ALL'],
             'api_servers': ['grpcs://grpcb.in:9001'],
-            'api_type': 'REST',
+            'api_type': 'GRPC',
             'api_allowed_retry_count': 0,
             'active': True,
             'api_grpc_package': 'grpcbin',

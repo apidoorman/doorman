@@ -25,6 +25,20 @@ analytics_router = APIRouter()
 logger = logging.getLogger('doorman.analytics')
 
 
+def _normalize_top_pairs(pairs: list, key_name: str) -> list[dict]:
+    """Normalize (name,count) pairs into a consistent object list."""
+    out = []
+    for item in pairs or []:
+        if isinstance(item, dict):
+            if key_name in item and 'count' in item:
+                out.append(item)
+            elif 'name' in item and 'count' in item:
+                out.append({key_name: item.get('name'), 'count': item.get('count')})
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            out.append({key_name: item[0], 'count': item[1]})
+    return out
+
+
 # ============================================================================
 # ENDPOINT 1: Dashboard Overview
 # ============================================================================
@@ -141,8 +155,8 @@ async def get_analytics_overview(
                 'bandwidth_out': snapshot.total_bytes_out,
             },
             'percentiles': snapshot.percentiles.to_dict(),
-            'top_apis': snapshot.top_apis,
-            'top_users': snapshot.top_users,
+            'top_apis': _normalize_top_pairs(snapshot.top_apis, 'api'),
+            'top_users': _normalize_top_pairs(snapshot.top_users, 'user'),
             'status_distribution': snapshot.status_distribution,
         }
 
@@ -341,7 +355,7 @@ async def get_top_apis(
         snapshot = enhanced_metrics_store.get_snapshot(start_ts, end_ts)
 
         # Get top APIs (already sorted by count)
-        top_apis = snapshot.top_apis[:limit]
+        top_apis = _normalize_top_pairs(snapshot.top_apis, 'api')[:limit]
 
         return respond_rest(
             ResponseModel(
@@ -423,7 +437,7 @@ async def get_top_users(
         snapshot = enhanced_metrics_store.get_snapshot(start_ts, end_ts)
 
         # Get top users (already sorted by count)
-        top_users = snapshot.top_users[:limit]
+        top_users = _normalize_top_pairs(snapshot.top_users, 'user')[:limit]
 
         return respond_rest(
             ResponseModel(

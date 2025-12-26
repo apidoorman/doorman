@@ -6,50 +6,25 @@ from typing import Any, Dict, List, Tuple
 import pytest
 
 from client import LiveClient
+from live_targets import GRAPHQL_TARGETS, GRPC_TARGETS, REST_TARGETS, SOAP_TARGETS
 
-_RUN_EXT = os.getenv('DOORMAN_TEST_EXTERNAL', '0') in ('1', 'true', 'True')
-pytestmark = [
-    pytest.mark.public,
-    pytest.mark.credits,
-    pytest.mark.gateway,
-    pytest.mark.skipif(not _RUN_EXT, reason='Requires external network (DOORMAN_TEST_EXTERNAL=1)')
-]
+pytestmark = [pytest.mark.public, pytest.mark.credits, pytest.mark.gateway]
 
 
 def _rest_targets() -> List[Tuple[str, str]]:
-    return [
-        ("https://httpbin.org", "/get"),
-        ("https://jsonplaceholder.typicode.com", "/posts/1"),
-        ("https://api.ipify.org", "/?format=json"),
-    ]
+    return REST_TARGETS
 
 
-def _soap_targets() -> List[Tuple[str, str, str]]:
-    return [
-        ("http://www.dneonline.com", "/calculator.asmx", "calc"),
-        ("https://www.dataaccess.com", "/webservicesserver/NumberConversion.wso", "num"),
-        (
-            "http://webservices.oorsprong.org",
-            "/websamples.countryinfo/CountryInfoService.wso",
-            "country",
-        ),
-    ]
+def _soap_targets() -> List[Tuple[str, str, str, str]]:
+    return SOAP_TARGETS
 
 
 def _gql_targets() -> List[Tuple[str, str]]:
-    return [
-        ("https://rickandmortyapi.com", "{ characters(page: 1) { info { count } } }"),
-        ("https://api.spacex.land", "{ company { name } }"),
-        ("https://countries.trevorblades.com", "{ country(code: \"US\") { name } }")
-    ]
+    return GRAPHQL_TARGETS
 
 
 def _grpc_targets() -> List[Tuple[str, str]]:
-    return [
-        ("grpc://grpcb.in:9000", "GRPCBin.Empty"),
-        ("grpcs://grpcb.in:9001", "GRPCBin.Empty"),
-        ("grpc://grpcb.in:9000", "GRPCBin.Empty"),
-    ]
+    return GRPC_TARGETS
 
 
 PROTO_GRPCBIN = (
@@ -90,6 +65,15 @@ def _soap_envelope(kind: str) -> str:
             "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
             "<soap:Body><NumberToWords xmlns=\"http://www.dataaccess.com/webservicesserver/\">"
             "<ubiNum>7</ubiNum></NumberToWords></soap:Body></soap:Envelope>"
+        )
+    if kind == "temp":
+        return (
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+            "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
+            "xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" "
+            "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+            "<soap:Body><CelsiusToFahrenheit xmlns=\"https://www.w3schools.com/xml/\">"
+            "<Celsius>20</Celsius></CelsiusToFahrenheit></soap:Body></soap:Envelope>"
         )
     return (
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
@@ -168,8 +152,11 @@ def _one_call(client: LiveClient, kind: str, name: str, ver: str, meta: Dict[str
         return client.get(f"/api/rest/{name}/{ver}{meta['uri']}")
     if kind == "SOAP":
         env = _soap_envelope(meta["sk"])  # soap kind
+        headers = {"Content-Type": "text/xml"}
+        if meta.get("soap_action"):
+            headers["SOAPAction"] = meta["soap_action"]
         return client.post(
-            f"/api/soap/{name}/{ver}{meta['uri']}", data=env, headers={"Content-Type": "text/xml"}
+            f"/api/soap/{name}/{ver}{meta['uri']}", data=env, headers=headers
         )
     if kind == "GRAPHQL":
         return client.post(
@@ -362,7 +349,7 @@ def _setup_api(
         return name, ver, meta
 
     if kind == "SOAP":
-        server, uri, sk = _soap_targets()[idx]
+        server, uri, sk, action = _soap_targets()[idx]
         client.post(
             "/platform/api",
             json={
@@ -372,7 +359,7 @@ def _setup_api(
                 "api_allowed_roles": ["admin"],
                 "api_allowed_groups": ["ALL"],
                 "api_servers": [server],
-                "api_type": "REST",
+                "api_type": "SOAP",
                 "active": True,
                 "api_credits_enabled": True,
                 "api_credit_group": credit_group,
@@ -389,7 +376,7 @@ def _setup_api(
             },
         )
         _subscribe(client, name, ver)
-        meta = {"uri": uri, "sk": sk, "credit_group": credit_group}
+        meta = {"uri": uri, "sk": sk, "credit_group": credit_group, "soap_action": action}
         return name, ver, meta
 
     if kind == "GRAPHQL":
@@ -403,7 +390,7 @@ def _setup_api(
                 "api_allowed_roles": ["admin"],
                 "api_allowed_groups": ["ALL"],
                 "api_servers": [server],
-                "api_type": "REST",
+                "api_type": "GRAPHQL",
                 "active": True,
                 "api_credits_enabled": True,
                 "api_credit_group": credit_group,
@@ -437,7 +424,7 @@ def _setup_api(
             "api_allowed_roles": ["admin"],
             "api_allowed_groups": ["ALL"],
             "api_servers": [server],
-            "api_type": "REST",
+            "api_type": "GRPC",
             "active": True,
             "api_credits_enabled": True,
             "api_credit_group": credit_group,

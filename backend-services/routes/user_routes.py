@@ -434,7 +434,7 @@ async def get_all_users(
             filtered = []
             for u in users:
                 # Hide bootstrap admin (username='admin') from ALL users in UI
-                if u.get('username') == 'admin':
+                if u.get('username') == 'admin' and not await _safe_is_admin_user(username):
                     continue
                 # Hide other admin role users from non-admin users
                 if not await _safe_is_admin_user(username) and await _safe_is_admin_role(
@@ -494,10 +494,12 @@ async def get_user_by_username(username: str, request: Request):
             f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
         )
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        # Block access to bootstrap admin user for ALL users (including admin),
+        # Block access to bootstrap admin user for non-admins,
         # except when STRICT_RESPONSE_ENVELOPE=true (envelope-shape tests)
-        if username == 'admin' and not (
-            os.getenv('STRICT_RESPONSE_ENVELOPE', 'false').lower() == 'true'
+        if (
+            username == 'admin'
+            and not await _safe_is_admin_user(auth_username)
+            and os.getenv('STRICT_RESPONSE_ENVELOPE', 'false').lower() != 'true'
         ):
             return process_response(
                 ResponseModel(
@@ -573,7 +575,7 @@ async def get_user_by_email(email: str, request: Request):
         if data.get('status_code') == 200 and isinstance(data.get('response'), dict):
             u = data.get('response')
             # Block access to bootstrap admin user for ALL users
-            if u.get('username') == 'admin':
+            if u.get('username') == 'admin' and not await _safe_is_admin_user(username):
                 return process_response(
                     ResponseModel(
                         status_code=404,

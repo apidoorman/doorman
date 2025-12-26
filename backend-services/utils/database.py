@@ -10,12 +10,12 @@ import os
 import threading
 import uuid
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from pymongo import ASCENDING, IndexModel, MongoClient
 
 from utils import chaos_util, password_util
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 logger = logging.getLogger('doorman.gateway')
 

@@ -52,7 +52,9 @@ async def get_dashboard_data(request: Request):
             try:
                 ts = datetime.fromtimestamp(pt['timestamp'])
                 key = ts.strftime('%b')
-                monthly_usage[key] = monthly_usage.get(key, 0) + int(pt.get('count', 0))
+                count = int(pt.get('count', 0))
+                test_count = int(pt.get('test_count', 0) or 0)
+                monthly_usage[key] = monthly_usage.get(key, 0) + max(0, count - test_count)
             except Exception:
                 continue
 
@@ -83,8 +85,13 @@ async def get_dashboard_data(request: Request):
             except Exception:
                 continue
 
+        total_requests = int(sum(monthly_usage.values()))
+        if total_requests <= 0:
+            total_requests = int(
+                max(0, snap.get('total_requests', 0) - snap.get('total_test_requests', 0))
+            )
         dashboard_data = {
-            'totalRequests': int(sum(monthly_usage.values()) or snap.get('total_requests', 0)),
+            'totalRequests': total_requests,
             'activeUsers': total_users,
             'newApis': total_apis,
             'monthlyUsage': monthly_usage,
