@@ -136,7 +136,7 @@ message DeleteReply { bool ok = 1; }
                     'api_allowed_roles': [],
                     'api_allowed_groups': [],
                     'api_servers': [f'grpc://{host_ref}:{port}'],
-                    'api_type': 'REST',
+                    'api_type': 'GRPC',
                     'active': True,
                     'api_public': True,
                     'api_grpc_package': pkg,
@@ -157,7 +157,7 @@ message DeleteReply { bool ok = 1; }
             assert r_ep.status_code in (200, 201), r_ep.text
 
             url = f'{base}/api/grpc/{api_name}'
-            hdr = {'X-API-Version': api_version}
+            hdr = {'X-API-Version': api_version, 'X-IS-TEST': 'true'}
             assert (
                 requests.post(
                     url, json={'method': 'Resource.Create', 'message': {'name': 'A'}}, headers=hdr

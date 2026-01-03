@@ -66,7 +66,7 @@ class UpdateApiModel(BaseModel):
         example=['Greeter.SayHello'],
     )
     api_credits_enabled: bool | None = Field(
-        False, description='Enable credit-based authentication for the API', example=True
+        None, description='Enable credit-based authentication for the API', example=True
     )
     api_credit_group: str | None = Field(
         None, description='API credit group for the API credits', example='ai-group-1'

@@ -17,7 +17,7 @@ def test_soap_cors_preflight(client):
             'api_allowed_roles': ['admin'],
             'api_allowed_groups': ['ALL'],
             'api_servers': ['http://127.0.0.1:9'],
-            'api_type': 'REST',
+            'api_type': 'SOAP',
             'active': True,
             'api_cors_allow_origins': ['http://example.com'],
             'api_cors_allow_methods': ['POST'],

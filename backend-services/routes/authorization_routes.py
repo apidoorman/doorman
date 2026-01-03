@@ -150,6 +150,11 @@ async def authorization(request: Request):
         _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
             _samesite = 'lax'
+        if _samesite == 'none' and not _secure:
+            logger.warning(
+                f'{request_id} | COOKIE_SAMESITE=None requires Secure cookies; downgrading to Lax for non-HTTPS'
+            )
+            _samesite = 'lax'
 
         host = request.headers.get('x-forwarded-host') or request.url.hostname or (request.client.host if request.client else None)
         # Prefer host-only cookies for local/test hosts to maximize compatibility with httpx/ASGI clients
@@ -945,6 +950,15 @@ async def authorization_invalidate(response: Response, request: Request):
             safe_domain = None
         response.delete_cookie('access_token_cookie', domain=safe_domain, path='/')
         return response
+    except HTTPException as e:
+        return respond_rest(
+            ResponseModel(
+                status_code=getattr(e, 'status_code', 401),
+                response_headers={'request_id': request_id},
+                error_code='AUTH005',
+                error_message=str(getattr(e, 'detail', 'Token error')),
+            )
+        )
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
