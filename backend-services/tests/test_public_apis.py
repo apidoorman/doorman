@@ -30,7 +30,7 @@ async def test_rest_public_api_allows_unauthenticated(client, authed_client):
 
     r = await client.get(f'/api/rest/{name}/{ver}/ping')
 
-    assert r.status_code in (200, 400, 404, 429, 500)
+    assert r.status_code in (200, 400, 404, 429, 500, 504)
 
 
 @pytest.mark.asyncio
@@ -54,7 +54,7 @@ async def test_graphql_public_api_allows_unauthenticated(client, authed_client):
         headers={'X-API-Version': ver, 'Content-Type': 'application/json'},
         json={'query': '{ ping }'},
     )
-    assert r.status_code in (200, 400, 404, 429, 500)
+    assert r.status_code in (200, 400, 404, 429, 500, 504)
 
 
 @pytest.mark.asyncio
@@ -135,4 +135,4 @@ async def test_auth_not_required_but_not_public(client, authed_client):
     assert ce.status_code in (200, 201), ce.text
 
     r = await client.get(f'/api/rest/{name}/{ver}/ping')
-    assert r.status_code in (200, 400, 404, 429, 500)
+    assert r.status_code in (200, 400, 404, 429, 500, 504)

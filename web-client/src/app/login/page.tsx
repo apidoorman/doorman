@@ -52,7 +52,8 @@ const LoginPage = () => {
       try {
         const meData: any = await getJson(`${SERVER_URL}/platform/user/me`)
         const isSuperAdmin = meData && (meData.username === 'admin' || meData.role === 'admin')
-        if (!meData || (!isSuperAdmin && meData.ui_access !== true)) {
+        const allowUi = !!(meData && (isSuperAdmin || meData.ui_access === true))
+        if (!allowUi) {
           setErrorMessage('Your account does not have UI access. Contact an administrator.')
           try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
           setIsLoading(false)
@@ -66,13 +67,7 @@ const LoginPage = () => {
         return
       }
       await checkAuth()
-      // Double-check UI access after auth sync
-      if (hasUIAccess) {
-        router.push('/dashboard')
-      } else {
-        setErrorMessage('Your account does not have UI access. Contact an administrator.')
-        try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
-      }
+      router.push('/dashboard')
     } catch (error) {
       console.error('Login error:', error)
       setErrorMessage('Network error. Please try again.')

@@ -13,12 +13,12 @@ except Exception:
 import logging
 import os
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
 from utils import password_util
 from utils.database import InMemoryDB
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 logger = logging.getLogger('doorman.gateway')
 

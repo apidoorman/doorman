@@ -22,7 +22,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import uvicorn
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -111,7 +111,7 @@ from utils.security_settings_util import (
     stop_auto_save_task,
 )
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 PID_FILE = 'doorman.pid'
 

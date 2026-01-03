@@ -13,7 +13,7 @@ async def _setup(client, upstream_url: str, name='gllive', ver='v1'):
             'api_allowed_roles': ['admin'],
             'api_allowed_groups': ['ALL'],
             'api_servers': [upstream_url],
-            'api_type': 'REST',
+            'api_type': 'GRAPHQL',
             'api_allowed_retry_count': 0,
             'api_public': True,
         },

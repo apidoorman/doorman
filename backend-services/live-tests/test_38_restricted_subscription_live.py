@@ -1,12 +1,18 @@
 import time
 
-import os
 import pytest
-from servers import start_rest_echo_server, start_soap_echo_server, start_graphql_json_server
+from live_targets import GRAPHQL_TARGETS, GRPC_TARGETS, REST_TARGETS, SOAP_TARGETS
 pytestmark = [pytest.mark.public, pytest.mark.auth]
 
 
-def _mk_api(client, name: str, ver: str, servers: list[str], extra: dict | None = None):
+def _mk_api(
+    client,
+    name: str,
+    ver: str,
+    servers: list[str],
+    api_type: str,
+    extra: dict | None = None,
+):
     r = client.post(
         '/platform/api',
         json={
@@ -14,7 +20,7 @@ def _mk_api(client, name: str, ver: str, servers: list[str], extra: dict | None 
             'api_version': ver,
             'api_description': f'Restricted {name}',
             'api_servers': servers,
-            'api_type': 'REST',
+            'api_type': api_type,
             'api_public': False,
             'api_allowed_roles': ['admin'],
             'api_allowed_groups': ['ALL'],
@@ -55,30 +61,41 @@ def restricted_apis(client):
 
     # REST (requires subscription)
     name = f'rx-rest-{stamp}'
-    rest = start_rest_echo_server()
-    _mk_api(client, name, ver, [rest.url])
-    _mk_endpoint(client, name, ver, 'GET', '/r')
-    out.append(('REST', name, ver, {'uri': '/r'}))
+    rest_server, rest_uri = REST_TARGETS[0]
+    rest_path = rest_uri.split('?')[0] or '/'
+    _mk_api(client, name, ver, [rest_server], 'REST')
+    _mk_endpoint(client, name, ver, 'GET', rest_path)
+    out.append(('REST', name, ver, {'uri': rest_uri}))
 
     # SOAP (requires subscription)
     name = f'rx-soap-{stamp}'
-    soap = start_soap_echo_server()
-    _mk_api(client, name, ver, [soap.url])
-    _mk_endpoint(client, name, ver, 'POST', '/svc')
-    out.append(('SOAP', name, ver, {'uri': '/svc'}))
+    soap_server, soap_uri, soap_kind, soap_action = SOAP_TARGETS[0]
+    _mk_api(client, name, ver, [soap_server], 'SOAP')
+    _mk_endpoint(client, name, ver, 'POST', soap_uri)
+    out.append(
+        ('SOAP', name, ver, {'uri': soap_uri, 'sk': soap_kind, 'soap_action': soap_action})
+    )
 
     # GraphQL (requires subscription)
     name = f'rx-gql-{stamp}'
-    gql = start_graphql_json_server({'data': {'ok': True}})
-    _mk_api(client, name, ver, [gql.url])
+    gql_server, gql_query = GRAPHQL_TARGETS[0]
+    _mk_api(client, name, ver, [gql_server], 'GRAPHQL')
     _mk_endpoint(client, name, ver, 'POST', '/graphql')
-    out.append(('GRAPHQL', name, ver, {'query': '{ ok }'}))
+    out.append(('GRAPHQL', name, ver, {'query': gql_query}))
 
     # gRPC (requires subscription) — do not upload proto here; we only assert auth behavior
     name = f'rx-grpc-{stamp}'
-    _mk_api(client, name, ver, [rest.url])
+    grpc_server, grpc_method = GRPC_TARGETS[0]
+    _mk_api(
+        client,
+        name,
+        ver,
+        [grpc_server],
+        'GRPC',
+        extra={'api_grpc_package': 'grpcbin'},
+    )
     _mk_endpoint(client, name, ver, 'POST', '/grpc')
-    out.append(('GRPC', name, ver, {'method': 'Svc.M', 'message': {}}))
+    out.append(('GRPC', name, ver, {'method': grpc_method, 'message': {}}))
 
     try:
         yield out
@@ -121,16 +138,39 @@ def _call(client, kind: str, name: str, ver: str, meta: dict):
     if kind == 'REST':
         return client.get(f'/api/rest/{name}/{ver}{meta["uri"]}')
     if kind == 'SOAP':
-        envelope = (
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-            "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
-            "xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" "
-            "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
-            "<soap:Body><Add xmlns=\"http://tempuri.org/\"><intA>1</intA><intB>2</intB></Add>"
-            "</soap:Body></soap:Envelope>"
-        )
+        kind_key = meta.get('sk') or ''
+        headers = {'Content-Type': 'text/xml'}
+        if meta.get('soap_action'):
+            headers['SOAPAction'] = meta['soap_action']
+        if kind_key == 'calc':
+            envelope = (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
+                "xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" "
+                "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+                "<soap:Body><Add xmlns=\"http://tempuri.org/\"><intA>1</intA><intB>2</intB></Add>"
+                "</soap:Body></soap:Envelope>"
+            )
+        elif kind_key == 'num':
+            envelope = (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
+                "xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" "
+                "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+                "<soap:Body><NumberToWords xmlns=\"http://www.dataaccess.com/webservicesserver/\">"
+                "<ubiNum>7</ubiNum></NumberToWords></soap:Body></soap:Envelope>"
+            )
+        else:
+            envelope = (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
+                "xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" "
+                "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+                "<soap:Body><CapitalCity xmlns=\"http://www.oorsprong.org/websamples.countryinfo\">"
+                "<sCountryISOCode>US</sCountryISOCode></CapitalCity></soap:Body></soap:Envelope>"
+            )
         return client.post(
-            f'/api/soap/{name}/{ver}{meta["uri"]}', data=envelope, headers={'Content-Type': 'text/xml'}
+            f'/api/soap/{name}/{ver}{meta["uri"]}', data=envelope, headers=headers
         )
     if kind == 'GRAPHQL':
         q = meta.get('query') or '{ __typename }'

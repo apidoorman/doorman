@@ -247,13 +247,20 @@ def restore_memory_from_file(path: str | None = None) -> dict:
         from utils.database import user_collection
 
         admin = user_collection.find_one({'username': 'admin'})
-        if admin is not None and not isinstance(admin.get('password'), (bytes, bytearray)):
-            pwd = _os.getenv('DOORMAN_ADMIN_PASSWORD')
-            if not pwd:
+        if admin is not None:
+            updates = {}
+            env_email = _os.getenv('DOORMAN_ADMIN_EMAIL')
+            if env_email and admin.get('email') != env_email:
+                updates['email'] = env_email
+            if admin.get('ui_access') is not True:
+                updates['ui_access'] = True
+            env_pwd = _os.getenv('DOORMAN_ADMIN_PASSWORD')
+            if env_pwd:
+                updates['password'] = _pw.hash_password(env_pwd)
+            elif not isinstance(admin.get('password'), (bytes, bytearray)):
                 raise RuntimeError('DOORMAN_ADMIN_PASSWORD must be set in environment')
-            user_collection.update_one(
-                {'username': 'admin'}, {'$set': {'password': _pw.hash_password(pwd)}}
-            )
+            if updates:
+                user_collection.update_one({'username': 'admin'}, {'$set': updates})
     except Exception:
         pass
     return {'version': payload.get('version', 1), 'created_at': payload.get('created_at')}

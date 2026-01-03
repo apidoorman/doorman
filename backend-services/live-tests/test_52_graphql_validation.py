@@ -71,7 +71,7 @@ def test_graphql_validation_blocks_invalid_variables(client):
             'api_allowed_roles': ['admin'],
             'api_allowed_groups': ['ALL'],
             'api_servers': [f'http://{host}:{port}'],
-            'api_type': 'REST',
+            'api_type': 'GRAPHQL',
             'active': True,
         },
     )

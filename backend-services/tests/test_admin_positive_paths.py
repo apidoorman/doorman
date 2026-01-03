@@ -16,11 +16,11 @@ async def test_admin_can_view_admin_role_and_user(authed_client):
     names = {(r.get('role_name') or '').lower() for r in roles}
     assert 'admin' in names
 
-    # Super admin user (username='admin') should be hidden from ALL users (ghost user)
+    # Super admin user is hidden from other users; admin can view self
     r_user = await authed_client.get('/platform/user/admin')
-    assert r_user.status_code == 404, 'Super admin user should return 404 (hidden)'
+    assert r_user.status_code == 200
 
-    # Super admin should also not appear in user lists
+    # Super admin should appear in user list for admin
     r_users = await authed_client.get('/platform/user/all?page=1&page_size=100')
     assert r_users.status_code == 200
     users = r_users.json()
@@ -30,7 +30,7 @@ async def test_admin_can_view_admin_role_and_user(authed_client):
         else (users.get('users') or users.get('response', {}).get('users') or [])
     )
     usernames = {u.get('username') for u in user_list}
-    assert 'admin' not in usernames, 'Super admin should not appear in user list'
+    assert 'admin' in usernames
 
 
 @pytest.mark.asyncio

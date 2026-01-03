@@ -20,6 +20,10 @@ def test_rate_limiting_blocks_excess_requests(client):
                 'throttle_wait_duration_type': 'second',
             },
         )
+        try:
+            client.delete('/api/caches')
+        except Exception:
+            pass
 
         client.post(
             '/platform/api',
