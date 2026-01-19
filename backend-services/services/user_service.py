@@ -124,10 +124,6 @@ class UserService:
         """
         logger.info(f'{request_id} | Getting user by email: {email}')
         user = await db_find_one(user_collection, {'email': email})
-        if '_id' in user:
-            del user['_id']
-        if 'password' in user:
-            del user['password']
         if not user:
             logger.error(f'{request_id} | User retrieval failed with code USR002')
             return ResponseModel(
@@ -136,6 +132,10 @@ class UserService:
                 error_code='USR002',
                 error_message='User not found',
             ).dict()
+        if '_id' in user:
+            del user['_id']
+        if 'password' in user:
+            del user['password']
         logger.info(f'{request_id} | User retrieval successful')
         if not active_username == user.get('username') and not await platform_role_required_bool(
             active_username, 'manage_users'

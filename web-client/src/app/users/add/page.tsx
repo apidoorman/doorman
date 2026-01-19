@@ -275,9 +275,10 @@ const AddUserPage = () => {
                   <SearchableSelect
                     value={formData.role}
                     onChange={(value) => handleInputChange('role', value)}
-                    placeholder="Select or type role name"
+                    placeholder="Select role"
                     fetchOptions={fetchRoles}
                     disabled={loading}
+                    restrictToOptions
                   />
                 </div>
                 <div>
@@ -343,10 +344,11 @@ const AddUserPage = () => {
                   onChange={setNewGroup}
                   onAdd={addGroup}
                   onKeyPress={(e) => e.key === 'Enter' && addGroup()}
-                  placeholder="Select or type group name"
+                  placeholder="Select group"
                   fetchOptions={fetchGroups}
                   disabled={loading}
                   addButtonText="Add Group"
+                  restrictToOptions
                 />
               </div>
             </div>

@@ -89,9 +89,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="flex h-full flex-col">
           <div className="px-6 py-3.5 border-b border-gray-200 dark:border-white/[0.08]">
             <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 bg-primary-600 dark:bg-[#e5e5e5] rounded flex items-center justify-center">
-                <span className="text-white dark:text-[#1a1a1a] font-semibold text-xs">D</span>
-              </div>
+              <img src="/android-chrome-192x192.png" alt="Doorman" className="w-5 h-5 object-contain shrink-0" />
               <h1 className="text-[15px] font-medium text-gray-900 dark:text-white">Doorman</h1>
             </div>
           </div>

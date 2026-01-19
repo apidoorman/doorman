@@ -35,11 +35,12 @@ def _strip_id(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def _export_all() -> dict[str, Any]:
-    apis = [_strip_id(a) for a in api_collection.find().to_list(length=None)]
-    endpoints = [_strip_id(e) for e in endpoint_collection.find().to_list(length=None)]
-    roles = [_strip_id(r) for r in role_collection.find().to_list(length=None)]
-    groups = [_strip_id(g) for g in group_collection.find().to_list(length=None)]
-    routings = [_strip_id(r) for r in routing_collection.find().to_list(length=None)]
+    # PyMongo cursors are synchronous; convert to lists directly
+    apis = [_strip_id(a) for a in list(api_collection.find())]
+    endpoints = [_strip_id(e) for e in list(endpoint_collection.find())]
+    roles = [_strip_id(r) for r in list(role_collection.find())]
+    groups = [_strip_id(g) for g in list(group_collection.find())]
+    routings = [_strip_id(r) for r in list(routing_collection.find())]
     return {
         'apis': apis,
         'endpoints': endpoints,
@@ -147,9 +148,9 @@ async def export_apis(
                     'rest',
                 )
             api.get('api_id')
-            eps = endpoint_collection.find(
-                {'api_name': api_name, 'api_version': api_version}
-            ).to_list(length=None)
+            eps = list(
+                endpoint_collection.find({'api_name': api_name, 'api_version': api_version})
+            )
             audit(
                 request,
                 actor=username,
@@ -166,7 +167,7 @@ async def export_apis(
                 ).dict(),
                 'rest',
             )
-        apis = [_strip_id(a) for a in api_collection.find().to_list(length=None)]
+        apis = [_strip_id(a) for a in list(api_collection.find())]
         audit(
             request,
             actor=username,
@@ -237,7 +238,7 @@ async def export_roles(request: Request, role_name: str | None = None):
             return process_response(
                 ResponseModel(status_code=200, response={'role': _strip_id(role)}).dict(), 'rest'
             )
-        roles = [_strip_id(r) for r in role_collection.find().to_list(length=None)]
+        roles = [_strip_id(r) for r in list(role_collection.find())]
         audit(
             request,
             actor=username,
@@ -308,7 +309,7 @@ async def export_groups(request: Request, group_name: str | None = None):
             return process_response(
                 ResponseModel(status_code=200, response={'group': _strip_id(group)}).dict(), 'rest'
             )
-        groups = [_strip_id(g) for g in group_collection.find().to_list(length=None)]
+        groups = [_strip_id(g) for g in list(group_collection.find())]
         audit(
             request,
             actor=username,
@@ -380,7 +381,7 @@ async def export_routings(request: Request, client_key: str | None = None):
                 ResponseModel(status_code=200, response={'routing': _strip_id(routing)}).dict(),
                 'rest',
             )
-        routings = [_strip_id(r) for r in routing_collection.find().to_list(length=None)]
+        routings = [_strip_id(r) for r in list(routing_collection.find())]
         audit(
             request,
             actor=username,
@@ -440,7 +441,7 @@ async def export_endpoints(
             query['api_name'] = api_name
         if api_version:
             query['api_version'] = api_version
-        eps = [_strip_id(e) for e in endpoint_collection.find(query).to_list(length=None)]
+        eps = [_strip_id(e) for e in list(endpoint_collection.find(query))]
         return process_response(
             ResponseModel(status_code=200, response={'endpoints': eps}).dict(), 'rest'
         )

@@ -42,6 +42,15 @@ const nextConfig: NextConfig = {
     // Allow opt-out to disable optimizer entirely when desired
     unoptimized: (process.env.NEXT_IMAGE_UNOPTIMIZED || '').toLowerCase() === 'true',
   },
+  async redirects() {
+    return [
+      {
+        source: '/favicon.ico',
+        destination: '/favicon-32x32.png',
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {

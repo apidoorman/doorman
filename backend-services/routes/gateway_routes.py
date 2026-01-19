@@ -365,6 +365,24 @@ async def gateway(request: Request, path: str):
                 await limit_and_throttle(request)
                 payload = await auth_required(request)
                 username = payload.get('sub')
+                # Enforce API allowed roles when configured
+                try:
+                    allowed_roles = resolved_api.get('api_allowed_roles') or []
+                    if allowed_roles:
+                        from services.user_service import UserService as _US
+                        u = await _US.get_user_by_username_helper(username)
+                        if (u.get('role') or '') not in set(allowed_roles):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW014',
+                                    error_message='Forbidden: role not allowed for this API',
+                                ).dict(),
+                                'rest',
+                            )
+                except Exception:
+                    pass
                 await enforce_pre_request_limit(request, username)
             else:
                 pass
@@ -653,6 +671,24 @@ async def soap_gateway(request: Request, path: str):
                 await limit_and_throttle(request)
                 payload = await auth_required(request)
                 username = payload.get('sub')
+                # Enforce API allowed roles when configured
+                try:
+                    allowed_roles = api.get('api_allowed_roles') or []
+                    if allowed_roles:
+                        from services.user_service import UserService as _US
+                        u = await _US.get_user_by_username_helper(username)
+                        if (u.get('role') or '') not in set(allowed_roles):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW014',
+                                    error_message='Forbidden: role not allowed for this API',
+                                ).dict(),
+                                'graphql',
+                            )
+                except Exception:
+                    pass
                 await enforce_pre_request_limit(request, username)
             else:
                 pass
@@ -833,6 +869,24 @@ async def graphql_gateway(request: Request, path: str):
                 await limit_and_throttle(request)
                 payload = await auth_required(request)
                 username = payload.get('sub')
+                # Enforce API allowed roles when configured
+                try:
+                    allowed_roles = api.get('api_allowed_roles') or []
+                    if allowed_roles:
+                        from services.user_service import UserService as _US
+                        u = await _US.get_user_by_username_helper(username)
+                        if (u.get('role') or '') not in set(allowed_roles):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW014',
+                                    error_message='Forbidden: role not allowed for this API',
+                                ).dict(),
+                                'grpc',
+                            )
+                except Exception:
+                    pass
                 await enforce_pre_request_limit(request, username)
             else:
                 pass
@@ -1107,6 +1161,24 @@ async def grpc_gateway(request: Request, path: str):
                 await limit_and_throttle(request)
                 payload = await auth_required(request)
                 username = payload.get('sub')
+                # Enforce API allowed roles when configured
+                try:
+                    allowed_roles = api.get('api_allowed_roles') or []
+                    if allowed_roles:
+                        from services.user_service import UserService as _US
+                        u = await _US.get_user_by_username_helper(username)
+                        if (u.get('role') or '') not in set(allowed_roles):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW014',
+                                    error_message='Forbidden: role not allowed for this API',
+                                ).dict(),
+                                'soap',
+                            )
+                except Exception:
+                    pass
                 await enforce_pre_request_limit(request, username)
             else:
                 pass

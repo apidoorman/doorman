@@ -371,28 +371,26 @@ export default function CreditsPage() {
                     value={assignForm.username}
                     onChange={(val: string) => setAssignForm({ ...assignForm, username: val })}
                     fetchOptions={fetchUserOptions}
-                    placeholder="Select or type username"
+                    placeholder="Select username"
+                    restrictToOptions
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Credit Group *
-                  </label>
-                  <select
-                    value={assignForm.credit_group}
-                    onChange={(e) => setAssignForm({ ...assignForm, credit_group: e.target.value, tier_name: '' })}
-                    className="input"
-                  >
-                    <option value="">Select credit group</option>
-                    {Object.keys(defs).map((group) => (
-                      <option key={group} value={group}>{group}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Select from available credit definitions
-                  </p>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Credit Group *
+                </label>
+                <SearchableSelect
+                  value={assignForm.credit_group}
+                  onChange={(v: string) => setAssignForm({ ...assignForm, credit_group: v, tier_name: '' })}
+                  fetchOptions={async () => Promise.resolve(Object.keys(defs))}
+                  placeholder="Select credit group"
+                  restrictToOptions
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Select from available credit definitions
+                </p>
+              </div>
                 
                 {assignForm.credit_group && (
                   <div>
