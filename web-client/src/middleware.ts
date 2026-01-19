@@ -10,8 +10,37 @@ const PUBLIC_PATH_PREFIXES = [
   '/public',
   '/_next',
   '/api',
+  // Common root-level static assets
   '/favicon.ico',
+  '/favicon.png',
+  '/favicon-16x16.png',
+  '/favicon-32x32.png',
+  '/favicon.svg',
+  '/apple-touch-icon.png',
+  '/android-chrome-192x192.png',
+  '/android-chrome-512x512.png',
+  '/safari-pinned-tab.svg',
+  '/icon.png',
 ]
+
+function isStaticAsset(pathname: string): boolean {
+  const lower = pathname.toLowerCase()
+  return [
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.webp',
+    '.svg',
+    '.ico',
+    '.txt',
+    '.json',
+    '.css',
+    '.js',
+    '.map',
+    '.xml',
+  ].some(ext => lower.endsWith(ext))
+}
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATH_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))
@@ -19,7 +48,7 @@ function isPublicPath(pathname: string): boolean {
 
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl
-  if (isPublicPath(pathname)) {
+  if (isPublicPath(pathname) || isStaticAsset(pathname)) {
     return NextResponse.next()
   }
 

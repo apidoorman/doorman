@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
-import { getJson, postJson, delJson } from '@/utils/api'
+import { getJson, postJson, delJson, fetchAllPaginated } from '@/utils/api'
+import SearchableSelect from '@/components/SearchableSelect'
 import { SERVER_URL } from '@/utils/config'
 
 interface TierAssignment {
@@ -38,6 +39,22 @@ export default function TierUsersPage() {
   const [expirationDate, setExpirationDate] = useState('')
   const [notes, setNotes] = useState('')
   const [assigning, setAssigning] = useState(false)
+  
+  const fetchUserOptions = async (): Promise<string[]> => {
+    try {
+      const users = await fetchAllPaginated<any>(
+        (page, size) => `${SERVER_URL}/platform/user/all?page=${page}&page_size=${size}`,
+        (data) => (data?.users || data?.response?.users || []),
+        undefined,
+        undefined,
+        'cache:users:all'
+      )
+      return users.map((u: any) => u?.username).filter(Boolean)
+    } catch (e) {
+      console.error('Failed to fetch users:', e)
+      return []
+    }
+  }
 
   useEffect(() => {
     fetchData()
@@ -273,14 +290,14 @@ export default function TierUsersPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      User ID *
+                      Username *
                     </label>
-                    <input
-                      type="text"
+                    <SearchableSelect
                       value={newUserId}
-                      onChange={(e) => setNewUserId(e.target.value)}
-                      className="input"
-                      placeholder="Enter user ID or email"
+                      onChange={setNewUserId}
+                      fetchOptions={fetchUserOptions}
+                      placeholder="Select username"
+                      restrictToOptions
                     />
                   </div>
                   

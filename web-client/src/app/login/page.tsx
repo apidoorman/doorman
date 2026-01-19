@@ -105,9 +105,7 @@ const LoginPage = () => {
         <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-white/[0.08] rounded-lg p-8 shadow-xl">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="mx-auto mb-4 w-12 h-12 bg-primary-600 dark:bg-[#e5e5e5] rounded flex items-center justify-center">
-              <span className="text-white dark:text-[#1a1a1a] font-semibold">D</span>
-            </div>
+            <img src="/android-chrome-192x192.png" alt="Doorman logo" className="mx-auto mb-4 w-12 h-12 object-contain" />
             <h1 className="text-[22px] font-medium text-gray-900 dark:text-white/90 mb-1">Welcome to Doorman</h1>
             <p className="text-gray-600 dark:text-white/40 text-[13px]">Sign in to manage your API gateway</p>
           </div>

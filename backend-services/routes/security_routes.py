@@ -250,8 +250,29 @@ async def restart_gateway(request: Request):
                 'rest',
             )
 
-        pid_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'doorman.pid')
-        pid_file = os.path.abspath(pid_file)
+        # Try multiple likely locations for doorman.pid to avoid CWD ambiguity
+        candidates = []
+        try:
+            routes_dir = os.path.dirname(os.path.abspath(__file__))
+            be_root = os.path.abspath(os.path.join(routes_dir, '..'))
+            candidates.append(os.path.join(be_root, 'doorman.pid'))
+        except Exception:
+            pass
+        try:
+            # CWD-relative (used by doorman.start in some setups)
+            candidates.append(os.path.abspath('doorman.pid'))
+        except Exception:
+            pass
+        try:
+            # Alongside doorman.py
+            from importlib import import_module as _imp
+            _dm = _imp('doorman')
+            _dm_path = os.path.abspath(getattr(_dm, '__file__', ''))
+            if _dm_path:
+                candidates.append(os.path.join(os.path.dirname(_dm_path), 'doorman.pid'))
+        except Exception:
+            pass
+        pid_file = next((p for p in candidates if p and os.path.exists(p)), candidates[0] if candidates else os.path.abspath('doorman.pid'))
         if not os.path.exists(pid_file):
             return process_response(
                 ResponseModel(
