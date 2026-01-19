@@ -1,0 +1,11 @@
+services:
+  doorman:
+    # Persist data and logs in Docker-managed volumes for production-like runs
+    volumes:
+      - doorman-generated:/app/backend-services/generated
+      - doorman-logs:/app/backend-services/logs
+
+volumes:
+  doorman-generated:
+  doorman-logs:
+

@@ -559,7 +559,7 @@ Response:
 
 
 @user_router.get(
-    '/email/{email}', description='Get user by email', response_model=list[UserModelResponse]
+    '/email/{email}', description='Get user by email', response_model=ResponseModel
 )
 async def get_user_by_email(email: str, request: Request):
     request_id = str(uuid.uuid4())

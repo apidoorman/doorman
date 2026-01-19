@@ -154,10 +154,16 @@ class Database:
         # for tests that adjust the env and call initialize_collections again.
         try:
             env_pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
+            env_email = os.getenv('DOORMAN_ADMIN_EMAIL')
             if env_pwd:
                 users.update_one(
                     {'username': 'admin'},
                     {'$set': {'password': password_util.hash_password(env_pwd)}},
+                )
+            if env_email:
+                users.update_one(
+                    {'username': 'admin'},
+                    {'$set': {'email': env_email}},
                 )
         except Exception:
             pass

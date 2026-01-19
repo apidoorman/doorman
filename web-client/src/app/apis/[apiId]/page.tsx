@@ -1281,10 +1281,11 @@ const ApiDetailPage = () => {
                     onChange={setNewRole}
                     onAdd={addRole}
                     onKeyPress={(e) => e.key === 'Enter' && addRole()}
-                    placeholder="Select or type role name"
+                    placeholder="Select role"
                     fetchOptions={fetchRoles}
                     disabled={saving}
                     addButtonText="Add"
+                    restrictToOptions
                   />
                 )}
 
@@ -1324,10 +1325,11 @@ const ApiDetailPage = () => {
                     onChange={setNewGroup}
                     onAdd={addGroup}
                     onKeyPress={(e) => e.key === 'Enter' && addGroup()}
-                    placeholder="Select or type group name"
+                    placeholder="Select group"
                     fetchOptions={fetchGroups}
                     disabled={saving}
                     addButtonText="Add"
+                    restrictToOptions
                   />
                 )}
 

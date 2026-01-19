@@ -189,6 +189,12 @@ class AsyncDatabase:
                     raise RuntimeError(
                         'Admin user missing password and DOORMAN_ADMIN_PASSWORD not set'
                     )
+            # Ensure admin email matches env if provided
+            env_email = os.getenv('DOORMAN_ADMIN_EMAIL')
+            if adm and env_email and adm.get('email') != env_email:
+                await self.db.users.update_one(
+                    {'username': 'admin'}, {'$set': {'email': env_email}}
+                )
         except Exception:
             pass
 

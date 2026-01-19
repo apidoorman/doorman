@@ -260,4 +260,3 @@ export default function OpenApiViewer({ openapiUrl }: { openapiUrl: string }) {
     </div>
   )
 }
-

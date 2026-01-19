@@ -58,6 +58,18 @@ async def subscribe_api(api_data: SubscribeModel, request: Request):
         )
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
 
+        # If targeting a different user, require manage_subscriptions permission
+        if api_data.username and api_data.username != username:
+            if not await platform_role_required_bool(username, 'manage_subscriptions'):
+                return respond_rest(
+                    ResponseModel(
+                        status_code=403,
+                        response_headers={'request_id': request_id},
+                        error_code='SUB009',
+                        error_message='You do not have permission to subscribe another user',
+                    )
+                )
+
         if not await group_required(
             request, api_data.api_name + '/' + api_data.api_version, api_data.username
         ):
@@ -144,6 +156,18 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request):
             f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
         )
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+
+        # If targeting a different user, require manage_subscriptions permission
+        if api_data.username and api_data.username != username:
+            if not await platform_role_required_bool(username, 'manage_subscriptions'):
+                return respond_rest(
+                    ResponseModel(
+                        status_code=403,
+                        response_headers={'request_id': request_id},
+                        error_code='SUB010',
+                        error_message='You do not have permission to unsubscribe another user',
+                    )
+                )
 
         if not await group_required(
             request, api_data.api_name + '/' + api_data.api_version, api_data.username
@@ -324,7 +348,7 @@ async def available_apis(username: str, request: Request):
             can_manage = await platform_role_required_bool(actor, 'manage_subscriptions')
 
         cursor = api_collection.find().sort('api_name', 1)
-        apis = cursor.to_list(length=None)
+        apis = list(cursor)
         for a in apis:
             if a.get('_id'):
                 del a['_id']
