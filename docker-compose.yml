@@ -31,8 +31,8 @@ services:
       # Encryption key for dumps (set a strong value in .env for real use)
       MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY:-change-me-in-prod}
     volumes:
-      - ./generated:/app/backend-services/generated
-      - ./logs:/app/backend-services/logs
+      - doorman-generated:/app/backend-services/generated
+      - doorman-logs:/app/backend-services/logs
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "sh", "-c", "curl -f $([ \"$${HTTPS_ONLY:-false}\" = \"true\" ] && echo https || echo http)://localhost:$${PORT:-3001}/platform/monitor/liveness"]
@@ -81,3 +81,5 @@ services:
 volumes:
   redis-data:
   mongo-data:
+  doorman-generated:
+  doorman-logs:
