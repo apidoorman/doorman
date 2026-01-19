@@ -42,6 +42,22 @@ When ready:
 - Web UI: `http://localhost:3000`
 - Gateway API: `http://localhost:3001`
 
+### One‑Command Demo (in‑memory + auto‑seed)
+
+Spin up a preconfigured demo (auto‑cleans on exit) without editing `.env`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up
+```
+
+Defaults:
+- Admin: `demo@doorman.dev` / `DemoPassword123!`
+- Web UI: `http://localhost:3000`
+- API: `http://localhost:3001`
+- Mode: in‑memory (no Redis/Mongo), demo data auto‑seeded in‑process on start
+- Isolation: uses separate image tag (`doorman-demo:latest`) and project name to avoid overwriting any existing `doorman`
+- Cleanup: containers, volumes, and networks are removed automatically when you stop (Ctrl+C)
+
 ## Frontend Gateway Configuration
 
 The web client needs to know the backend gateway URL. Set `NEXT_PUBLIC_GATEWAY_URL` in the root `.env` file:
@@ -75,7 +91,7 @@ docker compose down
 
 ### Required Environment Variables
 - `DOORMAN_ADMIN_EMAIL` — initial admin user email
-- `DOORMAN_ADMIN_PASSWORD` — initial admin password
+- `DOORMAN_ADMIN_PASSWORD` — initial admin password (12+ characters required)
 - `JWT_SECRET_KEY` — secret key for JWT tokens (32+ chars)
 
 Optional (recommended in some setups):
@@ -83,15 +99,23 @@ Optional (recommended in some setups):
 
 ### High Availability Setup
 
-For production/HA environments with Redis and MongoDB:
+For production/HA with Redis and MongoDB via Docker Compose:
 
 ```bash
-# Set in .env:
+# In .env (compose service names inside the network)
 MEM_OR_EXTERNAL=REDIS
+MONGO_DB_HOSTS=mongo:27017
+MONGO_DB_USER=doorman_admin
+MONGO_DB_PASSWORD=changeme   # set a stronger password in real deployments
+REDIS_HOST=redis
 
-# Start with production profile (includes Redis + MongoDB)
+# Start with production profile (brings up Redis + MongoDB)
 docker compose --profile production up -d
 ```
+
+Notes:
+- Ensure `MONGO_DB_USER`/`MONGO_DB_PASSWORD` match the values in `docker-compose.yml` (defaults are provided for convenience; change in production).
+- When running under Compose, use `mongo` and `redis` service names (not `localhost`).
 
 ### Alternative: Manual Docker Commands
 
