@@ -1,6 +1,8 @@
 // Gateway URL from environment - required for API calls
 // Set NEXT_PUBLIC_GATEWAY_URL in root .env file (loaded via dotenv-cli for dev, build arg for Docker)
-const GATEWAY_URL_RAW = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
+const DEMO = process.env.DEMO_MODE === 'true'
+// In demo, force same-origin by ignoring NEXT_PUBLIC_GATEWAY_URL
+const GATEWAY_URL_RAW = DEMO ? '' : (process.env.NEXT_PUBLIC_GATEWAY_URL || '')
 
 let _cachedUrl: string | null = null
 

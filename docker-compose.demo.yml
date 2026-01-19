@@ -1,33 +1,25 @@
 name: doorman-demo
-version: '3.8'
 
 services:
   doorman:
-    # Reuse the same build but inject demo-friendly frontend URL
+    # Build from demo Dockerfile with baked env
     build:
       context: .
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_GATEWAY_URL: http://localhost:3001
-        NEXT_PUBLIC_PROTECTED_USERS: demo@doorman.dev
+      dockerfile: Dockerfile.demo
     image: doorman-demo:latest
-    container_name: null
+    # Provide critical runtime env so it works even without a fresh build
     environment:
-      # App mode
-      ENV: development
-      MEM_OR_EXTERNAL: MEM
-      THREADS: 1
-      HTTPS_ONLY: "false"
-
-      # Admin bootstrap
       DOORMAN_ADMIN_EMAIL: demo@doorman.dev
       DOORMAN_ADMIN_PASSWORD: DemoPassword123!
       JWT_SECRET_KEY: demo-secret-change-me-please-32-bytes-min
-
-      # Demo seeding
-      DEMO_SEED: "true"
-
-      # Ports (compose defaults already match these)
+      # Keep demo memory isolated; avoid writing/reading host dumps
+      MEM_AUTO_SAVE_ENABLED: "false"
+      MEM_DUMP_PATH: "/tmp/demo_memory_dump.bin"
+      ENABLE_STARLETTE_CORS: "true"
+      ALLOWED_ORIGINS: http://localhost:3000
+      ALLOW_METHODS: GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD
+      ALLOW_HEADERS: "*"
+      ALLOW_CREDENTIALS: "true"
       PORT: 3001
       WEB_PORT: 3000
 
@@ -39,6 +31,7 @@ services:
     # Ensure it doesn't restart and doesn't persist bind mounts from base compose
     restart: "no"
     volumes: []
+    container_name: doorman-demo
 
   demo-cleanup:
     image: docker:27.3.1-cli

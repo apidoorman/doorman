@@ -42,21 +42,30 @@ When ready:
 - Web UI: `http://localhost:3000`
 - Gateway API: `http://localhost:3001`
 
-### One‑Command Demo (in‑memory + auto‑seed)
+### One‑Command Demo (in‑memory)
 
 Spin up a preconfigured demo (auto‑cleans on exit) without editing `.env`:
 
 ```bash
+# First time (build the demo image to include frontend proxy config)
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
+
+# Next runs (no rebuild needed)
 docker compose -f docker-compose.yml -f docker-compose.demo.yml up
 ```
 
-Defaults:
+Defaults (demo‑only):
 - Admin: `demo@doorman.dev` / `DemoPassword123!`
 - Web UI: `http://localhost:3000`
 - API: `http://localhost:3001`
-- Mode: in‑memory (no Redis/Mongo), demo data auto‑seeded in‑process on start
+- Mode: in‑memory (no Redis/Mongo); no seed data created
 - Isolation: uses separate image tag (`doorman-demo:latest`) and project name to avoid overwriting any existing `doorman`
 - Cleanup: containers, volumes, and networks are removed automatically when you stop (Ctrl+C)
+
+Notes:
+- Demo serves the API through the frontend (same‑origin proxy) so browser cookies work without cross‑port CORS issues. The first run with `--build` bakes this Next.js proxy configuration.
+- Demo runs fully in‑container: it does not mount the host `generated/` directory and disables memory auto‑save to avoid cross‑contamination with a non‑demo instance.
+- If you ran an older demo before this change and see demo data in a non‑demo run, stop the container and delete host memory dumps: `rm -rf generated/memory_dump*`.
 
 ## Frontend Gateway Configuration
 

@@ -67,6 +67,27 @@ load_env_files
 
 trap graceful_stop SIGTERM SIGINT
 
+# Start backend (Doorman) in the foreground so logs go to container stdout
+echo "[entrypoint] Starting Doorman backend..."
+(
+  cd /app/backend-services
+  # Ensure required directories
+  mkdir -p proto generated logs
+  python doorman.py run
+) &
+BACK_PID=$!
+
+# Start web client (Next.js)
+echo "[entrypoint] Starting web client..."
+(
+  cd /app/web-client
+  # Start Next.js on WEB_PORT, bind to 0.0.0.0 for container networking
+  PORT="${WEB_PORT:-3000}" npm run start -- -H 0.0.0.0 -p "${WEB_PORT:-3000}"
+) &
+WEB_PID=$!
+
+echo "[entrypoint] Services launched. Backend PID=$BACK_PID Web PID=$WEB_PID"
+
 # Optional: Demo seeding (in-memory, for quick start demos)
 if [ "${DEMO_SEED:-false}" = "true" ]; then
   (
@@ -95,27 +116,6 @@ if [ "${DEMO_SEED:-false}" = "true" ]; then
   ) &
 fi
 
-# Start backend (Doorman) in the foreground so logs go to container stdout
-echo "[entrypoint] Starting Doorman backend..."
-(
-  cd /app/backend-services
-  # Ensure required directories
-  mkdir -p proto generated logs
-  python doorman.py run
-) &
-BACK_PID=$!
-
-# Start web client (Next.js)
-echo "[entrypoint] Starting web client..."
-(
-  cd /app/web-client
-  # Start Next.js on WEB_PORT, bind to 0.0.0.0 for container networking
-  PORT="${WEB_PORT:-3000}" npm run start -- -H 0.0.0.0 -p "${WEB_PORT:-3000}"
-) &
-WEB_PID=$!
-
-echo "[entrypoint] Services launched. Backend PID=$BACK_PID Web PID=$WEB_PID"
-
-# Wait on either process to exit, then stop gracefully
-wait -n || true
+# Wait on either main service to exit, then stop gracefully
+wait -n "$BACK_PID" "$WEB_PID" || true
 graceful_stop
