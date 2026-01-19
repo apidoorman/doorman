@@ -1,0 +1,79 @@
+# Demo image: Python backend (Doorman) + Next.js web client
+# All demo environment is baked into the image (no .env required).
+
+FROM python:3.11-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Install Node.js + npm and useful tools
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       nodejs npm curl ca-certificates git \
+    && npm i -g npm@^10 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Backend dependencies first for better layer caching
+COPY backend-services/requirements.txt /app/backend-services/requirements.txt
+RUN python -m pip install --upgrade pip \
+    && pip install -r /app/backend-services/requirements.txt
+
+# Prepare web client dependencies separately for better caching
+WORKDIR /app/web-client
+COPY web-client/package*.json ./
+RUN npm ci --include=dev
+
+# Copy backend source only (avoid copying entire repo)
+WORKDIR /app
+COPY backend-services /app/backend-services
+
+# Copy web client sources (excluding node_modules via .dockerignore)
+WORKDIR /app/web-client
+COPY web-client/ .
+
+# Build-time args for frontend env (baked into Next.js bundle)
+# For demo, leave gateway URL empty so client uses same-origin and Next.js rewrites proxy to the API.
+ARG NEXT_PUBLIC_PROTECTED_USERS=demo@doorman.dev
+ARG NEXT_PUBLIC_GATEWAY_URL=
+
+# Build Next.js (production) with baked public env
+RUN echo "export NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS}" > /tmp/build-env.sh && \
+    echo "export NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL}" >> /tmp/build-env.sh && \
+    echo "export NODE_ENV=production" >> /tmp/build-env.sh && \
+    echo "export NEXT_TELEMETRY_DISABLED=1" >> /tmp/build-env.sh && \
+    echo "export DEMO_MODE=true" >> /tmp/build-env.sh && \
+    . /tmp/build-env.sh && \
+    npm run build && \
+    npm prune --omit=dev
+
+# Runtime configuration baked for demo
+WORKDIR /app
+
+# Demo defaults (no external .env needed)
+ENV ENV=development \
+    MEM_OR_EXTERNAL=MEM \
+    THREADS=1 \
+    HTTPS_ONLY=false \
+    DOORMAN_ADMIN_EMAIL=demo@doorman.dev \
+    DOORMAN_ADMIN_PASSWORD=DemoPassword123! \
+    JWT_SECRET_KEY=demo-secret-change-me-please-32-bytes-min \
+    DEMO_SEED=false \
+    DEMO_MODE=true \
+    ENABLE_STARLETTE_CORS=true \
+    ALLOWED_ORIGINS=http://localhost:3000 \
+    ALLOW_METHODS="GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD" \
+    ALLOW_HEADERS="*" \
+    ALLOW_CREDENTIALS=true \
+    PORT=3001 \
+    WEB_PORT=3000
+
+# Add entrypoint
+COPY docker/entrypoint.sh /app/docker/entrypoint.sh
+RUN chmod +x /app/docker/entrypoint.sh
+
+EXPOSE 3001 3000
+
+CMD ["/app/docker/entrypoint.sh"]

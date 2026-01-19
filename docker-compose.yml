@@ -8,8 +8,6 @@
 #   1. Set MEM_OR_EXTERNAL=REDIS in .env
 #   2. Run: docker compose --profile production up
 
-version: '3.8'
-
 services:
   doorman:
     build:
