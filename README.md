@@ -41,6 +41,7 @@ docker compose up
 When ready:
 - Web UI: `http://localhost:3000`
 - Gateway API: `http://localhost:3001`
+- Data & logs persist in Docker volumes (`doorman-generated`, `doorman-logs`).
 
 ### One‑Command Demo (in‑memory)
 
@@ -95,6 +96,14 @@ docker compose logs -f
 # Stop services
 docker compose down
 ```
+
+### Data & Logs
+
+- By default, Compose stores generated data and logs in Docker volumes, not in the repo folders:
+  - Volume `doorman-generated` → `/app/backend-services/generated`
+  - Volume `doorman-logs` → `/app/backend-services/logs`
+- To inspect inside the container: `docker compose exec doorman sh`
+- To reset data: `docker compose down -v` (removes volumes)
 
 ## Configuration
 
