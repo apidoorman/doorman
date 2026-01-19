@@ -560,9 +560,10 @@ const UserDetailPage = () => {
                     <SearchableSelect
                       value={editData.role || ''}
                       onChange={(value) => handleInputChange('role', value)}
-                      placeholder="Select or type role name"
+                      placeholder="Select role"
                       fetchOptions={fetchRoles}
                       disabled={saving}
+                      restrictToOptions
                     />
                     ) : (
                       <span className="badge badge-primary">{user.role}</span>
@@ -575,18 +576,18 @@ const UserDetailPage = () => {
                       <InfoTooltip text="Assign user to a pricing tier. Tier limits take priority over custom rate limits." />
                     </label>
                   {isEditing ? (
-                    <select
+                    <SearchableSelect
                       value={editData.tier_id || ''}
-                      onChange={(e) => handleInputChange('tier_id', e.target.value || undefined)}
-                      className="input"
-                    >
-                      <option value="">No Tier (Use custom rate limits)</option>
-                      {Array.isArray(availableTiers) && availableTiers.map((tier) => (
-                        <option key={tier.tier_id} value={tier.tier_id}>
-                          {tier.display_name || tier.name} - {tier.limits?.requests_per_minute || 0} req/min
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(val) => handleInputChange('tier_id', val || undefined)}
+                      fetchOptions={async () => Promise.resolve(
+                        (Array.isArray(availableTiers) ? availableTiers : []).map(t => ({
+                          label: `${t.display_name || t.name}`,
+                          value: t.tier_id,
+                        }))
+                      )}
+                      placeholder="Select tier"
+                      restrictToOptions
+                    />
                   ) : (
                     <>
                       {currentTier ? (
@@ -737,29 +738,33 @@ const UserDetailPage = () => {
               </div>
               <div className="p-6 space-y-4">
                 {isEditing && (
-                  <SearchableSelect
-                    value={newGroup}
-                    onChange={setNewGroup}
-                    onAdd={addGroup}
-                    onKeyPress={(e) => e.key === 'Enter' && addGroup()}
-                    placeholder="Select or type group name"
-                    fetchOptions={fetchGroups}
-                    disabled={saving}
-                    addButtonText="Add Group"
-                  />
+                <SearchableSelect
+                  value={newGroup}
+                  onChange={setNewGroup}
+                  onAdd={addGroup}
+                  onKeyPress={(e) => e.key === 'Enter' && addGroup()}
+                  placeholder="Select group"
+                  fetchOptions={fetchGroups}
+                  disabled={saving}
+                  addButtonText="Add Group"
+                  restrictToOptions
+                />
                 )}
 
                 <div className="space-y-2">
                   {(isEditing ? editData.groups : user.groups)?.map((group, index) => (
                     <div key={index} className="flex items-center gap-2">
                       {isEditing ? (
-                        <input
-                          type="text"
-                          value={group}
-                          onChange={(e) => handleGroupChange(index, e.target.value)}
-                          className="input flex-1"
-                          placeholder="Enter group name"
-                        />
+                        <div className="flex-1">
+                          <SearchableSelect
+                            value={group}
+                            onChange={(val) => handleGroupChange(index, val)}
+                            placeholder="Select group"
+                            fetchOptions={fetchGroups}
+                            disabled={saving}
+                            restrictToOptions
+                          />
+                        </div>
                       ) : (
                         <span className="text-sm bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-3 py-1 rounded-full flex-1">
                           {group}

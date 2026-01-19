@@ -1,0 +1,48 @@
+name: doorman-demo
+
+services:
+  doorman:
+    # Build from demo Dockerfile with baked env
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+    image: doorman-demo:latest
+    # Provide critical runtime env so it works even without a fresh build
+    environment:
+      DOORMAN_ADMIN_EMAIL: demo@doorman.dev
+      DOORMAN_ADMIN_PASSWORD: DemoPassword123!
+      JWT_SECRET_KEY: demo-secret-change-me-please-32-bytes-min
+      # Keep demo memory isolated; avoid writing/reading host dumps
+      MEM_AUTO_SAVE_ENABLED: "false"
+      MEM_DUMP_PATH: "/tmp/demo_memory_dump.bin"
+      ENABLE_STARLETTE_CORS: "true"
+      ALLOWED_ORIGINS: http://localhost:3000
+      ALLOW_METHODS: GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD
+      ALLOW_HEADERS: "*"
+      ALLOW_CREDENTIALS: "true"
+      PORT: 3001
+      WEB_PORT: 3000
+
+    # Tip: use a different host port if you already run something on 3000/3001
+    ports:
+      - "3001:3001"
+      - "3000:3000"
+
+    # Ensure it doesn't restart and doesn't persist bind mounts from base compose
+    restart: "no"
+    volumes: []
+    container_name: doorman-demo
+
+  demo-cleanup:
+    image: docker:27.3.1-cli
+    container_name: doorman-demo-cleanup
+    restart: "no"
+    # Wait idly; on SIGTERM/INT (when you Ctrl+C compose), run cleanup
+    command: ["/bin/sh", "-c", "trap '/bin/sh /cleanup.sh' TERM INT; tail -f /dev/null"]
+    environment:
+      - PROJECT=doorman-demo
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker/cleanup.sh:/cleanup.sh:ro
+    depends_on:
+      - doorman

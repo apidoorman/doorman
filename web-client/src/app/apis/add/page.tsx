@@ -593,10 +593,11 @@ const AddApiPage = () => {
                   onChange={setNewRole}
                   onAdd={addRole}
                   onKeyPress={(e) => e.key === 'Enter' && addRole()}
-                  placeholder="Select or type role name"
+                  placeholder="Select role"
                   fetchOptions={fetchRoles}
                   disabled={loading}
                   addButtonText="Add"
+                  restrictToOptions
                 />
                 <div className="flex flex-wrap gap-2 mt-2">
                   {formData.api_allowed_roles.map((r, i) => (
@@ -630,10 +631,11 @@ const AddApiPage = () => {
                   onChange={setNewGroup}
                   onAdd={addGroup}
                   onKeyPress={(e) => e.key === 'Enter' && addGroup()}
-                  placeholder="Select or type group name"
+                  placeholder="Select group"
                   fetchOptions={fetchGroups}
                   disabled={loading}
                   addButtonText="Add"
+                  restrictToOptions
                 />
                 <div className="flex flex-wrap gap-2 mt-2">
                   {formData.api_allowed_groups.map((g, i) => (

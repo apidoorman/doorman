@@ -9,6 +9,7 @@ import os
 
 from fastapi import HTTPException, Request
 from jose import JWTError
+from utils.role_util import is_admin_user
 
 from utils.async_db import db_find_one
 from utils.auth_util import auth_required
@@ -26,11 +27,12 @@ async def subscription_required(request: Request):
             raise HTTPException(status_code=401, detail='Invalid token')
         
         # Admin user bypasses subscription requirements
-        admin_email = os.getenv('DOORMAN_ADMIN_EMAIL', '')
-        logger.debug(f'Subscription check - username: "{username}", admin_email: "{admin_email}", match: {username == admin_email}')
-        if username == admin_email and admin_email:
-            logger.info(f'Admin user {username} bypassing subscription check')
-            return payload
+        try:
+            if await is_admin_user(username):
+                logger.info(f'Admin user {username} bypassing subscription check')
+                return payload
+        except Exception:
+            pass
         full_path = request.url.path
         if full_path.startswith('/api/rest/'):
             prefix = '/api/rest/'

@@ -2,16 +2,22 @@
 
 import { useState, useEffect, useRef } from 'react'
 
+type Option = string | { label: string; value: string }
+type NormalizedOption = { label: string; value: string }
+
 interface SearchableSelectProps {
   value: string
   onChange: (value: string) => void
   onAdd?: () => void
   onKeyPress?: (e: React.KeyboardEvent<HTMLInputElement>) => void
   placeholder?: string
-  fetchOptions: () => Promise<string[]>
+  fetchOptions: () => Promise<Option[]>
   disabled?: boolean
   className?: string
   addButtonText?: string
+  // When true, the user must pick an option from the list.
+  // Typing only filters; it will not set the bound value until an option is selected.
+  restrictToOptions?: boolean
 }
 
 export default function SearchableSelect({
@@ -23,12 +29,19 @@ export default function SearchableSelect({
   fetchOptions,
   disabled = false,
   className = '',
-  addButtonText = 'Add'
+  addButtonText = 'Add',
+  restrictToOptions = false,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [options, setOptions] = useState<string[]>([])
+  const [options, setOptions] = useState<NormalizedOption[]>([])
   const [loading, setLoading] = useState(false)
+  const [query, setQuery] = useState<string>(value || '')
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Keep internal query in sync with selected value
+  useEffect(() => {
+    setQuery(value || '')
+  }, [value])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -41,6 +54,12 @@ export default function SearchableSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const normalize = (items: Option[]): NormalizedOption[] => {
+    return items
+      .map((it) => (typeof it === 'string' ? { label: it, value: it } : it))
+      .filter((it): it is NormalizedOption => !!it && typeof it.label === 'string' && typeof it.value === 'string')
+  }
+
   const loadOptions = async () => {
     if (options.length > 0) {
       setIsOpen(true)
@@ -50,7 +69,7 @@ export default function SearchableSelect({
     setLoading(true)
     try {
       const data = await fetchOptions()
-      setOptions(data)
+      setOptions(normalize(data))
       setIsOpen(true)
     } catch (err) {
       console.error('Failed to load options:', err)
@@ -65,18 +84,23 @@ export default function SearchableSelect({
     }
   }
 
-  const handleSelect = (option: string) => {
-    onChange(option)
+  const handleSelect = (option: string | NormalizedOption) => {
+    const val = typeof option === 'string' ? option : option.value
+    const label = typeof option === 'string' ? option : option.label
+    onChange(val)
+    setQuery(label)
     setIsOpen(false)
   }
 
+  const filterText = (restrictToOptions ? query : value) || ''
   const filteredOptions = options.filter(opt =>
-    opt.toLowerCase().includes(value.toLowerCase())
+    opt.label.toLowerCase().includes(filterText.toLowerCase())
   )
 
   // Check if current value exists in the options list (case-insensitive)
-  const isValidValue = options.length === 0 || options.some(opt => 
-    opt.toLowerCase() === value.trim().toLowerCase()
+  const hasLoadedOptions = options.length > 0
+  const isValidValue = hasLoadedOptions && options.some(opt => 
+    opt.value.toLowerCase() === (value || '').trim().toLowerCase()
   )
 
   return (
@@ -84,8 +108,15 @@ export default function SearchableSelect({
       <div className="flex gap-2">
         <input
           type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={restrictToOptions ? query : value}
+          onChange={(e) => {
+            if (restrictToOptions) {
+              setQuery(e.target.value)
+              if (!isOpen) setIsOpen(true)
+            } else {
+              onChange(e.target.value)
+            }
+          }}
           onFocus={handleInputFocus}
           onKeyPress={onKeyPress}
           placeholder={placeholder}
@@ -126,7 +157,7 @@ export default function SearchableSelect({
               onClick={() => handleSelect(option)}
               className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
-              {option}
+              {option.label}
             </button>
           ))}
         </div>

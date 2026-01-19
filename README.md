@@ -41,6 +41,25 @@ docker compose up
 When ready:
 - Web UI: `http://localhost:3000`
 - Gateway API: `http://localhost:3001`
+- Data & logs persist in Docker volumes (`doorman-generated`, `doorman-logs`).
+
+### One‑Command Demo (in‑memory)
+
+Spin up a preconfigured demo (auto‑cleans on exit) without editing `.env`:
+
+```bash
+# First time (build the demo image to include frontend proxy config)
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
+
+# Next runs (no rebuild needed)
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up
+```
+
+Defaults (demo‑only):
+- Admin: `demo@doorman.dev` / `DemoPassword123!`
+- Web UI: `http://localhost:3000`
+- API: `http://localhost:3001`
+- Mode: in‑memory (no Redis/Mongo); no seed data created
 
 ## Frontend Gateway Configuration
 
@@ -71,11 +90,19 @@ docker compose logs -f
 docker compose down
 ```
 
+### Data & Logs
+
+- By default, Compose stores generated data and logs in Docker volumes, not in the repo folders:
+  - Volume `doorman-generated` → `/app/backend-services/generated`
+  - Volume `doorman-logs` → `/app/backend-services/logs`
+- To inspect inside the container: `docker compose exec doorman sh`
+- To reset data: `docker compose down -v` (removes volumes)
+
 ## Configuration
 
 ### Required Environment Variables
 - `DOORMAN_ADMIN_EMAIL` — initial admin user email
-- `DOORMAN_ADMIN_PASSWORD` — initial admin password
+- `DOORMAN_ADMIN_PASSWORD` — initial admin password (12+ characters required)
 - `JWT_SECRET_KEY` — secret key for JWT tokens (32+ chars)
 
 Optional (recommended in some setups):
@@ -83,15 +110,23 @@ Optional (recommended in some setups):
 
 ### High Availability Setup
 
-For production/HA environments with Redis and MongoDB:
+For production/HA with Redis and MongoDB via Docker Compose:
 
 ```bash
-# Set in .env:
+# In .env (compose service names inside the network)
 MEM_OR_EXTERNAL=REDIS
+MONGO_DB_HOSTS=mongo:27017
+MONGO_DB_USER=doorman_admin
+MONGO_DB_PASSWORD=changeme   # set a stronger password in real deployments
+REDIS_HOST=redis
 
-# Start with production profile (includes Redis + MongoDB)
+# Start with production profile (brings up Redis + MongoDB)
 docker compose --profile production up -d
 ```
+
+Notes:
+- Ensure `MONGO_DB_USER`/`MONGO_DB_PASSWORD` match the values in `docker-compose.yml` (defaults are provided for convenience; change in production).
+- When running under Compose, use `mongo` and `redis` service names (not `localhost`).
 
 ### Alternative: Manual Docker Commands
 

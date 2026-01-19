@@ -7,7 +7,8 @@ import Layout from '@/components/Layout'
 import InfoTooltip from '@/components/InfoTooltip'
 import FormHelp from '@/components/FormHelp'
 import { SERVER_URL } from '@/utils/config'
-import { postJson } from '@/utils/api'
+import { postJson, fetchAllPaginated } from '@/utils/api'
+import SearchableSelect from '@/components/SearchableSelect'
 
 interface CreateGroupData {
   group_name: string
@@ -25,6 +26,24 @@ const AddGroupPage = () => {
     api_access: []
   })
   const [newApi, setNewApi] = useState('')
+
+  const fetchApiOptions = async (): Promise<string[]> => {
+    const items = await fetchAllPaginated<any>(
+      (p, s) => `${SERVER_URL}/platform/api/all?page=${p}&page_size=${s}`,
+      (data) => (Array.isArray(data) ? data : (data.apis || data.response?.apis || [])),
+      undefined,
+      undefined,
+      'cache:apis:all'
+    )
+    return items
+      .map((api: any) => {
+        const name = api.api_name || api.name || ''
+        const version = api.api_version || api.version || ''
+        if (!name || !version) return null
+        return `${name}/${version}`
+      })
+      .filter(Boolean) as string[]
+  }
 
   const handleInputChange = (field: keyof CreateGroupData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -144,25 +163,17 @@ const AddGroupPage = () => {
                 <InfoTooltip text="Add API name/version pairs this group may access, e.g., users/v1" />
               </label>
               <div className="space-y-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="input flex-1"
-                    placeholder="Enter API name to grant access"
-                    value={newApi}
-                    onChange={(e) => setNewApi(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addApi())}
-                    disabled={loading}
-                  />
-                  <button
-                    type="button"
-                    onClick={addApi}
-                    disabled={loading || !newApi.trim()}
-                    className="btn btn-primary"
-                  >
-                    Add
-                  </button>
-                </div>
+                <SearchableSelect
+                  value={newApi}
+                  onChange={setNewApi}
+                  onAdd={addApi}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addApi())}
+                  placeholder="Select API (name/version)"
+                  fetchOptions={fetchApiOptions}
+                  disabled={loading}
+                  addButtonText="Add"
+                  restrictToOptions
+                />
 
                 <div className="flex flex-wrap gap-2">
                   {formData.api_access.map((api, index) => (

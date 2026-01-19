@@ -233,9 +233,10 @@ const UserSubscriptionsPage = () => {
                   <SearchableSelect
                     value={selectedApi}
                     onChange={setSelectedApi}
-                    placeholder="Select or search for an API"
+                    placeholder="Select API"
                     fetchOptions={fetchApiOptions}
                     disabled={isAdding}
+                    restrictToOptions
                   />
                 </div>
                 <button type="submit" className="btn btn-primary w-full" disabled={isAdding || !selectedApi}>
