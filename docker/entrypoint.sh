@@ -67,6 +67,34 @@ load_env_files
 
 trap graceful_stop SIGTERM SIGINT
 
+# Optional: Demo seeding (in-memory, for quick start demos)
+if [ "${DEMO_SEED:-false}" = "true" ]; then
+  (
+    set +e
+    BASE="http://localhost:${PORT:-3001}"
+    echo "[entrypoint] Waiting for backend to become healthy before seeding..."
+    for i in $(seq 1 40); do
+      if curl -sf "${BASE}/platform/monitor/liveness" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+    echo "[entrypoint] Attempting demo seed via API..."
+    COOKIE_FILE="/tmp/doorman.demo.cookies"
+    # Login with admin to obtain session cookie
+    if curl -sc "$COOKIE_FILE" -H 'Content-Type: application/json' \
+      -d "{\"email\":\"${DOORMAN_ADMIN_EMAIL:-admin@doorman.dev}\",\"password\":\"${DOORMAN_ADMIN_PASSWORD:-change-me}\"}" \
+      "${BASE}/platform/authorization" >/dev/null 2>&1; then
+      # Trigger seed (idempotent-ish)
+      curl -sb "$COOKIE_FILE" -X POST "${BASE}/platform/demo/seed" >/dev/null 2>&1 || true
+      echo "[entrypoint] Demo seed triggered"
+    else
+      echo "[entrypoint] Demo seed skipped (login failed)"
+    fi
+    rm -f "$COOKIE_FILE" 2>/dev/null || true
+  ) &
+fi
+
 # Start backend (Doorman) in the foreground so logs go to container stdout
 echo "[entrypoint] Starting Doorman backend..."
 (

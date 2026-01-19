@@ -433,6 +433,44 @@ async def app_lifespan(app: FastAPI):
     except Exception as e:
         gateway_logger.error(f'Memory mode restore failed: {e}')
 
+    # Optional: in-process demo seeding for MEM mode
+    try:
+        if database.memory_only and str(os.getenv('DEMO_SEED', 'false')).lower() in (
+            '1', 'true', 'yes', 'on'
+        ):
+            from utils.demo_seed_util import run_seed as _run_seed_demo
+
+            def _int_env(name: str, default: int) -> int:
+                try:
+                    return int(os.getenv(name, default))
+                except Exception:
+                    return default
+
+            users = _int_env('DEMO_USERS', 40)
+            apis = _int_env('DEMO_APIS', 15)
+            endpoints = _int_env('DEMO_ENDPOINTS', 6)
+            groups = _int_env('DEMO_GROUPS', 8)
+            protos = _int_env('DEMO_PROTOS', 6)
+            logs = _int_env('DEMO_LOGS', 1500)
+            gateway_logger.info(
+                f'DEMO_SEED enabled. Seeding in-memory store (users={users}, apis={apis}, endpoints={endpoints}, groups={groups}, protos={protos}, logs={logs})'
+            )
+            try:
+                await asyncio.to_thread(
+                    _run_seed_demo,
+                    users,
+                    apis,
+                    endpoints,
+                    groups,
+                    protos,
+                    logs,
+                    None,
+                )
+            except Exception as _se:
+                gateway_logger.warning(f'DEMO_SEED failed: {_se}')
+    except Exception:
+        pass
+
     try:
         loop = asyncio.get_event_loop()
 
