@@ -36,6 +36,10 @@ def test_public_api_no_auth_required(client):
         )
         assert r.status_code in (200, 201)
         s = requests.Session()
+        try:
+            s.trust_env = False
+        except Exception:
+            pass
         s.headers.update({'X-IS-TEST': 'true'})
         url = client.base_url.rstrip('/') + f'/api/rest/{api_name}/{api_version}/status'
         r = s.get(url)
@@ -87,6 +91,10 @@ def test_auth_not_required_but_not_public_allows_unauthenticated(client):
         import requests
 
         s = requests.Session()
+        try:
+            s.trust_env = False
+        except Exception:
+            pass
         s.headers.update({'X-IS-TEST': 'true'})
         url = client.base_url.rstrip('/') + f'/api/rest/{api_name}/{api_version}/ping'
         r = s.get(url)

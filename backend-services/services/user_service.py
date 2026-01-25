@@ -37,10 +37,10 @@ class UserService:
         Retrieve a user by email.
         """
         user = await db_find_one(user_collection, {'email': email})
-        if user.get('_id'):
-            del user['_id']
         if not user:
             raise HTTPException(status_code=404, detail='User not found')
+        if user.get('_id'):
+            del user['_id']
         return user
 
     @staticmethod
@@ -478,3 +478,42 @@ class UserService:
                 **({'total': total} if total is not None else {}),
             },
         ).dict()
+    @staticmethod
+    async def enable_mfa(username: str, secret: str, request_id: str) -> bool:
+        """
+        Enable MFA for a user.
+        """
+        try:
+            result = await asyncio.to_thread(
+                user_collection.update_one,
+                {'username': username},
+                {'$set': {'mfa_enabled': True, 'mfa_secret': secret, 'updated_at': datetime.now(UTC)}}
+            )
+            if result.modified_count > 0:
+                doorman_cache.delete_cache('user_cache', username)
+                logger.info(f'{request_id} | MFA enabled for user: {username}')
+                return True
+            return False
+        except Exception as e:
+            logger.error(f'{request_id} | Failed to enable MFA: {e}')
+            return False
+
+    @staticmethod
+    async def disable_mfa(username: str, request_id: str) -> bool:
+        """
+        Disable MFA for a user.
+        """
+        try:
+            result = await asyncio.to_thread(
+                user_collection.update_one,
+                {'username': username},
+                {'$set': {'mfa_enabled': False, 'mfa_secret': None, 'updated_at': datetime.now(UTC)}}
+            )
+            if result.modified_count > 0:
+                doorman_cache.delete_cache('user_cache', username)
+                logger.info(f'{request_id} | MFA disabled for user: {username}')
+                return True
+            return False
+        except Exception as e:
+            logger.error(f'{request_id} | Failed to disable MFA: {e}')
+            return False

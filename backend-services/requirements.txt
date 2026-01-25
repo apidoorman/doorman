@@ -51,5 +51,7 @@ pytz>=2024.1  # For timezone handling
 grpcio==1.75.0
 grpcio-tools==1.75.0
 grpcio-reflection==1.75.0
-protobuf==6.32.1
+# CVE-2026-0994: No patch available yet (affects all versions up to 6.33.4)
+# Upgrading to 6.33.4 to fix CVE-2025-4565 and using defensive coding practices
+protobuf>=6.33.4
 googleapis-common-protos>=1.63.0

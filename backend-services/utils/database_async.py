@@ -18,7 +18,13 @@ from dotenv import load_dotenv, find_dotenv
 from utils import password_util
 from utils.database import InMemoryDB
 
-load_dotenv(find_dotenv(usecwd=True))
+try:
+    import sys as _sys
+    _running_under_pytest = 'PYTEST_CURRENT_TEST' in os.environ or 'pytest' in _sys.modules
+except Exception:
+    _running_under_pytest = False
+if not _running_under_pytest:
+    load_dotenv(find_dotenv(usecwd=True))
 
 logger = logging.getLogger('doorman.gateway')
 

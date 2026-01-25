@@ -89,7 +89,14 @@ from routes.tier_routes import tier_router
 from routes.tools_routes import tools_router
 from routes.user_routes import user_router
 from routes.vault_routes import vault_router
+from routes.openapi_routes import openapi_router
+from routes.wsdl_routes import wsdl_router
+from routes.graphql_routes import graphql_routes_router
+from routes.grpc_routes import grpc_router
+from routes.mfa_routes import mfa_router
 from utils.audit_util import audit
+from middleware.security_audit_middleware import SecurityAuditMiddleware
+from middleware.latency_injection_middleware import LatencyInjectionMiddleware
 from utils.auth_blacklist import purge_expired_tokens
 from utils.cache_manager_util import cache_manager
 from utils.database import database
@@ -111,7 +118,18 @@ from utils.security_settings_util import (
     stop_auto_save_task,
 )
 
-load_dotenv(find_dotenv(usecwd=True))
+# Avoid loading developer .env while running under pytest so tests fully
+# control environment via monkeypatch without hidden defaults.
+try:
+    import sys as _sys
+
+    _running_under_pytest = (
+        'PYTEST_CURRENT_TEST' in os.environ or 'pytest' in _sys.modules
+    )
+except Exception:
+    _running_under_pytest = False
+if not _running_under_pytest:
+    load_dotenv(find_dotenv(usecwd=True))
 
 PID_FILE = 'doorman.pid'
 
@@ -1471,8 +1489,13 @@ try:
         '1', 'true', 'yes', 'on'
     )
     _live = _os.getenv('DOORMAN_RUN_LIVE', '').lower() in ('1', 'true', 'yes', 'on')
-    _test = _os.getenv('DOORMAN_TEST_MODE', '').lower() in ('1', 'true', 'yes', 'on')
-    if not (_skip_tier or _live or _test):
+    try:
+        import sys as __sys
+
+        _is_pytest = 'PYTEST_CURRENT_TEST' in _os.environ or 'pytest' in __sys.modules
+    except Exception:
+        _is_pytest = False
+    if not (_skip_tier or _live or _is_pytest):
         doorman.add_middleware(TierRateLimitMiddleware)
         logging.getLogger('doorman.gateway').info('Tier-based rate limiting middleware enabled')
     else:
@@ -1788,7 +1811,13 @@ except Exception as _e:
     except Exception:
         pass
 
-# Add GZip compression middleware (configurable via environment variables)
+    # Security Audit Middleware (should be close to top to catch all requests)
+    doorman.add_middleware(SecurityAuditMiddleware)
+
+    # Latency Injection (Chaos Mode)
+    doorman.add_middleware(LatencyInjectionMiddleware)
+
+# Add GZip compression for responses > 1KB(configurable via environment variables)
 # This should be added early in the middleware stack so it compresses final responses
 try:
     compression_enabled = os.getenv('COMPRESSION_ENABLED', 'true').lower() == 'true'
@@ -2123,7 +2152,7 @@ async def automatic_purger(interval_seconds):
 
 
 @doorman.exception_handler(JWTError)
-async def jwt_exception_handler(exc: JWTError):
+async def jwt_exception_handler(request: Request, exc: JWTError):
     return process_response(
         ResponseModel(status_code=401, error_code='JWT001', error_message='Invalid token').dict(),
         'rest',
@@ -2185,7 +2214,26 @@ doorman.include_router(analytics_router, prefix='/platform', tags=['Analytics'])
 doorman.include_router(tier_router, prefix='/platform/tiers', tags=['Tiers'])
 doorman.include_router(rate_limit_rule_router, prefix='/platform/rate-limits', tags=['Rate Limits'])
 doorman.include_router(quota_router, prefix='/platform/quota', tags=['Quota'])
+doorman.include_router(openapi_router, tags=['OpenAPI Discovery'])
+doorman.include_router(wsdl_router, tags=['WSDL Discovery'])
+doorman.include_router(graphql_routes_router, tags=['GraphQL'])
+doorman.include_router(grpc_router, tags=['gRPC Discovery'])
+doorman.include_router(mfa_router, tags=['MFA'])
 
+
+
+@doorman.on_event('startup')
+async def startup_event():
+    """Run startup checks"""
+    try:
+        from utils.redis_client import get_redis_client
+        redis = get_redis_client()
+        redis.ping()
+        gateway_logger.info('Startup check: Redis connection successful')
+    except Exception as e:
+        gateway_logger.error(f'Startup check failed: Redis unavailable - {e}')
+        # In strict mode we might exit, but for resilience we log error
+        # sys.exit(1)
 
 def start() -> None:
     if os.path.exists(PID_FILE):

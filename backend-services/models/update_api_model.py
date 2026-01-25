@@ -119,5 +119,63 @@ class UpdateApiModel(BaseModel):
         None, description='Override: trust X-Forwarded-For for this API'
     )
 
+    # Request/Response Transformation
+    api_request_transform: dict | None = Field(
+        None,
+        description='Request transformation config. Supports headers, body (JSONPath), query transforms.',
+    )
+    api_response_transform: dict | None = Field(
+        None,
+        description='Response transformation config. Supports headers, body (JSONPath), status mapping.',
+    )
+
+    # OpenAPI Auto-Discovery
+    api_openapi_url: str | None = Field(
+        None,
+        description='URL path to fetch OpenAPI spec from upstream (e.g., /openapi.json)',
+    )
+    api_openapi_auto_discover: bool | None = Field(
+        None,
+        description='If true, automatically discover and sync endpoints from upstream OpenAPI spec',
+    )
+
+    # SOAP/WSDL Configuration
+    api_wsdl_url: str | None = Field(
+        None,
+        description='URL to fetch WSDL from upstream (e.g., /service?wsdl)',
+    )
+    api_soap_version: str | None = Field(
+        None,
+        description='SOAP version: "1.1" or "1.2". If not set, auto-detects from envelope.',
+    )
+    api_ws_security: dict | None = Field(
+        None,
+        description='WS-Security configuration for SOAP requests',
+    )
+
+    # GraphQL Configuration
+    api_graphql_max_depth: int | None = Field(
+        None,
+        description='Maximum allowed query depth for GraphQL queries',
+    )
+    api_graphql_schema_url: str | None = Field(
+        None,
+        description='GraphQL endpoint path for introspection',
+    )
+    api_graphql_subscriptions: bool | None = Field(
+        None,
+        description='Enable WebSocket subscription proxy for this API',
+    )
+
+    # gRPC Configuration
+    api_grpc_web_enabled: bool | None = Field(
+        None,
+        description='Enable gRPC-Web proxy for browser clients',
+    )
+    api_grpc_reflection_url: str | None = Field(
+        None,
+        description='Upstream URL for gRPC Server Reflection',
+    )
+
     class Config:
         arbitrary_types_allowed = True

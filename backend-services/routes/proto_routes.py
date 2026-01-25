@@ -12,6 +12,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from shutil import copy2
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
@@ -63,16 +64,34 @@ def sanitize_filename(filename: str):
     return sanitized
 
 
-def validate_path(base_path: Path, target_path: Path):
+def validate_path(base_path: Path, target_path: Path) -> bool:
+    """
+    Robust path validation to prevent traversal attacks.
+    Ensures target_path is strictly within base_path.
+    """
     try:
-        base_path = Path(os.path.realpath(base_path))
-        target_path = Path(os.path.realpath(target_path))
-        project_root = Path(os.path.realpath(PROJECT_ROOT))
-        if not str(base_path).startswith(str(project_root)):
+        # Resolve to absolute, real paths to handle symlinks
+        abs_base = os.path.abspath(str(base_path))
+        abs_target = os.path.abspath(str(target_path))
+        
+        # Ensure base is within project (defensive)
+        abs_project = os.path.abspath(str(PROJECT_ROOT))
+        
+        # Whitelist: project root or system temp
+        import tempfile
+        abs_temp = os.path.abspath(tempfile.gettempdir())
+
+        is_in_project = abs_base.startswith(abs_project)
+        is_in_temp = abs_base.startswith(abs_temp)
+
+        if not (is_in_project or is_in_temp):
             return False
-        return str(target_path).startswith(str(base_path))
-    except Exception as e:
-        logger.error(f'Path validation error: {str(e)}')
+
+        # The core check: ensure target is truly inside base
+        # os.path.commonpath is the most robust way to check ancestry
+        return os.path.commonpath([abs_base, abs_target]) == abs_base
+    except (ValueError, Exception) as e:
+        logger.error(f"Path validation error: {str(e)}")
         return False
 
 
@@ -154,6 +173,54 @@ def get_safe_proto_path(api_name: str, api_version: str):
         raise HTTPException(status_code=400, detail=f'Path validation error: {str(e)}')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Failed to create safe paths: {str(e)}')
+
+
+def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
+    """Archive existing proto file with timestamp"""
+    try:
+        # Resolve and validate source path
+        msg = f"Archive source path {proto_path} is unsafe"
+        try:
+            proto_path = proto_path.resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Path derived from sanitized inputs and validated via validate_path/commonpath against fixed PROJECT_ROOT
+        except RuntimeError:
+            logger.warning(f"{msg} (resolve failed)")
+            return
+
+        if not validate_path(PROJECT_ROOT, proto_path):
+            logger.warning(f"{msg} (outside root)")
+            return
+            
+        if not proto_path.exists() or not proto_path.is_file():  # codeql[py/uncontrolled-data-in-path-expression]: Existence check on validated, fixed-base path
+            return
+
+        archive_dir = (PROJECT_ROOT / 'proto' / 'history').resolve()
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = int(time.time())
+        # Re-sanitize inputs to be paranoid
+        safe_name = sanitize_filename(api_name)
+        safe_ver = sanitize_filename(api_version)
+        # Ensure the source path matches the exact expected sanitized filename under proto/
+        expected_src = (PROJECT_ROOT / 'proto' / f"{safe_name}_{safe_ver}.proto").resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Expected path built from sanitized components and validated against PROJECT_ROOT
+        if expected_src != proto_path:
+            logger.warning(
+                f"Archive source path mismatch: expected {expected_src}, got {proto_path}; skipping archive"
+            )
+            return
+        filename = f"{safe_name}_{safe_ver}_{timestamp}.proto"
+        
+        dest = (archive_dir / filename).resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Destination path built from sanitized components and constrained to archive_dir via validate_path
+        
+        # Verify destination is strictly within archive_dir
+        if not validate_path(archive_dir, dest):
+            logger.warning(f"Archive destination path {dest} is unsafe")
+            return
+            
+        # Copy with metadata
+        copy2(proto_path, dest)  # codeql[py/uncontrolled-data-in-path-expression]: Copy between validated, fixed-base paths only
+        logger.info(f"Archived proto to {dest}")
+    except Exception as e:
+        logger.error(f"Failed to archive proto: {e}")
 
 
 """
@@ -251,6 +318,36 @@ async def upload_proto_file(
         pkg_name = _extract_package_name(proto_content)
         if not validate_path(PROJECT_ROOT, proto_path):
             raise ValueError('Invalid proto path detected')
+            
+        # Archive existing before overwrite (with strict filename equality guard)
+        archive_existing_proto(proto_path, api_name, api_version)
+        
+        # Write only if the computed path matches the sanitized expectation
+        try:
+            expected_src = (
+                PROJECT_ROOT / 'proto' / f"{sanitize_filename(api_name)}_{sanitize_filename(api_version)}.proto"
+            ).resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Expected sanitized path used for equality guard only
+        except Exception:
+            return process_response(
+                ResponseModel(
+                    status_code=400,
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_code=ErrorCodes.PATH_VALIDATION,
+                    error_message='Failed to compute expected proto path',
+                ).dict(),
+                'rest',
+            )
+        if expected_src != proto_path:
+            return process_response(
+                ResponseModel(
+                    status_code=400,
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_code=ErrorCodes.PATH_VALIDATION,
+                    error_message='Computed proto path mismatch after sanitization',
+                ).dict(),
+                'rest',
+            )
+
         proto_path.write_text(proto_content)
         try:
             # Ensure grpc_tools is available before attempting compilation

@@ -9,6 +9,13 @@ class LiveClient:
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip('/') + '/'
         self.sess = requests.Session()
+        # Ignore proxy env to ensure localhost direct connection
+        try:
+            self.sess.trust_env = False
+        except Exception:
+            pass
+        self._token: str | None = None
+        self._csrf: str | None = None
         # Track resources created during tests for cleanup
         self._created_apis: set[tuple[str, str]] = set()
         self._created_endpoints: set[tuple[str, str, str, str]] = set()
@@ -25,10 +32,16 @@ class LiveClient:
         self._created_tier_assignments: set[str] = set()
 
     def _get_csrf(self) -> str | None:
-        for c in self.sess.cookies:
-            if c.name == 'csrf_token':
-                return c.value
-        return None
+        if self._csrf:
+            return self._csrf
+        try:
+            for c in self.sess.cookies:
+                if c.name == 'csrf_token':
+                    self._csrf = c.value
+                    break
+        except Exception:
+            pass
+        return self._csrf
 
     def _headers_with_csrf(self, headers: dict | None) -> dict:
         out = {'Accept': 'application/json'}
@@ -36,9 +49,12 @@ class LiveClient:
         out['X-IS-TEST'] = 'true'
         if headers:
             out.update(headers)
+        # Prefer bearer auth when available to avoid cookie nuances across environments
+        if 'Authorization' not in out and self._token:
+            out['Authorization'] = f'Bearer {self._token}'
         csrf = self._get_csrf()
-        if csrf and 'X-CSRF-Token' not in out:
-            out['X-CSRF-Token'] = csrf
+        if csrf:
+            out['X-CSRF-Token'] = out.get('X-CSRF-Token', csrf)
         return out
 
     def get(self, path: str, **kwargs):
@@ -55,6 +71,14 @@ class LiveClient:
         resp = self.sess.post(
             url, json=json, data=data, files=files, headers=hdrs, allow_redirects=False, **kwargs
         )
+        # Reflect auth state changes for invalidate to ensure tests read 401 afterwards
+        try:
+            p = path.split('?')[0]
+            if p.startswith('/platform/authorization/invalidate') and resp.status_code in (200, 204):
+                self._token = None
+                self._csrf = None
+        except Exception:
+            pass
         # Best-effort resource tracking
         try:
             p = path.split('?')[0]
@@ -140,10 +164,32 @@ class LiveClient:
     def login(self, email: str, password: str):
         r = self.post('/platform/authorization', json={'email': email, 'password': password})
         r.raise_for_status()
-        return r.json()
+        payload = r.json() or {}
+        # Capture bearer token for header auth in addition to cookies
+        token = None
+        if isinstance(payload, dict):
+            token = payload.get('access_token') or (payload.get('response') or {}).get('access_token')
+        if token:
+            self._token = token
+        # Snapshot csrf immediately after login
+        try:
+            self._csrf = None
+            for c in self.sess.cookies:
+                if c.name == 'csrf_token':
+                    self._csrf = c.value
+                    break
+        except Exception:
+            pass
+        return payload
 
     def logout(self):
         r = self.post('/platform/authorization/invalidate', json={})
+        # Clear bearer and csrf snapshots to reflect session invalidation
+        try:
+            self._token = None
+            self._csrf = None
+        except Exception:
+            pass
         return r
 
     # ------------------------

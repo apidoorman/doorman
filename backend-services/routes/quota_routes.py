@@ -17,6 +17,8 @@ from services.tier_service import TierService, get_tier_service
 from utils.database_async import async_database
 from utils.quota_tracker import QuotaTracker, get_quota_tracker
 from utils.auth_util import auth_required
+from utils.rate_limiter import get_rate_limiter
+from models.rate_limit_models import RateLimitRule, RuleType, TimeWindow
 
 logger = logging.getLogger(__name__)
 
@@ -477,8 +479,21 @@ async def get_burst_status(
         if not limits:
             limits = tier.limits
 
-        # TODO: Get actual burst usage from Redis
-        # For now, return structure with placeholder data
+        rate_limiter = get_rate_limiter()
+        
+        # Helper to get usage
+        def _get_burst_usage(w: TimeWindow, limit: int, burst: int):
+            if not limit: return 0
+            rule = RateLimitRule(
+                rule_id=f'tier_{w.value}_{user_id}',
+                rule_type=RuleType.PER_USER,
+                time_window=w,
+                limit=limit,
+                burst_allowance=burst
+            )
+            data = rate_limiter.get_current_usage(rule, user_id)
+            return data.burst_count
+
         burst_status = {
             'user_id': user_id,
             'burst_limits': {
@@ -487,11 +502,11 @@ async def get_burst_status(
                 'per_second': limits.burst_per_second,
             },
             'burst_usage': {
-                'per_minute': 0,  # TODO: Get from Redis
-                'per_hour': 0,
-                'per_second': 0,
+                'per_minute': _get_burst_usage(TimeWindow.MINUTE, limits.requests_per_minute, limits.burst_per_minute),
+                'per_hour': _get_burst_usage(TimeWindow.HOUR, limits.requests_per_hour, limits.burst_per_hour),
+                'per_second': _get_burst_usage(TimeWindow.SECOND, limits.requests_per_second, limits.burst_per_second),
             },
-            'note': 'Burst tracking requires rate limiter integration',
+            'note': 'Live data from rate limiter',
         }
 
         return burst_status

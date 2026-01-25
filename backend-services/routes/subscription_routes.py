@@ -300,6 +300,19 @@ async def subscriptions_for_user_by_id(user_id: str, request: Request):
             f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
         )
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+
+        # Restrict to self or users with manage_subscriptions permission
+        if user_id != username:
+            if not await platform_role_required_bool(username, 'manage_subscriptions'):
+                return respond_rest(
+                    ResponseModel(
+                        status_code=403,
+                        response_headers={'request_id': request_id},
+                        error_code='SUB011',
+                        error_message='You do not have permission to view another user\'s subscriptions',
+                    )
+                )
+
         return respond_rest(await SubscriptionService.get_user_subscriptions(user_id, request_id))
     except Exception as e:
         logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)

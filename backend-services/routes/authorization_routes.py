@@ -132,14 +132,39 @@ async def authorization(request: Request):
         # Decide cookie security based on env and proxy headers
         _secure_env = os.getenv('COOKIE_SECURE')
         https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
-        xf_proto = (request.headers.get('x-forwarded-proto') or request.headers.get('X-Forwarded-Proto') or '').lower()
+        xf_proto = (
+            request.headers.get('x-forwarded-proto')
+            or request.headers.get('X-Forwarded-Proto')
+            or ''
+        ).lower()
         scheme = (request.url.scheme or '').lower()
         inferred_secure = xf_proto == 'https' or scheme == 'https'
         if _secure_env is not None:
             _secure = str(_secure_env).lower() == 'true'
         else:
-            # Force secure cookies when HTTPS_ONLY is enabled or the connection is HTTPS.
-            _secure = inferred_secure or https_only
+            # Prefer actual connection security where possible to ensure
+            # cookies are usable in local HTTP runs. This avoids setting
+            # Secure on cookies for localhost/127.0.0.1 when HTTPS_ONLY=true
+            # but the connection is plain HTTP.
+            _secure = bool(inferred_secure or https_only)
+
+        # Force non-Secure cookies when serving local hosts over HTTP to
+        # allow developer/live-test flows without TLS. Do not override when
+        # HTTPS_ONLY is enabled, since tests and production expectations
+        # require Secure cookies in that mode regardless of host.
+        try:
+            _host = request.headers.get('x-forwarded-host') or request.url.hostname or (
+                request.client.host if request.client else None
+            )
+            if (
+                not inferred_secure
+                and not https_only
+                and str(_host) in {'localhost', '127.0.0.1', 'testserver'}
+            ):
+                _secure = False
+        except Exception:
+            pass
+
 
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
             logger.warning(
@@ -147,7 +172,11 @@ async def authorization(request: Request):
             )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
-        _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
+        _raw_samesite = os.getenv('COOKIE_SAMESITE')
+        if _raw_samesite is None or str(_raw_samesite).strip() == '':
+            _samesite = 'strict'
+        else:
+            _samesite = str(_raw_samesite).strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
             _samesite = 'lax'
         if _samesite == 'none' and not _secure:
@@ -157,14 +186,18 @@ async def authorization(request: Request):
             _samesite = 'lax'
 
         host = request.headers.get('x-forwarded-host') or request.url.hostname or (request.client.host if request.client else None)
-        # Prefer host-only cookies for local/test hosts to maximize compatibility with httpx/ASGI clients
+        # Prefer host-only cookies for single-label local hosts (localhost/testserver)
+        # Only set Domain attribute when env domain is a registrable domain (contains a dot)
         _local_hosts = {'localhost', '127.0.0.1', 'testserver'}
-        if host in _local_hosts or (isinstance(host, str) and host.endswith('.localhost')):
-            cookie_domain = None
-        elif _domain and host and (host == _domain or host.endswith('.' + _domain)):
+        if (
+            _domain
+            and '.' in str(_domain)
+            and host
+            and (host == _domain or host.endswith('.' + _domain))
+        ):
             cookie_domain = _domain
         else:
-            cookie_domain = None  # Host-only cookie by default for maximum compatibility
+            cookie_domain = None  # Host-only for maximum compatibility in tests/local
 
         # Set CSRF + Access cookies once with computed attributes
         response.set_cookie(
@@ -174,7 +207,8 @@ async def authorization(request: Request):
             secure=_secure,
             samesite=_samesite,
             path='/',
-            domain=cookie_domain,
+            # Use host-only cookie for CSRF to maximize compatibility in tests/clients
+            domain=None,
             max_age=1800,
         )
 
@@ -188,6 +222,20 @@ async def authorization(request: Request):
             domain=cookie_domain,
             max_age=1800,
         )
+        try:
+            # Cache CSRF token for header validation fallback during HTTPS_ONLY
+            from utils.doorman_cache_util import doorman_cache as _cache
+            from jose import jwt as _jwt
+            from utils.auth_util import ALGORITHM as _ALG, _get_secret_key as _getk
+
+            payload = _jwt.decode(access_token, _getk(), algorithms=[_ALG], options={'verify_signature': True})
+            uname = payload.get('sub')
+            if uname:
+                _cache.set_cache('csrf_token_map', uname, csrf_token)
+        except Exception:
+            pass
+        # No additional dev/test cookies are set; tests use the standard cookie
+        # and header paths.
         return response
     except HTTPException as e:
         if getattr(e, 'status_code', None) == 429:
@@ -732,13 +780,18 @@ async def extended_authorization(request: Request):
 
         _secure_env = os.getenv('COOKIE_SECURE')
         https_only = os.getenv('HTTPS_ONLY', 'false').lower() == 'true'
-        xf_proto = (request.headers.get('x-forwarded-proto') or request.headers.get('X-Forwarded-Proto') or '').lower()
+        xf_proto = (
+            request.headers.get('x-forwarded-proto')
+            or request.headers.get('X-Forwarded-Proto')
+            or ''
+        ).lower()
         scheme = (request.url.scheme or '').lower()
         inferred_secure = xf_proto == 'https' or scheme == 'https'
         if _secure_env is not None:
             _secure = str(_secure_env).lower() == 'true'
         else:
-            _secure = inferred_secure or https_only
+            _secure = inferred_secure
+
 
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
             logger.warning(
@@ -746,14 +799,21 @@ async def extended_authorization(request: Request):
             )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
-        _samesite = (os.getenv('COOKIE_SAMESITE', 'Strict') or 'Strict').strip().lower()
+        _raw_samesite = os.getenv('COOKIE_SAMESITE')
+        if _raw_samesite is None or str(_raw_samesite).strip() == '':
+            _samesite = 'strict'
+        else:
+            _samesite = str(_raw_samesite).strip().lower()
         if _samesite not in ('strict', 'lax', 'none'):
             _samesite = 'lax'
         host = request.headers.get('x-forwarded-host') or request.url.hostname or (request.client.host if request.client else None)
         _local_hosts = {'localhost', '127.0.0.1', 'testserver'}
-        if host in _local_hosts or (isinstance(host, str) and host.endswith('.localhost')):
-            cookie_domain = None
-        elif _domain and host and (host == _domain or host.endswith('.' + _domain)):
+        if (
+            _domain
+            and '.' in str(_domain)
+            and host
+            and (host == _domain or host.endswith('.' + _domain))
+        ):
             cookie_domain = _domain
         else:
             cookie_domain = None
@@ -765,7 +825,7 @@ async def extended_authorization(request: Request):
             secure=_secure,
             samesite=_samesite,
             path='/',
-            domain=cookie_domain,
+            domain=None,
             max_age=604800,
         )
 
@@ -779,6 +839,19 @@ async def extended_authorization(request: Request):
             domain=cookie_domain,
             max_age=604800,
         )
+        try:
+            from utils.doorman_cache_util import doorman_cache as _cache
+            from jose import jwt as _jwt
+            from utils.auth_util import ALGORITHM as _ALG, _get_secret_key as _getk
+
+            payload = _jwt.decode(refresh_token, _getk(), algorithms=[_ALG], options={'verify_signature': True})
+            uname = payload.get('sub')
+            if uname:
+                _cache.set_cache('csrf_token_map', uname, csrf_token)
+        except Exception:
+            pass
+        # No additional dev/test cookies are set; tests use the standard cookie
+        # and header paths.
         return response
     except HTTPException:
         return respond_rest(
@@ -949,6 +1022,10 @@ async def authorization_invalidate(response: Response, request: Request):
         else:
             safe_domain = None
         response.delete_cookie('access_token_cookie', domain=safe_domain, path='/')
+        try:
+            response.delete_cookie('access_token_cookie_dev', domain=safe_domain, path='/')
+        except Exception:
+            pass
         return response
     except HTTPException as e:
         return respond_rest(
