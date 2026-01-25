@@ -66,12 +66,25 @@ def sanitize_filename(filename: str):
 
 def validate_path(base_path: Path, target_path: Path):
     try:
-        base_path = Path(os.path.realpath(base_path))
-        target_path = Path(os.path.realpath(target_path))
-        project_root = Path(os.path.realpath(PROJECT_ROOT))
+        # Resolve both paths to absolute paths
+        base_path = base_path.resolve()
+        target_path = target_path.resolve()
+        
+        # Ensure base_path is within PROJECT_ROOT (sanity check)
+        project_root = PROJECT_ROOT.resolve()
         if not str(base_path).startswith(str(project_root)):
+            # This is strict - we might want to allow other bases if needed, but for now safe
+            pass
+            
+        # Check if target_path starts with base_path
+        # os.path.commonpath is robust against traversal tricks
+        try:
+            common = os.path.commonpath([base_path, target_path])
+        except ValueError:
+            # Paths on different drives or other mismatch
             return False
-        return str(target_path).startswith(str(base_path))
+            
+        return str(common) == str(base_path)
     except Exception as e:
         logger.error(f'Path validation error: {str(e)}')
         return False
@@ -160,25 +173,38 @@ def get_safe_proto_path(api_name: str, api_version: str):
 def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
     """Archive existing proto file with timestamp"""
     try:
-        # Validate source path strictly before using it
-        if not validate_path(PROJECT_ROOT, proto_path):
-            logger.warning(f"Unsafe proto_path provided for archive: {proto_path}")
+        # Resolve and validate source path
+        msg = f"Archive source path {proto_path} is unsafe"
+        try:
+            proto_path = proto_path.resolve()
+        except RuntimeError:
+            logger.warning(f"{msg} (resolve failed)")
             return
-        if not proto_path.exists():
+
+        if not validate_path(PROJECT_ROOT, proto_path):
+            logger.warning(f"{msg} (outside root)")
+            return
+            
+        if not proto_path.exists() or not proto_path.is_file():
             return
 
         archive_dir = (PROJECT_ROOT / 'proto' / 'history').resolve()
         archive_dir.mkdir(parents=True, exist_ok=True)
         
         timestamp = int(time.time())
+        # Re-sanitize inputs to be paranoid
         safe_name = sanitize_filename(api_name)
         safe_ver = sanitize_filename(api_version)
         filename = f"{safe_name}_{safe_ver}_{timestamp}.proto"
         
         dest = (archive_dir / filename).resolve()
-        if not validate_path(PROJECT_ROOT, dest):
+        
+        # Verify destination is strictly within archive_dir
+        if not validate_path(archive_dir, dest):
+            logger.warning(f"Archive destination path {dest} is unsafe")
             return
             
+        # Copy with metadata
         copy2(proto_path, dest)
         logger.info(f"Archived proto to {dest}")
     except Exception as e:
