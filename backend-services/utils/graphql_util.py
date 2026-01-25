@@ -35,8 +35,11 @@ def calculate_query_depth(query: str) -> int:
     if not query or not isinstance(query, str):
         return 0
     
-    # Remove comments
-    query = re.sub(r'#.*$', '', query, flags=re.MULTILINE)
+    # Remove comments (line-by-line to avoid ReDoS on pathological inputs)
+    try:
+        query = '\n'.join(line.split('#', 1)[0] for line in query.splitlines())
+    except Exception:
+        pass
     
     # Remove string literals to avoid counting braces in strings
     query = re.sub(r'"[^"]*"', '""', query)
@@ -96,8 +99,11 @@ def estimate_query_complexity(query: str) -> int:
     if not query:
         return 0
     
-    # Remove comments and strings
-    query = re.sub(r'#.*$', '', query, flags=re.MULTILINE)
+    # Remove comments (line-by-line) and strings
+    try:
+        query = '\n'.join(line.split('#', 1)[0] for line in query.splitlines())
+    except Exception:
+        pass
     query = re.sub(r'"[^"]*"', '', query)
     
     # Count field names (words before { or after { or before })

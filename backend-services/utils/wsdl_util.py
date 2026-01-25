@@ -247,7 +247,8 @@ def create_ws_security_header(
     Args:
         username: Username for UsernameToken
         password: Password (plaintext or will be hashed)
-        password_type: 'PasswordText' or 'PasswordDigest'
+        password_type: 'PasswordText', 'PasswordDigest' (SHA-1 for legacy compatibility),
+                       or 'PasswordDigestSHA256' (preferred, stronger digest)
         add_timestamp: Add Timestamp element
         timestamp_ttl_seconds: Timestamp validity duration
         add_nonce: Add Nonce to UsernameToken
@@ -277,14 +278,25 @@ def create_ws_security_header(
         nonce_value = secrets.token_bytes(16)
         nonce_b64 = __import__('base64').b64encode(nonce_value).decode('ascii')
         
-        if password_type == 'PasswordDigest' and password:
-            # Digest = Base64(SHA1(Nonce + Created + Password))
+        if password and password_type in ('PasswordDigest', 'PasswordDigestSHA256'):
+            # Digest = Base64(HASH(Nonce + Created + Password))
             digest_input = nonce_value + created.encode('utf-8') + password.encode('utf-8')
-            password_digest = __import__('base64').b64encode(
-                hashlib.sha1(digest_input).digest()
-            ).decode('ascii')
+            if password_type == 'PasswordDigestSHA256':
+                digest_bytes = hashlib.sha256(digest_input).digest()
+                password_type_uri = (
+                    'http://docs.oasis-open.org/wss/2004/01/'
+                    'oasis-200401-wss-username-token-profile-1.1#PasswordDigestSHA256'
+                )
+            else:
+                # Legacy UsernameToken Profile PasswordDigest (SHA-1)
+                digest_bytes = hashlib.sha1(digest_input).digest()
+                password_type_uri = (
+                    'http://docs.oasis-open.org/wss/2004/01/'
+                    'oasis-200401-wss-username-token-profile-1.0#PasswordDigest'
+                )
+            password_digest = __import__('base64').b64encode(digest_bytes).decode('ascii')
             password_elem = f'''
-        <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest">{password_digest}</wsse:Password>'''
+        <wsse:Password Type="{password_type_uri}">{password_digest}</wsse:Password>'''
         else:
             # Plain text password
             password_elem = f'''

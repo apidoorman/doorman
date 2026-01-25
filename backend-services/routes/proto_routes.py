@@ -160,6 +160,10 @@ def get_safe_proto_path(api_name: str, api_version: str):
 def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
     """Archive existing proto file with timestamp"""
     try:
+        # Validate source path strictly before using it
+        if not validate_path(PROJECT_ROOT, proto_path):
+            logger.warning(f"Unsafe proto_path provided for archive: {proto_path}")
+            return
         if not proto_path.exists():
             return
 
@@ -171,7 +175,7 @@ def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
         safe_ver = sanitize_filename(api_version)
         filename = f"{safe_name}_{safe_ver}_{timestamp}.proto"
         
-        dest = archive_dir / filename
+        dest = (archive_dir / filename).resolve()
         if not validate_path(PROJECT_ROOT, dest):
             return
             
