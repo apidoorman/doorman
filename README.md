@@ -9,7 +9,7 @@
 
 # Doorman API Gateway
 
-A lightweight, Python-based API gateway for managing REST, SOAP, GraphQL, gRPC, and AI APIs. No low-level language expertise required.
+Lightweight Python API gateway for REST, SOAP, GraphQL, gRPC, and AI APIs.
 
 ![Example](https://i.ibb.co/jkwPWdnm/Image-9-26-25-at-10-12-PM.png)
 
@@ -21,171 +21,88 @@ A lightweight, Python-based API gateway for managing REST, SOAP, GraphQL, gRPC, 
 - **Caching & Storage**: Redis caching, MongoDB integration, or in memory
 - **Validation**: Request payload validation and logging
 
-## One‑Command Demo
+## Quick Demo
 
-### Prerequisites
-- Docker installed
-
-### Run with Docker Compose
+Run a local demo instance in seconds.
 
 ```bash
-# First time (build the demo image to include frontend proxy config)
+# Clone and launch instantly
 docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
-
-# Next runs (no rebuild needed)
-docker compose -f docker-compose.yml -f docker-compose.demo.yml up
 ```
 
-Defaults (demo‑only):
-- Admin: `demo@doorman.dev` / `DemoPassword123!`
-- Web UI: `http://localhost:3000`
-- API: `http://localhost:3001`
-- Mode: in‑memory (no Redis/Mongo); no seed data created
+- **Web UI**: [http://localhost:3000](http://localhost:3000)
+- **Admin**: `demo@doorman.dev` / `DemoPassword123!`
+- **Mode**: Memory mode (no external DB)
 
-## Quick Start
+---
 
-### Prerequisites
-- Docker installed
-- Environment file (`.env`) at repo root (start from `./.env.example`)
+## Self-Hosting
 
-### Run with Docker Compose
+Deploy with Docker. Production mode requires Redis and MongoDB.
 
+### 1. Environment Configuration
+Copy the template and set your secrets.
 ```bash
-# 1) Prepare env (first time)
 cp .env.example .env
-# Edit .env and set: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
-
-# 2) Start (builds automatically)
-docker compose up
+# Set: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
 ```
 
-When ready:
-- Web UI: `http://localhost:3000`
-- Gateway API: `http://localhost:3001`
-- Data & logs persist in Docker volumes (`doorman-generated`, `doorman-logs`).
+### 2. Choose Storage
+- Memory (default): development and tests.
+- Redis + MongoDB: production. Note: SQLite is not supported.
 
-## Frontend Gateway Configuration
-
-The web client needs to know the backend gateway URL. Set `NEXT_PUBLIC_GATEWAY_URL` in the root `.env` file:
-
+### 3. Launch
 ```bash
-# For Docker Compose (default - both services in same container)
-NEXT_PUBLIC_GATEWAY_URL=http://localhost:3001
-
-# For production reverse proxy (frontend and API on same domain)
-# Leave unset - frontend will use same origin
-```
-
-**Behavior:**
-- If `NEXT_PUBLIC_GATEWAY_URL` is set → uses that URL for API calls
-- If not set → uses same origin (for reverse proxy deployments where frontend and API share the same domain)
-
-### Run in Background
-
-```bash
-# Start detached
+# Standard launch
 docker compose up -d
 
-# View logs
-docker compose logs -f
-
-# Stop services
-docker compose down
-```
-
-### Data & Logs
-
-- By default, Compose stores generated data and logs in Docker volumes, not in the repo folders:
-  - Volume `doorman-generated` → `/app/backend-services/generated`
-  - Volume `doorman-logs` → `/app/backend-services/logs`
-- To inspect inside the container: `docker compose exec doorman sh`
-- To reset data: `docker compose down -v` (removes volumes)
-
-## Configuration
-
-### Required Environment Variables
-- `DOORMAN_ADMIN_EMAIL` — initial admin user email
-- `DOORMAN_ADMIN_PASSWORD` — initial admin password (12+ characters required)
-- `JWT_SECRET_KEY` — secret key for JWT tokens (32+ chars)
-
-Optional (recommended in some setups):
-- `NEXT_PUBLIC_GATEWAY_URL` — frontend → gateway base URL (see “Frontend Gateway Configuration”)
-
-### High Availability Setup
-
-For production/HA with Redis and MongoDB via Docker Compose:
-
-```bash
-# In .env (compose service names inside the network)
-MEM_OR_EXTERNAL=REDIS
-MONGO_DB_HOSTS=mongo:27017
-MONGO_DB_USER=doorman_admin
-MONGO_DB_PASSWORD=changeme   # set a stronger password in real deployments
-REDIS_HOST=redis
-
-# Start with production profile (brings up Redis + MongoDB)
+# Production launch (Redis + MongoDB)
 docker compose --profile production up -d
 ```
 
-Notes:
-- Ensure `MONGO_DB_USER`/`MONGO_DB_PASSWORD` match the values in `docker-compose.yml` (defaults are provided for convenience; change in production).
-- When running under Compose, use `mongo` and `redis` service names (not `localhost`).
+---
 
-### Alternative: Manual Docker Commands
+## Configuration
 
-If you prefer not to use Docker Compose:
+### Core Environment Variables
+| Variable | Required | Description |
+| :--- | :--- | :--- |
+| `DOORMAN_ADMIN_EMAIL` | Yes | Initial administrator email |
+| `DOORMAN_ADMIN_PASSWORD` | Yes | Admin password (min 12 chars) |
+| `JWT_SECRET_KEY` | Yes | Secret for signing access tokens |
+| `NEXT_PUBLIC_GATEWAY_URL` | No | Frontend API target (Defaults to same origin) |
 
-```bash
-# Build the image
-docker build -t doorman:latest .
+### Persistence & Performance
+- Redis: set `MEM_OR_EXTERNAL=REDIS` to enable caching/rate limiting.
+- MongoDB: set `MONGO_DB_HOSTS=mongo:27017` (and credentials) to persist configurations and users.
+- Volumes: Docker-managed volumes (`doorman-generated`, `doorman-logs`). Use `docker compose down -v` to reset.
 
-# Run the container
-docker run --rm --name doorman \
-  -p 3001:3001 -p 3000:3000 \
-  --env-file .env \
-  doorman:latest
+---
+
+## Repository Structure
+
+```text
+doorman/
+├── backend-services/    # Python Gateway Engine (FastAPI)
+├── web-client/         # Next.js Dashboard
+├── user-docs/          # Technical Guides & Runbooks
+├── scripts/            # Build & Maintenance tools
+└── ops/                # Infrastructure & Docker config
 ```
 
 ## Documentation
 
-- User docs live in `user-docs/` with:
-  - `01-getting-started.md` for setup and first API
-  - `02-configuration.md` for environment variables
-  - `03-security.md` for hardening
-  - `04-api-workflows.md` for end-to-end examples
-  - `05-operations.md` for production ops and runbooks
-  - `06-tools.md` for diagnostics and the CORS checker
-
-
-## Repository Structure
-
-```
-doorman/
-├── backend-services/    # Python gateway core, routes, services, tests
-├── web-client/         # Next.js frontend
-├── docker/             # Container entrypoint and scripts
-├── user-docs/          # Documentation and guides
-├── scripts/            # Helper scripts (preflight, coverage, maintenance)
-└── generated/          # Local development artifacts
-```
-
-## Security Notes
-
-- Frontend only exposes `NEXT_PUBLIC_*` variables to the browser
-- Never pass secrets to frontend build args
-- Backend loads environment at runtime from `--env-file` or `/env/*.env`
-- Platform/injected env variables take precedence over repo files
-
-## License
-
-Copyright Doorman Dev, LLC
-
-Licensed under the Apache License 2.0 - see [LICENSE](https://www.apache.org/licenses/LICENSE-2.0)
-
-## Disclaimer
-
-Use at your own risk. By using this software, you agree to the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0) and any annotations in the source code.
+Deep-dive into our guides for advanced setups:
+- [Getting Started Guide](user-docs/01-getting-started.md)
+- [Security & Hardening](user-docs/03-security.md)
+- [API Workflows (gRPC/SOAP)](user-docs/04-api-workflows.md)
+- [Production Operations](user-docs/05-operations.md)
 
 ---
 
-**We welcome contributors and testers!**
+## License
+
+**Copyright © Doorman Dev, LLC**
+Licensed under the **Apache License 2.0**.
+
+Review the [Security Hardening Guide](user-docs/03-security.md) before production deployment.
