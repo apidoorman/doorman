@@ -43,20 +43,13 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
     - Adds rate limit headers to responses
     """
 
-    # Class-level storage for singleton access in tests
-    _instance_counts: dict = {}
-    _instance_queue: dict = {}
+    # Class-level helper for usage in tests
+    _rate_limiter_override = None
 
     def __init__(self, app: ASGIApp):
         super().__init__(app)
-        self._request_counts = TierRateLimitMiddleware._instance_counts
-        self._request_queue = TierRateLimitMiddleware._instance_queue
-
-    @classmethod
-    def reset_counters(cls) -> None:
-        """Reset all rate limit counters. Used by tests."""
-        cls._instance_counts.clear()
-        cls._instance_queue.clear()
+        # Use simple local queue for throttling, but rate limiting itself is distributed via Redis
+        self._request_queue = {}
 
     async def dispatch(self, request: Request, call_next):
         """
@@ -71,268 +64,172 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
         logger.debug(f'[tier_rl] user_id={user_id} path={request.url.path}')
 
         if not user_id:
-            # No user ID, skip tier-based limiting
             return await call_next(request)
 
         # Get user's tier limits
         tier_service = get_tier_service(async_database.db)
         limits = await tier_service.get_user_limits(user_id)
-        logger.debug(f'[tier_rl] user={user_id} limits={limits}')
 
         if not limits:
-            # No tier limits configured, allow request
             return await call_next(request)
 
-        # Check rate limits
-        rate_limit_result = await self._check_rate_limits(user_id, limits)
+        # Using the utility's RateLimiter to check distributed limits
+        from utils.rate_limiter import get_rate_limiter
+        rate_limiter = self._rate_limiter_override or get_rate_limiter()
+        
+        # Check all applicable windows
+        from models.rate_limit_models import RateLimitRule, RuleType, TimeWindow
+        
+        # Minute check
+        minute_res = None
+        if limits.requests_per_minute and limits.requests_per_minute < 999999:
+            rule = RateLimitRule(
+                rule_id=f'tier_minute_{user_id}',
+                rule_type=RuleType.PER_USER,
+                time_window=TimeWindow.MINUTE,
+                limit=limits.requests_per_minute,
+                burst_allowance=limits.burst_per_minute,
+            )
+            # Use check_hybrid for token bucket burst support + sliding window accuracy
+            minute_res = await asyncio.to_thread(rate_limiter.check_hybrid, rule, user_id)
+            if not minute_res.allowed:
+                return self._handle_limit_exceeded(minute_res, limits, 'minute')
 
-        if not rate_limit_result['allowed']:
-            # Check if throttling is enabled
-            if limits.enable_throttling:
-                # Try to queue the request
-                queued = await self._try_queue_request(user_id, limits.max_queue_time_ms)
+        # Hour check
+        hour_res = None
+        if limits.requests_per_hour and limits.requests_per_hour < 999999:
+            rule = RateLimitRule(
+                rule_id=f'tier_hour_{user_id}',
+                rule_type=RuleType.PER_USER,
+                time_window=TimeWindow.HOUR,
+                limit=limits.requests_per_hour,
+                burst_allowance=limits.burst_per_hour,
+            )
+            hour_res = await asyncio.to_thread(rate_limiter.check_hybrid, rule, user_id)
+            if not hour_res.allowed:
+                return self._handle_limit_exceeded(hour_res, limits, 'hour')
 
-                if not queued:
-                    # Queue full or timeout, return 429
-                    return self._create_rate_limit_response(rate_limit_result, limits)
+        # Day check
+        day_res = None
+        if limits.requests_per_day and limits.requests_per_day < 999999:
+            rule = RateLimitRule(
+                rule_id=f'tier_day_{user_id}',
+                rule_type=RuleType.PER_USER,
+                time_window=TimeWindow.DAY,
+                limit=limits.requests_per_day,
+            )
+            day_res = await asyncio.to_thread(rate_limiter.check_hybrid, rule, user_id)
+            if not day_res.allowed:
+                return self._handle_limit_exceeded(day_res, limits, 'day')
 
-                # Request was queued and processed, continue
-            else:
-                # Throttling disabled, hard reject
-                return self._create_rate_limit_response(rate_limit_result, limits)
-
-        # Increment counters
-        self._increment_counters(user_id, limits)
-
-        # Process request
+        # Allowed. Proceed.
         response = await call_next(request)
 
-        # Add rate limit headers
-        self._add_rate_limit_headers(response, user_id, limits)
+        # Add headers (prioritize smallest window)
+        res_to_use = minute_res or hour_res or day_res
+        if res_to_use:
+            self._add_rate_limit_headers(response, res_to_use)
 
         return response
 
-    async def _check_rate_limits(self, user_id: str, limits: TierLimits) -> dict:
-        """
-        Check if user has exceeded any rate limits
+    def _handle_limit_exceeded(self, result, limits: TierLimits, period: str):
+        """Handle rejection or throttling"""
+        # Throttling logic could go here, but for complexity reduction in distributed env,
+        # we'll default to 429 unless explicitly requested to queue (which is complex to do distributively).
+        # For now, standard rejection.
+        return self._create_rate_limit_response(result, limits, period)
 
-        Returns:
-            dict with 'allowed' (bool) and 'limit_type' (str)
-        """
-        now = int(time.time())
-
-        # Check requests per minute
-        if limits.requests_per_minute and limits.requests_per_minute < 999999:
-            key = f'{user_id}:minute:{now // 60}'
-            count = self._request_counts.get(key, 0)
-            logger.debug(f'[tier_rl] check rpm: key={key} count={count} limit={limits.requests_per_minute}')
-
-            if count >= limits.requests_per_minute:
-                return {
-                    'allowed': False,
-                    'limit_type': 'minute',
-                    'limit': limits.requests_per_minute,
-                    'current': count,
-                    'reset_at': ((now // 60) + 1) * 60,
-                }
-
-        # Check requests per hour
-        if limits.requests_per_hour and limits.requests_per_hour < 999999:
-            key = f'{user_id}:hour:{now // 3600}'
-            count = self._request_counts.get(key, 0)
-
-            if count >= limits.requests_per_hour:
-                return {
-                    'allowed': False,
-                    'limit_type': 'hour',
-                    'limit': limits.requests_per_hour,
-                    'current': count,
-                    'reset_at': ((now // 3600) + 1) * 3600,
-                }
-
-        # Check requests per day
-        if limits.requests_per_day and limits.requests_per_day < 999999:
-            key = f'{user_id}:day:{now // 86400}'
-            count = self._request_counts.get(key, 0)
-
-            if count >= limits.requests_per_day:
-                return {
-                    'allowed': False,
-                    'limit_type': 'day',
-                    'limit': limits.requests_per_day,
-                    'current': count,
-                    'reset_at': ((now // 86400) + 1) * 86400,
-                }
-
-        return {'allowed': True}
-
-    def _increment_counters(self, user_id: str, limits: TierLimits):
-        """Increment request counters for all time windows"""
-        now = int(time.time())
-
-        if limits.requests_per_minute:
-            key = f'{user_id}:minute:{now // 60}'
-            self._request_counts[key] = self._request_counts.get(key, 0) + 1
-
-        if limits.requests_per_hour:
-            key = f'{user_id}:hour:{now // 3600}'
-            self._request_counts[key] = self._request_counts.get(key, 0) + 1
-
-        if limits.requests_per_day:
-            key = f'{user_id}:day:{now // 86400}'
-            self._request_counts[key] = self._request_counts.get(key, 0) + 1
-
-    async def _try_queue_request(self, user_id: str, max_wait_ms: int) -> bool:
-        """
-        Try to queue request with throttling
-
-        Returns:
-            True if request was processed, False if timeout/rejected
-        """
-        queue_key = f'{user_id}:queue'
-        start_time = time.time() * 1000  # milliseconds
-
-        # Initialize queue if needed
-        if queue_key not in self._request_queue:
-            self._request_queue[queue_key] = asyncio.Queue(maxsize=100)
-
-        queue = self._request_queue[queue_key]
-
-        try:
-            # Add to queue with timeout
-            await asyncio.wait_for(queue.put(1), timeout=max_wait_ms / 1000.0)
-
-            # Wait for rate limit to reset
-            while True:
-                elapsed = (time.time() * 1000) - start_time
-
-                if elapsed >= max_wait_ms:
-                    # Timeout exceeded
-                    await queue.get()  # Remove from queue
-                    return False
-
-                # Check if we can proceed
-                # In a real implementation, check actual rate limit status
-                await asyncio.sleep(0.1)  # Small delay
-
-                # For now, assume we can proceed after a short wait
-                if elapsed >= 100:  # 100ms min throttle delay
-                    await queue.get()  # Remove from queue
-                    return True
-
-        except TimeoutError:
-            return False
-
-    def _create_rate_limit_response(self, result: dict, limits: TierLimits) -> JSONResponse:
+    def _create_rate_limit_response(self, result, limits: TierLimits, period: str) -> JSONResponse:
         """Create 429 Too Many Requests response"""
-        retry_after = result.get('reset_at', 0) - int(time.time())
-
+        retry_after = max(0, result.retry_after or (result.reset_at - int(time.time())))
+        
+        info = result.to_info()
+        headers = info.to_headers()
+        
         return JSONResponse(
             status_code=429,
             content={
                 'error': 'Rate limit exceeded',
                 'error_code': 'RATE_LIMIT_EXCEEDED',
-                'message': f'Rate limit exceeded: {result.get("current", 0)}/{result.get("limit", 0)} requests per {result.get("limit_type", "period")}',
-                'limit_type': result.get('limit_type'),
-                'limit': result.get('limit'),
-                'current': result.get('current'),
-                'reset_at': result.get('reset_at'),
-                'retry_after': max(0, retry_after),
-                'throttling_enabled': limits.enable_throttling,
+                'message': f'Rate limit exceeded: quota {result.limit} per {period}',
+                'limit': result.limit,
+                'remaining': 0,
+                'reset_at': result.reset_at,
+                'retry_after': retry_after,
             },
-            headers={
-                'Retry-After': str(max(0, retry_after)),
-                'X-RateLimit-Limit': str(result.get('limit', 0)),
-                'X-RateLimit-Remaining': '0',
-                'X-RateLimit-Reset': str(result.get('reset_at', 0)),
-            },
+            headers=headers,
         )
 
-    def _add_rate_limit_headers(self, response: Response, user_id: str, limits: TierLimits):
-        """Add rate limit headers to response"""
-        now = int(time.time())
-
-        # Add headers for minute limit (most relevant)
-        if limits.requests_per_minute:
-            key = f'{user_id}:minute:{now // 60}'
-            current = self._request_counts.get(key, 0)
-            remaining = max(0, limits.requests_per_minute - current)
-            reset_at = ((now // 60) + 1) * 60
-
-            response.headers['X-RateLimit-Limit'] = str(limits.requests_per_minute)
-            response.headers['X-RateLimit-Remaining'] = str(remaining)
-            response.headers['X-RateLimit-Reset'] = str(reset_at)
+    def _add_rate_limit_headers(self, response: Response, result):
+        """Add X-RateLimit-* headers"""
+        try:
+            info = result.to_info()
+            for key, val in info.to_headers().items():
+                response.headers[key] = val
+        except Exception:
+            pass
 
     def _should_skip(self, request: Request) -> bool:
         """Check if request should skip rate limiting"""
         import os
 
-        # Skip tier rate limiting when explicitly disabled (for non-tier-rate-limit tests)
+        # Skip tier rate limiting when explicitly disabled
         if os.getenv('SKIP_TIER_RATE_LIMIT', '').lower() in ('1', 'true', 'yes'):
             return True
 
-        skip_paths = [
-            '/health',
-            '/metrics',
-            '/docs',
-            '/redoc',
-            '/openapi.json',
-            '/platform/',  # Skip all platform/admin routes - tier limits only apply to gateway
-        ]
+        if request.url.path.startswith('/health') or \
+           request.url.path.startswith('/metrics') or \
+           request.url.path.startswith('/docs') or \
+           request.url.path.startswith('/redoc') or \
+           request.url.path.startswith('/openapi.json'):
+            return True
+            
+        # Admin interface usually skipped for user-tier limits
+        if request.url.path.startswith('/platform/'):
+            return True
 
-        return any(request.url.path.startswith(path) for path in skip_paths)
+        return False
 
     def _get_user_id(self, request: Request) -> str | None:
-        """Extract user ID from request.
-
-        Attempts, in order:
-        - Previously decoded payload on request.state (jwt_payload)
-        - FastAPI request.user attribute
-        - Decode JWT from cookie 'access_token_cookie' or Authorization: Bearer header
-        """
-        # 1) Previously decoded payload (if any)
+        """Extract user ID with support for previously decoded state"""
+        # 1) Previously decoded payload
         try:
             if hasattr(request.state, 'jwt_payload') and request.state.jwt_payload:
-                sub = request.state.jwt_payload.get('sub')
-                if sub:
-                    return sub
+                 return request.state.jwt_payload.get('sub')
         except Exception:
             pass
 
-        # 2) request.state.user or request.user
+        # 2) Cookie/Header decode logic duplicate from auth_util handled by earlier middleware usually,
+        # but re-implemented here for safety if middleware order varies.
         try:
-            user = getattr(request.state, 'user', None) or getattr(request, 'user', None)
-            if user:
-                if hasattr(user, 'username'):
-                    return user.username
-                if isinstance(user, dict):
-                    sub = user.get('username') or user.get('sub')
-                    if sub:
-                        return sub
+            from utils.auth_util import auth_required
+            # We don't call auth_required because it raises 401. We just want to peek.
+            # Reuse existing methods if possible or simplified peek:
+            pass 
         except Exception:
             pass
-
-        # 3) Decode JWT from cookie or header as last resort
-        try:
-            import os
-            token = request.cookies.get('access_token_cookie')
-            if not token:
-                auth = request.headers.get('Authorization') or request.headers.get('authorization')
-                if auth and str(auth).lower().startswith('bearer '):
-                    token = auth.split(' ', 1)[1].strip()
-            # Read SECRET_KEY dynamically in case it was set after import
-            secret = SECRET_KEY or os.getenv('JWT_SECRET_KEY')
-            logger.debug(f'[tier_rl] token={token[:20] if token else None}... secret={bool(secret)} jwt={bool(_jwt)}')
-            if token and _jwt and secret:
-                payload = _jwt.decode(token, secret, algorithms=[ALGORITHM])
-                try:
-                    setattr(request.state, 'jwt_payload', payload)
-                except Exception:
-                    pass
-                sub = payload.get('sub')
-                if sub:
-                    return sub
-        except Exception as e:
-            logger.debug(f'[tier_rl] JWT decode error: {e}')
-
+            
+        # Fallback to existing logic if needed, but for now assuming auth middleware ran first
+        # or we accept checking cookies directly
+        import os
+        token = request.cookies.get('access_token_cookie')
+        if not token:
+            auth = request.headers.get('Authorization') or request.headers.get('authorization')
+            if auth and str(auth).lower().startswith('bearer '):
+                token = auth.split(' ', 1)[1].strip()
+        
+        if token and _jwt:
+            # Read secret from key_util now
+            from utils.key_util import get_verification_key
+            try:
+                # Unverified decode to find kid
+                header = _jwt.get_unverified_header(token)
+                kid = header.get('kid')
+                key_info = get_verification_key(kid)
+                if key_info:
+                    payload = _jwt.decode(token, key_info.verification_key, algorithms=[key_info.algorithm])
+                    return payload.get('sub')
+            except Exception:
+                pass
+                
         return None

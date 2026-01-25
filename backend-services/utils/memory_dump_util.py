@@ -16,7 +16,26 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from .database import database
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DUMP_PATH = os.getenv('MEM_DUMP_PATH', str(_PROJECT_ROOT / 'generated' / 'memory_dump.bin'))
+
+def _normalize_dump_path(p: str | None) -> str:
+    """Return an absolute dump path.
+
+    - If `p` is absolute, return as-is.
+    - If `p` is relative or empty, resolve relative to backend-services root so
+      defaults like 'generated/memory_dump.bin' map to the Docker volume mount
+      at '/app/backend-services/generated'.
+    """
+    if not p:
+        return str(_PROJECT_ROOT / 'generated' / 'memory_dump.bin')
+    try:
+        return p if os.path.isabs(p) else str((_PROJECT_ROOT / p).resolve())
+    except Exception:
+        return str(_PROJECT_ROOT / 'generated' / 'memory_dump.bin')
+
+
+# Normalize env-provided path so relative values still land in the mounted
+# backend-services/generated directory inside containers.
+DEFAULT_DUMP_PATH = _normalize_dump_path(os.getenv('MEM_DUMP_PATH'))
 
 
 def _derive_key(key_material: str, salt: bytes) -> bytes:
@@ -59,6 +78,13 @@ def _split_dir_and_stem(path_hint: str | None) -> tuple[str, str]:
     - If hint is None, use DEFAULT_DUMP_PATH and derive as above.
     """
     hint = path_hint or DEFAULT_DUMP_PATH
+    # Apply the same normalization for any hint to avoid writing under CWD
+    # when a relative path is passed (e.g., from env or API body).
+    if not os.path.isabs(hint):
+        try:
+            hint = str((_PROJECT_ROOT / hint).resolve())
+        except Exception:
+            hint = DEFAULT_DUMP_PATH
 
     if hint.endswith(os.sep):
         dump_dir = hint

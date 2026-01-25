@@ -127,5 +127,87 @@ class CreateApiModel(BaseModel):
         None, description='Override: trust X-Forwarded-For for this API'
     )
 
+    # Request/Response Transformation
+    api_request_transform: dict | None = Field(
+        None,
+        description='Request transformation config. Supports headers, body (JSONPath), query transforms.',
+        example={
+            'request': {
+                'headers': {'add': {'X-Custom': 'value'}, 'remove': ['X-Internal']},
+                'body': {'set': {'$.source': 'doorman'}},
+            }
+        },
+    )
+    api_response_transform: dict | None = Field(
+        None,
+        description='Response transformation config. Supports headers, body (JSONPath), status mapping.',
+        example={
+            'response': {
+                'headers': {'add': {'X-Gateway': 'doorman'}},
+                'body': {'wrap': 'data'},
+                'status_map': {'500': 502},
+            }
+        },
+    )
+
+    # OpenAPI Auto-Discovery
+    api_openapi_url: str | None = Field(
+        None,
+        description='URL path to fetch OpenAPI spec from upstream (e.g., /openapi.json, /swagger.json)',
+        example='/openapi.json',
+    )
+    api_openapi_auto_discover: bool | None = Field(
+        False,
+        description='If true, automatically discover and sync endpoints from upstream OpenAPI spec',
+    )
+
+    # SOAP/WSDL Configuration
+    api_wsdl_url: str | None = Field(
+        None,
+        description='URL to fetch WSDL from upstream (e.g., /service?wsdl)',
+        example='/CustomerService?wsdl',
+    )
+    api_soap_version: str | None = Field(
+        None,
+        description='SOAP version: "1.1" or "1.2". If not set, auto-detects from envelope.',
+        example='1.1',
+    )
+    api_ws_security: dict | None = Field(
+        None,
+        description='WS-Security configuration for SOAP requests',
+        example={
+            'username': 'service_user',
+            'password_type': 'PasswordText',
+            'add_timestamp': True,
+            'timestamp_ttl_seconds': 300,
+        },
+    )
+
+    # GraphQL Configuration
+    api_graphql_max_depth: int | None = Field(
+        None,
+        description='Maximum allowed query depth for GraphQL queries (default: 10, 0 = disabled)',
+        example=10,
+    )
+    api_graphql_schema_url: str | None = Field(
+        None,
+        description='GraphQL endpoint path for introspection (default: /graphql)',
+        example='/graphql',
+    )
+    api_graphql_subscriptions: bool | None = Field(
+        False,
+        description='Enable WebSocket subscription proxy for this API',
+    )
+
+    # gRPC Configuration
+    api_grpc_web_enabled: bool | None = Field(
+        False,
+        description='Enable gRPC-Web proxy for browser clients',
+    )
+    api_grpc_reflection_url: str | None = Field(
+        None,
+        description='Upstream URL for gRPC Server Reflection (if different from base URL)',
+    )
+
     class Config:
         arbitrary_types_allowed = True

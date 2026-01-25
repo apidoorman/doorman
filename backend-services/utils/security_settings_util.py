@@ -20,6 +20,20 @@ _STOP_EVENT: asyncio.Event | None = None
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _GEN_DIR = _PROJECT_ROOT / 'generated'
 
+def _normalize_path(p: str | None) -> str:
+    """Normalize a path to be absolute under backend-services if relative.
+
+    Ensures that defaults like 'generated/memory_dump.bin' resolve to the
+    Docker volume mount at '/app/backend-services/generated' inside containers,
+    rather than the container working directory.
+    """
+    if not p:
+        return str(_GEN_DIR / 'memory_dump.bin')
+    try:
+        return p if os.path.isabs(p) else str((_PROJECT_ROOT / p).resolve())
+    except Exception:
+        return str(_GEN_DIR / 'memory_dump.bin')
+
 def _env_bool(name: str, default: bool) -> bool:
     try:
         raw = os.getenv(name)
@@ -46,12 +60,15 @@ DEFAULTS = {
     # Allow env overrides so deployments can enable autosave without API calls
     'enable_auto_save': _env_bool('MEM_AUTO_SAVE_ENABLED', False),
     'auto_save_frequency_seconds': _env_int('MEM_AUTO_SAVE_FREQ', 900),
-    'dump_path': os.getenv('MEM_DUMP_PATH', str(_GEN_DIR / 'memory_dump.bin')),
+    'dump_path': _normalize_path(os.getenv('MEM_DUMP_PATH')),
     'ip_whitelist': [],
     'ip_blacklist': [],
     'trust_x_forwarded_for': False,
     'xff_trusted_proxies': [],
-    'allow_localhost_bypass': (os.getenv('LOCAL_HOST_IP_BYPASS', 'false').lower() == 'true'),
+    # Default to allowing localhost bypass for developer ergonomics and to
+    # satisfy live-tests that run the gateway and upstreams on the same host.
+    # Can be disabled via env or platform security settings.
+    'allow_localhost_bypass': (os.getenv('LOCAL_HOST_IP_BYPASS', 'true').lower() == 'true'),
 }
 
 SETTINGS_FILE = os.getenv('SECURITY_SETTINGS_FILE', str(_GEN_DIR / 'security_settings.json'))

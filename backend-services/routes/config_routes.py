@@ -8,6 +8,7 @@ import time
 import uuid
 from typing import Any
 
+from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException
 
 from models.response_model import ResponseModel
@@ -19,7 +20,9 @@ from utils.database import (
     group_collection,
     role_collection,
     routing_collection,
+    routing_collection,
 )
+from utils.database_async import async_database
 from utils.doorman_cache_util import doorman_cache
 from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
@@ -47,7 +50,69 @@ def _export_all() -> dict[str, Any]:
         'roles': roles,
         'groups': groups,
         'routings': routings,
+        'groups': groups,
+        'routings': routings,
     }
+
+
+async def _create_snapshot(actor: str):
+    """Create a snapshot of current configuration"""
+    data = _export_all()
+    snapshot = {
+        'snapshot_id': str(uuid.uuid4()),
+        'timestamp': datetime.now(),
+        'created_by': actor,
+        'data': data
+    }
+    await async_database.db.config_snapshots.insert_one(snapshot)
+    return snapshot['snapshot_id']
+
+
+async def _restore_snapshot(snapshot_id: str = None):
+    """Restore configuration from snapshot (latest if id not provided)"""
+    if snapshot_id:
+        snapshot = await async_database.db.config_snapshots.find_one({'snapshot_id': snapshot_id})
+    else:
+        # Get latest
+        cursor = async_database.db.config_snapshots.find().sort('timestamp', -1).limit(1)
+        snapshot = await cursor.to_list(length=1)
+        snapshot = snapshot[0] if snapshot else None
+
+    if not snapshot:
+        raise ValueError('No snapshot found')
+
+    data = snapshot['data']
+    
+    # Restore logic: wipe and insert (simplified for implementation plan)
+    # In prod, transactions would be better
+    
+    # APIs
+    api_collection.delete_many({})
+    if data['apis']:
+        api_collection.insert_many(data['apis'])
+        
+    # Endpoints
+    endpoint_collection.delete_many({})
+    if data['endpoints']:
+        endpoint_collection.insert_many(data['endpoints'])
+        
+    # Roles
+    role_collection.delete_many({})
+    if data['roles']:
+        role_collection.insert_many(data['roles'])
+        
+    # Groups
+    group_collection.delete_many({})
+    if data['groups']:
+        group_collection.insert_many(data['groups'])
+        
+    # Routings
+    routing_collection.delete_many({})
+    if data['routings']:
+        routing_collection.insert_many(data['routings'])
+        
+    doorman_cache.clear_all_caches()
+    return snapshot['timestamp']
 
 
 """
@@ -579,6 +644,10 @@ async def import_all(request: Request, body: dict[str, Any]):
                 ).dict(),
                 'rest',
             )
+
+        # Create snapshot before import
+        await _create_snapshot(username)
+        
         counts = {'apis': 0, 'endpoints': 0, 'roles': 0, 'groups': 0, 'routings': 0}
         for api in body.get('apis', []) or []:
             _upsert_api(api)
@@ -624,3 +693,46 @@ async def import_all(request: Request, body: dict[str, Any]):
         )
     finally:
         logger.info(f'{request_id} | import_all took {time.time() * 1000 - start:.2f}ms')
+
+
+@config_router.post(
+    '/config/rollback',
+    description='Rollback configuration to latest snapshot',
+    response_model=ResponseModel,
+)
+async def rollback_config(request: Request):
+    """
+    Rollback to the most recent configuration snapshot.
+    """
+    request_id = str(uuid.uuid4())
+    try:
+        payload = await auth_required(request)
+        username = payload.get('sub')
+        
+        if not await platform_role_required_bool(username, 'manage_gateway'):
+             raise HTTPException(status_code=403, detail='Insufficient permissions')
+
+        ts = await _restore_snapshot()
+        
+        audit(
+            request,
+            actor=username,
+            action='config.rollback',
+            target='latest',
+            status='success',
+            details={'restored_to': str(ts)},
+            request_id=request_id,
+        )
+        
+        return process_response(
+            ResponseModel(status_code=200, message=f'Configuration rolled back to {ts}').dict(),
+            'rest'
+        )
+    except ValueError as e:
+        return process_response(
+            ResponseModel(status_code=404, error_code='CFG404', error_message=str(e)).dict(),
+            'rest'
+        )
+    except Exception as e:
+        logger.error(f'{request_id} | rollback error: {e}')
+        raise HTTPException(status_code=500, detail='Rollback failed')
