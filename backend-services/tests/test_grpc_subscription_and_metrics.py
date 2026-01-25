@@ -31,11 +31,11 @@ async def _setup_api(client, name, ver, public=False):
 
 
 @pytest.mark.asyncio
-async def test_grpc_requires_subscription_when_not_public(monkeypatch, authed_client):
+async def test_grpc_requires_subscription_when_not_public(monkeypatch, authed_client, regular_client):
     name, ver = 'gsub', 'v1'
     await _setup_api(authed_client, name, ver, public=False)
 
-    r = await authed_client.post(
+    r = await regular_client.post(
         f'/api/grpc/{name}',
         headers={'X-API-Version': ver, 'Content-Type': 'application/json'},
         json={'method': 'Svc.M', 'message': {}},

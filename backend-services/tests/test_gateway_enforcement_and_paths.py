@@ -109,7 +109,7 @@ class _FakeAsyncClient:
 
 
 @pytest.mark.asyncio
-async def test_subscription_required_blocks_without_subscription(monkeypatch, authed_client):
+async def test_subscription_required_blocks_without_subscription(monkeypatch, authed_client, regular_client):
     name, ver = 'nosub', 'v1'
     await authed_client.post(
         '/platform/api',
@@ -138,7 +138,7 @@ async def test_subscription_required_blocks_without_subscription(monkeypatch, au
     import services.gateway_service as gs
 
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
-    r = await authed_client.get(f'/api/rest/{name}/{ver}/x')
+    r = await regular_client.get(f'/api/rest/{name}/{ver}/x')
     assert r.status_code == 403
 
 

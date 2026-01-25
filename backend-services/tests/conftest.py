@@ -175,6 +175,47 @@ async def authed_client():
     return client
 
 
+@pytest_asyncio.fixture
+async def regular_client(authed_client):
+    """Fixture that returns a client authenticated as a regular (non-admin) user."""
+    username = 'regular-test-user-' + str(os.urandom(4).hex())
+    email = f'{username}@example.com'
+    password = 'RegularPassword123!'
+    
+    # Create the user using the existing authed_client
+    await authed_client.post(
+        '/platform/user',
+        json={
+            'username': username,
+            'email': email,
+            'password': password,
+            'role': 'user',
+            'groups': ['ALL'],
+            'active': True,
+        }
+    )
+    
+    # Create a new client and login
+    from doorman import doorman
+    client = AsyncClient(app=doorman, base_url='http://testserver')
+    r = await client.post(
+        '/platform/authorization',
+        json={'email': email, 'password': password}
+    )
+    assert r.status_code == 200
+    
+    body = r.json()
+    token = body.get('access_token')
+    if token:
+        client.cookies.set(
+            'access_token_cookie',
+            token,
+            domain=os.environ.get('COOKIE_DOMAIN') or 'testserver',
+            path='/',
+        )
+    return client
+
+
 @pytest.fixture
 def client():
     from doorman import doorman

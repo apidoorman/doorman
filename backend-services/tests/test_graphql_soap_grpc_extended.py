@@ -231,7 +231,7 @@ async def test_grpc_upstream_404_maps_to_404(monkeypatch, authed_client):
 
 
 @pytest.mark.asyncio
-async def test_grpc_subscription_required(monkeypatch, authed_client):
+async def test_grpc_subscription_required(monkeypatch, authed_client, regular_client):
     from conftest import create_api, create_endpoint
 
     name, ver = 'grpcsub', 'v1'
@@ -240,7 +240,7 @@ async def test_grpc_subscription_required(monkeypatch, authed_client):
     import services.gateway_service as gs
 
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
-    r = await authed_client.post(
+    r = await regular_client.post(
         f'/api/grpc/{name}',
         headers={'X-API-Version': ver, 'Content-Type': 'application/json'},
         json={'method': 'Svc.Method', 'message': {}},
