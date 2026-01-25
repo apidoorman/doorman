@@ -70,7 +70,11 @@ def test_bulk_public_rest_crud(client):
                     },
                 )
                 assert r.status_code in (200, 201), r.text
-            s = requests.Session()
+                s = requests.Session()
+                try:
+                    s.trust_env = False
+                except Exception:
+                    pass
             s.headers.update({'X-IS-TEST': 'true'})
             url = f'{base}/api/rest/{api_name}/{api_version}/items'
             assert s.get(url).status_code == 200
@@ -122,7 +126,11 @@ def test_bulk_public_soap_crud(client):
                     },
                 )
                 assert r.status_code in (200, 201), r.text
-            s = requests.Session()
+                s = requests.Session()
+                try:
+                    s.trust_env = False
+                except Exception:
+                    pass
             s.headers.update({'X-IS-TEST': 'true'})
             headers = {'Content-Type': 'text/xml'}
             for uri in ['create', 'read', 'update', 'delete']:

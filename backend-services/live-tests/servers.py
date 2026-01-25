@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -14,45 +16,64 @@ def _find_free_port() -> int:
     return port
 
 
-def _get_host_from_container() -> str:
-    """Get the hostname to use when referring to the host machine from a Docker container.
+def _get_host_from_container():
+    """Hostname to use from container to reach host-run test servers.
 
-    Returns the appropriate hostname for test servers to use in URLs that Doorman will connect to:
-    - If Doorman is running natively (local mode): returns 127.0.0.1
-    - If Doorman is running in Docker: returns host.docker.internal (Mac/Win) or 172.17.0.1 (Linux)
-
-    Set DOORMAN_IN_DOCKER=1 to explicitly indicate Doorman is running in Docker containers.
+    Precedence:
+    - DOORMAN_TEST_HOSTNAME (explicit override)
+    - If running tests for a Dockerized gateway (DOORMAN_IN_DOCKER=1):
+      - macOS/Windows: host.docker.internal (Docker Desktop)
+      - Linux: 172.17.0.1 (default docker0 bridge)
+    - Otherwise: 127.0.0.1 (tests and gateway share the host)
     """
-    import os
-    import platform
-
-    # Check if Doorman is running in Docker (explicit override)
+    override = (os.getenv('DOORMAN_TEST_HOSTNAME') or '').strip()
+    if override:
+        return override
     docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
-
     if docker_env in ('1', 'true', 'yes'):
-        # Explicitly told Doorman IS in Docker
         system = platform.system()
-        if system == 'Darwin' or system == 'Windows':
+        if system in ('Darwin', 'Windows'):
             return 'host.docker.internal'
-        else:
-            return '172.17.0.1'
-
-    # Default: assume Doorman is running natively (not in Docker)
-    # This is the most common development setup
+        return '172.17.0.1'
     return '127.0.0.1'
 
 
 class _ThreadedHTTPServer:
-    def __init__(self, handler_cls, host='127.0.0.1', port=None):
+    def __init__(self, handler_cls, host='0.0.0.0', port=None):
+        # Bind to all interfaces so Dockerized gateway can reach the server
         self.bind_host = host
         self.port = port or _find_free_port()
         self._server = HTTPServer((self.bind_host, self.port), handler_cls)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
-        # For the URL, use the host reference that Docker can reach
+        # Advertise a host reachable by containers or local host
         self.host = _get_host_from_container()
 
     def start(self):
         self._thread.start()
+        # Wait for readiness: ensure the socket accepts connections
+        try:
+            for _ in range(100):
+                ok = False
+                for target in (('127.0.0.1', self.port), (self.host, self.port)):
+                    s = socket.socket()
+                    try:
+                        s.settimeout(0.05)
+                        s.connect(target)
+                        ok = True
+                        break
+                    except Exception:
+                        pass
+                    finally:
+                        try:
+                            s.close()
+                        except Exception:
+                            pass
+                if ok:
+                    break
+                import time as _t
+                _t.sleep(0.01)
+        except Exception:
+            pass
         return self
 
     def stop(self):

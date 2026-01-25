@@ -41,7 +41,7 @@ localStorage.setItem('API_URL', 'https://api.doorman.example.com')
 |----------|---------|-------------|
 | `MEM_OR_EXTERNAL` | `MEM` | `MEM` (in-memory) or `REDIS` (production) |
 | `MEM_ENCRYPTION_KEY` | - | 32+ char secret for memory dumps (required for dumps) |
-| `MEM_DUMP_PATH` | `generated/memory_dump.bin` | Memory dump file path |
+| `MEM_DUMP_PATH` | `generated/memory_dump.bin` | Memory dump file path. Relative paths are resolved under `backend-services/` so `generated/...` maps to the Docker volume mount (`/app/backend-services/generated`). |
 | `REDIS_HOST` | `localhost` | Redis hostname |
 | `REDIS_PORT` | `6379` | Redis port |
 | `REDIS_DB` | `0` | Redis database number |

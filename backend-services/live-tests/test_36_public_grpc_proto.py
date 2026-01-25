@@ -158,32 +158,15 @@ message DeleteReply { bool ok = 1; }
 
             url = f'{base}/api/grpc/{api_name}'
             hdr = {'X-API-Version': api_version, 'X-IS-TEST': 'true'}
-            assert (
-                requests.post(
-                    url, json={'method': 'Resource.Create', 'message': {'name': 'A'}}, headers=hdr
-                ).status_code
-                == 200
-            )
-            assert (
-                requests.post(
-                    url, json={'method': 'Resource.Read', 'message': {'id': 1}}, headers=hdr
-                ).status_code
-                == 200
-            )
-            assert (
-                requests.post(
-                    url,
-                    json={'method': 'Resource.Update', 'message': {'id': 1, 'name': 'B'}},
-                    headers=hdr,
-                ).status_code
-                == 200
-            )
-            assert (
-                requests.post(
-                    url, json={'method': 'Resource.Delete', 'message': {'id': 1}}, headers=hdr
-                ).status_code
-                == 200
-            )
+            s = requests.Session()
+            try:
+                s.trust_env = False
+            except Exception:
+                pass
+            assert s.post(url, json={'method': 'Resource.Create', 'message': {'name': 'A'}}, headers=hdr).status_code == 200
+            assert s.post(url, json={'method': 'Resource.Read', 'message': {'id': 1}}, headers=hdr).status_code == 200
+            assert s.post(url, json={'method': 'Resource.Update', 'message': {'id': 1, 'name': 'B'}}, headers=hdr).status_code == 200
+            assert s.post(url, json={'method': 'Resource.Delete', 'message': {'id': 1}}, headers=hdr).status_code == 200
         finally:
             try:
                 client.delete(f'/platform/endpoint/POST/{api_name}/{api_version}/grpc')

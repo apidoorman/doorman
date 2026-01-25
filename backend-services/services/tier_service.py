@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from models.rate_limit_models import Tier, TierLimits, TierName, UserTierAssignment
+from utils.doorman_cache_util import doorman_cache
+from utils.email_util import send_email
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +291,9 @@ class TierService:
             await self.assignments_collection.insert_one(assignment.to_dict())
             logger.info(f'Assigned user {user_id} to tier {tier_id}')
 
+        # Invalidate cache
+        doorman_cache.delete_cache('user_cache', f'tier_limits_{user_id}')
+
         return assignment
 
     async def get_user_assignment(self, user_id: str) -> UserTierAssignment | None:
@@ -359,9 +364,19 @@ class TierService:
             # User has custom limits
             return assignment.override_limits
 
+        # Check cache for tier limits
+        cached_limits = doorman_cache.get_cache('user_cache', f'tier_limits_{user_id}')
+        if cached_limits:
+             try:
+                 return TierLimits.from_dict(cached_limits)
+             except Exception:
+                 pass
+
         # Get tier limits
         tier = await self.get_user_tier(user_id)
         if tier:
+            # Cache the limits
+            doorman_cache.set_cache('user_cache', f'tier_limits_{user_id}', tier.limits.to_dict())
             return tier.limits
 
         return None
@@ -380,6 +395,7 @@ class TierService:
 
         if result.deleted_count > 0:
             logger.info(f'Removed tier assignment for user {user_id}')
+            doorman_cache.delete_cache('user_cache', f'tier_limits_{user_id}')
             return True
 
         return False
@@ -450,6 +466,12 @@ class TierService:
             notes=f'Upgraded from {current_tier.tier_id if current_tier else "default"}',
         )
 
+        # Send notification
+        email_body = f"You have been upgraded to the {new_tier.display_name} plan.\nEffective: {effective_from}"
+        # In a real app we'd fetch user email from userService
+        fake_email = f"{user_id}@example.com" 
+        await send_email(fake_email, "Tier Upgrade Notification", email_body)
+
         logger.info(f'Upgraded user {user_id} to tier {new_tier_id}')
         return assignment
 
@@ -491,6 +513,11 @@ class TierService:
             notes=f'Downgraded from {current_tier.tier_id if current_tier else "default"} with {grace_period_days} day grace period',
         )
 
+        # Send notification
+        email_body = f"You have been downgraded to the {new_tier.display_name} plan.\nEffective: {effective_from}"
+        fake_email = f"{user_id}@example.com"
+        await send_email(fake_email, "Tier Downgrade Notification", email_body)
+
         logger.info(
             f'Scheduled downgrade for user {user_id} to tier {new_tier_id} on {effective_from}'
         )
@@ -529,9 +556,51 @@ class TierService:
             notes=f'Temporary upgrade for {duration_days} days',
         )
 
+        # Send notification
+        email_body = f"You have been given a temporary trial of {temp_tier.display_name} for {duration_days} days."
+        fake_email = f"{user_id}@example.com"
+        await send_email(fake_email, "Trial Activated", email_body)
+
         logger.info(
             f'Temporary upgrade for user {user_id} to tier {temp_tier_id} until {effective_until}'
         )
+        return assignment
+
+    async def start_trial(
+        self, user_id: str, tier_id: str, days: int, assigned_by: str | None = None
+    ) -> UserTierAssignment:
+        """
+        Start a trial for a user on a specific tier.
+        Wrapper around temporary_tier_upgrade for clarity.
+        """
+        return await self.temporary_tier_upgrade(user_id, tier_id, days, assigned_by)
+
+    async def handle_payment_failure(self, user_id: str) -> UserTierAssignment:
+        """
+        Handle payment failure for a user.
+        Downgrades user to default tier immediately.
+        """
+        logger.warning(f'Handling payment failure for user {user_id}')
+        
+        default_tier = await self.get_default_tier()
+        if not default_tier:
+             raise ValueError("No default tier configured for fallback")
+             
+        # Downgrade immediately
+        assignment = await self.downgrade_user_tier(
+            user_id=user_id,
+            new_tier_id=default_tier.tier_id,
+            grace_period_days=0,
+            assigned_by='system:payment_failure'
+        )
+        
+        # Send alert
+        await send_email(
+            f"{user_id}@example.com", 
+            "Payment Failure - Account Downgraded",
+            f"We could not process your payment. Your account has been downgraded to {default_tier.display_name}."
+        )
+        
         return assignment
 
     # ========================================================================
@@ -585,8 +654,10 @@ class TierService:
         active_count = await self.assignments_collection.count_documents(
             {
                 'tier_id': tier_id,
-                '$or': [{'effective_from': None}, {'effective_from': {'$lte': now}}],
-                '$or': [{'effective_until': None}, {'effective_until': {'$gte': now}}],
+                '$and': [
+                    {'$or': [{'effective_from': None}, {'effective_from': {'$lte': now}}]},
+                    {'$or': [{'effective_until': None}, {'effective_until': {'$gte': now}}]},
+                ],
             }
         )
 

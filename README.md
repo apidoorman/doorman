@@ -21,6 +21,27 @@ A lightweight, Python-based API gateway for managing REST, SOAP, GraphQL, gRPC, 
 - **Caching & Storage**: Redis caching, MongoDB integration, or in memory
 - **Validation**: Request payload validation and logging
 
+## One‑Command Demo
+
+### Prerequisites
+- Docker installed
+
+### Run with Docker Compose
+
+```bash
+# First time (build the demo image to include frontend proxy config)
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
+
+# Next runs (no rebuild needed)
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up
+```
+
+Defaults (demo‑only):
+- Admin: `demo@doorman.dev` / `DemoPassword123!`
+- Web UI: `http://localhost:3000`
+- API: `http://localhost:3001`
+- Mode: in‑memory (no Redis/Mongo); no seed data created
+
 ## Quick Start
 
 ### Prerequisites
@@ -42,24 +63,6 @@ When ready:
 - Web UI: `http://localhost:3000`
 - Gateway API: `http://localhost:3001`
 - Data & logs persist in Docker volumes (`doorman-generated`, `doorman-logs`).
-
-### One‑Command Demo (in‑memory)
-
-Spin up a preconfigured demo (auto‑cleans on exit) without editing `.env`:
-
-```bash
-# First time (build the demo image to include frontend proxy config)
-docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
-
-# Next runs (no rebuild needed)
-docker compose -f docker-compose.yml -f docker-compose.demo.yml up
-```
-
-Defaults (demo‑only):
-- Admin: `demo@doorman.dev` / `DemoPassword123!`
-- Web UI: `http://localhost:3000`
-- API: `http://localhost:3001`
-- Mode: in‑memory (no Redis/Mongo); no seed data created
 
 ## Frontend Gateway Configuration
 
