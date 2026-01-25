@@ -181,7 +181,7 @@ def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
         # Resolve and validate source path
         msg = f"Archive source path {proto_path} is unsafe"
         try:
-            proto_path = proto_path.resolve()
+            proto_path = proto_path.resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Path derived from sanitized inputs and validated via validate_path/commonpath against fixed PROJECT_ROOT
         except RuntimeError:
             logger.warning(f"{msg} (resolve failed)")
             return
@@ -190,7 +190,7 @@ def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
             logger.warning(f"{msg} (outside root)")
             return
             
-        if not proto_path.exists() or not proto_path.is_file():
+        if not proto_path.exists() or not proto_path.is_file():  # codeql[py/uncontrolled-data-in-path-expression]: Existence check on validated, fixed-base path
             return
 
         archive_dir = (PROJECT_ROOT / 'proto' / 'history').resolve()
@@ -202,7 +202,7 @@ def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
         safe_ver = sanitize_filename(api_version)
         filename = f"{safe_name}_{safe_ver}_{timestamp}.proto"
         
-        dest = (archive_dir / filename).resolve()
+        dest = (archive_dir / filename).resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Destination path built from sanitized components and constrained to archive_dir via validate_path
         
         # Verify destination is strictly within archive_dir
         if not validate_path(archive_dir, dest):
@@ -210,7 +210,7 @@ def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
             return
             
         # Copy with metadata
-        copy2(proto_path, dest)
+        copy2(proto_path, dest)  # codeql[py/uncontrolled-data-in-path-expression]: Copy between validated, fixed-base paths only
         logger.info(f"Archived proto to {dest}")
     except Exception as e:
         logger.error(f"Failed to archive proto: {e}")

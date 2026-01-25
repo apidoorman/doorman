@@ -284,7 +284,7 @@ def create_ws_security_header(
             if password_type == 'PasswordDigestSHA256':
                 # WS-Security 1.1 requires SHA-256 for PasswordDigestSHA256.
                 # This is a network digest, NOT used for local password storage.
-                digest_bytes = hashlib.sha256(digest_input).digest()  # codeql [py/weak-cryptographic-algorithm]
+                digest_bytes = hashlib.sha256(digest_input).digest()  # codeql[py/weak-cryptographic-algorithm]: WS-Security UsernameToken digest (transport-level), not password storage
                 password_type_uri = (
                     'http://docs.oasis-open.org/wss/2004/01/'
                     'oasis-200401-wss-username-token-profile-1.1#PasswordDigestSHA256'
@@ -292,7 +292,7 @@ def create_ws_security_header(
             else:
                 # Legacy UsernameToken Profile PasswordDigest (SHA-1)
                 # Specified by OASIS standard; required for SOAP interoperability.
-                digest_bytes = hashlib.sha1(digest_input).digest()  # codeql [py/weak-cryptographic-algorithm]
+                digest_bytes = hashlib.sha1(digest_input).digest()  # codeql[py/weak-cryptographic-algorithm]: Legacy WS-Security digest for interoperability; not used for password storage
                 password_type_uri = (
                     'http://docs.oasis-open.org/wss/2004/01/'
                     'oasis-200401-wss-username-token-profile-1.0#PasswordDigest'
