@@ -40,9 +40,19 @@ async def db_delete_one(collection: Any, query: dict[str, Any]) -> Any:
     return await asyncio.to_thread(fn, query)
 
 
-async def db_find_list(collection: Any, query: dict[str, Any]) -> list[dict[str, Any]]:
+async def db_find_list(
+    collection: Any, query: dict[str, Any], sort: list[tuple[str, int]] | None = None
+) -> list[dict[str, Any]]:
     find = collection.find
     cursor = find(query)
+    if sort:
+        # Some drivers use .sort([(field, dir)]), others .sort(field, dir)
+        try:
+            cursor = cursor.sort(sort)
+        except Exception:
+            for fld, direction in sort:
+                cursor = cursor.sort(fld, direction)
+
     to_list = getattr(cursor, 'to_list', None)
     if callable(to_list):
         if inspect.iscoroutinefunction(to_list):
@@ -126,3 +136,17 @@ async def db_count(collection: Any, query: dict[str, Any]) -> int:
     if inspect.iscoroutinefunction(fn):
         return await fn(query)
     return await asyncio.to_thread(fn, query)
+
+
+async def db_delete_many(collection: Any, query: dict[str, Any]) -> Any:
+    fn = collection.delete_many
+    if inspect.iscoroutinefunction(fn):
+        return await fn(query)
+    return await asyncio.to_thread(fn, query)
+
+
+async def db_insert_many(collection: Any, docs: list[dict[str, Any]]) -> Any:
+    fn = collection.insert_many
+    if inspect.iscoroutinefunction(fn):
+        return await fn(docs)
+    return await asyncio.to_thread(fn, docs)

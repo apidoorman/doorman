@@ -360,8 +360,8 @@ async def available_apis(username: str, request: Request):
         if not can_manage:
             can_manage = await platform_role_required_bool(actor, 'manage_subscriptions')
 
-        cursor = api_collection.find().sort('api_name', 1)
-        apis = list(cursor)
+        from utils.async_db import db_find_list
+        apis = await db_find_list(api_collection, {}, sort=[('api_name', 1)])
         for a in apis:
             if a.get('_id'):
                 del a['_id']

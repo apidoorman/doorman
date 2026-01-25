@@ -33,7 +33,7 @@ class TestChunkedEncodingBodyLimit:
 
         response = client.post(
             '/platform/authorization',
-            data=small_payload,
+            content=small_payload,
             headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
         )
 
@@ -67,7 +67,7 @@ class TestChunkedEncodingBodyLimit:
 
             response = client.post(
                 '/api/rest/test/v1/endpoint',
-                data=large_payload,
+                content=large_payload,
                 headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
@@ -86,7 +86,7 @@ class TestChunkedEncodingBodyLimit:
 
             response = client.post(
                 '/api/soap/test/v1/service',
-                data=medium_payload,
+                content=medium_payload,
                 headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'text/xml'},
             )
 
@@ -105,7 +105,7 @@ class TestChunkedEncodingBodyLimit:
 
             response = client.post(
                 '/platform/authorization',
-                data=large_payload,
+                content=large_payload,
                 headers={'Content-Type': 'application/json'},
             )
 
@@ -124,7 +124,7 @@ class TestChunkedEncodingBodyLimit:
 
             response = client.post(
                 '/platform/authorization',
-                data=large_payload,
+                content=large_payload,
                 headers={
                     'Transfer-Encoding': 'chunked',
                     'Content-Length': '100',
@@ -154,7 +154,7 @@ class TestChunkedEncodingBodyLimit:
 
             response = client.put(
                 '/platform/user/testuser',
-                data=large_payload,
+                content=large_payload,
                 headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
@@ -172,7 +172,7 @@ class TestChunkedEncodingBodyLimit:
 
             response = client.patch(
                 '/platform/user/testuser',
-                data=large_payload,
+                content=large_payload,
                 headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
@@ -190,7 +190,7 @@ class TestChunkedEncodingBodyLimit:
 
             response = client.post(
                 '/api/graphql/test',
-                data=large_query.encode(),
+                content=large_query.encode(),
                 headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
             )
 
@@ -217,7 +217,7 @@ class TestChunkedEncodingBodyLimit:
             for route in routes:
                 response = client.post(
                     route,
-                    data=large_payload,
+                    content=large_payload,
                     headers={'Transfer-Encoding': 'chunked', 'Content-Type': 'application/json'},
                 )
 

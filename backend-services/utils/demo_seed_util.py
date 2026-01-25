@@ -4,7 +4,7 @@ import os
 import random
 import string
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from utils import password_util
 from utils.database import (
@@ -327,7 +327,7 @@ def seed_user_credits(usernames: list[str], credit_groups: list[str]) -> None:
             users_credits[g] = {
                 'tier_name': _rand_choice(['basic', 'pro', 'enterprise']),
                 'available_credits': random.randint(10, 10000),
-                'reset_date': (datetime.utcnow() + timedelta(days=random.randint(1, 30))).strftime(
+                'reset_date': (datetime.now(timezone.utc) + timedelta(days=random.randint(1, 30))).strftime(
                     '%Y-%m-%d'
                 ),
                 'user_api_key': encrypt_value(uuid.uuid4().hex),
@@ -364,7 +364,7 @@ def seed_logs(n: int, usernames: list[str], apis: list[tuple[str, str]]) -> None
     log_path = os.path.join(logs_dir, 'doorman.log')
     methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
     uris = ['/status', '/list', '/items', '/items/123', '/search?q=test', '/export', '/metrics']
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     with open(log_path, 'a', encoding='utf-8') as lf:
         for _ in range(n):
             api = _rand_choice(apis) if apis else ('demo', 'v1')
@@ -414,7 +414,7 @@ message StatusReply {{
 
 
 def seed_metrics(usernames: list[str], apis: list[tuple[str, str]], minutes: int = 400) -> None:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for i in range(minutes, 0, -1):
         minute_start = int(((now - timedelta(minutes=i)).timestamp()) // 60) * 60
         b = MinuteBucket(start_ts=minute_start)
