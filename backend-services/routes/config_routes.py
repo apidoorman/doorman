@@ -20,11 +20,19 @@ from utils.database import (
     group_collection,
     role_collection,
     routing_collection,
-    routing_collection,
 )
 from utils.database_async import async_database
 from utils.doorman_cache_util import doorman_cache
 from utils.response_util import process_response
+from utils.async_db import (
+    db_delete_many,
+    db_delete_one,
+    db_find_list,
+    db_find_one,
+    db_insert_many,
+    db_insert_one,
+    db_update_one,
+)
 from utils.role_util import platform_role_required_bool
 
 config_router = APIRouter()
@@ -37,19 +45,17 @@ def _strip_id(doc: dict[str, Any]) -> dict[str, Any]:
     return d
 
 
-def _export_all() -> dict[str, Any]:
-    # PyMongo cursors are synchronous; convert to lists directly
-    apis = [_strip_id(a) for a in list(api_collection.find())]
-    endpoints = [_strip_id(e) for e in list(endpoint_collection.find())]
-    roles = [_strip_id(r) for r in list(role_collection.find())]
-    groups = [_strip_id(g) for g in list(group_collection.find())]
-    routings = [_strip_id(r) for r in list(routing_collection.find())]
+async def _export_all() -> dict[str, Any]:
+    # Use db_find_list for compatibility across sync/async drivers
+    apis = [_strip_id(a) for a in await db_find_list(api_collection, {})]
+    endpoints = [_strip_id(e) for e in await db_find_list(endpoint_collection, {})]
+    roles = [_strip_id(r) for r in await db_find_list(role_collection, {})]
+    groups = [_strip_id(g) for g in await db_find_list(group_collection, {})]
+    routings = [_strip_id(r) for r in await db_find_list(routing_collection, {})]
     return {
         'apis': apis,
         'endpoints': endpoints,
         'roles': roles,
-        'groups': groups,
-        'routings': routings,
         'groups': groups,
         'routings': routings,
     }
@@ -57,7 +63,7 @@ def _export_all() -> dict[str, Any]:
 
 async def _create_snapshot(actor: str):
     """Create a snapshot of current configuration"""
-    data = _export_all()
+    data = await _export_all()
     snapshot = {
         'snapshot_id': str(uuid.uuid4()),
         'timestamp': datetime.now(),
@@ -86,7 +92,16 @@ async def _restore_snapshot(snapshot_id: str = None):
     else:
         # Get latest
         cursor = coll.find().sort('timestamp', -1).limit(1)
-        snapshot = await cursor.to_list(length=1)
+        # Handle both async (Motor) and sync (InMemory/PyMongo) cursors gracefully
+        if hasattr(cursor, 'to_list'):
+            # Check if it's an awaitable (Motor)
+            import inspect
+            if inspect.iscoroutinefunction(cursor.to_list) or inspect.isawaitable(cursor.to_list(length=1)):
+                snapshot = await cursor.to_list(length=1)
+            else:
+                snapshot = cursor.to_list(length=1)
+        else:
+            snapshot = list(cursor)[:1]
         snapshot = snapshot[0] if snapshot else None
 
     if not snapshot:
@@ -94,33 +109,33 @@ async def _restore_snapshot(snapshot_id: str = None):
 
     data = snapshot['data']
     
-    # Restore logic: wipe and insert (simplified for implementation plan)
+    # Restore logic: wipe and insert
     # In prod, transactions would be better
     
     # APIs
-    api_collection.delete_many({})
-    if data['apis']:
-        api_collection.insert_many(data['apis'])
+    await db_delete_many(api_collection, {})
+    if data.get('apis'):
+        await db_insert_many(api_collection, data['apis'])
         
     # Endpoints
-    endpoint_collection.delete_many({})
-    if data['endpoints']:
-        endpoint_collection.insert_many(data['endpoints'])
+    await db_delete_many(endpoint_collection, {})
+    if data.get('endpoints'):
+        await db_insert_many(endpoint_collection, data['endpoints'])
         
     # Roles
-    role_collection.delete_many({})
-    if data['roles']:
-        role_collection.insert_many(data['roles'])
+    await db_delete_many(role_collection, {})
+    if data.get('roles'):
+        await db_insert_many(role_collection, data['roles'])
         
     # Groups
-    group_collection.delete_many({})
-    if data['groups']:
-        group_collection.insert_many(data['groups'])
+    await db_delete_many(group_collection, {})
+    if data.get('groups'):
+        await db_insert_many(group_collection, data['groups'])
         
     # Routings
-    routing_collection.delete_many({})
-    if data['routings']:
-        routing_collection.insert_many(data['routings'])
+    await db_delete_many(routing_collection, {})
+    if data.get('routings'):
+        await db_insert_many(routing_collection, data['routings'])
         
     doorman_cache.clear_all_caches()
     return snapshot['timestamp']
@@ -154,7 +169,7 @@ async def export_all(request: Request):
                 ).dict(),
                 'rest',
             )
-        data = _export_all()
+        data = await _export_all()
         audit(
             request,
             actor=username,
@@ -215,7 +230,7 @@ async def export_apis(
                 'rest',
             )
         if api_name and api_version:
-            api = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+            api = await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
             if not api:
                 return process_response(
                     ResponseModel(
@@ -224,8 +239,8 @@ async def export_apis(
                     'rest',
                 )
             api.get('api_id')
-            eps = list(
-                endpoint_collection.find({'api_name': api_name, 'api_version': api_version})
+            eps = await db_find_list(
+                endpoint_collection, {'api_name': api_name, 'api_version': api_version}
             )
             audit(
                 request,
@@ -243,7 +258,7 @@ async def export_apis(
                 ).dict(),
                 'rest',
             )
-        apis = [_strip_id(a) for a in list(api_collection.find())]
+        apis = [_strip_id(a) for a in await db_find_list(api_collection, {})]
         audit(
             request,
             actor=username,
@@ -294,11 +309,11 @@ async def export_roles(request: Request, role_name: str | None = None):
                 'rest',
             )
         if role_name:
-            role = role_collection.find_one({'role_name': role_name})
+            role = await db_find_one(role_collection, {'role_name': role_name})
             if not role:
                 return process_response(
                     ResponseModel(
-                        status_code=404, error_code='CFG404', error_message='Role not found'
+                        status_code=404, error_code='CFG405', error_message='Role not found'
                     ).dict(),
                     'rest',
                 )
@@ -314,7 +329,7 @@ async def export_roles(request: Request, role_name: str | None = None):
             return process_response(
                 ResponseModel(status_code=200, response={'role': _strip_id(role)}).dict(), 'rest'
             )
-        roles = [_strip_id(r) for r in list(role_collection.find())]
+        roles = [_strip_id(r) for r in await db_find_list(role_collection, {})]
         audit(
             request,
             actor=username,
@@ -365,11 +380,11 @@ async def export_groups(request: Request, group_name: str | None = None):
                 'rest',
             )
         if group_name:
-            group = group_collection.find_one({'group_name': group_name})
+            group = await db_find_one(group_collection, {'group_name': group_name})
             if not group:
                 return process_response(
                     ResponseModel(
-                        status_code=404, error_code='CFG404', error_message='Group not found'
+                        status_code=404, error_code='CFG406', error_message='Group not found'
                     ).dict(),
                     'rest',
                 )
@@ -385,7 +400,7 @@ async def export_groups(request: Request, group_name: str | None = None):
             return process_response(
                 ResponseModel(status_code=200, response={'group': _strip_id(group)}).dict(), 'rest'
             )
-        groups = [_strip_id(g) for g in list(group_collection.find())]
+        groups = [_strip_id(g) for g in await db_find_list(group_collection, {})]
         audit(
             request,
             actor=username,
@@ -436,11 +451,11 @@ async def export_routings(request: Request, client_key: str | None = None):
                 'rest',
             )
         if client_key:
-            routing = routing_collection.find_one({'client_key': client_key})
+            routing = await db_find_one(routing_collection, {'client_key': client_key})
             if not routing:
                 return process_response(
                     ResponseModel(
-                        status_code=404, error_code='CFG404', error_message='Routing not found'
+                        status_code=404, error_code='CFG407', error_message='Routing not found'
                     ).dict(),
                     'rest',
                 )
@@ -457,7 +472,7 @@ async def export_routings(request: Request, client_key: str | None = None):
                 ResponseModel(status_code=200, response={'routing': _strip_id(routing)}).dict(),
                 'rest',
             )
-        routings = [_strip_id(r) for r in list(routing_collection.find())]
+        routings = [_strip_id(r) for r in await db_find_list(routing_collection, {})]
         audit(
             request,
             actor=username,
@@ -517,7 +532,7 @@ async def export_endpoints(
             query['api_name'] = api_name
         if api_version:
             query['api_version'] = api_version
-        eps = [_strip_id(e) for e in list(endpoint_collection.find(query))]
+        eps = [_strip_id(e) for e in await db_find_list(endpoint_collection, query)]
         return process_response(
             ResponseModel(status_code=200, response={'endpoints': eps}).dict(), 'rest'
         )
@@ -533,12 +548,12 @@ async def export_endpoints(
         )
 
 
-def _upsert_api(doc: dict[str, Any]) -> None:
+async def _upsert_api(doc: dict[str, Any]) -> None:
     api_name = doc.get('api_name')
     api_version = doc.get('api_version')
     if not api_name or not api_version:
         return
-    existing = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+    existing = await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
     to_set = copy.deepcopy(_strip_id(doc))
 
     if existing:
@@ -548,14 +563,14 @@ def _upsert_api(doc: dict[str, Any]) -> None:
         to_set.setdefault('api_id', str(uuid.uuid4()))
         to_set.setdefault('api_path', f'/{api_name}/{api_version}')
     if existing:
-        api_collection.update_one(
-            {'api_name': api_name, 'api_version': api_version}, {'$set': to_set}
+        await db_update_one(
+            api_collection, {'api_name': api_name, 'api_version': api_version}, {'$set': to_set}
         )
     else:
-        api_collection.insert_one(to_set)
+        await db_insert_one(api_collection, to_set)
 
 
-def _upsert_endpoint(doc: dict[str, Any]) -> None:
+async def _upsert_endpoint(doc: dict[str, Any]) -> None:
     api_name = doc.get('api_name')
     api_version = doc.get('api_version')
     method = doc.get('endpoint_method')
@@ -563,12 +578,13 @@ def _upsert_endpoint(doc: dict[str, Any]) -> None:
     if not (api_name and api_version and method and uri):
         return
 
-    api_doc = api_collection.find_one({'api_name': api_name, 'api_version': api_version})
+    api_doc = await db_find_one(api_collection, {'api_name': api_name, 'api_version': api_version})
     to_set = copy.deepcopy(_strip_id(doc))
     if api_doc:
         to_set['api_id'] = api_doc.get('api_id')
     to_set.setdefault('endpoint_id', str(uuid.uuid4()))
-    existing = endpoint_collection.find_one(
+    existing = await db_find_one(
+        endpoint_collection,
         {
             'api_name': api_name,
             'api_version': api_version,
@@ -577,7 +593,8 @@ def _upsert_endpoint(doc: dict[str, Any]) -> None:
         }
     )
     if existing:
-        endpoint_collection.update_one(
+        await db_update_one(
+            endpoint_collection,
             {
                 'api_name': api_name,
                 'api_version': api_version,
@@ -587,43 +604,43 @@ def _upsert_endpoint(doc: dict[str, Any]) -> None:
             {'$set': to_set},
         )
     else:
-        endpoint_collection.insert_one(to_set)
+        await db_insert_one(endpoint_collection, to_set)
 
 
-def _upsert_role(doc: dict[str, Any]) -> None:
+async def _upsert_role(doc: dict[str, Any]) -> None:
     name = doc.get('role_name')
     if not name:
         return
     to_set = copy.deepcopy(_strip_id(doc))
-    existing = role_collection.find_one({'role_name': name})
+    existing = await db_find_one(role_collection, {'role_name': name})
     if existing:
-        role_collection.update_one({'role_name': name}, {'$set': to_set})
+        await db_update_one(role_collection, {'role_name': name}, {'$set': to_set})
     else:
-        role_collection.insert_one(to_set)
+        await db_insert_one(role_collection, to_set)
 
 
-def _upsert_group(doc: dict[str, Any]) -> None:
+async def _upsert_group(doc: dict[str, Any]) -> None:
     name = doc.get('group_name')
     if not name:
         return
     to_set = copy.deepcopy(_strip_id(doc))
-    existing = group_collection.find_one({'group_name': name})
+    existing = await db_find_one(group_collection, {'group_name': name})
     if existing:
-        group_collection.update_one({'group_name': name}, {'$set': to_set})
+        await db_update_one(group_collection, {'group_name': name}, {'$set': to_set})
     else:
-        group_collection.insert_one(to_set)
+        await db_insert_one(group_collection, to_set)
 
 
-def _upsert_routing(doc: dict[str, Any]) -> None:
+async def _upsert_routing(doc: dict[str, Any]) -> None:
     key = doc.get('client_key')
     if not key:
         return
     to_set = copy.deepcopy(_strip_id(doc))
-    existing = routing_collection.find_one({'client_key': key})
+    existing = await db_find_one(routing_collection, {'client_key': key})
     if existing:
-        routing_collection.update_one({'client_key': key}, {'$set': to_set})
+        await db_update_one(routing_collection, {'client_key': key}, {'$set': to_set})
     else:
-        routing_collection.insert_one(to_set)
+        await db_insert_one(routing_collection, to_set)
 
 
 """
@@ -661,19 +678,19 @@ async def import_all(request: Request, body: dict[str, Any]):
         
         counts = {'apis': 0, 'endpoints': 0, 'roles': 0, 'groups': 0, 'routings': 0}
         for api in body.get('apis', []) or []:
-            _upsert_api(api)
+            await _upsert_api(api)
             counts['apis'] += 1
         for ep in body.get('endpoints', []) or []:
-            _upsert_endpoint(ep)
+            await _upsert_endpoint(ep)
             counts['endpoints'] += 1
         for r in body.get('roles', []) or []:
-            _upsert_role(r)
+            await _upsert_role(r)
             counts['roles'] += 1
         for g in body.get('groups', []) or []:
-            _upsert_group(g)
+            await _upsert_group(g)
             counts['groups'] += 1
         for rt in body.get('routings', []) or []:
-            _upsert_routing(rt)
+            await _upsert_routing(rt)
             counts['routings'] += 1
 
         try:

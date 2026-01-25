@@ -266,7 +266,7 @@ async def generate_report(request: Request, start: str, end: str):
         import datetime as _dt
 
         def _to_date_time(ts: int):
-            dt = _dt.datetime.utcfromtimestamp(ts)
+            dt = _dt.datetime.fromtimestamp(ts, _dt.timezone.utc)
             return dt.strftime('%Y-%m-%d'), dt.strftime('%H:%M')
 
         start_date, start_time_str = _to_date_time(start_ts)
@@ -423,7 +423,7 @@ async def generate_report(request: Request, start: str, end: str):
         w.writerow(['Bandwidth (per day, UTC)'])
         w.writerow(['date', 'bytes_in', 'bytes_out', 'total'])
         for day_ts in sorted(daily_bw.keys()):
-            date_str = _dt.datetime.utcfromtimestamp(day_ts).strftime('%Y-%m-%d')
+            date_str = _dt.datetime.fromtimestamp(day_ts, _dt.timezone.utc).strftime('%Y-%m-%d')
             bi = int(daily_bw[day_ts]['in'])
             bo = int(daily_bw[day_ts]['out'])
             w.writerow([date_str, bi, bo, bi + bo])

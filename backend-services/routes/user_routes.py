@@ -369,7 +369,7 @@ Response:
 """
 
 
-@user_router.get('/me', description='Get user by username', response_model=UserModelResponse)
+@user_router.get('/me', description='Get user by username', response_model=ResponseModel)
 async def get_user_by_username(request: Request):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -415,7 +415,7 @@ Response:
 """
 
 
-@user_router.get('/all', description='Get all users', response_model=list[UserModelResponse])
+@user_router.get('/all', description='Get all users', response_model=ResponseModel)
 async def get_all_users(
     request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE
 ):
@@ -482,7 +482,7 @@ Response:
 
 
 @user_router.get(
-    '/{username}', description='Get user by username', response_model=UserModelResponse
+    '/{username}', description='Get user by username', response_model=ResponseModel
 )
 async def get_user_by_username(username: str, request: Request):
     request_id = str(uuid.uuid4())
@@ -612,7 +612,7 @@ async def get_user_by_email(email: str, request: Request):
 
 
 @user_router.get(
-    '', description='Get all users (base path)', response_model=list[UserModelResponse]
+    '', description='Get all users (base path)', response_model=ResponseModel
 )
 async def get_all_users_base(
     request: Request, page: int = Defaults.PAGE, page_size: int = Defaults.PAGE_SIZE

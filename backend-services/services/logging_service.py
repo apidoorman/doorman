@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
@@ -317,9 +317,9 @@ class LoggingService:
                     rec = json.loads(s)
                     timestamp_str = rec.get('time') or rec.get('timestamp')
                     try:
-                        timestamp = timestamp_str or datetime.utcnow().isoformat()
+                        timestamp = timestamp_str or datetime.now(timezone.utc).isoformat()
                     except Exception:
-                        timestamp = datetime.utcnow().isoformat()
+                        timestamp = datetime.now(timezone.utc).isoformat()
                     message = rec.get('message', '')
                     name = rec.get('name', '')
                     level = rec.get('level', '')
@@ -346,7 +346,7 @@ class LoggingService:
                 try:
                     timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
                 except ValueError:
-                    timestamp = datetime.utcnow()
+                    timestamp = datetime.now(timezone.utc)
             message_parts = full_message.split(' | ', 1)
             request_id = message_parts[0] if len(message_parts) > 1 else None
             message = message_parts[1] if len(message_parts) > 1 else full_message

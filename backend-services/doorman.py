@@ -2221,20 +2221,6 @@ doorman.include_router(grpc_router, tags=['gRPC Discovery'])
 doorman.include_router(mfa_router, tags=['MFA'])
 
 
-
-@doorman.on_event('startup')
-async def startup_event():
-    """Run startup checks"""
-    try:
-        from utils.redis_client import get_redis_client
-        redis = get_redis_client()
-        redis.ping()
-        gateway_logger.info('Startup check: Redis connection successful')
-    except Exception as e:
-        gateway_logger.error(f'Startup check failed: Redis unavailable - {e}')
-        # In strict mode we might exit, but for resilience we log error
-        # sys.exit(1)
-
 def start() -> None:
     if os.path.exists(PID_FILE):
         gateway_logger.info('doorman is already running!')
