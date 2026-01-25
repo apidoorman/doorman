@@ -21,7 +21,6 @@ from xml.etree import ElementTree as ET
 import defusedxml.ElementTree as SafeET
 
 import httpx
-import os
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -279,21 +278,10 @@ def create_ws_security_header(
         nonce_value = secrets.token_bytes(16)
         nonce_b64 = __import__('base64').b64encode(nonce_value).decode('ascii')
         
-        # Gate legacy SHA-1 UsernameToken digests behind an env flag for security hardening.
-        # Default behavior prefers SHA-256 unless explicitly allowed to use SHA-1.
-        allow_sha1 = os.getenv('DOORMAN_ALLOW_WSSE_SHA1', '').lower() in ('1', 'true', 'yes', 'on')
-        effective_type = password_type
-        if password_type == 'PasswordDigest' and not allow_sha1:
-            try:
-                logger.warning('WS-Security PasswordDigest (SHA-1) disabled by default; using SHA-256. Set DOORMAN_ALLOW_WSSE_SHA1=true to enable SHA-1 for interop.')
-            except Exception:
-                pass
-            effective_type = 'PasswordDigestSHA256'
-
-        if password and effective_type in ('PasswordDigest', 'PasswordDigestSHA256'):
+        if password and password_type in ('PasswordDigest', 'PasswordDigestSHA256'):
             # Digest = Base64(HASH(Nonce + Created + Password))
             digest_input = nonce_value + created.encode('utf-8') + password.encode('utf-8')
-            if effective_type == 'PasswordDigestSHA256':
+            if password_type == 'PasswordDigestSHA256':
                 # WS-Security 1.1 requires SHA-256 for PasswordDigestSHA256.
                 # This is a network digest, NOT used for local password storage.
                 digest_bytes = hashlib.sha256(digest_input).digest()  # codeql[py/weak-cryptographic-algorithm]: WS-Security UsernameToken digest (transport-level), not password storage
