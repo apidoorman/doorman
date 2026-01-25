@@ -13,7 +13,7 @@ import json
 import logging
 import threading
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Deque, List, Optional
 
 
@@ -53,7 +53,7 @@ class MemoryLogHandler(logging.Handler):
         try:
             payload = {
                 # Align keys with JSONFormatter in doorman.py
-                "time": datetime.utcfromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S"),
+                "time": datetime.fromtimestamp(record.created, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
                 "name": record.name,
                 "level": record.levelname,
                 "message": self.format(record) if self.formatter else record.getMessage(),

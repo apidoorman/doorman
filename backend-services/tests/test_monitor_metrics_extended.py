@@ -237,9 +237,9 @@ async def test_monitor_report_csv(monkeypatch, authed_client):
     monkeypatch.setattr(gs.httpx, 'AsyncClient', _FakeAsyncClient)
     await authed_client.get(f'/api/rest/{name}/{ver}/r')
 
-    from datetime import datetime
+    from datetime import datetime, timezone
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     start = now.strftime('%Y-%m-%dT%H:%M')
     end = start
     csvr = await authed_client.get(f'/platform/monitor/report?start={start}&end={end}')

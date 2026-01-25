@@ -86,7 +86,16 @@ async def _restore_snapshot(snapshot_id: str = None):
     else:
         # Get latest
         cursor = coll.find().sort('timestamp', -1).limit(1)
-        snapshot = await cursor.to_list(length=1)
+        # Handle both async (Motor) and sync (InMemory/PyMongo) cursors gracefully
+        if hasattr(cursor, 'to_list'):
+            # Check if it's an awaitable (Motor)
+            import inspect
+            if inspect.iscoroutinefunction(cursor.to_list) or inspect.isawaitable(cursor.to_list(length=1)):
+                snapshot = await cursor.to_list(length=1)
+            else:
+                snapshot = cursor.to_list(length=1)
+        else:
+            snapshot = list(cursor)[:1]
         snapshot = snapshot[0] if snapshot else None
 
     if not snapshot:
