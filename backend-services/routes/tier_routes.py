@@ -113,6 +113,21 @@ class TemporaryUpgradeRequest(BaseModel):
     duration_days: int
 
 
+class TrialStartRequest(BaseModel):
+    """Request model for starting trial"""
+
+    user_id: str
+    tier_id: str
+    days: int = 14
+
+
+class PaymentFailureRequest(BaseModel):
+    """Request model for payment failure webhook"""
+
+    user_id: str
+    reason: str | None = None
+
+
 class TierResponse(BaseModel):
     """Response model for tier"""
 
@@ -616,6 +631,48 @@ async def temporary_tier_upgrade(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to create temporary upgrade',
         )
+
+
+@tier_router.post('/trial/start', response_model=Dict[str, Any])
+async def start_trial(
+    request: TrialStartRequest, tier_service: TierService = Depends(get_tier_service_dep)
+):
+    """
+    Start a trial for a user
+    
+    Requires admin permissions.
+    """
+    try:
+        assignment = await tier_service.start_trial(
+            user_id=request.user_id,
+            tier_id=request.tier_id,
+            days=request.days,
+        )
+        return assignment.to_dict()
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f'Error starting trial: {e}')
+        raise HTTPException(status_code=500, detail='Failed to start trial')
+
+
+@tier_router.post('/payment/failure', response_model=Dict[str, Any])
+async def handle_payment_failure(
+    request: PaymentFailureRequest, tier_service: TierService = Depends(get_tier_service_dep)
+):
+    """
+    Handle payment failure (webhook)
+    
+    Downgrades user immediately.
+    """
+    try:
+        assignment = await tier_service.handle_payment_failure(request.user_id)
+        return assignment.to_dict()
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f'Error handling payment failure: {e}')
+        raise HTTPException(status_code=500, detail='Failed to handle payment failure')
 
 
 # ============================================================================

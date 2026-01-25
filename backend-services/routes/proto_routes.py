@@ -12,6 +12,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from shutil import copy2
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
@@ -156,6 +157,30 @@ def get_safe_proto_path(api_name: str, api_version: str):
         raise HTTPException(status_code=500, detail=f'Failed to create safe paths: {str(e)}')
 
 
+def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
+    """Archive existing proto file with timestamp"""
+    try:
+        if not proto_path.exists():
+            return
+
+        archive_dir = (PROJECT_ROOT / 'proto' / 'history').resolve()
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = int(time.time())
+        safe_name = sanitize_filename(api_name)
+        safe_ver = sanitize_filename(api_version)
+        filename = f"{safe_name}_{safe_ver}_{timestamp}.proto"
+        
+        dest = archive_dir / filename
+        if not validate_path(PROJECT_ROOT, dest):
+            return
+            
+        copy2(proto_path, dest)
+        logger.info(f"Archived proto to {dest}")
+    except Exception as e:
+        logger.error(f"Failed to archive proto: {e}")
+
+
 """
 Upload proto file
 
@@ -251,6 +276,10 @@ async def upload_proto_file(
         pkg_name = _extract_package_name(proto_content)
         if not validate_path(PROJECT_ROOT, proto_path):
             raise ValueError('Invalid proto path detected')
+            
+        # Archive existing before overwrite
+        archive_existing_proto(proto_path, api_name, api_version)
+        
         proto_path.write_text(proto_content)
         try:
             # Ensure grpc_tools is available before attempting compilation

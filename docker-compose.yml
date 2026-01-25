@@ -30,12 +30,17 @@ services:
       MEM_AUTO_SAVE_FREQ: ${MEM_AUTO_SAVE_FREQ:-300}
       # Encryption key for dumps (set a strong value in .env for real use)
       MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY:-change-me-in-prod}
+      # Ensure logs are written to a Docker-managed volume, not the image
+      LOGS_DIR: /app/backend-services/platform-logs
     volumes:
       - doorman-generated:/app/backend-services/generated
-      - doorman-logs:/app/backend-services/logs
+      - doorman-logs:/app/backend-services/platform-logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "sh", "-c", "curl -f $([ \"$${HTTPS_ONLY:-false}\" = \"true\" ] && echo https || echo http)://localhost:$${PORT:-3001}/platform/monitor/liveness"]
+      # Always use HTTP for the internal healthcheck. TLS should be terminated
+      # at the reverse proxy (Nginx/Traefik/ALB), and Uvicorn listens in plain HTTP.
+      # Using HTTPS here will cause Uvicorn to log 'Invalid HTTP request received.'
+      test: ["CMD", "sh", "-c", "curl -fsS http://localhost:$${PORT:-3001}/platform/monitor/liveness"]
       interval: 30s
       timeout: 10s
       retries: 3

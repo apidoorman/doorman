@@ -25,14 +25,7 @@ async def subscription_required(request: Request):
         username = payload.get('sub')
         if not username:
             raise HTTPException(status_code=401, detail='Invalid token')
-        
-        # Admin user bypasses subscription requirements
-        try:
-            if await is_admin_user(username):
-                logger.info(f'Admin user {username} bypassing subscription check')
-                return payload
-        except Exception:
-            pass
+        # All users (including admins) must have a subscription unless the API is public
         full_path = request.url.path
         if full_path.startswith('/api/rest/'):
             prefix = '/api/rest/'

@@ -156,6 +156,7 @@ class DoormanCacheManager:
             'client_routing_cache': 'client_routing_cache:',
             'token_def_cache': 'token_def_cache:',
             'credit_def_cache': 'credit_def_cache:',
+            'csrf_token_map': 'csrf_token_map:',
         }
         self.default_ttls = {
             'api_cache': 86400,
@@ -173,6 +174,7 @@ class DoormanCacheManager:
             'client_routing_cache': 86400,
             'token_def_cache': 86400,
             'credit_def_cache': 86400,
+            'csrf_token_map': 1800,
         }
 
     def _get_key(self, cache_name, key):

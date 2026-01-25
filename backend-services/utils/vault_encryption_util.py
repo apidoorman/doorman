@@ -80,7 +80,8 @@ def encrypt_vault_value(value: str, email: str, username: str) -> str:
         encrypted_bytes = cipher.encrypt(value.encode('utf-8'))
 
         # Return as base64 string
-        return encrypted_bytes.decode('utf-8')
+        # Return as base64 string with version prefix
+        return f'v1:{encrypted_bytes.decode("utf-8")}'
     except Exception as e:
         logger.error(f'Encryption failed: {str(e)}')
         raise ValueError(f'Failed to encrypt vault value: {str(e)}') from e
@@ -113,6 +114,11 @@ def decrypt_vault_value(encrypted_value: str, email: str, username: str) -> str:
         # Create Fernet cipher
         cipher = Fernet(encryption_key)
 
+        # Handle version prefix
+        if encrypted_value.startswith('v1:'):
+            encrypted_value = encrypted_value[3:]
+        # Future: elif encrypted_value.startswith('v2:'): ...
+        
         # Decrypt the value
         decrypted_bytes = cipher.decrypt(encrypted_value.encode('utf-8'))
 
