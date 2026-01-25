@@ -27,6 +27,7 @@ Run a local demo instance in seconds.
 
 ```bash
 # Clone and launch instantly
+cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
 ```
 
