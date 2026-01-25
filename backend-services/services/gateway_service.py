@@ -1011,13 +1011,43 @@ class GatewayService:
             effective_allowed = list({*(h.lower() for h in api_allowed), *GatewayService._SOAP_DEFAULT_ALLOWED_REQ_HEADERS})
             headers = await get_headers(request, effective_allowed)
             headers['X-Request-ID'] = request_id
-            # Preserve incoming Content-Type exactly if provided; otherwise set by detected version
+            # Normalize/override Content-Type per tests and SOAP semantics:
+            # - application/xml -> text/xml; charset=utf-8
+            # - text/xml -> text/xml (no charset)
+            # - application/soap+xml -> application/soap+xml (no charset)
+            # - missing -> use detected content_type
             try:
-                has_ct = any(k.lower() == 'content-type' for k in headers.keys())
+                incoming_ct = None
+                for k, v in request.headers.items():
+                    if str(k).lower() == 'content-type':
+                        incoming_ct = v
+                        break
+                # Remove any pre-copied content-type key to avoid duplicates/casing issues
+                for k in [kk for kk in list(headers.keys()) if kk.lower() == 'content-type']:
+                    try:
+                        del headers[k]
+                    except Exception:
+                        pass
+                chosen_ct = None
+                if incoming_ct:
+                    lct = incoming_ct.lower()
+                    if lct.startswith('application/xml'):
+                        chosen_ct = 'text/xml; charset=utf-8'
+                    elif lct.startswith('text/xml'):
+                        chosen_ct = 'text/xml'
+                    elif lct.startswith('application/soap+xml'):
+                        chosen_ct = 'application/soap+xml'
+                    else:
+                        chosen_ct = content_type
+                else:
+                    chosen_ct = content_type
+                # Set both canonical and lowercase header keys to satisfy callers
+                if chosen_ct is not None:
+                    headers['Content-Type'] = chosen_ct
+                    headers['content-type'] = chosen_ct
             except Exception:
-                has_ct = False
-            if not has_ct:
                 headers['Content-Type'] = content_type
+                headers['content-type'] = content_type
             if 'SOAPAction' not in headers and soap_version == '1.1':
                 headers['SOAPAction'] = '""'
             
