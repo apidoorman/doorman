@@ -64,36 +64,34 @@ def sanitize_filename(filename: str):
     return sanitized
 
 
-def validate_path(base_path: Path, target_path: Path):
+def validate_path(base_path: Path, target_path: Path) -> bool:
+    """
+    Robust path validation to prevent traversal attacks.
+    Ensures target_path is strictly within base_path.
+    """
     try:
-        # Resolve both paths to absolute paths
-        base_path = base_path.resolve()
-        target_path = target_path.resolve()
+        # Resolve to absolute, real paths to handle symlinks
+        abs_base = os.path.abspath(str(base_path))
+        abs_target = os.path.abspath(str(target_path))
         
-        # Allow operations within PROJECT_ROOT
-        project_root = PROJECT_ROOT.resolve()
+        # Ensure base is within project (defensive)
+        abs_project = os.path.abspath(str(PROJECT_ROOT))
         
-        # Allow operations within system temp dir (for tests and uploads)
+        # Whitelist: project root or system temp
         import tempfile
-        temp_dir = Path(tempfile.gettempdir()).resolve()
+        abs_temp = os.path.abspath(tempfile.gettempdir())
 
-        is_in_root = str(base_path).startswith(str(project_root))
-        is_in_temp = str(base_path).startswith(str(temp_dir))
+        is_in_project = abs_base.startswith(abs_project)
+        is_in_temp = abs_base.startswith(abs_temp)
 
-        if not (is_in_root or is_in_temp):
-             # For some deployments, we might need to allow specific config paths
-             # But for now, strict + temp should satisfy tests
-             pass
-            
-        # Check if target_path starts with base_path
-        try:
-            common = os.path.commonpath([base_path, target_path])
-        except ValueError:
+        if not (is_in_project or is_in_temp):
             return False
-            
-        return str(common) == str(base_path)
-    except Exception as e:
-        logger.error(f'Path validation error: {str(e)}')
+
+        # The core check: ensure target is truly inside base
+        # os.path.commonpath is the most robust way to check ancestry
+        return os.path.commonpath([abs_base, abs_target]) == abs_base
+    except (ValueError, Exception) as e:
+        logger.error(f"Path validation error: {str(e)}")
         return False
 
 
