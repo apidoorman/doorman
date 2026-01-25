@@ -1003,13 +1003,21 @@ class GatewayService:
                 soap_version = detect_soap_version(envelope)
             
             soap_action = request.headers.get('SOAPAction', '').strip('"')
-            content_type = get_content_type_for_version(soap_version, soap_action if soap_version == '1.2' else None)
+            content_type = get_content_type_for_version(
+                soap_version, soap_action if soap_version == '1.2' else None
+            )
             
             api_allowed = (api.get('api_allowed_headers') or []) if api else []
             effective_allowed = list({*(h.lower() for h in api_allowed), *GatewayService._SOAP_DEFAULT_ALLOWED_REQ_HEADERS})
             headers = await get_headers(request, effective_allowed)
             headers['X-Request-ID'] = request_id
-            headers['Content-Type'] = content_type
+            # Preserve incoming Content-Type exactly if provided; otherwise set by detected version
+            try:
+                has_ct = any(k.lower() == 'content-type' for k in headers.keys())
+            except Exception:
+                has_ct = False
+            if not has_ct:
+                headers['Content-Type'] = content_type
             if 'SOAPAction' not in headers and soap_version == '1.1':
                 headers['SOAPAction'] = '""'
             

@@ -62,19 +62,30 @@ async def _create_snapshot(actor: str):
         'snapshot_id': str(uuid.uuid4()),
         'timestamp': datetime.now(),
         'created_by': actor,
-        'data': data
+        'data': data,
     }
-    await async_database.db.config_snapshots.insert_one(snapshot)
+    # Some environments (MEM) may not expose a config_snapshots collection. Treat as best-effort.
+    coll = getattr(async_database.db, 'config_snapshots', None)
+    if coll is None:
+        try:
+            logger.debug('config_snapshots not available in current DB; skipping snapshot create')
+        except Exception:
+            pass
+        return None
+    await coll.insert_one(snapshot)
     return snapshot['snapshot_id']
 
 
 async def _restore_snapshot(snapshot_id: str = None):
     """Restore configuration from snapshot (latest if id not provided)"""
+    coll = getattr(async_database.db, 'config_snapshots', None)
+    if coll is None:
+        raise ValueError('Snapshot storage not available')
     if snapshot_id:
-        snapshot = await async_database.db.config_snapshots.find_one({'snapshot_id': snapshot_id})
+        snapshot = await coll.find_one({'snapshot_id': snapshot_id})
     else:
         # Get latest
-        cursor = async_database.db.config_snapshots.find().sort('timestamp', -1).limit(1)
+        cursor = coll.find().sort('timestamp', -1).limit(1)
         snapshot = await cursor.to_list(length=1)
         snapshot = snapshot[0] if snapshot else None
 
