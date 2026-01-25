@@ -201,7 +201,7 @@ def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
         safe_name = sanitize_filename(api_name)
         safe_ver = sanitize_filename(api_version)
         # Ensure the source path matches the exact expected sanitized filename under proto/
-        expected_src = (PROJECT_ROOT / 'proto' / f"{safe_name}_{safe_ver}.proto").resolve()
+        expected_src = (PROJECT_ROOT / 'proto' / f"{safe_name}_{safe_ver}.proto").resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Expected path built from sanitized components and validated against PROJECT_ROOT
         if expected_src != proto_path:
             logger.warning(
                 f"Archive source path mismatch: expected {expected_src}, got {proto_path}; skipping archive"
@@ -326,7 +326,7 @@ async def upload_proto_file(
         try:
             expected_src = (
                 PROJECT_ROOT / 'proto' / f"{sanitize_filename(api_name)}_{sanitize_filename(api_version)}.proto"
-            ).resolve()
+            ).resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Expected sanitized path used for equality guard only
         except Exception:
             return process_response(
                 ResponseModel(
