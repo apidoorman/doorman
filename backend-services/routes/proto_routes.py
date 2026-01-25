@@ -200,6 +200,13 @@ def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
         # Re-sanitize inputs to be paranoid
         safe_name = sanitize_filename(api_name)
         safe_ver = sanitize_filename(api_version)
+        # Ensure the source path matches the exact expected sanitized filename under proto/
+        expected_src = (PROJECT_ROOT / 'proto' / f"{safe_name}_{safe_ver}.proto").resolve()
+        if expected_src != proto_path:
+            logger.warning(
+                f"Archive source path mismatch: expected {expected_src}, got {proto_path}; skipping archive"
+            )
+            return
         filename = f"{safe_name}_{safe_ver}_{timestamp}.proto"
         
         dest = (archive_dir / filename).resolve()  # codeql[py/uncontrolled-data-in-path-expression]: Destination path built from sanitized components and constrained to archive_dir via validate_path
@@ -312,9 +319,35 @@ async def upload_proto_file(
         if not validate_path(PROJECT_ROOT, proto_path):
             raise ValueError('Invalid proto path detected')
             
-        # Archive existing before overwrite
+        # Archive existing before overwrite (with strict filename equality guard)
         archive_existing_proto(proto_path, api_name, api_version)
         
+        # Write only if the computed path matches the sanitized expectation
+        try:
+            expected_src = (
+                PROJECT_ROOT / 'proto' / f"{sanitize_filename(api_name)}_{sanitize_filename(api_version)}.proto"
+            ).resolve()
+        except Exception:
+            return process_response(
+                ResponseModel(
+                    status_code=400,
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_code=ErrorCodes.PATH_VALIDATION,
+                    error_message='Failed to compute expected proto path',
+                ).dict(),
+                'rest',
+            )
+        if expected_src != proto_path:
+            return process_response(
+                ResponseModel(
+                    status_code=400,
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_code=ErrorCodes.PATH_VALIDATION,
+                    error_message='Computed proto path mismatch after sanitization',
+                ).dict(),
+                'rest',
+            )
+
         proto_path.write_text(proto_content)
         try:
             # Ensure grpc_tools is available before attempting compilation
