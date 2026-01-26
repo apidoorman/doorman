@@ -40,23 +40,26 @@ class InMemoryWindowCounter:
 
     def __init__(self):
         self._store = {}
+        self._lock = asyncio.Lock()
 
     async def incr(self, key: str) -> int:
-        now = int(time.time())
-        entry = self._store.get(key)
-        if entry and entry['expires_at'] > now:
-            entry['count'] += 1
-        else:
-            entry = {'count': 1, 'expires_at': now + 1}
-        self._store[key] = entry
-        return entry['count']
+        async with self._lock:
+            now = int(time.time())
+            entry = self._store.get(key)
+            if entry and entry['expires_at'] > now:
+                entry['count'] += 1
+            else:
+                entry = {'count': 1, 'expires_at': now + 1}
+            self._store[key] = entry
+            return entry['count']
 
     async def expire(self, key: str, ttl_seconds: int) -> None:
-        now = int(time.time())
-        entry = self._store.get(key)
-        if entry:
-            entry['expires_at'] = now + int(ttl_seconds)
-            self._store[key] = entry
+        async with self._lock:
+            now = int(time.time())
+            entry = self._store.get(key)
+            if entry:
+                entry['expires_at'] = now + int(ttl_seconds)
+                self._store[key] = entry
 
 
 _fallback_counter = InMemoryWindowCounter()
