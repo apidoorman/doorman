@@ -208,7 +208,7 @@ async def authorization(request: Request):
             samesite=_samesite,
             path='/',
             # Use host-only cookie for CSRF to maximize compatibility in tests/clients
-            domain=None,
+            domain=cookie_domain,
             max_age=1800,
         )
 
@@ -825,7 +825,7 @@ async def extended_authorization(request: Request):
             secure=_secure,
             samesite=_samesite,
             path='/',
-            domain=None,
+            domain=cookie_domain,
             max_age=604800,
         )
 
