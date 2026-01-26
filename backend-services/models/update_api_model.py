@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -32,7 +33,7 @@ class UpdateApiModel(BaseModel):
         example=['http://localhost:8080', 'http://localhost:8081'],
     )
     api_type: str | None = Field(
-        None, description="Type of the API. Valid values: 'REST'", example='REST'
+        None, description="Type of the API. Valid values: 'REST', 'SOAP', 'GRAPHQL', 'GRPC'", example='REST'
     )
     api_authorization_field_swap: str | None = Field(
         None,
@@ -175,6 +176,20 @@ class UpdateApiModel(BaseModel):
     api_grpc_reflection_url: str | None = Field(
         None,
         description='Upstream URL for gRPC Server Reflection',
+    )
+
+    api_is_crud: bool | None = Field(
+        None,
+        description='If true, this API is a CRUD builder API and stores data in Doorman database',
+    )
+    api_crud_collection: str | None = Field(
+        None,
+        description='Dynamic collection name for custom CRUD data',
+        example='crud_data_my_collection',
+    )
+    api_crud_schema: Optional[dict] = Field(
+        None,
+        description="Schema definition for CRUD validation. Dict of field_name -> rules.",
     )
 
     class Config:

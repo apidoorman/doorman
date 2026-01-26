@@ -88,6 +88,11 @@ class Database:
         )
         self.db = self.client.get_database()
 
+    def get_collection(self, name):
+        if self.memory_only:
+            return self.db.create_collection(name)
+        return self.db[name]
+
     def initialize_collections(self):
         if self.memory_only:
             # Resolve admin seed credentials consistently across modes (no auto-generation)
@@ -723,7 +728,8 @@ class InMemoryDB:
             self.rate_limit_rules = self._sync_rate_limit_rules
 
     def list_collection_names(self):
-        return [
+        # Return all InMemoryCollection attributes
+        base_collections = [
             'users',
             'apis',
             'endpoints',
@@ -741,11 +747,24 @@ class InMemoryDB:
             'user_tier_assignments',
             'rate_limit_rules',
         ]
+        # Also include any dynamically created collections
+        dynamic_collections = [
+            name for name in dir(self)
+            if not name.startswith('_') 
+            and hasattr(self, name)
+            and isinstance(getattr(self, name), InMemoryCollection)
+            and name not in base_collections
+        ]
+        return base_collections + dynamic_collections
 
     def create_collection(self, name):
         if name not in self.list_collection_names():
+            from utils.database import InMemoryCollection
             setattr(self, name, InMemoryCollection(name))
         return getattr(self, name)
+
+    def __getitem__(self, name):
+        return self.create_collection(name)
 
     def get_database(self):
         return self

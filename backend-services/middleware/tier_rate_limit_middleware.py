@@ -29,7 +29,7 @@ try:
 except Exception:
     _jwt = None
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('doorman.gateway')
 
 
 class TierRateLimitMiddleware(BaseHTTPMiddleware):
@@ -61,17 +61,24 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
 
         # Extract user ID
         user_id = self._get_user_id(request)
-        logger.debug(f'[tier_rl] user_id={user_id} path={request.url.path}')
+        logger.info(f'[tier_rl] user_id={user_id} path={request.url.path}')
 
         if not user_id:
             return await call_next(request)
 
         # Get user's tier limits
-        tier_service = get_tier_service(async_database.db)
-        limits = await tier_service.get_user_limits(user_id)
-
-        if not limits:
+        try:
+            tier_service = get_tier_service(async_database.db)
+            limits = await tier_service.get_user_limits(user_id)
+        except Exception as e:
+            logger.error(f'[tier_rl] Error getting limits for {user_id}: {str(e)}', exc_info=True)
             return await call_next(request)
+        
+        if not limits:
+            logger.info(f'[tier_rl] no limits found for user_id={user_id}')
+            return await call_next(request)
+        
+        logger.info(f'[tier_rl] applying limits for {user_id}: minute={limits.requests_per_minute}')
 
         # Using the utility's RateLimiter to check distributed limits
         from utils.rate_limiter import get_rate_limiter
@@ -188,6 +195,7 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith('/platform/'):
             return True
 
+        logger.info(f'[tier_rl] checking path={request.url.path}')
         return False
 
     def _get_user_id(self, request: Request) -> str | None:

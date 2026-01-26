@@ -308,12 +308,11 @@ const APIsPage = () => {
                         </p>
                       </td>
                       <td>
-                        <span className={`badge ${
-                          (api.api_type as string)?.toLowerCase() === 'rest' ? 'badge-success' :
+                        <span className={`badge ${(api.api_type as string)?.toLowerCase() === 'rest' ? 'badge-success' :
                           (api.api_type as string)?.toLowerCase() === 'graphql' ? 'badge-warning' :
-                          (api.api_type as string)?.toLowerCase() === 'grpc' ? 'badge-error' :
-                          'badge-gray'
-                        }`}>
+                            (api.api_type as string)?.toLowerCase() === 'grpc' ? 'badge-error' :
+                              'badge-gray'
+                          }`}>
                           {api.api_type}
                         </span>
                       </td>
