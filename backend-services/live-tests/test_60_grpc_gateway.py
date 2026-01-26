@@ -155,7 +155,8 @@ def test_grpc_gateway_basic_flow(client):
                     pass
                 server.stop(0)
     except Exception as e:
-        pytest.skip(f'Skipping gRPC due to setup failure: {e}')
+        # Re-raise so we can see the full traceback in pytest
+        raise e
 
 
 import pytest

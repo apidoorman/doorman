@@ -1495,7 +1495,7 @@ try:
         _is_pytest = 'PYTEST_CURRENT_TEST' in _os.environ or 'pytest' in __sys.modules
     except Exception:
         _is_pytest = False
-    if not (_skip_tier or _live or _is_pytest):
+    if not _skip_tier:
         doorman.add_middleware(TierRateLimitMiddleware)
         logging.getLogger('doorman.gateway').info('Tier-based rate limiting middleware enabled')
     else:

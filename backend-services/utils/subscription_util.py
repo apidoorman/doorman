@@ -26,7 +26,9 @@ async def subscription_required(request: Request):
         if not username:
             raise HTTPException(status_code=401, detail='Invalid token')
         # Admin bypass: users with admin role skip subscription checks
-        if await is_admin_user(username):
+        # Can be overriden (e.g. for testing) by setting ENFORCE_ADMIN_SUBSCRIPTION=true
+        enforce_admin = os.getenv('ENFORCE_ADMIN_SUBSCRIPTION', 'false').lower() == 'true'
+        if await is_admin_user(username) and not enforce_admin:
             return payload
 
         # All users (non-admins) must have a subscription unless the API is public

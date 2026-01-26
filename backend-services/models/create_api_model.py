@@ -4,6 +4,7 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/pypeople-dev/doorman for more information
 """
 
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -35,7 +36,9 @@ class CreateApiModel(BaseModel):
         description='List of backend servers for the API',
         example=['http://localhost:8080', 'http://localhost:8081'],
     )
-    api_type: str = Field(None, description="Type of the API. Valid values: 'REST'", example='REST')
+    api_type: str | None = Field(
+        None, description="Type of the API. Valid values: 'REST', 'SOAP', 'GRAPHQL', 'GRPC'", example='REST'
+    )
     api_allowed_retry_count: int = Field(
         0, description='Number of allowed retries for the API', example=0
     )
@@ -207,6 +210,24 @@ class CreateApiModel(BaseModel):
     api_grpc_reflection_url: str | None = Field(
         None,
         description='Upstream URL for gRPC Server Reflection (if different from base URL)',
+    )
+
+    api_is_crud: bool | None = Field(
+        False,
+        description='If true, this API is a CRUD builder API and stores data in Doorman database',
+    )
+    api_crud_collection: str | None = Field(
+        None,
+        description='Dynamic collection name for custom CRUD data',
+        example='crud_data_my_collection',
+    )
+    api_crud_schema: Optional[dict] = Field(
+        None,
+        description="Schema definition for CRUD validation. Dict of field_name -> rules.",
+        example={
+            "name": {"type": "string", "required": True, "min_length": 3},
+            "age": {"type": "number", "min_value": 0}
+        }
     )
 
     class Config:

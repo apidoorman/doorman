@@ -282,6 +282,7 @@ async def gateway(request: Request, path: str):
     )
     start_time = time.time() * 1000
     try:
+        logger.info(f"{request_id} | GATEWAY path: {path}")
         parts = [p for p in (path or '').split('/') if p]
         api_public = False
         api_auth_required = True
@@ -338,23 +339,28 @@ async def gateway(request: Request, path: str):
                         )
                 except Exception:
                     pass
-                api_public = bool(resolved_api.get('api_public'))
-                api_auth_required = (
-                    bool(resolved_api.get('api_auth_required'))
-                    if resolved_api.get('api_auth_required') is not None
-                    else True
-                )
+                if resolved_api:
+                    api_public = bool(resolved_api.get('api_public'))
+                    api_auth_required = (
+                        bool(resolved_api.get('api_auth_required'))
+                        if resolved_api.get('api_auth_required') is not None
+                        else True
+                    )
+            if resolved_api:
+                logger.info(f"{request_id} | RESOLVED API: {resolved_api.get('api_name')}")
             return None
 
         # Case 1: Version is embedded in path (/{api}/{vN}/...)
         if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
             _maybe_resp = await _resolve_api_by(parts[0], parts[1], parts[2:])
+            logger.info(f"{request_id} | REST route resolution (path): result={'found' if resolved_api else 'not found'}")
             if _maybe_resp is not None:
                 return _maybe_resp
         # Case 2: Support X-API-Version header for REST if version not present in path
         elif len(parts) >= 1 and (request.headers.get('X-API-Version')):
             ver = request.headers.get('X-API-Version')
             _maybe_resp = await _resolve_api_by(parts[0], ver, parts[1:])
+            logger.info(f"{request_id} | REST route resolution (header): result={'found' if resolved_api else 'not found'}")
             if _maybe_resp is not None:
                 return _maybe_resp
         username = None
@@ -617,7 +623,7 @@ Response:
 
 @gateway_router.api_route(
     '/soap/{path:path}',
-    methods=['POST'],
+    methods=['POST', 'GET'],
     description='SOAP gateway endpoint',
     response_model=ResponseModel,
 )
@@ -632,19 +638,19 @@ async def soap_gateway(request: Request, path: str):
         parts = [p for p in (path or '').split('/') if p]
         api_public = False
         api_auth_required = True
+        api = None # Initialize api to None
         if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
-            key1 = f'/{parts[0]}/{parts[1]}'
-            key2 = f'{parts[0]}/{parts[1]}'
-            api_key = doorman_cache.get_cache('api_id_cache', key1) or doorman_cache.get_cache(
-                'api_id_cache', key2
-            )
+            api_name_version = f'/{parts[0]}/{parts[1]}'
+            api_key = doorman_cache.get_cache('api_id_cache', api_name_version)
             try:
                 logger.debug(
-                    f"{request_id} | SOAP route resolve: path={path} key1={key1} key2={key2} api_key={'set' if api_key else 'none'}"
+                    f"{request_id} | SOAP route resolve: path={path} key1={api_name_version} api_key={'set' if api_key else 'none'}"
                 )
             except Exception:
                 pass
-            api = await api_util.get_api(api_key, key1)
+            if not api:
+                api = await api_util.get_api(api_key, api_name_version)
+            logger.info(f"{request_id} | SOAP api resolution: result={'found' if api else 'not found'}")
             api_public = bool(api.get('api_public')) if api else False
             api_auth_required = (
                 bool(api.get('api_auth_required'))
@@ -727,6 +733,120 @@ async def soap_gateway(request: Request, path: str):
     finally:
         end_time = time.time() * 1000
         logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+
+
+@gateway_router.api_route(
+    '/grpc/{path:path}',
+    methods=['POST', 'GET'],
+    description='gRPC gateway endpoint',
+    response_model=ResponseModel,
+)
+async def grpc_gateway(request: Request, path: str):
+    request_id = (
+        getattr(request.state, 'request_id', None)
+        or request.headers.get('X-Request-ID')
+        or str(uuid.uuid4())
+    )
+    start_time = time.time() * 1000
+    try:
+        # Determine API context for Auth/Subscription
+        parts = [p for p in (path or '').split('/') if p]
+        api_name = parts[-1] if parts else None
+        
+        # Default behavior if api_name not found (GatewayService will handle 404/errors later)
+        # But we need it for auth.
+        api = None
+        username = None
+        api_public = False
+        api_auth_required = True
+
+        if api_name:
+            api_version = request.headers.get('X-API-Version', 'v1')
+            api_path = f'{api_name}/{api_version}'
+            api = doorman_cache.get_cache('api_cache', api_path)
+            if not api:
+                api = await api_util.get_api(None, api_path)
+            
+            if api:
+                api_public = bool(api.get('api_public'))
+                api_auth_required = (
+                    bool(api.get('api_auth_required'))
+                    if api.get('api_auth_required') is not None
+                    else True
+                )
+                try:
+                    enforce_api_ip_policy(request, api)
+                except HTTPException as e:
+                    return process_response(
+                        ResponseModel(
+                            status_code=e.status_code,
+                            error_code=e.detail,
+                            error_message='IP restricted',
+                        ).dict(),
+                        'grpc',
+                    )
+
+        if api and not api_public:
+            if api_auth_required:
+                try:
+                    await subscription_required(request)
+                    await group_required(request)
+                    await limit_and_throttle(request)
+                    payload = await auth_required(request)
+                    username = payload.get('sub')
+                    
+                    # Enforce API allowed roles
+                    allowed_roles = api.get('api_allowed_roles') or []
+                    if allowed_roles:
+                        from services.user_service import UserService as _US
+                        u = await _US.get_user_by_username_helper(username)
+                        if (u.get('role') or '') not in set(allowed_roles):
+                             return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW014',
+                                    error_message='Forbidden: role not allowed for this API',
+                                ).dict(),
+                                'grpc',
+                            )
+                    
+                    await enforce_pre_request_limit(request, username)
+                except HTTPException as e:
+                    # Map HTTP exceptions (like 403 from sub check, 429 from limits) to gRPC response?
+                    # process_response with 'grpc' will handle it.
+                    return process_response(
+                        ResponseModel(
+                            status_code=e.status_code,
+                            error_code=e.detail, # detail usually string or dict
+                            error_message=str(e.detail),
+                        ).dict(),
+                        'grpc',
+                    )
+
+        logger.info(
+            f'{request_id} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
+        )
+        logger.info(
+            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+        )
+        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+
+        return process_response(
+            await GatewayService.grpc_gateway(username, request, request_id, start_time, path),
+            'grpc',
+        )
+    except Exception as e:
+        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        return process_response(
+            ResponseModel(
+                status_code=500,
+                response_headers={'request_id': request_id},
+                error_code='GTW999',
+                error_message='An unexpected error occurred',
+            ).dict(),
+            'grpc',
+        )
 
 
 """
@@ -1107,135 +1227,3 @@ Response:
 """
 
 
-@gateway_router.api_route(
-    '/grpc/{path:path}',
-    methods=['POST'],
-    description='gRPC gateway endpoint',
-    response_model=ResponseModel,
-)
-async def grpc_gateway(request: Request, path: str):
-    request_id = (
-        getattr(request.state, 'request_id', None)
-        or request.headers.get('X-Request-ID')
-        or str(uuid.uuid4())
-    )
-    start_time = time.time() * 1000
-    try:
-        if not request.headers.get('X-API-Version'):
-            raise HTTPException(status_code=400, detail='X-API-Version header is required')
-        api_name = re.sub(r'^.*/', '', request.url.path)
-        api_key = doorman_cache.get_cache(
-            'api_id_cache', api_name + '/' + request.headers.get('X-API-Version', 'v0')
-        )
-        api = await api_util.get_api(
-            api_key, api_name + '/' + request.headers.get('X-API-Version', 'v0')
-        )
-        if api:
-            try:
-                enforce_api_ip_policy(request, api)
-            except HTTPException as e:
-                return process_response(
-                    ResponseModel(
-                        status_code=e.status_code,
-                        error_code=e.detail,
-                        error_message='IP restricted',
-                    ).dict(),
-                    'grpc',
-                )
-        api_public = bool(api.get('api_public')) if api else False
-        api_auth_required = (
-            bool(api.get('api_auth_required'))
-            if api and api.get('api_auth_required') is not None
-            else True
-        )
-        username = None
-        # In dedicated gRPC test mode, allow calls to proceed without subscription/group
-        # to enable focused unit-style checks of gRPC packaging and fallback behavior.
-        test_mode = str(os.getenv('DOORMAN_TEST_GRPC', '')).lower() in (
-            '1', 'true', 'yes', 'on'
-        )
-        if api and not api_public and not test_mode:
-            if api_auth_required:
-                await subscription_required(request)
-                await group_required(request)
-                await limit_and_throttle(request)
-                payload = await auth_required(request)
-                username = payload.get('sub')
-                # Enforce API allowed roles when configured
-                try:
-                    allowed_roles = api.get('api_allowed_roles') or []
-                    if allowed_roles:
-                        from services.user_service import UserService as _US
-                        u = await _US.get_user_by_username_helper(username)
-                        if (u.get('role') or '') not in set(allowed_roles):
-                            return process_response(
-                                ResponseModel(
-                                    status_code=403,
-                                    response_headers={'request_id': request_id},
-                                    error_code='GTW014',
-                                    error_message='Forbidden: role not allowed for this API',
-                                ).dict(),
-                                'soap',
-                            )
-                except Exception:
-                    pass
-                await enforce_pre_request_limit(request, username)
-            else:
-                pass
-        logger.info(
-            f'{request_id} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
-        )
-        logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
-        )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
-        if api and api.get('validation_enabled'):
-            body = await request.json()
-            request_data = json.loads(body.get('data', '{}'))
-            try:
-                await validation_util.validate_grpc_request(api.get('api_id'), request_data)
-            except Exception as e:
-                return process_response(
-                    ResponseModel(
-                        status_code=400,
-                        response_headers={'request_id': request_id},
-                        error_code='GTW011',
-                        error_message=str(e),
-                    ).dict(),
-                    'grpc',
-                )
-        svc_resp = await GatewayService.grpc_gateway(
-            username, request, request_id, start_time, path
-        )
-        if not isinstance(svc_resp, dict):
-            svc_resp = ResponseModel(
-                status_code=500,
-                response_headers={'request_id': request_id},
-                error_code='GTW006',
-                error_message='Internal server error',
-            ).dict()
-        return process_response(svc_resp, 'grpc')
-    except HTTPException as e:
-        return process_response(
-            ResponseModel(
-                status_code=e.status_code,
-                response_headers={'request_id': request_id},
-                error_code=e.detail,
-                error_message=e.detail,
-            ).dict(),
-            'rest',
-        )
-    except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
-        return process_response(
-            ResponseModel(
-                status_code=500,
-                response_headers={'request_id': request_id},
-                error_code='GTW999',
-                error_message='An unexpected error occurred',
-            ).dict(),
-            'grpc',
-        )
-    finally:
-        end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')

@@ -211,6 +211,15 @@ def process_response(response, type):
             )
     elif type == 'grpc':
         try:
+            content_type = (response.response_headers or {}).get('Content-Type', '')
+            if 'text/plain' in content_type:
+                 return Response(
+                    content=response.response,
+                    status_code=response.status_code,
+                    media_type='text/plain',
+                    headers=_normalize_headers(response.response_headers),
+                )
+
             strict = os.getenv('STRICT_RESPONSE_ENVELOPE', 'false').lower() == 'true'
             if response.status_code == 200:
                 content = (
