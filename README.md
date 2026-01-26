@@ -50,7 +50,7 @@ cp .env.example .env
 
 ### 2. Choose Storage
 - Memory (default): development and tests.
-- Redis + MongoDB: production. Note: SQLite is not supported.
+- Redis + MongoDB: production.
 
 ### 3. Launch
 ```bash
