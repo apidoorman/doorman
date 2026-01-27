@@ -70,12 +70,12 @@ class UserService:
         """
         Retrieve a user by username.
         """
-        logger.info(f'{request_id} | Getting user: {username}')
+        logger.info(f'Getting user: {username}')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = await db_find_one(user_collection, {'username': username})
             if not user:
-                logger.error(f'{request_id} | User retrieval failed with code USR002')
+                logger.error(f'User retrieval failed with code USR002')
                 return ResponseModel(
                     status_code=404, error_code='USR002', error_message='User not found'
                 ).dict()
@@ -85,7 +85,7 @@ class UserService:
                 del user['password']
             doorman_cache.set_cache('user_cache', username, user)
         if not user:
-            logger.error(f'{request_id} | User retrieval failed with code USR002')
+            logger.error(f'User retrieval failed with code USR002')
             return ResponseModel(
                 status_code=404,
                 response_headers={'request_id': request_id},
@@ -114,7 +114,7 @@ class UserService:
                 user['bandwidth_resets_at'] = resets_at
         except Exception:
             pass
-        logger.info(f'{request_id} | User retrieval successful')
+        logger.info(f'User retrieval successful')
         return ResponseModel(status_code=200, response=user).dict()
 
     @staticmethod
@@ -122,10 +122,10 @@ class UserService:
         """
         Retrieve a user by email.
         """
-        logger.info(f'{request_id} | Getting user by email: {email}')
+        logger.info(f'Getting user by email: {email}')
         user = await db_find_one(user_collection, {'email': email})
         if not user:
-            logger.error(f'{request_id} | User retrieval failed with code USR002')
+            logger.error(f'User retrieval failed with code USR002')
             return ResponseModel(
                 status_code=404,
                 response_headers={'request_id': request_id},
@@ -136,11 +136,11 @@ class UserService:
             del user['_id']
         if 'password' in user:
             del user['password']
-        logger.info(f'{request_id} | User retrieval successful')
+        logger.info(f'User retrieval successful')
         if not active_username == user.get('username') and not await platform_role_required_bool(
             active_username, 'manage_users'
         ):
-            logger.error(f'{request_id} | User retrieval failed with code USR008')
+            logger.error(f'User retrieval failed with code USR008')
             return ResponseModel(
                 status_code=403,
                 error_code='USR008',
@@ -153,11 +153,11 @@ class UserService:
         """
         Create a new user.
         """
-        logger.info(f'{request_id} | Creating user: {data.username}')
+        logger.info(f'Creating user: {data.username}')
         try:
             if data.custom_attributes is not None and len(data.custom_attributes.keys()) > 10:
                 logger.error(
-                    f'{request_id} | User creation failed with code USR016: Too many custom attributes'
+                    f'User creation failed with code USR016: Too many custom attributes'
                 )
                 return ResponseModel(
                     status_code=400,
@@ -167,7 +167,7 @@ class UserService:
                 ).dict()
         except Exception:
             logger.error(
-                f'{request_id} | User creation failed with code USR016: Invalid custom attributes payload'
+                f'User creation failed with code USR016: Invalid custom attributes payload'
             )
             return ResponseModel(
                 status_code=400,
@@ -176,7 +176,7 @@ class UserService:
                 error_message='Maximum 10 custom attributes allowed. Please replace an existing one.',
             ).dict()
         if await db_find_one(user_collection, {'username': data.username}):
-            logger.error(f'{request_id} | User creation failed with code USR001')
+            logger.error(f'User creation failed with code USR001')
             return ResponseModel(
                 status_code=400,
                 response_headers={'request_id': request_id},
@@ -184,7 +184,7 @@ class UserService:
                 error_message='Username already exists',
             ).dict()
         if await db_find_one(user_collection, {'email': data.email}):
-            logger.error(f'{request_id} | User creation failed with code USR001')
+            logger.error(f'User creation failed with code USR001')
             return ResponseModel(
                 status_code=400,
                 response_headers={'request_id': request_id},
@@ -192,7 +192,7 @@ class UserService:
                 error_message='Email already exists',
             ).dict()
         if not password_util.is_secure_password(data.password):
-            logger.error(f'{request_id} | User creation failed with code USR005')
+            logger.error(f'User creation failed with code USR005')
             return ResponseModel(
                 status_code=400,
                 response_headers={'request_id': request_id},
@@ -207,7 +207,7 @@ class UserService:
         if 'password' in data_dict:
             del data_dict['password']
         doorman_cache.set_cache('user_cache', data.username, data_dict)
-        logger.info(f'{request_id} | User creation successful')
+        logger.info(f'User creation successful')
         return ResponseModel(
             status_code=201,
             response_headers={'request_id': request_id},
@@ -239,12 +239,12 @@ class UserService:
         """
         Update user information.
         """
-        logger.info(f'{request_id} | Updating user: {username}')
+        logger.info(f'Updating user: {username}')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = await db_find_one(user_collection, {'username': username})
             if not user:
-                logger.error(f'{request_id} | User update failed with code USR002')
+                logger.error(f'User update failed with code USR002')
                 return ResponseModel(
                     status_code=404, error_code='USR002', error_message='User not found'
                 ).dict()
@@ -258,7 +258,7 @@ class UserService:
                     and len(non_null_update_data['custom_attributes'].keys()) > 10
                 ):
                     logger.error(
-                        f'{request_id} | User update failed with code USR016: Too many custom attributes'
+                        f'User update failed with code USR016: Too many custom attributes'
                     )
                     return ResponseModel(
                         status_code=400,
@@ -267,7 +267,7 @@ class UserService:
                     ).dict()
             except Exception:
                 logger.error(
-                    f'{request_id} | User update failed with code USR016: Invalid custom attributes payload'
+                    f'User update failed with code USR016: Invalid custom attributes payload'
                 )
                 return ResponseModel(
                     status_code=400,
@@ -282,19 +282,19 @@ class UserService:
                 if update_result.modified_count > 0:
                     doorman_cache.delete_cache('user_cache', username)
                 if not update_result.acknowledged or update_result.modified_count == 0:
-                    logger.error(f'{request_id} | User update failed with code USR003')
+                    logger.error(f'User update failed with code USR003')
                     return ResponseModel(
                         status_code=400, error_code='USR004', error_message='Unable to update user'
                     ).dict()
             except Exception as e:
                 doorman_cache.delete_cache('user_cache', username)
                 logger.error(
-                    f'{request_id} | User update failed with exception: {str(e)}', exc_info=True
+                    f'User update failed with exception: {str(e)}', exc_info=True
                 )
                 raise
         if non_null_update_data.get('role'):
             await UserService.purge_apis_after_role_change(username, request_id)
-        logger.info(f'{request_id} | User update successful')
+        logger.info(f'User update successful')
         return ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},
@@ -306,18 +306,18 @@ class UserService:
         """
         Delete a user.
         """
-        logger.info(f'{request_id} | Deleting user: {username}')
+        logger.info(f'Deleting user: {username}')
         user = doorman_cache.get_cache('user_cache', username)
         if not user:
             user = await db_find_one(user_collection, {'username': username})
             if not user:
-                logger.error(f'{request_id} | User deletion failed with code USR002')
+                logger.error(f'User deletion failed with code USR002')
                 return ResponseModel(
                     status_code=404, error_code='USR002', error_message='User not found'
                 ).dict()
         delete_result = await db_delete_one(user_collection, {'username': username})
         if not delete_result.acknowledged or delete_result.deleted_count == 0:
-            logger.error(f'{request_id} | User deletion failed with code USR003')
+            logger.error(f'User deletion failed with code USR003')
             return ResponseModel(
                 status_code=400,
                 response_headers={'request_id': request_id},
@@ -326,7 +326,7 @@ class UserService:
             ).dict()
         doorman_cache.delete_cache('user_cache', username)
         doorman_cache.delete_cache('user_subscription_cache', username)
-        logger.info(f'{request_id} | User deletion successful')
+        logger.info(f'User deletion successful')
         return ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},
@@ -338,9 +338,9 @@ class UserService:
         """
         Update user information.
         """
-        logger.info(f'{request_id} | Updating password for user: {username}')
+        logger.info(f'Updating password for user: {username}')
         if not password_util.is_secure_password(update_data.new_password):
-            logger.error(f'{request_id} | User password update failed with code USR005')
+            logger.error(f'User password update failed with code USR005')
             return ResponseModel(
                 status_code=400,
                 response_headers={'request_id': request_id},
@@ -357,13 +357,13 @@ class UserService:
         except Exception as e:
             doorman_cache.delete_cache('user_cache', username)
             logger.error(
-                f'{request_id} | User password update failed with exception: {str(e)}',
+                f'User password update failed with exception: {str(e)}',
                 exc_info=True,
             )
             raise
         user = await db_find_one(user_collection, {'username': username})
         if not user:
-            logger.error(f'{request_id} | User password update failed with code USR002')
+            logger.error(f'User password update failed with code USR002')
             return ResponseModel(
                 status_code=404,
                 response_headers={'request_id': request_id},
@@ -375,7 +375,7 @@ class UserService:
         if 'password' in user:
             del user['password']
         doorman_cache.set_cache('user_cache', username, user)
-        logger.info(f'{request_id} | User password update successful')
+        logger.info(f'User password update successful')
         return ResponseModel(
             status_code=200,
             response_headers={'request_id': request_id},
@@ -387,7 +387,7 @@ class UserService:
         """
         Remove subscriptions after role change.
         """
-        logger.info(f'{request_id} | Purging APIs for user: {username}')
+        logger.info(f'Purging APIs for user: {username}')
         user_subscriptions = doorman_cache.get_cache(
             'user_subscription_cache', username
         ) or await db_find_one(subscriptions_collection, {'username': username})
@@ -416,18 +416,18 @@ class UserService:
             except Exception as e:
                 doorman_cache.delete_cache('user_subscription_cache', username)
                 logger.error(
-                    f'{request_id} | Subscription update failed with exception: {str(e)}',
+                    f'Subscription update failed with exception: {str(e)}',
                     exc_info=True,
                 )
                 raise
-        logger.info(f'{request_id} | Purge successful')
+        logger.info(f'Purge successful')
 
     @staticmethod
     async def get_all_users(page: int, page_size: int, request_id: str) -> dict:
         """
         Get all users.
         """
-        logger.info(f'{request_id} | Getting all users: Page={page} Page Size={page_size}')
+        logger.info(f'Getting all users: Page={page} Page Size={page_size}')
         try:
             page, page_size = validate_page_params(page, page_size)
         except Exception as e:
@@ -467,7 +467,7 @@ class UserService:
             for key, value in user.items():
                 if isinstance(value, bytes):
                     user[key] = value.decode('utf-8')
-        logger.info(f'{request_id} | User retrieval successful')
+        logger.info(f'User retrieval successful')
         return ResponseModel(
             status_code=200,
             response={
@@ -491,11 +491,11 @@ class UserService:
             )
             if result.modified_count > 0:
                 doorman_cache.delete_cache('user_cache', username)
-                logger.info(f'{request_id} | MFA enabled for user: {username}')
+                logger.info(f'MFA enabled for user: {username}')
                 return True
             return False
         except Exception as e:
-            logger.error(f'{request_id} | Failed to enable MFA: {e}')
+            logger.error(f'Failed to enable MFA: {e}')
             return False
 
     @staticmethod
@@ -511,9 +511,9 @@ class UserService:
             )
             if result.modified_count > 0:
                 doorman_cache.delete_cache('user_cache', username)
-                logger.info(f'{request_id} | MFA disabled for user: {username}')
+                logger.info(f'MFA disabled for user: {username}')
                 return True
             return False
         except Exception as e:
-            logger.error(f'{request_id} | Failed to disable MFA: {e}')
+            logger.error(f'Failed to disable MFA: {e}')
             return False

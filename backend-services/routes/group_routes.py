@@ -52,9 +52,9 @@ async def create_group(api_data: CreateGroupModel, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(
                 ResponseModel(
@@ -68,7 +68,7 @@ async def create_group(api_data: CreateGroupModel, request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -79,7 +79,7 @@ async def create_group(api_data: CreateGroupModel, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -110,9 +110,9 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(
                 ResponseModel(
@@ -126,7 +126,7 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -137,7 +137,7 @@ async def update_group(group_name: str, api_data: UpdateGroupModel, request: Req
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -168,9 +168,9 @@ async def delete_group(group_name: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_GROUPS):
             return respond_rest(
                 ResponseModel(
@@ -184,7 +184,7 @@ async def delete_group(group_name: str, request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -195,7 +195,7 @@ async def delete_group(group_name: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -218,14 +218,14 @@ async def get_groups(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await GroupService.get_groups(page, page_size, request_id))
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -237,7 +237,7 @@ async def get_groups(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -258,14 +258,14 @@ async def get_group(group_name: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await GroupService.get_group(group_name, request_id))
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -277,4 +277,4 @@ async def get_group(group_name: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

@@ -188,7 +188,7 @@ async def export_all(request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | export_all error: {e}')
+        logger.error(f'export_all error: {e}')
         return process_response(
             ResponseModel(
                 status_code=500, error_code='GTW999', error_message='An unexpected error occurred'
@@ -196,7 +196,7 @@ async def export_all(request: Request):
             'rest',
         )
     finally:
-        logger.info(f'{request_id} | export_all took {time.time() * 1000 - start:.2f}ms')
+        logger.info(f'export_all took {time.time() * 1000 - start:.2f}ms')
 
 
 """
@@ -274,7 +274,7 @@ async def export_apis(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | export_apis error: {e}')
+        logger.error(f'export_apis error: {e}')
         return process_response(
             ResponseModel(
                 status_code=500, error_code='GTW999', error_message='An unexpected error occurred'
@@ -282,7 +282,7 @@ async def export_apis(
             'rest',
         )
     finally:
-        logger.info(f'{request_id} | export_apis took {time.time() * 1000 - start:.2f}ms')
+        logger.info(f'export_apis took {time.time() * 1000 - start:.2f}ms')
 
 
 """
@@ -345,7 +345,7 @@ async def export_roles(request: Request, role_name: str | None = None):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | export_roles error: {e}')
+        logger.error(f'export_roles error: {e}')
         return process_response(
             ResponseModel(
                 status_code=500, error_code='GTW999', error_message='An unexpected error occurred'
@@ -416,7 +416,7 @@ async def export_groups(request: Request, group_name: str | None = None):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | export_groups error: {e}')
+        logger.error(f'export_groups error: {e}')
         return process_response(
             ResponseModel(
                 status_code=500, error_code='GTW999', error_message='An unexpected error occurred'
@@ -488,7 +488,7 @@ async def export_routings(request: Request, client_key: str | None = None):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | export_routings error: {e}')
+        logger.error(f'export_routings error: {e}')
         return process_response(
             ResponseModel(
                 status_code=500, error_code='GTW999', error_message='An unexpected error occurred'
@@ -539,7 +539,7 @@ async def export_endpoints(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | export_endpoints error: {e}')
+        logger.error(f'export_endpoints error: {e}')
         return process_response(
             ResponseModel(
                 status_code=500, error_code='GTW999', error_message='An unexpected error occurred'
@@ -712,7 +712,7 @@ async def import_all(request: Request, body: dict[str, Any]):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | import_all error: {e}')
+        logger.error(f'import_all error: {e}')
         return process_response(
             ResponseModel(
                 status_code=500, error_code='GTW999', error_message='An unexpected error occurred'
@@ -720,7 +720,7 @@ async def import_all(request: Request, body: dict[str, Any]):
             'rest',
         )
     finally:
-        logger.info(f'{request_id} | import_all took {time.time() * 1000 - start:.2f}ms')
+        logger.info(f'import_all took {time.time() * 1000 - start:.2f}ms')
 
 
 @config_router.post(
@@ -762,5 +762,5 @@ async def rollback_config(request: Request):
             'rest'
         )
     except Exception as e:
-        logger.error(f'{request_id} | rollback error: {e}')
+        logger.error(f'rollback error: {e}')
         raise HTTPException(status_code=500, detail='Rollback failed')

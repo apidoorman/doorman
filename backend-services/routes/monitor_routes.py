@@ -60,9 +60,9 @@ async def get_metrics(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, 'manage_gateway'):
             return process_response(
                 ResponseModel(
@@ -121,7 +121,7 @@ async def get_metrics(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -133,7 +133,7 @@ async def get_metrics(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -448,7 +448,7 @@ async def generate_report(request: Request, start: str, end: str):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error in report: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error in report: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -460,4 +460,4 @@ async def generate_report(request: Request, start: str, end: str):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

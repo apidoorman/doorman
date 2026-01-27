@@ -85,6 +85,7 @@ async def get_logs(
     level: str | None = Query(None, description='Filter by log level'),
     limit: int = Query(100, description='Number of logs to return', ge=1, le=1000),
     offset: int = Query(0, description='Number of logs to skip', ge=0),
+    type: str | None = Query(None, description='Filter by request type (platform, auth, gateway)'),
 ):
     request_id_param = str(uuid.uuid4())
     start_time_param = time.time() * 1000
@@ -125,6 +126,8 @@ async def get_logs(
             limit=limit,
             offset=offset,
             request_id_param=request_id_param,
+            type=type,
+            exclude_type=request.query_params.get('exclude_type'),
         )
 
         return respond_rest(
@@ -170,9 +173,9 @@ async def get_log_files(request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await platform_role_required_bool(username, Roles.VIEW_LOGS):
             return respond_rest(
@@ -198,7 +201,7 @@ async def get_log_files(request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -209,7 +212,7 @@ async def get_log_files(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -263,9 +266,9 @@ async def get_log_statistics(request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await platform_role_required_bool(username, Roles.VIEW_LOGS):
             return respond_rest(
@@ -289,7 +292,7 @@ async def get_log_statistics(request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -301,7 +304,7 @@ async def get_log_statistics(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -342,6 +345,7 @@ async def export_logs(
     api: str | None = Query(None, description='Filter by API'),
     endpoint: str | None = Query(None, description='Filter by endpoint'),
     level: str | None = Query(None, description='Filter by log level'),
+    type: str | None = Query(None, description='Filter by request type (platform, auth, gateway)'),
 ):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -349,9 +353,9 @@ async def export_logs(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await platform_role_required_bool(username, Roles.EXPORT_LOGS):
             return process_response(
@@ -375,6 +379,8 @@ async def export_logs(
             filters['endpoint'] = endpoint
         if level:
             filters['level'] = level
+        if type:
+            filters['type'] = type
 
         export_result = await logging_service.export_logs(
             format=format,
@@ -393,7 +399,7 @@ async def export_logs(
         )
 
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -405,7 +411,7 @@ async def export_logs(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -435,6 +441,7 @@ async def download_logs(
     api: str | None = Query(None, description='Filter by API'),
     endpoint: str | None = Query(None, description='Filter by endpoint'),
     level: str | None = Query(None, description='Filter by log level'),
+    type: str | None = Query(None, description='Filter by request type (platform, auth, gateway)'),
 ):
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
@@ -442,9 +449,9 @@ async def download_logs(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await platform_role_required_bool(username, Roles.EXPORT_LOGS):
             return process_response(
@@ -468,6 +475,8 @@ async def download_logs(
             filters['endpoint'] = endpoint
         if level:
             filters['level'] = level
+        if type:
+            filters['type'] = type
 
         export_result = await logging_service.export_logs(
             format=format,
@@ -492,7 +501,7 @@ async def download_logs(
         )
 
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -504,4 +513,4 @@ async def download_logs(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

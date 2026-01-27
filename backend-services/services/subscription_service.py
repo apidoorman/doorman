@@ -59,7 +59,7 @@ class SubscriptionService:
         """
         Get user subscriptions.
         """
-        logger.info(f'{request_id} | Getting subscriptions for: {username}')
+        logger.info(f'Getting subscriptions for: {username}')
 
         subscriptions = doorman_cache.get_cache('user_subscription_cache', username)
         if (
@@ -69,7 +69,7 @@ class SubscriptionService:
         ):
             subscriptions = subscriptions_collection.find_one({'username': username})
             if not subscriptions:
-                logger.info(f'{request_id} | No subscriptions found; returning empty list')
+                logger.info(f'No subscriptions found; returning empty list')
 
                 return ResponseModel(status_code=200, response={'apis': []}).dict()
             if subscriptions.get('_id'):
@@ -78,7 +78,7 @@ class SubscriptionService:
             doorman_cache.set_cache('user_subscription_cache', username, subscriptions)
 
         apis = subscriptions.get('apis', []) if isinstance(subscriptions, dict) else []
-        logger.info(f'{request_id} | Subscriptions retrieved successfully')
+        logger.info(f'Subscriptions retrieved successfully')
         return ResponseModel(
             status_code=200, response={'apis': apis, 'subscriptions': {'apis': apis}}
         ).dict()
@@ -89,11 +89,11 @@ class SubscriptionService:
         Subscribe to an API.
         """
         logger.info(
-            f'{request_id} | Subscribing {data.username} to API: {data.api_name}/{data.api_version}'
+            f'Subscribing {data.username} to API: {data.api_name}/{data.api_version}'
         )
         api = await SubscriptionService.api_exists(data.api_name, data.api_version)
         if not api:
-            logger.error(f'{request_id} | Subscription failed with code SUB003')
+            logger.error(f'Subscription failed with code SUB003')
             return ResponseModel(
                 status_code=404,
                 response_headers={'request_id': request_id},
@@ -115,7 +115,7 @@ class SubscriptionService:
             'apis' in user_subscriptions
             and f'{data.api_name}/{data.api_version}' in user_subscriptions['apis']
         ):
-            logger.error(f'{request_id} | Subscription failed with code SUB004')
+            logger.error(f'Subscription failed with code SUB004')
             return ResponseModel(
                 status_code=400,
                 response_headers={'request_id': request_id},
@@ -133,7 +133,7 @@ class SubscriptionService:
             del user_subscriptions['_id']
         if user_subscriptions:
             doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
-        logger.info(f'{request_id} | Subscription successful')
+        logger.info(f'Subscription successful')
         return ResponseModel(
             status_code=200, response={'message': 'Successfully subscribed to the API'}
         ).dict()
@@ -144,7 +144,7 @@ class SubscriptionService:
         Unsubscribe from an API.
         """
         logger.info(
-            f'{request_id} | Unsubscribing {data.username} from API: {data.api_name}/{data.api_version}'
+            f'Unsubscribing {data.username} from API: {data.api_name}/{data.api_version}'
         )
         api = await SubscriptionService.api_exists(data.api_name, data.api_version)
         if not api:
@@ -163,7 +163,7 @@ class SubscriptionService:
             not user_subscriptions
             or f'{data.api_name}/{data.api_version}' not in user_subscriptions.get('apis', [])
         ):
-            logger.error(f'{request_id} | Unsubscription failed with code SUB006')
+            logger.error(f'Unsubscription failed with code SUB006')
             return ResponseModel(
                 status_code=400,
                 response_headers={'request_id': request_id},
@@ -180,7 +180,7 @@ class SubscriptionService:
             del user_subscriptions['_id']
         if user_subscriptions:
             doorman_cache.set_cache('user_subscription_cache', data.username, user_subscriptions)
-        logger.info(f'{request_id} | Unsubscription successful')
+        logger.info(f'Unsubscription successful')
         return ResponseModel(
             status_code=200, response={'message': 'Successfully unsubscribed from the API'}
         ).dict()
