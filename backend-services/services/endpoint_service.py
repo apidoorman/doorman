@@ -35,7 +35,9 @@ class EndpointService:
             + ' '
             + data.endpoint_uri
         )
-        cache_key = f'/{data.endpoint_method}/{data.api_name}/{data.api_version}/{data.endpoint_uri}'.replace(
+        # Use client_uri for routing if provided, otherwise use endpoint_uri
+        routing_uri = data.client_uri if data.client_uri else data.endpoint_uri
+        cache_key = f'/{data.endpoint_method}/{data.api_name}/{data.api_version}/{routing_uri}'.replace(
             '//', '/'
         )
         if doorman_cache.get_cache('endpoint_cache', cache_key) or endpoint_collection.find_one(
@@ -53,6 +55,27 @@ class EndpointService:
                 error_code='END001',
                 error_message='Endpoint already exists for the requested API name, version and URI',
             ).dict()
+        # Check if client_uri conflicts with another endpoint's client_uri or endpoint_uri
+        if data.client_uri:
+            conflict = endpoint_collection.find_one(
+                {
+                    'endpoint_method': data.endpoint_method,
+                    'api_name': data.api_name,
+                    'api_version': data.api_version,
+                    '$or': [
+                        {'client_uri': data.client_uri},
+                        {'endpoint_uri': data.client_uri, 'client_uri': None}
+                    ]
+                }
+            )
+            if conflict:
+                logger.error(request_id + ' | Endpoint creation failed - client_uri conflict')
+                return ResponseModel(
+                    status_code=400,
+                    response_headers={'request_id': request_id},
+                    error_code='END001',
+                    error_message='Client URI conflicts with an existing endpoint',
+                ).dict()
         # Resolve API ID from cache using canonical key "/{name}/{version}"
         data.api_id = doorman_cache.get_cache(
             'api_id_cache', f'/{data.api_name}/{data.api_version}'
@@ -115,11 +138,11 @@ class EndpointService:
                 # Validate path stays within proto directory
                 proto_dir_resolved = proto_dir.resolve()
                 if not str(proto_path).startswith(str(proto_dir_resolved)):
-                    logger.error(f'{request_id} | Invalid proto path detected')
+                    logger.error(f'Invalid proto path detected')
                     raise ValueError('Proto path must be within proto directory')
                 # Additional validation before file operations
                 if not str(proto_path).startswith(str(project_root.resolve())):
-                    logger.error(f'{request_id} | Proto path outside project root')
+                    logger.error(f'Proto path outside project root')
                     raise ValueError('Proto path must be within project root')
                 if not proto_path.exists():
                     proto_content = (
@@ -152,7 +175,7 @@ class EndpointService:
                 )
                 if code != 0:
                     logger.warning(
-                        f'{request_id} | Pre-gen gRPC stubs returned {code} for {module_base}'
+                        f'Pre-gen gRPC stubs returned {code} for {module_base}'
                     )
                 try:
                     init_path = (generated_dir / '__init__.py').resolve()
@@ -162,7 +185,7 @@ class EndpointService:
                 except Exception:
                     pass
         except Exception as _e:
-            logger.debug(f'{request_id} | Skipping pre-gen gRPC stubs: {_e}')
+            logger.debug(f'Skipping pre-gen gRPC stubs: {_e}')
         return ResponseModel(
             status_code=201,
             response_headers={'request_id': request_id},
@@ -215,6 +238,28 @@ class EndpointService:
                 error_code='END006',
                 error_message='API method, name, version and URI cannot be updated',
             ).dict()
+        # Check if client_uri update conflicts with existing endpoints
+        if data.client_uri and data.client_uri != endpoint.get('client_uri'):
+            conflict = endpoint_collection.find_one(
+                {
+                    'endpoint_method': endpoint_method,
+                    'api_name': api_name,
+                    'api_version': api_version,
+                    'endpoint_uri': {'$ne': endpoint_uri},  # Exclude current endpoint
+                    '$or': [
+                        {'client_uri': data.client_uri},
+                        {'endpoint_uri': data.client_uri, 'client_uri': None}
+                    ]
+                }
+            )
+            if conflict:
+                logger.error(request_id + ' | Endpoint update failed - client_uri conflict')
+                return ResponseModel(
+                    status_code=400,
+                    response_headers={'request_id': request_id},
+                    error_code='END006',
+                    error_message='Client URI conflicts with an existing endpoint',
+                ).dict()
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
         if not_null_data:
             update_result = endpoint_collection.update_one(

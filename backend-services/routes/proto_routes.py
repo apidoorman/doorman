@@ -273,8 +273,8 @@ async def upload_proto_file(
             pass
         payload = await auth_required(request)
         username = payload.get('sub')
-        logger.info(f'{request_id} | Username: {username}')
-        logger.info(f'{request_id} | Endpoint: POST /proto/{api_name}/{api_version}')
+        logger.info(f'Username: {username}')
+        logger.info(f'Endpoint: POST /proto/{api_name}/{api_version}')
         if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return process_response(
                 ResponseModel(
@@ -393,7 +393,7 @@ async def upload_proto_file(
                 ],
                 check=True,
             )
-            logger.info(f'{request_id} | Proto compiled: src={compile_input} out={generated_dir}')
+            logger.info(f'Proto compiled: src={compile_input} out={generated_dir}')
             init_path = (generated_dir / '__init__.py').resolve()
             if not validate_path(generated_dir, init_path):
                 raise ValueError('Invalid init path')
@@ -435,7 +435,7 @@ async def upload_proto_file(
                 'rest',
             )
         except subprocess.CalledProcessError as e:
-            logger.error(f'{request_id} | Failed to generate gRPC code: {str(e)}')
+            logger.error(f'Failed to generate gRPC code: {str(e)}')
             return process_response(
                 ResponseModel(
                     status_code=500,
@@ -446,7 +446,7 @@ async def upload_proto_file(
                 'rest',
             )
     except HTTPException as e:
-        logger.error(f'{request_id} | Path validation error: {str(e)}')
+        logger.error(f'Path validation error: {str(e)}')
         return process_response(
             ResponseModel(
                 status_code=e.status_code,
@@ -458,7 +458,7 @@ async def upload_proto_file(
         )
     except Exception as e:
         logger.error(
-            f'{request_id} | Error uploading proto file: {type(e).__name__}: {str(e)}',
+            f'Error uploading proto file: {type(e).__name__}: {str(e)}',
             exc_info=True,
         )
         return process_response(
@@ -471,7 +471,7 @@ async def upload_proto_file(
             'rest',
         )
     finally:
-        logger.info(f'{request_id} | Total time: {time.time() * 1000 - start_time}ms')
+        logger.info(f'Total time: {time.time() * 1000 - start_time}ms')
 
 
 """
@@ -502,8 +502,8 @@ async def get_proto_file(api_name: str, api_version: str, request: Request):
     start_time = time.time() * 1000
     payload = await auth_required(request)
     username = payload.get('sub')
-    logger.info(f'{request_id} | Username: {username} | From: {request.client.host}')
-    logger.info(f'{request_id} | Endpoint: {request.method} {request.url.path}')
+    logger.info(f'Username: {username} | From: {request.client.host}')
+    logger.info(f'Endpoint: {request.method} {request.url.path}')
     try:
         if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return process_response(
@@ -539,7 +539,7 @@ async def get_proto_file(api_name: str, api_version: str, request: Request):
             'rest',
         )
     except HTTPException as e:
-        logger.error(f'{request_id} | Path validation error: {str(e)}')
+        logger.error(f'Path validation error: {str(e)}')
         return process_response(
             ResponseModel(
                 status_code=e.status_code,
@@ -550,7 +550,7 @@ async def get_proto_file(api_name: str, api_version: str, request: Request):
             'rest',
         )
     except Exception as e:
-        logger.error(f'{request_id} | Failed to get proto file: {str(e)}')
+        logger.error(f'Failed to get proto file: {str(e)}')
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -561,7 +561,7 @@ async def get_proto_file(api_name: str, api_version: str, request: Request):
             'rest',
         )
     finally:
-        logger.info(f'{request_id} | Total time: {time.time() * 1000 - start_time}ms')
+        logger.info(f'Total time: {time.time() * 1000 - start_time}ms')
 
 
 """
@@ -596,9 +596,9 @@ async def update_proto_file(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return process_response(
                 ResponseModel(
@@ -670,7 +670,7 @@ async def update_proto_file(
                 check=True,
             )
         except subprocess.CalledProcessError as e:
-            logger.error(f'{request_id} | Failed to generate gRPC code: {str(e)}')
+            logger.error(f'Failed to generate gRPC code: {str(e)}')
             return process_response(
                 ResponseModel(
                     status_code=500,
@@ -689,7 +689,7 @@ async def update_proto_file(
             'rest',
         )
     except HTTPException as e:
-        logger.error(f'{request_id} | Path validation error: {str(e)}')
+        logger.error(f'Path validation error: {str(e)}')
         return process_response(
             ResponseModel(
                 status_code=e.status_code,
@@ -700,7 +700,7 @@ async def update_proto_file(
             'rest',
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -712,7 +712,7 @@ async def update_proto_file(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -745,9 +745,9 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return process_response(
                 ResponseModel(
@@ -766,7 +766,7 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
             if not validate_path(PROJECT_ROOT, proto_path):
                 raise ValueError('Unsafe proto file path detected')
             proto_path.unlink()
-            logger.info(f'{request_id} | Deleted proto file: {proto_path}')
+            logger.info(f'Deleted proto file: {proto_path}')
         generated_files = [
             f'{key}_pb2.py',
             f'{key}_pb2.pyc',
@@ -777,12 +777,12 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
             file_path = (generated_dir / file).resolve()
             if not validate_path(generated_dir, file_path):
                 logger.warning(
-                    f'{request_id} | Unsafe file path detected: {file_path}. Skipping deletion.'
+                    f'Unsafe file path detected: {file_path}. Skipping deletion.'
                 )
                 continue
             if file_path.exists():
                 file_path.unlink()
-                logger.info(f'{request_id} | Deleted generated file: {file_path}')
+                logger.info(f'Deleted generated file: {file_path}')
         return process_response(
             ResponseModel(
                 status_code=200,
@@ -792,7 +792,7 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
             'rest',
         )
     except ValueError as e:
-        logger.error(f'{request_id} | Path validation error: {str(e)}')
+        logger.error(f'Path validation error: {str(e)}')
         return process_response(
             ResponseModel(
                 status_code=400,
@@ -803,7 +803,7 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
             'rest',
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -815,4 +815,4 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

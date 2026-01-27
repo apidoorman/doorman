@@ -108,7 +108,7 @@ async def status(request: Request):
                 ).dict(),
                 'rest',
             )
-        logger.error(f'{request_id} | Status check failed: {str(e)}')
+        logger.error(f'Status check failed: {str(e)}')
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -120,7 +120,7 @@ async def status(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Status check time {end_time - start_time}ms')
+        logger.info(f'Status check time {end_time - start_time}ms')
 
 
 @gateway_router.get('/health', description='Public health probe', include_in_schema=False)
@@ -238,7 +238,7 @@ async def clear_all_caches(request: Request):
         return resp
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Clear caches took {end_time - start_time:.2f}ms')
+        logger.info(f'Clear caches took {end_time - start_time:.2f}ms')
 
 
 # Handle CORS preflight without requiring auth
@@ -282,6 +282,7 @@ async def gateway(request: Request, path: str):
     )
     start_time = time.time() * 1000
     try:
+        logger.info(f"Endpoint: {request.method} {str(request.url.path)}")
         parts = [p for p in (path or '').split('/') if p]
         api_public = False
         api_auth_required = True
@@ -296,7 +297,7 @@ async def gateway(request: Request, path: str):
             )
             try:
                 logger.debug(
-                    f"{request_id} | REST route resolve: path={path} key1={key1} key2={key2} api_key={'set' if api_key else 'none'}"
+                    f"REST route resolve: path={path} key1={key1} key2={key2} api_key={'set' if api_key else 'none'}"
                 )
             except Exception:
                 pass
@@ -387,17 +388,18 @@ async def gateway(request: Request, path: str):
             else:
                 pass
         logger.info(
-            f'{request_id} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
+            f'Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
         )
-        logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
-        )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        if username:
+            logger.info(
+                f'Username: {username} | From: {request.client.host}:{request.client.port}'
+            )
         return process_response(
             await GatewayService.rest_gateway(username, request, request_id, start_time, path),
             'rest',
         )
     except HTTPException as e:
+        logger.warning(f"Request failed (HTTP {e.status_code}): {e.detail}")
         return process_response(
             ResponseModel(
                 status_code=e.status_code,
@@ -408,7 +410,7 @@ async def gateway(request: Request, path: str):
             'rest',
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -420,7 +422,7 @@ async def gateway(request: Request, path: str):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 @gateway_router.get(
@@ -593,7 +595,7 @@ async def rest_preflight(request: Request, path: str):
         return StarletteResponse(status_code=204, headers={'request_id': request_id})
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -640,7 +642,7 @@ async def soap_gateway(request: Request, path: str):
             )
             try:
                 logger.debug(
-                    f"{request_id} | SOAP route resolve: path={path} key1={key1} key2={key2} api_key={'set' if api_key else 'none'}"
+                    f"SOAP route resolve: path={path} key1={key1} key2={key2} api_key={'set' if api_key else 'none'}"
                 )
             except Exception:
                 pass
@@ -693,12 +695,12 @@ async def soap_gateway(request: Request, path: str):
             else:
                 pass
         logger.info(
-            f'{request_id} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
+            f'Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
         )
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return process_response(
             await GatewayService.soap_gateway(username, request, request_id, start_time, path),
             'soap',
@@ -714,7 +716,7 @@ async def soap_gateway(request: Request, path: str):
             'rest',
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -726,7 +728,7 @@ async def soap_gateway(request: Request, path: str):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -795,7 +797,7 @@ async def soap_preflight(request: Request, path: str):
         return StarletteResponse(status_code=204, headers={'request_id': request_id})
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -891,12 +893,12 @@ async def graphql_gateway(request: Request, path: str):
             else:
                 pass
         logger.info(
-            f'{request_id} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
+            f'Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
         )
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if api and api.get('validation_enabled'):
             body = await request.json()
             query = body.get('query')
@@ -928,7 +930,7 @@ async def graphql_gateway(request: Request, path: str):
             'rest',
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -940,7 +942,7 @@ async def graphql_gateway(request: Request, path: str):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -1012,7 +1014,7 @@ async def graphql_preflight(request: Request, path: str):
         return StarletteResponse(status_code=204, headers={'request_id': request_id})
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 @gateway_router.api_route(
@@ -1085,7 +1087,7 @@ async def grpc_preflight(request: Request, path: str):
         return StarletteResponse(status_code=204, headers={'request_id': request_id})
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -1183,12 +1185,12 @@ async def grpc_gateway(request: Request, path: str):
             else:
                 pass
         logger.info(
-            f'{request_id} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
+            f'Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
         )
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if api and api.get('validation_enabled'):
             body = await request.json()
             request_data = json.loads(body.get('data', '{}'))
@@ -1226,7 +1228,7 @@ async def grpc_gateway(request: Request, path: str):
             'rest',
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -1238,4 +1240,4 @@ async def grpc_gateway(request: Request, path: str):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

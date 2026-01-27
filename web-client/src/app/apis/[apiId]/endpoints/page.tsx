@@ -13,6 +13,7 @@ interface EndpointItem {
   api_version: string
   endpoint_method: string
   endpoint_uri: string
+  client_uri?: string
   endpoint_description?: string
   endpoint_id?: string
   endpoint_servers?: string[]
@@ -33,6 +34,10 @@ export default function ApiEndpointsPage() {
   const [sortBy, setSortBy] = useState<'method' | 'uri' | 'servers'>('method')
   const [working, setWorking] = useState<Record<string, boolean>>({})
   const [epNewServer, setEpNewServer] = useState<Record<string, string>>({})
+  const [editingDescription, setEditingDescription] = useState<string | null>(null)
+  const [editedDescriptionValue, setEditedDescriptionValue] = useState('')
+  const [editingClientUri, setEditingClientUri] = useState<string | null>(null)
+  const [editedClientUriValue, setEditedClientUriValue] = useState('')
 
   type EpValidation = {
     loading: boolean
@@ -116,7 +121,7 @@ export default function ApiEndpointsPage() {
       setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, exists: true } }))
       setSuccess('Validation saved')
       setTimeout(() => setSuccess(null), 2000)
-    } catch (e:any) {
+    } catch (e: any) {
       setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, error: e?.message || 'Failed to save validation' } }))
     }
   }
@@ -144,7 +149,7 @@ export default function ApiEndpointsPage() {
       setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, exists: true } }))
       setSuccess('Validation created')
       setTimeout(() => setSuccess(null), 2000)
-    } catch (e:any) {
+    } catch (e: any) {
       setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, error: e?.message || 'Failed to create validation' } }))
     }
   }
@@ -168,7 +173,7 @@ export default function ApiEndpointsPage() {
       setValidationByEndpoint(prev => ({ ...prev, [eid]: { loading: false, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: null } }))
       setSuccess('Validation deleted')
       setTimeout(() => setSuccess(null), 2000)
-    } catch (e:any) {
+    } catch (e: any) {
       setValidationByEndpoint(prev => ({ ...prev, [eid]: { ...prev[eid], saving: false, error: e?.message || 'Failed to delete validation' } }))
     }
   }
@@ -181,7 +186,7 @@ export default function ApiEndpointsPage() {
         setApiName(parsed.api_name || '')
         setApiVersion(parsed.api_version || '')
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const loadEndpoints = async () => {
@@ -191,7 +196,7 @@ export default function ApiEndpointsPage() {
       if (!apiName || !apiVersion) {
         const data = await getJson<any>(`${SERVER_URL}/platform/api/all`)
         const list = Array.isArray(data) ? data : (data.apis || data.response?.apis || [])
-        const found = (list || []).find((a:any) => String(a.api_id) === String(apiId))
+        const found = (list || []).find((a: any) => String(a.api_id) === String(apiId))
         if (found) {
           setApiName(found.api_name || '')
           setApiVersion(found.api_version || '')
@@ -208,11 +213,11 @@ export default function ApiEndpointsPage() {
     }
     try {
       await attempt()
-    } catch (e:any) {
+    } catch (e: any) {
       try {
         await new Promise(r => setTimeout(r, 200))
         await attempt()
-      } catch (err:any) {
+      } catch (err: any) {
         setError(err?.message || 'Failed to load endpoints')
       }
     } finally {
@@ -261,13 +266,21 @@ export default function ApiEndpointsPage() {
     try {
       const { delJson } = await import('@/utils/api')
       await delJson(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`)
-      await loadEndpoints()
-      setSuccess('Endpoint deleted')
-      setTimeout(() => setSuccess(null), 2000)
+
+      // Close modal and clear state first
       setShowDeleteModal(false)
       setDeleteConfirmation('')
       setEndpointToDelete(null)
-    } catch (e:any) {
+
+      // Optimistically remove from state immediately
+      setAllEndpoints(prev => prev.filter(item => keyFor(item) !== k))
+      setEndpoints(prev => prev.filter(item => keyFor(item) !== k))
+
+      // Then reload from server to ensure consistency
+      await loadEndpoints()
+      setSuccess('Endpoint deleted')
+      setTimeout(() => setSuccess(null), 2000)
+    } catch (e: any) {
       setError(e?.message || 'Failed to delete endpoint')
     } finally {
       setWorking(prev => ({ ...prev, [k]: false }))
@@ -291,7 +304,7 @@ export default function ApiEndpointsPage() {
       await loadEndpoints()
       setSuccess('Endpoint servers updated')
       setTimeout(() => setSuccess(null), 2000)
-    } catch (e:any) {
+    } catch (e: any) {
       setError(e?.message || 'Failed to update endpoint')
     } finally {
       setWorking(prev => ({ ...prev, [k]: false }))
@@ -311,6 +324,71 @@ export default function ApiEndpointsPage() {
   const removeEndpointServer = async (ep: EndpointItem, index: number) => {
     const next = (ep.endpoint_servers || []).filter((_, i) => i !== index)
     await saveEndpointServers(ep, next)
+  }
+
+  const startEditDescription = (ep: EndpointItem) => {
+    const k = keyFor(ep)
+    setEditingDescription(k)
+    setEditedDescriptionValue(ep.endpoint_description || '')
+  }
+
+  const cancelEditDescription = () => {
+    setEditingDescription(null)
+    setEditedDescriptionValue('')
+  }
+
+  const saveDescription = async (ep: EndpointItem) => {
+    const k = keyFor(ep)
+    setWorking(prev => ({ ...prev, [k]: true }))
+    setError(null)
+    try {
+      const { putJson } = await import('@/utils/api')
+      await putJson(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`, { endpoint_description: editedDescriptionValue })
+      await loadEndpoints()
+      setSuccess('Endpoint description updated')
+      setTimeout(() => setSuccess(null), 2000)
+      setEditingDescription(null)
+      setEditedDescriptionValue('')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update endpoint description')
+    } finally {
+      setWorking(prev => ({ ...prev, [k]: false }))
+    }
+  }
+
+  const startEditClientUri = (ep: EndpointItem) => {
+    const k = keyFor(ep)
+    setEditingClientUri(k)
+    setEditedClientUriValue(ep.client_uri || '')
+  }
+
+  const cancelEditClientUri = () => {
+    setEditingClientUri(null)
+    setEditedClientUriValue('')
+  }
+
+  const saveClientUri = async (ep: EndpointItem) => {
+    const k = keyFor(ep)
+    // Basic validation
+    if (editedClientUriValue && !editedClientUriValue.startsWith('/')) {
+      setError('Client URI must start with /')
+      return
+    }
+    setWorking(prev => ({ ...prev, [k]: true }))
+    setError(null)
+    try {
+      const { putJson } = await import('@/utils/api')
+      await putJson(`${SERVER_URL}/platform/endpoint/${encodeURIComponent(ep.endpoint_method)}/${encodeURIComponent(ep.api_name)}/${encodeURIComponent(ep.api_version)}/${encodeURIComponent(ep.endpoint_uri.replace(/^\//, ''))}`, { client_uri: editedClientUriValue || null })
+      await loadEndpoints()
+      setSuccess('Client URI updated')
+      setTimeout(() => setSuccess(null), 2000)
+      setEditingClientUri(null)
+      setEditedClientUriValue('')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update client URI')
+    } finally {
+      setWorking(prev => ({ ...prev, [k]: false }))
+    }
   }
 
   return (
@@ -375,7 +453,8 @@ export default function ApiEndpointsPage() {
                 <tr>
                   <th></th>
                   <th>Method</th>
-                  <th>URI</th>
+                  <th>URI (Backend)</th>
+                  <th>Client URI</th>
                   <th>Description</th>
                   <th>Routing</th>
                   <th>Servers</th>
@@ -406,8 +485,104 @@ export default function ApiEndpointsPage() {
                           <td>
                             <span className={`badge ${ep.endpoint_method === 'GET' ? 'badge-success' : ep.endpoint_method === 'POST' ? 'badge-primary' : 'badge-warning'}`}>{ep.endpoint_method}</span>
                           </td>
-                          <td className="font-mono text-sm">{ep.endpoint_uri}</td>
-                          <td className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">{ep.endpoint_description || '-'}</td>
+                          <td className="font-mono text-sm" title="Backend URI">{ep.endpoint_uri}</td>
+                          <td className="text-sm">
+                            {editingClientUri === k ? (
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  className="input input-sm min-w-[150px] font-mono text-xs"
+                                  value={editedClientUriValue}
+                                  onChange={(e) => setEditedClientUriValue(e.target.value)}
+                                  placeholder="/public/path"
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter') saveClientUri(ep)
+                                    else if (e.key === 'Escape') cancelEditClientUri()
+                                  }}
+                                  autoFocus
+                                  disabled={saving}
+                                />
+                                <button onClick={() => saveClientUri(ep)} disabled={saving} className="btn btn-success btn-xs" title="Save">✓</button>
+                                <button onClick={cancelEditClientUri} disabled={saving} className="btn btn-ghost btn-xs" title="Cancel">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 group min-h-[20px]">
+                                <span className={`font-mono text-sm ${ep.client_uri ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'}`}>
+                                  {ep.client_uri || '-'}
+                                </span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); startEditClientUri(ep) }}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                  title="Edit Client URI"
+                                >
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                          <td className="text-sm text-gray-600 dark:text-gray-400 max-w-xs">
+                            {editingDescription === k ? (
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  className="input input-sm flex-1 min-w-[200px]"
+                                  value={editedDescriptionValue}
+                                  onChange={(e) => setEditedDescriptionValue(e.target.value)}
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                      saveDescription(ep)
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditDescription()
+                                    }
+                                  }}
+                                  autoFocus
+                                  disabled={saving}
+                                />
+                                <button
+                                  onClick={() => saveDescription(ep)}
+                                  disabled={saving}
+                                  className="btn btn-success btn-sm"
+                                  title="Save"
+                                >
+                                  {saving ? (
+                                    <div className="spinner h-3 w-3"></div>
+                                  ) : (
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={cancelEditDescription}
+                                  disabled={saving}
+                                  className="btn btn-ghost btn-sm"
+                                  title="Cancel"
+                                >
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 group">
+                                <span className="truncate">{ep.endpoint_description || '-'}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    startEditDescription(ep)
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                  title="Edit description"
+                                >
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            )}
+                          </td>
                           <td>
                             <span className={`badge ${hasOverride ? 'badge-primary' : 'badge-gray'}`} title="Routing precedence: client-key → endpoint → API">
                               {hasOverride ? 'Endpoint override' : 'API default'}
@@ -428,12 +603,9 @@ export default function ApiEndpointsPage() {
                                       <input
                                         type="checkbox"
                                         checked={hasOverride}
-                                        onChange={async (e) => {
-                                          const on = e.target.checked
-                                          if (!on) {
-                                            await saveEndpointServers(ep, [])
-                                          }
-                                        }}
+                                        disabled={true}
+                                        className="cursor-not-allowed"
+                                        title="This setting is managed on the Edit API page"
                                       />
                                       <span className="text-sm text-gray-700 dark:text-gray-300">Use endpoint servers</span>
                                     </div>
@@ -470,7 +642,7 @@ export default function ApiEndpointsPage() {
                                             type="checkbox"
                                             checked={!!validationByEndpoint[ep.endpoint_id]?.enabled}
                                             onChange={(e) => {
-                                              const v = validationByEndpoint[ep.endpoint_id!] || { loading:false, exists:false, enabled:false, schemaText:'{\n}\n', saving:false, error:null }
+                                              const v = validationByEndpoint[ep.endpoint_id!] || { loading: false, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: null }
                                               setValidationByEndpoint(prev => ({ ...prev, [ep.endpoint_id!]: { ...v, enabled: e.target.checked } }))
                                             }}
                                             onClick={(e) => e.stopPropagation()}
@@ -488,7 +660,7 @@ export default function ApiEndpointsPage() {
                                           className="input font-mono text-xs h-32"
                                           value={validationByEndpoint[ep.endpoint_id!]?.schemaText || '{\n}\n'}
                                           onChange={(e) => {
-                                            const v = validationByEndpoint[ep.endpoint_id!] || { loading:false, exists:false, enabled:false, schemaText:'{\n}\n', saving:false, error:null }
+                                            const v = validationByEndpoint[ep.endpoint_id!] || { loading: false, exists: false, enabled: false, schemaText: '{\n}\n', saving: false, error: null }
                                             setValidationByEndpoint(prev => ({ ...prev, [ep.endpoint_id!]: { ...v, schemaText: e.target.value } }))
                                           }}
                                           onFocus={() => ensureValidationLoaded(ep)}

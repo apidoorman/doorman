@@ -267,7 +267,25 @@ class EnhancedMetricsStore:
         # Count unique users
         unique_users = set()
         for bucket in buckets:
-            unique_users.update(bucket.unique_users)
+            # EnhancedMinuteBucket has unique_users as set
+            if hasattr(bucket, 'unique_users') and isinstance(bucket.unique_users, set):
+                unique_users.update(bucket.unique_users)
+            # AggregatedMetrics has unique_users_set
+            elif hasattr(bucket, 'unique_users_set') and isinstance(bucket.unique_users_set, set):
+                unique_users.update(bucket.unique_users_set)
+            # MinuteBucket has user_counts keys
+            elif hasattr(bucket, 'user_counts') and bucket.user_counts:
+                unique_users.update(bucket.user_counts.keys())
+
+        unique_users_count = len(unique_users)
+        if unique_users_count == 0 and buckets:
+            # Fallback: sum counts if we have no actual user identifiers
+            unique_users_count = sum(
+                getattr(b, 'unique_users', 0)
+                if not isinstance(getattr(b, 'unique_users', 0), (set, list))
+                else len(getattr(b, 'unique_users', []))
+                for b in buckets
+            )
 
         # Aggregate status counts
         status_distribution: dict[str, int] = defaultdict(int)
@@ -373,7 +391,7 @@ class EnhancedMetricsStore:
             percentiles=percentiles,
             total_bytes_in=total_bytes_in,
             total_bytes_out=total_bytes_out,
-            unique_users=len(unique_users),
+            unique_users=unique_users_count,
             series=series,
             top_apis=sorted(api_counts.items(), key=lambda x: x[1], reverse=True)[:10],
             top_users=sorted(user_counts.items(), key=lambda x: x[1], reverse=True)[:10],
@@ -387,7 +405,24 @@ class EnhancedMetricsStore:
         """
         range_to_minutes = {'1h': 60, '24h': 60 * 24, '7d': 60 * 24 * 7, '30d': 60 * 24 * 30}
         minutes = range_to_minutes.get(range_key, 60 * 24)
-        buckets: list[EnhancedMinuteBucket] = list(self._buckets)[-minutes:]
+        
+        # Use simple deque slice if within memory range
+        if minutes <= self._max_minutes:
+            buckets: list[EnhancedMinuteBucket] = list(self._buckets)[-minutes:]
+        else:
+            # Require historical data from aggregator
+            end_ts = int(time.time())
+            start_ts = end_ts - (minutes * 60)
+            
+            # Fetch aggregated buckets
+            # Note: returns AggregatedMetrics, not EnhancedMinuteBucket
+            # but they share key attributes (count, error_count, total_ms, etc.)
+            buckets = analytics_aggregator.get_buckets_for_range(start_ts, end_ts)
+            
+            # If nothing returned, fallback to in-memory (better than nothing)
+            if not buckets:
+                buckets = list(self._buckets)
+
         series = []
 
         if group == 'day':
@@ -403,7 +438,10 @@ class EnhancedMetricsStore:
                 }
             )
             for b in buckets:
-                day_ts = int((b.start_ts // 86400) * 86400)
+                # Handle both EnhancedMinuteBucket and AggregatedMetrics
+                # AggregatedMetrics might be daily or hourly, but we just group by day timestamp here
+                ts = getattr(b, 'start_ts')
+                day_ts = int((ts // 86400) * 86400)
                 d = day_map[day_ts]
                 d['count'] += b.count
                 d['error_count'] += b.error_count
@@ -453,7 +491,33 @@ class EnhancedMetricsStore:
         total = self.total_requests
         avg_total_ms = (self.total_ms / total) if total else 0.0
         status = {str(k): v for k, v in self.status_counts.items()}
+        
+        unique_users = set()
+        for b in buckets:
+            # EnhancedMinuteBucket has unique_users as set
+            if hasattr(b, 'unique_users') and isinstance(b.unique_users, set):
+                unique_users.update(b.unique_users)
+            
+            # AggregatedMetrics has unique_users_set
+            elif hasattr(b, 'unique_users_set') and isinstance(b.unique_users_set, set):
+                unique_users.update(b.unique_users_set)
+                
+            # Fallback to user_counts keys (MinuteBucket compatibility)
+            elif getattr(b, 'user_counts', None):
+                unique_users.update(b.user_counts.keys())
+
+        unique_users_count = len(unique_users)
+        if unique_users_count == 0 and buckets:
+            # Fallback: sum counts if sets are not available
+            unique_users_count = sum(
+                getattr(b, 'unique_users', 0)
+                if not isinstance(getattr(b, 'unique_users', 0), (set, list))
+                else len(getattr(b, 'unique_users', []))
+                for b in buckets
+            )
+
         return {
+            'unique_users': unique_users_count,
             'total_requests': total,
             'avg_response_ms': avg_total_ms,
             'total_bytes_in': self.total_bytes_in,
@@ -466,6 +530,7 @@ class EnhancedMetricsStore:
                 :10
             ],
             'top_apis': sorted(self.api_counts.items(), key=lambda kv: kv[1], reverse=True)[:10],
+            'buckets': [b.to_dict() for b in list(self._buckets)],
         }
 
     def save_to_file(self, path: str) -> None:
@@ -484,6 +549,9 @@ class EnhancedMetricsStore:
                 'total_ms': self.total_ms,
                 'total_bytes_in': self.total_bytes_in,
                 'total_bytes_out': self.total_bytes_out,
+                'status_counts': dict(self.status_counts),
+                'username_counts': dict(self.username_counts),
+                'api_counts': dict(self.api_counts),
                 'buckets': [b.to_dict() for b in list(self._buckets)],
             }
             with open(tmp, 'w', encoding='utf-8') as f:
@@ -492,11 +560,41 @@ class EnhancedMetricsStore:
         except Exception:
             pass
 
+    def load_dict(self, data: dict) -> None:
+        """Populate store from dictionary."""
+        try:
+            self.total_requests = int(data.get('total_requests', 0))
+            self.total_ms = float(data.get('total_ms', 0.0))
+            self.total_bytes_in = int(data.get('total_bytes_in', 0))
+            self.total_bytes_out = int(data.get('total_bytes_out', 0))
+            
+            self.status_counts = defaultdict(int, data.get('status_counts') or {})
+            self.username_counts = defaultdict(int, data.get('username_counts') or {})
+            self.api_counts = defaultdict(int, data.get('api_counts') or {})
+            
+            self._buckets.clear()
+            for bd in data.get('buckets', []):
+                try:
+                    self._buckets.append(EnhancedMinuteBucket.from_dict(bd))
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
     def load_from_file(self, path: str) -> None:
         """Load metrics from file."""
-        # Note: Simplified version - full implementation would reconstruct
-        # EnhancedMinuteBucket objects from saved data
-        pass
+        try:
+            if not os.path.exists(path):
+                return
+            
+            import json
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
+            
+            if isinstance(data, dict):
+                self.load_dict(data)
+        except Exception:
+            pass
 
 
 # Global enhanced metrics store instance

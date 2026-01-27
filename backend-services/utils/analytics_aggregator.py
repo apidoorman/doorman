@@ -186,6 +186,7 @@ class AnalyticsAggregator:
             status_counts=dict(status_counts),
             api_counts=dict(api_counts),
             percentiles=percentiles,
+            unique_users_set=unique_users,
         )
 
     def _aggregate_aggregated_buckets(
@@ -214,8 +215,17 @@ class AnalyticsAggregator:
         # Ideally, we'd re-calculate from raw latencies, but those aren't stored in aggregated buckets
         weighted_percentiles = self._weighted_average_percentiles(buckets)
 
-        # Unique users: sum (may overcount, but acceptable for aggregated data)
-        unique_users = sum(b.unique_users for b in buckets)
+        # Unique users: merge sets if available, otherwise fallback to sum (imperfect but best effort)
+        unique_users_set = set()
+        has_sets = any(bool(b.unique_users_set) for b in buckets)
+        
+        if has_sets:
+            for b in buckets:
+                if b.unique_users_set:
+                    unique_users_set.update(b.unique_users_set)
+            unique_users_count = len(unique_users_set)
+        else:
+            unique_users_count = sum(b.unique_users for b in buckets)
 
         return AggregatedMetrics(
             start_ts=start_ts,
@@ -226,10 +236,11 @@ class AnalyticsAggregator:
             total_ms=total_ms,
             bytes_in=total_bytes_in,
             bytes_out=total_bytes_out,
-            unique_users=unique_users,
+            unique_users=unique_users_count,
             status_counts=dict(status_counts),
             api_counts=dict(api_counts),
             percentiles=weighted_percentiles,
+            unique_users_set=unique_users_set,
         )
 
     def _weighted_average_percentiles(
@@ -320,11 +331,31 @@ class AnalyticsAggregator:
 
     def load_dict(self, data: dict) -> None:
         """Load aggregator state from persistence."""
-        # Note: This is a simplified version. Full implementation would
-        # reconstruct AggregatedMetrics objects from dictionaries
         self._last_5min_aggregation = data.get('last_5min_aggregation', 0)
         self._last_hourly_aggregation = data.get('last_hourly_aggregation', 0)
         self._last_daily_aggregation = data.get('last_daily_aggregation', 0)
+        
+        # Restore buckets
+        self.five_minute_buckets.clear()
+        for b_data in data.get('five_minute_buckets', []):
+            try:
+                self.five_minute_buckets.append(AggregatedMetrics.from_dict(b_data))
+            except Exception:
+                continue
+                
+        self.hourly_buckets.clear()
+        for b_data in data.get('hourly_buckets', []):
+            try:
+                self.hourly_buckets.append(AggregatedMetrics.from_dict(b_data))
+            except Exception:
+                continue
+                
+        self.daily_buckets.clear()
+        for b_data in data.get('daily_buckets', []):
+            try:
+                self.daily_buckets.append(AggregatedMetrics.from_dict(b_data))
+            except Exception:
+                continue
 
 
 # Global aggregator instance

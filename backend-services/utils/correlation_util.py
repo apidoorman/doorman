@@ -40,12 +40,11 @@ def ensure_correlation_id() -> str:
 
 def log_with_correlation(level: str, message: str, **kwargs) -> None:
     """
-    Log a message with the correlation ID automatically prepended.
+    Log a message. The RequestIdFilter will automatically attach the ID.
     """
-    cid = get_correlation_id() or 'no-correlation-id'
-    log_message = f'{cid} | {message}'
+    # cid = get_correlation_id() or 'no-correlation-id' # handled by filter
     log_func = getattr(logger, level.lower(), logger.info)
-    log_func(log_message, **kwargs)
+    log_func(message, **kwargs)
 
 
 async def run_with_correlation(coro, correlation_id_value: str | None = None):
@@ -93,3 +92,19 @@ async def run_async_with_correlation(
     except Exception as e:
         log_with_correlation('error', f'Async task failed: {str(e)}', exc_info=True)
         raise
+
+
+class RequestIdFilter(logging.Filter):
+    """
+    Log filter that injects the current request/correlation ID into the log record.
+    This ensures that all logs, even those without explicit IDs, are tagged.
+    """
+
+    def filter(self, record):
+        cid = get_correlation_id()
+        # Always set request_id to avoid formatting errors
+        record.request_id = cid if cid else 'no-request-id'
+        
+        # We generally rely on the formatter to include the request_id.
+        # Prepending it here would cause duplication (e.g. "ID | ID | message").
+        return True

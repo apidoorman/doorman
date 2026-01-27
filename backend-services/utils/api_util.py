@@ -45,32 +45,43 @@ async def get_api_endpoints(api_id: str) -> list | None:
         endpoints_list = await db_find_list(endpoint_collection, {'api_id': api_id})
         if not endpoints_list:
             return None
-        endpoints = [
-            f'{endpoint.get("endpoint_method")}{endpoint.get("endpoint_uri")}'
-            for endpoint in endpoints_list
-        ]
+        endpoints = []
+        for endpoint in endpoints_list:
+            # Use client_uri if available for routing matching
+            uri = endpoint.get('client_uri') or endpoint.get('endpoint_uri')
+            endpoints.append(f'{endpoint.get("endpoint_method")}{uri}')
         doorman_cache.set_cache('api_endpoint_cache', api_id, endpoints)
     return endpoints
 
 
-async def get_endpoint(api: dict, method: str, endpoint_uri: str) -> dict | None:
-    """Return the endpoint document for a given API, method, and uri.
+async def get_endpoint(api: dict, method: str, routing_uri: str) -> dict | None:
+    """Return the endpoint document for a given API, method, and URI.
+    
+    Args:
+        api: API document
+        method: HTTP method
+        routing_uri: The URI requested by the client (matches client_uri or endpoint_uri)
 
     Uses the same cache key pattern as EndpointService to avoid duplicate queries.
     """
     api_name = api.get('api_name')
     api_version = api.get('api_version')
-    cache_key = f'/{method}/{api_name}/{api_version}/{endpoint_uri}'.replace('//', '/')
+    cache_key = f'/{method}/{api_name}/{api_version}/{routing_uri}'.replace('//', '/')
     endpoint = doorman_cache.get_cache('endpoint_cache', cache_key)
     if endpoint:
         return endpoint
+    
+    # Search for either client_uri or endpoint_uri matching the request
     doc = await db_find_one(
         endpoint_collection,
         {
             'api_name': api_name,
             'api_version': api_version,
-            'endpoint_uri': endpoint_uri,
             'endpoint_method': method,
+            '$or': [
+                {'client_uri': routing_uri},
+                {'endpoint_uri': routing_uri}
+            ]
         },
     )
     if not doc:

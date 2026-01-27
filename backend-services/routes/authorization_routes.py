@@ -62,8 +62,8 @@ async def authorization(request: Request):
         login_window = int(os.getenv('LOGIN_IP_RATE_WINDOW', '300'))
         rate_limit_info = await limit_by_ip(request, limit=login_limit, window=login_window)
 
-        logger.info(f'{request_id} | From: {request.client.host}:{request.client.port}')
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'From: {request.client.host}:{request.client.port}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         try:
             data = await request.json()
         except Exception:
@@ -168,7 +168,7 @@ async def authorization(request: Request):
 
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
             logger.warning(
-                f'{request_id} | SECURITY WARNING: Secure cookies disabled in production environment'
+                f'SECURITY WARNING: Secure cookies disabled in production environment'
             )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
@@ -181,7 +181,7 @@ async def authorization(request: Request):
             _samesite = 'lax'
         if _samesite == 'none' and not _secure:
             logger.warning(
-                f'{request_id} | COOKIE_SAMESITE=None requires Secure cookies; downgrading to Lax for non-HTTPS'
+                f'COOKIE_SAMESITE=None requires Secure cookies; downgrading to Lax for non-HTTPS'
             )
             _samesite = 'lax'
 
@@ -272,7 +272,7 @@ async def authorization(request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -283,7 +283,7 @@ async def authorization(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -317,7 +317,7 @@ async def register(request: Request):
         await limit_by_ip(request, limit=reg_limit, window=reg_window)
 
         logger.info(
-            f'{request_id} | Register request from: {request.client.host}:{request.client.port}'
+            f'Register request from: {request.client.host}:{request.client.port}'
         )
 
         try:
@@ -362,7 +362,7 @@ async def register(request: Request):
         return respond_rest(result)
 
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -373,7 +373,7 @@ async def register(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -398,9 +398,9 @@ async def admin_revoke_user_tokens(username: str, request: Request):
         payload = await auth_required(request)
         admin_user = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}'
+            f'Username: {admin_user} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(
                 ResponseModel(
@@ -421,7 +421,7 @@ async def admin_revoke_user_tokens(username: str, request: Request):
                     )
                 )
         except Exception as e:
-            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
+            logger.error(f'Admin check failed: {str(e)}', exc_info=True)
         revoke_all_for_user(username)
         return respond_rest(
             ResponseModel(
@@ -431,7 +431,7 @@ async def admin_revoke_user_tokens(username: str, request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -442,7 +442,7 @@ async def admin_revoke_user_tokens(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -467,9 +467,9 @@ async def admin_unrevoke_user_tokens(username: str, request: Request):
         payload = await auth_required(request)
         admin_user = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}'
+            f'Username: {admin_user} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(
                 ResponseModel(
@@ -490,7 +490,7 @@ async def admin_unrevoke_user_tokens(username: str, request: Request):
                     )
                 )
         except Exception as e:
-            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
+            logger.error(f'Admin check failed: {str(e)}', exc_info=True)
         unrevoke_all_for_user(username)
         return respond_rest(
             ResponseModel(
@@ -500,7 +500,7 @@ async def admin_unrevoke_user_tokens(username: str, request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -511,7 +511,7 @@ async def admin_unrevoke_user_tokens(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -536,9 +536,9 @@ async def admin_disable_user(username: str, request: Request):
         payload = await auth_required(request)
         admin_user = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}'
+            f'Username: {admin_user} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(
                 ResponseModel(
@@ -559,7 +559,7 @@ async def admin_disable_user(username: str, request: Request):
                     )
                 )
         except Exception as e:
-            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
+            logger.error(f'Admin check failed: {str(e)}', exc_info=True)
 
         await UserService.update_user(username, UpdateUserModel(active=False), request_id)
 
@@ -572,7 +572,7 @@ async def admin_disable_user(username: str, request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -583,7 +583,7 @@ async def admin_disable_user(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -608,9 +608,9 @@ async def admin_enable_user(username: str, request: Request):
         payload = await auth_required(request)
         admin_user = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}'
+            f'Username: {admin_user} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(
                 ResponseModel(
@@ -631,7 +631,7 @@ async def admin_enable_user(username: str, request: Request):
                     )
                 )
         except Exception as e:
-            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
+            logger.error(f'Admin check failed: {str(e)}', exc_info=True)
         await UserService.update_user(username, UpdateUserModel(active=True), request_id)
 
         return respond_rest(
@@ -642,7 +642,7 @@ async def admin_enable_user(username: str, request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -653,7 +653,7 @@ async def admin_enable_user(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -678,9 +678,9 @@ async def admin_user_status(username: str, request: Request):
         payload = await auth_required(request)
         admin_user = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {admin_user} | From: {request.client.host}:{request.client.port}'
+            f'Username: {admin_user} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(admin_user, 'manage_auth'):
             return respond_rest(
                 ResponseModel(
@@ -701,7 +701,7 @@ async def admin_user_status(username: str, request: Request):
                     )
                 )
         except Exception as e:
-            logger.error(f'{request_id} | Admin check failed: {str(e)}', exc_info=True)
+            logger.error(f'Admin check failed: {str(e)}', exc_info=True)
         user = await UserService.get_user_by_username_helper(username)
         status = {'active': bool(user.get('active', False)), 'revoked': is_user_revoked(username)}
         return respond_rest(
@@ -710,7 +710,7 @@ async def admin_user_status(username: str, request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -721,7 +721,7 @@ async def admin_user_status(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -752,9 +752,9 @@ async def extended_authorization(request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         user = await UserService.get_user_by_username_helper(username)
         if not user['active']:
             return respond_rest(
@@ -795,7 +795,7 @@ async def extended_authorization(request: Request):
 
         if not _secure and os.getenv('ENV', '').lower() in ('production', 'prod'):
             logger.warning(
-                f'{request_id} | SECURITY WARNING: Secure cookies disabled in production environment'
+                f'SECURITY WARNING: Secure cookies disabled in production environment'
             )
 
         _domain = os.getenv('COOKIE_DOMAIN', None)
@@ -873,7 +873,7 @@ async def extended_authorization(request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -884,7 +884,7 @@ async def extended_authorization(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -915,9 +915,9 @@ async def authorization_status(request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(
             ResponseModel(
                 status_code=200,
@@ -944,7 +944,7 @@ async def authorization_status(request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -955,7 +955,7 @@ async def authorization_status(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -988,9 +988,9 @@ async def authorization_invalidate(response: Response, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         try:
             import time as _t
 
@@ -1000,7 +1000,7 @@ async def authorization_invalidate(response: Response, request: Request):
                 ttl = max(1, int(exp - _t.time()))
             add_revoked_jti(username, payload.get('jti'), ttl)
         except Exception as e:
-            logger.warning(f'{request_id} | Token revocation failed, using fallback: {str(e)}')
+            logger.warning(f'Token revocation failed, using fallback: {str(e)}')
             if username not in jwt_blacklist:
                 jwt_blacklist[username] = TimedHeap()
             jwt_blacklist[username].push(payload.get('jti'))
@@ -1037,7 +1037,7 @@ async def authorization_invalidate(response: Response, request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -1048,4 +1048,4 @@ async def authorization_invalidate(response: Response, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

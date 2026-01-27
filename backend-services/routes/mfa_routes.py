@@ -78,7 +78,7 @@ async def setup_mfa(request: Request):
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Setup MFA failed: {e}', exc_info=True)
+        logger.error(f'Setup MFA failed: {e}', exc_info=True)
         return respond_rest('MFA999', str(e), None, None, 500, start_time)
 
 
@@ -135,7 +135,7 @@ async def enable_mfa(request: Request):
         return respond_rest(None, None, {'message': 'MFA enabled successfully'}, request_id, 200, start_time)
         
     except Exception as e:
-        logger.error(f'{request_id} | Enable MFA failed: {e}', exc_info=True)
+        logger.error(f'Enable MFA failed: {e}', exc_info=True)
         return respond_rest('MFA999', str(e), None, None, 500, start_time)
 
 
@@ -210,7 +210,7 @@ async def verify_mfa_login(request: Request):
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Verify MFA failed: {e}', exc_info=True)
+        logger.error(f'Verify MFA failed: {e}', exc_info=True)
         return respond_rest('MFA999', str(e), None, None, 500, start_time)
 
 
@@ -258,5 +258,5 @@ async def disable_mfa(request: Request):
         return respond_rest(None, None, {'message': 'MFA disabled successfully'}, request_id, 200, start_time)
         
     except Exception as e:
-        logger.error(f'{request_id} | Disable MFA failed: {e}', exc_info=True)
+        logger.error(f'Disable MFA failed: {e}', exc_info=True)
         return respond_rest('MFA999', str(e), None, None, 500, start_time)

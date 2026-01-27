@@ -74,6 +74,9 @@ export default function LogsPage() {
   const [loadingExpanded, setLoadingExpanded] = useState<Set<string>>(new Set())
   const [currentRequestId, setCurrentRequestId] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
+  const [searchTrigger, setSearchTrigger] = useState(0)
+  const [useLocalTime, setUseLocalTime] = useState(true)
+  const [hidePlatformLogs, setHidePlatformLogs] = useState(false)
   const [filters, setFilters] = useState<FilterState>(() => {
     const now = new Date()
     const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0')
@@ -116,31 +119,64 @@ export default function LogsPage() {
         next[k] = Array.isArray(ep.endpoint_servers) && ep.endpoint_servers.length > 0
       })
       setOverrideMap(prev => ({ ...prev, ...next }))
-    } catch {}
+    } catch { }
   }
 
   const toQueryParams = (f: FilterState) => {
     const qp = new URLSearchParams()
-    const map: Record<string,string> = {
-      startDate: 'start_date',
-      endDate: 'end_date',
-      startTime: 'start_time',
-      endTime: 'end_time',
-      request_id: 'request_id',
-      ipAddress: 'ip_address',
-      minResponseTime: 'min_response_time',
-      maxResponseTime: 'max_response_time',
-      user: 'user',
-      api: 'api',
-      endpoint: 'endpoint',
-      method: 'method',
-      level: 'level'
+
+    // Helper to add standard fields
+    const addStandardFields = () => {
+      const map: Record<string, string> = {
+        request_id: 'request_id',
+        ipAddress: 'ip_address',
+        minResponseTime: 'min_response_time',
+        maxResponseTime: 'max_response_time',
+        user: 'user',
+        api: 'api',
+        endpoint: 'endpoint',
+        method: 'method',
+        level: 'level'
+      }
+      Object.entries(f).forEach(([k, v]) => {
+        if (!v || ['startDate', 'endDate', 'startTime', 'endTime'].includes(k)) return
+        const key = (map as any)[k] || k
+        qp.append(key, v)
+      })
     }
-    Object.entries(f).forEach(([k,v]) => {
-      if (!v) return
-      const key = (map as any)[k] || k
-      qp.append(key, v)
-    })
+
+    addStandardFields()
+
+    if (hidePlatformLogs) {
+      qp.append('exclude_type', 'platform')
+    }
+
+    // Handle Date/Time
+    if (useLocalTime) {
+      if (f.startDate) {
+        // Construct local date time
+        // If time is missing, default to 00:00 for start, 23:59 for end (though state has defaults)
+        const d = new Date(`${f.startDate}T${f.startTime || '00:00'}`)
+        if (!isNaN(d.getTime())) {
+          qp.append('start_date', `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`)
+          qp.append('start_time', `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`)
+        }
+      }
+
+      if (f.endDate) {
+        const d = new Date(`${f.endDate}T${f.endTime || '23:59'}`)
+        if (!isNaN(d.getTime())) {
+          qp.append('end_date', `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`)
+          qp.append('end_time', `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`)
+        }
+      }
+    } else {
+      if (f.startDate) qp.append('start_date', f.startDate)
+      if (f.startTime) qp.append('start_time', f.startTime)
+      if (f.endDate) qp.append('end_date', f.endDate)
+      if (f.endTime) qp.append('end_time', f.endTime)
+    }
+
     return qp
   }
 
@@ -155,7 +191,7 @@ export default function LogsPage() {
 
       const { fetchJson } = await import('@/utils/http')
       const csrf = getCookie('csrf_token')
-      const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept':'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }})
+      const response = await fetch(`${SERVER_URL}/platform/logging/logs?${queryParams}`, { credentials: 'include', headers: { 'Accept': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) } })
 
       if (!response.ok) {
         throw new Error('Failed to fetch logs')
@@ -182,7 +218,7 @@ export default function LogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [filters, logsPage, logsPageSize])
+  }, [filters, logsPage, logsPageSize, hidePlatformLogs, useLocalTime])
 
   // (Log file listing removed)
 
@@ -248,8 +284,17 @@ export default function LogsPage() {
   const groupLogsByRequestId = (logList: Log[]): GroupedLogs[] => {
     const groups: { [key: string]: Log[] } = {}
 
+    let noIdCounter = 0
+
     logList.forEach(log => {
-      const requestId = log.request_id || 'no-request-id'
+      let requestId = log.request_id
+
+      // If no valid request_id, generate a unique one to prevent grouping
+      if (!requestId || requestId === 'no-request-id') {
+        noIdCounter++
+        requestId = `no-id-${noIdCounter}-${Math.random().toString(36).substr(2, 9)}`
+      }
+
       if (!groups[requestId]) {
         groups[requestId] = []
       }
@@ -258,6 +303,7 @@ export default function LogsPage() {
 
     return Object.entries(groups)
       .filter(([requestId, logs]) => {
+        // Since we are creating unique IDs for non-grouped logs, this filter logic remains safe
         if (currentRequestId && requestId === currentRequestId) {
           return false
         }
@@ -295,7 +341,7 @@ export default function LogsPage() {
     if (hasSearched) {
       fetchLogs()
     }
-  }, [fetchLogs, hasSearched])
+  }, [fetchLogs, hasSearched, searchTrigger])
 
   const handleFilterChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -330,6 +376,7 @@ export default function LogsPage() {
   const handleSearch = () => {
     setLogsPage(1)
     setHasSearched(true)
+    setSearchTrigger(prev => prev + 1)
   }
 
   const toggleRequestExpansion = async (requestId: string) => {
@@ -420,17 +467,17 @@ export default function LogsPage() {
 
   return (
     <ProtectedRoute requiredPermission="view_logs">
-    <Layout>
-      <div className="space-y-6">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Logs</h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              View and analyze system logs and API requests
-            </p>
+      <Layout>
+        <div className="space-y-6">
+          <div className="page-header">
+            <div>
+              <h1 className="page-title">Logs</h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                View and analyze system logs and API requests
+              </p>
+            </div>
+            <div className="flex gap-2" />
           </div>
-          <div className="flex gap-2" />
-        </div>
 
           <div className="card">
             <div className="card-header">
@@ -446,416 +493,442 @@ export default function LogsPage() {
                     <button onClick={() => downloadLatest('csv')} disabled={exporting} className="btn btn-outline">Latest CSV</button>
                   </div>
                 )}
+
+                <div className="flex items-center ml-auto gap-4">
+                  <label className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hidePlatformLogs}
+                      onChange={(e) => {
+                        setHidePlatformLogs(e.target.checked)
+                        if (hasSearched) {
+                          setSearchTrigger(prev => prev + 1)
+                        }
+                      }}
+                      className="checkbox"
+                    />
+                    <span>Hide Platform Logs</span>
+                  </label>
+                  <label className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useLocalTime}
+                      onChange={(e) => setUseLocalTime(e.target.checked)}
+                      className="checkbox"
+                    />
+                    <span>Use Local Time</span>
+                  </label>
+                </div>
               </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  name="startDate"
-                  value={filters.startDate}
-                  onChange={handleFilterChange}
-                  className="input"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    name="startDate"
+                    value={filters.startDate}
+                    onChange={handleFilterChange}
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    name="endDate"
+                    value={filters.endDate}
+                    onChange={handleFilterChange}
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    name="startTime"
+                    value={filters.startTime}
+                    onChange={handleFilterChange}
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    name="endTime"
+                    value={filters.endTime}
+                    onChange={handleFilterChange}
+                    className="input"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  name="endDate"
-                  value={filters.endDate}
-                  onChange={handleFilterChange}
-                  className="input"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Start Time
-                </label>
-                <input
-                  type="time"
-                  name="startTime"
-                  value={filters.startTime}
-                  onChange={handleFilterChange}
-                  className="input"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  End Time
-                </label>
-                <input
-                  type="time"
-                  name="endTime"
-                  value={filters.endTime}
-                  onChange={handleFilterChange}
-                  className="input"
-                />
+
+              {showMoreFilters && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      User
+                    </label>
+                    <input
+                      type="text"
+                      name="user"
+                      value={filters.user}
+                      onChange={handleFilterChange}
+                      placeholder="Filter by user"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      API
+                    </label>
+                    <input
+                      type="text"
+                      name="api"
+                      value={filters.api || ''}
+                      onChange={handleFilterChange}
+                      placeholder="Filter by API (e.g., rest:orders)"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Endpoint
+                    </label>
+                    <input
+                      type="text"
+                      name="endpoint"
+                      value={filters.endpoint}
+                      onChange={handleFilterChange}
+                      placeholder="Filter by endpoint"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Request ID
+                    </label>
+                    <input
+                      type="text"
+                      name="request_id"
+                      value={filters.request_id}
+                      onChange={handleFilterChange}
+                      placeholder="Filter by request ID"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Method
+                    </label>
+                    <select
+                      name="method"
+                      value={filters.method}
+                      onChange={handleFilterChange}
+                      className="input"
+                    >
+                      <option value="">All Methods</option>
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                      <option value="PUT">PUT</option>
+                      <option value="DELETE">DELETE</option>
+                      <option value="PATCH">PATCH</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      IP Address
+                    </label>
+                    <input
+                      type="text"
+                      name="ipAddress"
+                      value={filters.ipAddress}
+                      onChange={handleFilterChange}
+                      placeholder="Filter by IP"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Min Response Time (ms)
+                    </label>
+                    <input
+                      type="number"
+                      name="minResponseTime"
+                      value={filters.minResponseTime}
+                      onChange={handleFilterChange}
+                      placeholder="Min time"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Max Response Time (ms)
+                    </label>
+                    <input
+                      type="number"
+                      name="maxResponseTime"
+                      value={filters.maxResponseTime}
+                      onChange={handleFilterChange}
+                      placeholder="Max time"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Log Level
+                    </label>
+                    <select
+                      name="level"
+                      value={filters.level}
+                      onChange={handleFilterChange}
+                      className="input"
+                    >
+                      <option value="">All Levels</option>
+                      <option value="ERROR">Error</option>
+                      <option value="WARN">Warning</option>
+                      <option value="INFO">Info</option>
+                      <option value="DEBUG">Debug</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-6">
+                <button onClick={handleSearch} className="btn btn-primary">
+                  Search Logs
+                </button>
+                <button
+                  onClick={() => setShowMoreFilters(!showMoreFilters)}
+                  className="btn btn-outline"
+                >
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
+                  </svg>
+                  {showMoreFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
+                </button>
+                <button onClick={clearFilters} className="btn btn-secondary">
+                  Clear Filters
+                </button>
               </div>
             </div>
+          </div>
 
-            {showMoreFilters && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  User
-                </label>
-                <input
-                  type="text"
-                  name="user"
-                  value={filters.user}
-                  onChange={handleFilterChange}
-                  placeholder="Filter by user"
-                  className="input"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  API
-                </label>
-                <input
-                  type="text"
-                  name="api"
-                  value={filters.api || ''}
-                  onChange={handleFilterChange}
-                  placeholder="Filter by API (e.g., rest:orders)"
-                  className="input"
-                />
-              </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Endpoint
-                  </label>
-                  <input
-                    type="text"
-                    name="endpoint"
-                    value={filters.endpoint}
-                    onChange={handleFilterChange}
-                    placeholder="Filter by endpoint"
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Request ID
-                  </label>
-                  <input
-                    type="text"
-                    name="request_id"
-                    value={filters.request_id}
-                    onChange={handleFilterChange}
-                    placeholder="Filter by request ID"
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Method
-                  </label>
-                  <select
-                    name="method"
-                    value={filters.method}
-                    onChange={handleFilterChange}
-                    className="input"
-                  >
-                    <option value="">All Methods</option>
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="DELETE">DELETE</option>
-                    <option value="PATCH">PATCH</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    IP Address
-                  </label>
-                  <input
-                    type="text"
-                    name="ipAddress"
-                    value={filters.ipAddress}
-                    onChange={handleFilterChange}
-                    placeholder="Filter by IP"
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Min Response Time (ms)
-                  </label>
-                  <input
-                    type="number"
-                    name="minResponseTime"
-                    value={filters.minResponseTime}
-                    onChange={handleFilterChange}
-                    placeholder="Min time"
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Max Response Time (ms)
-                  </label>
-                  <input
-                    type="number"
-                    name="maxResponseTime"
-                    value={filters.maxResponseTime}
-                    onChange={handleFilterChange}
-                    placeholder="Max time"
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Log Level
-                  </label>
-                  <select
-                    name="level"
-                    value={filters.level}
-                    onChange={handleFilterChange}
-                    className="input"
-                  >
-                    <option value="">All Levels</option>
-                    <option value="ERROR">Error</option>
-                    <option value="WARN">Warning</option>
-                    <option value="INFO">Info</option>
-                    <option value="DEBUG">Debug</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-2 mt-6">
-              <button onClick={handleSearch} className="btn btn-primary">
-                Search Logs
-              </button>
-              <button
-                onClick={() => setShowMoreFilters(!showMoreFilters)}
-                className="btn btn-outline"
-              >
-                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
+          {error && (
+            <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
+              <div className="flex">
+                <svg className="h-5 w-5 text-error-400 dark:text-error-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {showMoreFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
-              </button>
-              <button onClick={clearFilters} className="btn btn-secondary">
-                Clear Filters
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {error && (
-          <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
-            <div className="flex">
-              <svg className="h-5 w-5 text-error-400 dark:text-error-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="ml-3">
-                <p className="text-sm text-error-700 dark:text-error-300">{error}</p>
+                <div className="ml-3">
+                  <p className="text-sm text-error-700 dark:text-error-300">{error}</p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {loading ? (
-          <div className="card">
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <div className="spinner mx-auto mb-4"></div>
-                <p className="text-gray-600 dark:text-gray-400">Loading logs...</p>
+          {loading ? (
+            <div className="card">
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="spinner mx-auto mb-4"></div>
+                  <p className="text-gray-600 dark:text-gray-400">Loading logs...</p>
+                </div>
               </div>
             </div>
-          </div>
-        ) : (
-          /* Grouped Logs Table */
-          <div className="card">
-            <div className="overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th></th>
-                    <th>Request ID</th>
-                    <th>Start Time</th>
-                    <th>Duration</th>
-                    <th>User</th>
-                    <th>Endpoint</th>
-                    <th>Routing</th>
-                    <th>Method</th>
-                    <th>Response Time</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groupedLogs.map((group) => (
-                    <React.Fragment key={group.request_id}>
-                      <tr
-                        onClick={() => toggleRequestExpansion(group.request_id)}
-                        className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
-                      >
-                        <td>
-                          <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                            <svg
-                              className={`h-4 w-4 transform transition-transform ${expandedRequests.has(group.request_id) ? 'rotate-90' : ''}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-                        </td>
-                        <td>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                            {group.request_id}
-                          </p>
-                        </td>
-                        <td>
-                          <p className="text-sm text-gray-900 dark:text-white">
-                            {format(new Date(group.first_timestamp), 'MMM dd, yyyy HH:mm:ss')}
-                          </p>
-                        </td>
-                        <td>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {(group.expanded_logs || group.logs).length} log{(group.expanded_logs || group.logs).length !== 1 ? 's' : ''}
-                          </p>
-                        </td>
-                        <td>
-                          <p className="text-sm text-gray-900 dark:text-white">
-                            {group.user || '-'}
-                          </p>
-                        </td>
-                        <td>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                            {group.endpoint || '-'}
-                          </p>
-                        </td>
-                        <td>
-                          {(() => {
-                            if (!group.endpoint || !group.method) return '-'
-                            const m = (group.endpoint || '').match(/^\/?([^/]+\/v\d+)(?:\/(.*))?$/)
-                            if (!m) return '-'
-                            const apiPath = m[1]
-                            const epUri = '/' + (m[2] || '')
-                            const parts = apiPath.split('/')
-                            if (parts.length < 2) return '-'
-                            const api_name = parts[0]
-                            const api_version = parts[1]
-                            const k: OverrideKey = `${group.method}|${api_name}|${api_version}|${epUri}`
-                            const hasOverride = !!overrideMap[k]
-                            return (
-                              <span className={`badge ${hasOverride ? 'badge-primary' : 'badge-gray'}`} title="Routing precedence: client-key → endpoint → API">
-                                {hasOverride ? 'Endpoint override' : 'API default'}
-                              </span>
-                            )
-                          })()}
-                        </td>
-                        <td>
-                          <span className={`badge ${group.method === 'GET' ? 'badge-success' : group.method === 'POST' ? 'badge-primary' : 'badge-warning'}`}>
-                            {group.method || '-'}
-                          </span>
-                        </td>
-                        <td>
-                          <p className="text-sm text-gray-900 dark:text-white">
-                            {group.response_time ? `${parseFloat(group.response_time).toFixed(2)}ms` : '-'}
-                          </p>
-                        </td>
-                        <td>
-                          <span className={`badge ${group.has_error ? 'badge-error' : 'badge-success'}`}>
-                            {group.has_error ? 'Error' : 'Success'}
-                          </span>
-                        </td>
-                      </tr>
-
-                      {expandedRequests.has(group.request_id) && (
-                        <tr>
-                          <td colSpan={10} className="p-0">
-                            <div className="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-                              <div className="p-4">
-                                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                                  All Logs for Request: {group.request_id}
-                                </h4>
-
-                                {loadingExpanded.has(group.request_id) ? (
-                                  <div className="flex items-center justify-center py-8">
-                                    <div className="spinner mr-3"></div>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading all logs for this request...</p>
-                                  </div>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {((group.expanded_logs || group.logs) || []).map((log, index) => (
-                                      <div key={index} className="flex items-start space-x-4 p-2 bg-white dark:bg-gray-900 rounded border">
-                                        <div className="flex-shrink-0">
-                                          <span className={`badge ${getLevelBgColor(log.level)}`}>
-                                            {log.level}
-                                          </span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
-                                            <span>{format(new Date(log.timestamp), 'HH:mm:ss.SSS')}</span>
-                                            <span>•</span>
-                                            <span>{log.source}</span>
-                                          </div>
-                                          <p className="text-sm text-gray-900 dark:text-white">
-                                            {log.message}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+          ) : (
+            /* Grouped Logs Table */
+            <div className="card">
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Request ID</th>
+                      <th>Start Time</th>
+                      <th># of logs</th>
+                      <th>User</th>
+                      <th>Endpoint</th>
+                      <th>Routing</th>
+                      <th>Method</th>
+                      <th>Response Time</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedLogs.map((group) => (
+                      <React.Fragment key={group.request_id}>
+                        <tr
+                          onClick={() => toggleRequestExpansion(group.request_id)}
+                          className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
+                        >
+                          <td>
+                            <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                              <svg
+                                className={`h-4 w-4 transform transition-transform ${expandedRequests.has(group.request_id) ? 'rotate-90' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          </td>
+                          <td>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                              {group.request_id}
+                            </p>
+                          </td>
+                          <td>
+                            <p className="text-sm text-gray-900 dark:text-white">
+                              {format(new Date(group.first_timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                            </p>
+                          </td>
+                          <td>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {(group.expanded_logs || group.logs).length} log{(group.expanded_logs || group.logs).length !== 1 ? 's' : ''}
+                            </p>
+                          </td>
+                          <td>
+                            <p className="text-sm text-gray-900 dark:text-white">
+                              {group.user || '-'}
+                            </p>
+                          </td>
+                          <td>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                              {group.endpoint || '-'}
+                            </p>
+                          </td>
+                          <td>
+                            {(() => {
+                              if (!group.endpoint || !group.method) return '-'
+                              const m = (group.endpoint || '').match(/^\/?([^/]+\/v\d+)(?:\/(.*))?$/)
+                              if (!m) return '-'
+                              const apiPath = m[1]
+                              const epUri = '/' + (m[2] || '')
+                              const parts = apiPath.split('/')
+                              if (parts.length < 2) return '-'
+                              const api_name = parts[0]
+                              const api_version = parts[1]
+                              const k: OverrideKey = `${group.method}|${api_name}|${api_version}|${epUri}`
+                              const hasOverride = !!overrideMap[k]
+                              return (
+                                <span className={`badge ${hasOverride ? 'badge-primary' : 'badge-gray'}`} title="Routing precedence: client-key → endpoint → API">
+                                  {hasOverride ? 'Endpoint override' : 'API default'}
+                                </span>
+                              )
+                            })()}
+                          </td>
+                          <td>
+                            <span className={`badge ${group.method === 'GET' ? 'badge-success' : group.method === 'POST' ? 'badge-primary' : 'badge-warning'}`}>
+                              {group.method || '-'}
+                            </span>
+                          </td>
+                          <td>
+                            <p className="text-sm text-gray-900 dark:text-white">
+                              {group.response_time ? `${parseFloat(group.response_time).toFixed(2)}ms` : '-'}
+                            </p>
+                          </td>
+                          <td>
+                            <span className={`badge ${group.has_error ? 'badge-error' : 'badge-success'}`}>
+                              {group.has_error ? 'Error' : 'Success'}
+                            </span>
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
+
+                        {expandedRequests.has(group.request_id) && (
+                          <tr>
+                            <td colSpan={10} className="p-0">
+                              <div className="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                                <div className="p-4">
+                                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                                    All Logs for Request: {group.request_id}
+                                  </h4>
+
+                                  {loadingExpanded.has(group.request_id) ? (
+                                    <div className="flex items-center justify-center py-8">
+                                      <div className="spinner mr-3"></div>
+                                      <p className="text-sm text-gray-600 dark:text-gray-400">Loading all logs for this request...</p>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      {((group.expanded_logs || group.logs) || []).map((log, index) => (
+                                        <div key={index} className="flex items-start space-x-4 p-2 bg-white dark:bg-gray-900 rounded border">
+                                          <div className="flex-shrink-0">
+                                            <span className={`badge ${getLevelBgColor(log.level)}`}>
+                                              {log.level}
+                                            </span>
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                              <span>{format(new Date(log.timestamp), 'HH:mm:ss.SSS')}</span>
+                                              <span>•</span>
+                                              <span>{log.source}</span>
+                                            </div>
+                                            <p className="text-sm text-gray-900 dark:text-white">
+                                              {log.message}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination
+                page={logsPage}
+                pageSize={logsPageSize}
+                onPageChange={setLogsPage}
+                onPageSizeChange={(s) => { setLogsPageSize(s); setLogsPage(1) }}
+                hasNext={logsHasNext}
+              />
+
+              {!hasSearched ? (
+                <div className="text-center py-12">
+                  <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                    <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Ready to search logs</h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Use the filters above to search for specific logs and click "Search Logs" to get started.
+                  </p>
+                </div>
+              ) : groupedLogs.length === 0 && !loading && (
+                <div className="text-center py-12">
+                  <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                    <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No logs found</h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Try adjusting your filters or check back later for new logs.
+                  </p>
+                </div>
+              )}
             </div>
-
-            <Pagination
-              page={logsPage}
-              pageSize={logsPageSize}
-              onPageChange={setLogsPage}
-              onPageSizeChange={(s) => { setLogsPageSize(s); setLogsPage(1) }}
-              hasNext={logsHasNext}
-            />
-
-            {!hasSearched ? (
-              <div className="text-center py-12">
-                <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                  <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Ready to search logs</h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Use the filters above to search for specific logs and click "Search Logs" to get started.
-                </p>
-              </div>
-            ) : groupedLogs.length === 0 && !loading && (
-              <div className="text-center py-12">
-                <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                  <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No logs found</h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Try adjusting your filters or check back later for new logs.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </Layout>
+          )}
+        </div>
+      </Layout>
     </ProtectedRoute>
   )
 }

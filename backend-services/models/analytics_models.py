@@ -131,6 +131,21 @@ class EndpointMetrics:
             'status_counts': dict(self.status_counts),
         }
 
+    @staticmethod
+    def from_dict(d: dict) -> EndpointMetrics:
+        em = EndpointMetrics(
+            endpoint_uri=str(d.get('endpoint_uri', '')),
+            method=str(d.get('method', '')),
+            count=int(d.get('count', 0)),
+            error_count=int(d.get('error_count', 0)),
+            # Approximate reconstruction of total_ms from average if latency list is lost/truncated
+            total_ms=float(d.get('avg_ms', 0.0)) * int(d.get('count', 0)),
+        )
+        em.status_counts = {int(k): int(v) for k, v in (d.get('status_counts') or {}).items()}
+        # Note: We don't persist full latency list for endpoints to save space, 
+        # so we accept starting with empty latencies. New requests will populate it.
+        return em
+
 
 @dataclass
 class EnhancedMinuteBucket:
@@ -262,14 +277,49 @@ class EnhancedMinuteBucket:
             # NEW: Enhanced fields
             'percentiles': percentiles.to_dict(),
             'unique_users': self.get_unique_user_count(),
+            # Persist unique users as list
+            'unique_users_list': list(self.unique_users),
             'endpoint_metrics': {k: v.to_dict() for k, v in self.endpoint_metrics.items()},
-            'avg_request_size': sum(self.request_sizes) / len(self.request_sizes)
-            if self.request_sizes
-            else 0,
             'avg_response_size': sum(self.response_sizes) / len(self.response_sizes)
             if self.response_sizes
             else 0,
         }
+
+    @staticmethod
+    def from_dict(d: dict) -> EnhancedMinuteBucket:
+        mb = EnhancedMinuteBucket(
+            start_ts=int(d.get('start_ts', 0)),
+            count=int(d.get('count', 0)),
+            error_count=int(d.get('error_count', 0)),
+            total_ms=float(d.get('total_ms', 0.0)),
+            bytes_in=int(d.get('bytes_in', 0)),
+            bytes_out=int(d.get('bytes_out', 0)),
+            upstream_timeouts=int(d.get('upstream_timeouts', 0)),
+            retries=int(d.get('retries', 0)),
+        )
+        
+        # Restore dict/set fields
+        mb.status_counts = {int(k): int(v) for k, v in (d.get('status_counts') or {}).items()}
+        mb.api_counts = dict(d.get('api_counts') or {})
+        mb.api_error_counts = dict(d.get('api_error_counts') or {})
+        mb.user_counts = dict(d.get('user_counts') or {})
+        
+        # Restore endpoint metrics
+        ep_data = d.get('endpoint_metrics') or {}
+        for k, v in ep_data.items():
+            try:
+                mb.endpoint_metrics[k] = EndpointMetrics.from_dict(v)
+            except Exception:
+                pass
+                
+        # Restore unique users set
+        if 'unique_users_list' in d:
+            mb.unique_users = set(d['unique_users_list'])
+        elif 'user_counts' in d:
+            # Fallback for old data
+            mb.unique_users = set(d['user_counts'].keys())
+        
+        return mb
 
 
 @dataclass
@@ -294,6 +344,9 @@ class AggregatedMetrics:
     status_counts: dict[int, int] = field(default_factory=dict)
     api_counts: dict[str, int] = field(default_factory=dict)
     percentiles: PercentileMetrics | None = None
+    
+    # Store set for merging (not always persisted)
+    unique_users_set: set = field(default_factory=set)
 
     def to_dict(self) -> dict:
         return {
@@ -310,7 +363,45 @@ class AggregatedMetrics:
             'status_counts': dict(self.status_counts),
             'api_counts': dict(self.api_counts),
             'percentiles': self.percentiles.to_dict() if self.percentiles else None,
+            # Persist unique users set as list
+            'unique_users_list': list(self.unique_users_set) if self.unique_users_set else [],
         }
+
+    @staticmethod
+    def from_dict(d: dict) -> AggregatedMetrics:
+        """Create AggregatedMetrics from dictionary."""
+        am = AggregatedMetrics(
+            start_ts=int(d.get('start_ts', 0)),
+            end_ts=int(d.get('end_ts', 0)),
+            level=AggregationLevel(d.get('level', 'minute')),
+            count=int(d.get('count', 0)),
+            error_count=int(d.get('error_count', 0)),
+            total_ms=float(d.get('total_ms', 0.0)),
+            bytes_in=int(d.get('bytes_in', 0)),
+            bytes_out=int(d.get('bytes_out', 0)),
+            unique_users=int(d.get('unique_users', 0)),
+        )
+        
+        am.status_counts = {int(k): int(v) for k, v in (d.get('status_counts') or {}).items()}
+        am.api_counts = dict(d.get('api_counts') or {})
+        
+        if d.get('percentiles'):
+            p = d['percentiles']
+            am.percentiles = PercentileMetrics(
+                p50=float(p.get('p50', 0)),
+                p75=float(p.get('p75', 0)),
+                p90=float(p.get('p90', 0)),
+                p95=float(p.get('p95', 0)),
+                p99=float(p.get('p99', 0)),
+                min=float(p.get('min', 0)),
+                max=float(p.get('max', 0)),
+            )
+
+        # Restore unique users set
+        if 'unique_users_list' in d:
+            am.unique_users_set = set(d['unique_users_list'])
+            
+        return am
 
 
 @dataclass
