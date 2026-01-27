@@ -32,6 +32,13 @@ class UpdateEndpointModel(BaseModel):
         description='Optional list of backend servers for this endpoint (overrides API servers)',
         example=['http://localhost:8082', 'http://localhost:8083'],
     )
+    client_uri: str | None = Field(
+        None,
+        min_length=1,
+        max_length=255,
+        description='Client-facing URI (defaults to endpoint_uri if not set)',
+        example='/customers',
+    )
     api_id: str | None = Field(
         None,
         min_length=1,
