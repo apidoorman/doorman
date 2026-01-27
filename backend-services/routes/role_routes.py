@@ -52,11 +52,11 @@ async def create_role(api_data: CreateRoleModel, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_ROLES):
-            logger.error(f'{request_id} | User does not have permission to create roles')
+            logger.error(f'User does not have permission to create roles')
             return respond_rest(
                 ResponseModel(
                     status_code=403,
@@ -85,7 +85,7 @@ async def create_role(api_data: CreateRoleModel, request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -96,7 +96,7 @@ async def create_role(api_data: CreateRoleModel, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -125,14 +125,14 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
     start_time = time.time() * 1000
     try:
         # DEBUG: Log the incoming data
-        logger.info(f'{request_id} | DEBUG: Received model data: {api_data.dict()}')
+        logger.info(f'DEBUG: Received model data: {api_data.dict()}')
 
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_ROLES):
             return respond_rest(
                 ResponseModel(
@@ -170,7 +170,7 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -181,7 +181,7 @@ async def update_role(role_name: str, api_data: UpdateRoleModel, request: Reques
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -212,9 +212,9 @@ async def delete_role(role_name: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_ROLES):
             return respond_rest(
                 ResponseModel(
@@ -238,7 +238,7 @@ async def delete_role(role_name: str, request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -249,7 +249,7 @@ async def delete_role(role_name: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -272,9 +272,9 @@ async def get_roles(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         data = await RoleService.get_roles(page, page_size, request_id)
         try:
             if data.get('status_code') == 200 and isinstance(data.get('response'), dict):
@@ -297,7 +297,7 @@ async def get_roles(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -308,7 +308,7 @@ async def get_roles(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -329,9 +329,9 @@ async def get_role(role_name: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if await is_admin_role(role_name) and not await is_admin_user(username):
             return respond_rest(
                 ResponseModel(
@@ -355,7 +355,7 @@ async def get_role(role_name: str, request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -366,7 +366,7 @@ async def get_role(role_name: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 @role_router.get(

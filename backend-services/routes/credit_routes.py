@@ -46,9 +46,9 @@ async def list_credit_definitions(request: Request, page: int = 1, page_size: in
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
@@ -71,7 +71,7 @@ async def list_credit_definitions(request: Request, page: int = 1, page_size: in
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -83,7 +83,7 @@ async def list_credit_definitions(request: Request, page: int = 1, page_size: in
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -106,9 +106,9 @@ async def get_credit_definition(api_credit_group: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
@@ -117,7 +117,7 @@ async def get_credit_definition(api_credit_group: str, request: Request):
             )
         return respond_rest(await CreditService.get_credit_def(api_credit_group, request_id))
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -129,7 +129,7 @@ async def get_credit_definition(api_credit_group: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -164,9 +164,9 @@ async def create_credit(credit_data: CreditModel, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
@@ -187,7 +187,7 @@ async def create_credit(credit_data: CreditModel, request: Request):
         )
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -199,7 +199,7 @@ async def create_credit(credit_data: CreditModel, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -234,9 +234,9 @@ async def update_credit(api_credit_group: str, credit_data: CreditModel, request
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
@@ -257,7 +257,7 @@ async def update_credit(api_credit_group: str, credit_data: CreditModel, request
         )
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -269,7 +269,7 @@ async def update_credit(api_credit_group: str, credit_data: CreditModel, request
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -304,9 +304,9 @@ async def delete_credit(api_credit_group: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
@@ -327,7 +327,7 @@ async def delete_credit(api_credit_group: str, request: Request):
         )
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -339,7 +339,7 @@ async def delete_credit(api_credit_group: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -370,9 +370,9 @@ async def add_user_credits(username: str, credit_data: UserCreditModel, request:
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
@@ -393,7 +393,7 @@ async def add_user_credits(username: str, credit_data: UserCreditModel, request:
         )
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -405,7 +405,7 @@ async def add_user_credits(username: str, credit_data: UserCreditModel, request:
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -428,9 +428,9 @@ async def get_all_users_credits(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, 'manage_credits'):
             return respond_rest(
                 ResponseModel(
@@ -443,7 +443,7 @@ async def get_all_users_credits(
             await CreditService.get_all_credits(page, page_size, request_id, search=search)
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -455,7 +455,7 @@ async def get_all_users_credits(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -490,7 +490,7 @@ async def get_credits(username: str, request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -501,7 +501,7 @@ async def get_credits(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -549,16 +549,16 @@ async def rotate_key(request: Request):
             )
 
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         # No special role required, just authentication
 
         return respond_rest(await CreditService.rotate_api_key(username, group, request_id))
 
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -569,4 +569,4 @@ async def rotate_key(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

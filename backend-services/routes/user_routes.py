@@ -69,9 +69,9 @@ async def create_user(user_data: CreateUserModel, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_USERS):
             return respond_rest(
                 ResponseModel(
@@ -91,7 +91,7 @@ async def create_user(user_data: CreateUserModel, request: Request):
                 )
         return respond_rest(await UserService.create_user(user_data, request_id))
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -103,7 +103,7 @@ async def create_user(user_data: CreateUserModel, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -134,9 +134,9 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
         payload = await auth_required(request)
         auth_username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         # Block modifications to bootstrap admin user, except for limited operational fields
         if username == 'admin':
             allowed_keys = {
@@ -198,7 +198,7 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
                 )
         return respond_rest(await UserService.update_user(username, api_data, request_id))
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -210,7 +210,7 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -241,9 +241,9 @@ async def delete_user(username: str, request: Request):
         payload = await auth_required(request)
         auth_username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         # Block any deletion of bootstrap admin user
         if username == 'admin':
             return respond_rest(
@@ -273,7 +273,7 @@ async def delete_user(username: str, request: Request):
             )
         return respond_rest(await UserService.delete_user(username, request_id))
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -285,7 +285,7 @@ async def delete_user(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -318,9 +318,9 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
         payload = await auth_required(request)
         auth_username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         # Block any password changes to bootstrap admin user
         if username == 'admin':
             return respond_rest(
@@ -344,7 +344,7 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
             )
         return respond_rest(await UserService.update_password(username, api_data, request_id))
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -356,7 +356,7 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -377,9 +377,9 @@ async def get_user_by_username(request: Request):
         payload = await auth_required(request)
         auth_username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {auth_username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {auth_username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await UserService.get_user_by_username(auth_username, request_id))
     except HTTPException as e:
         return respond_rest(
@@ -391,7 +391,7 @@ async def get_user_by_username(request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -402,7 +402,7 @@ async def get_user_by_username(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -425,9 +425,9 @@ async def get_all_users(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         data = await UserService.get_all_users(page, page_size, request_id)
         if data.get('status_code') == 200 and isinstance(data.get('response'), dict):
             users = data['response'].get('users') or []
@@ -456,7 +456,7 @@ async def get_all_users(
             'rest',
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -468,7 +468,7 @@ async def get_all_users(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -491,9 +491,9 @@ async def get_user_by_username(username: str, request: Request):
         payload = await auth_required(request)
         auth_username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         # Block access to bootstrap admin user for non-admins,
         # except when STRICT_RESPONSE_ENVELOPE=true (envelope-shape tests)
         if (
@@ -533,7 +533,7 @@ async def get_user_by_username(username: str, request: Request):
             await UserService.get_user_by_username(username, request_id), 'rest'
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -545,7 +545,7 @@ async def get_user_by_username(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -568,9 +568,9 @@ async def get_user_by_email(email: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         data = await UserService.get_user_by_email(username, email, request_id)
         if data.get('status_code') == 200 and isinstance(data.get('response'), dict):
             u = data.get('response')
@@ -596,7 +596,7 @@ async def get_user_by_email(email: str, request: Request):
                 )
         return process_response(data, 'rest')
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -608,7 +608,7 @@ async def get_user_by_email(email: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 @user_router.get(

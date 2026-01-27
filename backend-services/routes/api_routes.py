@@ -51,12 +51,12 @@ async def create_api(request: Request, api_data: CreateApiModel) -> Response:
     request_id = str(uuid.uuid4())
     start_time = time.time() * 1000
     logger.info(
-        f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+        f'Username: {username} | From: {request.client.host}:{request.client.port}'
     )
-    logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+    logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
     try:
         if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
-            logger.warning(f'{request_id} | Permission denied for user: {username}')
+            logger.warning(f'Permission denied for user: {username}')
             return respond_rest(
                 ResponseModel(
                     status_code=403,
@@ -77,7 +77,7 @@ async def create_api(request: Request, api_data: CreateApiModel) -> Response:
         )
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -89,7 +89,7 @@ async def create_api(request: Request, api_data: CreateApiModel) -> Response:
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -122,9 +122,9 @@ async def update_api(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return respond_rest(
                 ResponseModel(
@@ -146,7 +146,7 @@ async def update_api(
         )
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -158,7 +158,7 @@ async def update_api(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -189,14 +189,14 @@ async def get_api_by_name_version(api_name: str, api_version: str, request: Requ
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(
             await ApiService.get_api_by_name_version(api_name, api_version, request_id)
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -208,7 +208,7 @@ async def get_api_by_name_version(api_name: str, api_version: str, request: Requ
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -239,9 +239,9 @@ async def delete_api(api_name: str, api_version: str, request: Request) -> Respo
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         result = await ApiService.delete_api(api_name, api_version, request_id)
         audit(
             request,
@@ -254,7 +254,7 @@ async def delete_api(api_name: str, api_version: str, request: Request) -> Respo
         )
         return respond_rest(result)
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -266,7 +266,7 @@ async def delete_api(api_name: str, api_version: str, request: Request) -> Respo
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -289,9 +289,9 @@ async def get_all_apis(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await ApiService.get_apis(page, page_size, request_id))
     except HTTPException as e:
         # Surface 401/403 properly for tests that probe unauthorized access
@@ -304,7 +304,7 @@ async def get_all_apis(
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -316,7 +316,7 @@ async def get_all_apis(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 @api_router.get('', description='Get all APIs (base path)', response_model=list[ApiModelResponse])
@@ -332,9 +332,9 @@ async def get_all_apis_base(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await ApiService.get_apis(page, page_size, request_id))
     except HTTPException as e:
         return respond_rest(
@@ -346,7 +346,7 @@ async def get_all_apis_base(
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,

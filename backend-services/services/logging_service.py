@@ -60,6 +60,8 @@ class LoggingService:
         limit: int = 100,
         offset: int = 0,
         request_id_param: str = None,
+        type: str | None = None,
+        exclude_type: str | None = None,
     ) -> dict[str, Any]:
         """
         Retrieve and filter logs based on various criteria
@@ -81,42 +83,16 @@ class LoggingService:
             logs = []
             total_count = 0
 
-            # Case A: Use in-memory buffer when it has content; it's fastest and covers both envs
-            if buffer_lines:
-                # Collect all matching logs first (newest first from reversed buffer)
-                matching_logs = []
-                for line in reversed(buffer_lines):
-                    log_entry = self._parse_log_line(line)
-                    if log_entry and self._matches_filters(
-                        log_entry,
-                        {
-                            'start_date': start_date,
-                            'end_date': end_date,
-                            'start_time': start_time,
-                            'end_time': end_time,
-                            'user': user,
-                            'api': api,
-                            'endpoint': endpoint,
-                            'request_id': request_id,
-                            'method': method,
-                            'ip_address': ip_address,
-                            'min_response_time': min_response_time,
-                            'max_response_time': max_response_time,
-                            'level': level,
-                        },
-                    ):
-                        matching_logs.append(log_entry)
-                
-                total_count = len(matching_logs)
-                # Paginate: skip offset, take limit (already in newest-first order)
-                logs = matching_logs[offset:offset + limit]
-            elif log_files:
+            # Strategy: Prioritize log files (history), fallback to in-memory buffer
+            
+            # Container for all matching logs
+            all_logs = []
+            
+            if log_files:
                 log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-                # Scan more files to ensure we don't miss logs (increased from 3 to 20)
+                # Scan more files to ensure we don't miss logs
                 log_files = log_files[:20]
 
-                # Collect all matching logs from all files
-                all_logs = []
                 for log_file in log_files:
                     if not os.path.exists(log_file):
                         continue
@@ -141,27 +117,53 @@ class LoggingService:
                                         'min_response_time': min_response_time,
                                         'max_response_time': max_response_time,
                                         'level': level,
+                                        'type': type,
+                                        'exclude_type': exclude_type,
                                     },
                                 ):
                                     all_logs.append(log_entry)
 
                     except Exception as e:
-                        logger.warning(f'Error reading log file {log_file}: {str(e)}')
+                        logger.warning(f'{request_id_param} | Error reading log file {log_file}: {str(e)}')
                         continue
-                
-                # Sort by timestamp descending (newest first)
-                all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-                total_count = len(all_logs)
-                # Paginate: skip offset, take limit
-                logs = all_logs[offset:offset + limit]
-            else:
-                # Nothing to read
-                pass
+            
+            # ALWAYS check buffer for recent logs, regardless of files
+            if buffer_lines:
+                for line in reversed(buffer_lines):
+                    log_entry = self._parse_log_line(line)
+                    if log_entry and self._matches_filters(
+                        log_entry,
+                        {
+                            'start_date': start_date,
+                            'end_date': end_date,
+                            'start_time': start_time,
+                            'end_time': end_time,
+                            'user': user,
+                            'api': api,
+                            'endpoint': endpoint,
+                            'request_id': request_id,
+                            'method': method,
+                            'ip_address': ip_address,
+                            'min_response_time': min_response_time,
+                            'max_response_time': max_response_time,
+                            'level': level,
+                            'type': type,
+                            'exclude_type': exclude_type,
+                        },
+                    ):
+                        all_logs.append(log_entry)
+
+            # Sort by timestamp descending (newest first)
+            all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            total_count = len(all_logs)
+            
+            # Paginate: skip offset, take limit
+            logs = all_logs[offset:offset + limit]
 
             return {'logs': logs, 'total': total_count, 'has_more': total_count > offset + limit}
 
         except Exception as e:
-            logger.error(f'Error retrieving logs: {str(e)}', exc_info=True)
+            logger.error(f'{request_id_param} | Error retrieving logs: {str(e)}', exc_info=True)
             raise HTTPException(status_code=500, detail='Failed to retrieve logs')
 
     def get_available_log_files(self) -> list[str]:
@@ -325,6 +327,8 @@ class LoggingService:
                     name = rec.get('name', '')
                     level = rec.get('level', '')
                     structured = self._extract_structured_data(message)
+                    if rec.get('request_id'):
+                        structured['request_id'] = rec.get('request_id')
                     return {
                         'timestamp': timestamp
                         if isinstance(timestamp, str)
@@ -354,9 +358,15 @@ class LoggingService:
             structured_data = self._extract_structured_data(message)
             if request_id:
                 structured_data['request_id'] = request_id
+            
+            # User Requirement: any log without a request id should be a debug log
+            final_level = level
+            if not request_id and not structured_data.get('request_id'):
+                final_level = 'DEBUG'
+
             return {
                 'timestamp': timestamp.isoformat(),
-                'level': level,
+                'level': final_level,
                 'message': message,
                 'source': name,
                 **structured_data,
@@ -408,6 +418,27 @@ class LoggingService:
             status_match = re.search(r'status_code[:\s]+(\d+)', message, re.IGNORECASE)
             if status_match:
                 data['status_code'] = status_match.group(1)
+
+        # Infer request type
+        # Default to platform
+        request_type = 'platform'
+        
+        endpoint_val = data.get('endpoint', '').lower()
+        if endpoint_val:
+            if any(x in endpoint_val for x in ('/rest', '/soap', '/graphql')):
+                request_type = 'gateway'
+            elif '/authorization' in endpoint_val:
+                request_type = 'auth'
+        
+        # Fallback to message content if endpoint not present
+        if request_type == 'platform':
+            msg_lower = message.lower()
+            if any(x in msg_lower for x in ('rest gateway', 'soap gateway', 'graphql gateway', 'upstream')):
+                request_type = 'gateway'
+            elif any(x in msg_lower for x in ('login', 'register', 'token', 'permission')):
+                request_type = 'auth'
+                
+        data['type'] = request_type
 
         return data
 
@@ -503,7 +534,7 @@ class LoggingService:
                 if timestamp > end_datetime:
                     return False
 
-            for field in ['user', 'api', 'endpoint', 'request_id', 'method', 'ip_address', 'level']:
+            for field in ['user', 'api', 'endpoint', 'request_id', 'method', 'ip_address', 'level', 'type']:
                 if filters.get(field) and filters[field].strip():
                     filter_value = filters[field].strip().lower()
                     log_value = str(log_entry.get(field, '')).lower()
@@ -552,6 +583,19 @@ class LoggingService:
                     if log_time > max_time:
                         return False
                 except (ValueError, TypeError):
+                    return False
+
+            if filters.get('exclude_type') and filters['exclude_type'].strip():
+                exclude_val = filters['exclude_type'].strip().lower()
+                log_type = str(log_entry.get('type', '')).lower()
+                endpoint = str(log_entry.get('endpoint', '')).lower()
+                
+                # Direct type match exclusion
+                if log_type == exclude_val:
+                    return False
+                
+                # Specific logic for 'platform' exclusion: also hide known platform endpoints
+                if exclude_val == 'platform' and '/platform/' in endpoint:
                     return False
 
             applied_filters = [f'{k}={v}' for k, v in filters.items() if v and str(v).strip()]

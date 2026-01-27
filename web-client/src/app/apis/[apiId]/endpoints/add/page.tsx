@@ -21,6 +21,7 @@ export default function AddEndpointPage() {
 
   const [method, setMethod] = useState('GET')
   const [uri, setUri] = useState('')
+  const [clientUri, setClientUri] = useState('')
   const [description, setDescription] = useState('')
   const [useOverride, setUseOverride] = useState(false)
   const [servers, setServers] = useState<string[]>([])
@@ -34,7 +35,7 @@ export default function AddEndpointPage() {
         setApiName(parsed.api_name || '')
         setApiVersion(parsed.api_version || '')
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const addServer = () => {
@@ -62,6 +63,9 @@ export default function AddEndpointPage() {
         endpoint_uri: uri.startsWith('/') ? uri : '/' + uri,
         endpoint_description: description || `${method} ${uri}`
       }
+      if (clientUri.trim()) {
+        body.client_uri = clientUri.trim()
+      }
       if (useOverride && servers.length > 0) {
         body.endpoint_servers = servers
       }
@@ -69,7 +73,7 @@ export default function AddEndpointPage() {
       setSuccess('Endpoint created')
       setTimeout(() => setSuccess(null), 1500)
       router.push(`/apis/${encodeURIComponent(apiId)}/endpoints`)
-    } catch (e:any) {
+    } catch (e: any) {
       setError(e?.message || 'Failed to create endpoint')
     } finally {
       setLoading(false)
@@ -108,7 +112,7 @@ export default function AddEndpointPage() {
             <div>
               <label className="block text-sm font-medium mb-1">Method</label>
               <select className="input" value={method} onChange={e => setMethod(e.target.value)}>
-                {['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS'].map(m => <option key={m} value={m}>{m}</option>)}
+                {['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'].map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div>
@@ -116,7 +120,14 @@ export default function AddEndpointPage() {
                 URI
                 <InfoTooltip text="Path pattern relative to the API base. Use {param} for path variables. Example: /items/{id}" />
               </label>
-              <input className="input" value={uri} onChange={e => setUri(e.target.value)} placeholder="/path/{id}" />
+              <input className="input" value={uri} onChange={e => setUri(e.target.value)} placeholder="/backend/path/{id}" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Client URI (Optional)
+                <InfoTooltip text="Public-facing URI if different from backend URI." />
+              </label>
+              <input className="input" value={clientUri} onChange={e => setClientUri(e.target.value)} placeholder="/public/path/{id}" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium mb-1">Description</label>
@@ -125,7 +136,7 @@ export default function AddEndpointPage() {
 
             <div className="md:col-span-2">
               <div className="flex items-center gap-2 mb-2">
-                <input id="use-override" type="checkbox" className="h-4 w-4" checked={useOverride} onChange={(e)=>setUseOverride(e.target.checked)} />
+                <input id="use-override" type="checkbox" className="h-4 w-4" checked={useOverride} onChange={(e) => setUseOverride(e.target.checked)} />
                 <label htmlFor="use-override" className="text-sm">
                   Use endpoint servers (override API servers)
                   <InfoTooltip text="Provide endpoint-specific upstreams. If disabled or empty, the API-level servers are used." />

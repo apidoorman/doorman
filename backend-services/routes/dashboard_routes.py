@@ -39,14 +39,18 @@ async def get_dashboard_data(request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         total_apis = api_collection.count_documents({})
 
         snap = enhanced_metrics_store.snapshot('30d')
-        total_users = len(set(snap.get('top_users', [])))  # Unique users from metrics
+        # Prefer calculated unique users for the period, fallback to top users count
+        total_users = snap.get('unique_users')
+        if total_users is None:
+            # Fallback: count from top_users (which might be truncated)
+            total_users = len(snap.get('top_users', []))
         monthly_usage: dict[str, int] = {}
         for pt in snap.get('series', []):
             try:
@@ -110,7 +114,7 @@ async def get_dashboard_data(request: Request):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -121,4 +125,4 @@ async def get_dashboard_data(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

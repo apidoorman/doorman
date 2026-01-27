@@ -42,12 +42,12 @@ class VaultService:
             ResponseModel dict with success or error
         """
         logger.info(
-            f'{request_id} | Creating vault entry: {entry_data.key_name} for user: {username}'
+            f'Creating vault entry: {entry_data.key_name} for user: {username}'
         )
 
         # Check if VAULT_KEY is configured
         if not is_vault_configured():
-            logger.error(f'{request_id} | VAULT_KEY not configured')
+            logger.error(f'VAULT_KEY not configured')
             return ResponseModel(
                 status_code=500,
                 error_code='VAULT001',
@@ -57,14 +57,14 @@ class VaultService:
         # Get user to retrieve email
         user = await db_find_one(user_collection, {'username': username})
         if not user:
-            logger.error(f'{request_id} | User not found: {username}')
+            logger.error(f'User not found: {username}')
             return ResponseModel(
                 status_code=404, error_code='VAULT002', error_message='User not found'
             ).dict()
 
         email = user.get('email')
         if not email:
-            logger.error(f'{request_id} | User email not found: {username}')
+            logger.error(f'User email not found: {username}')
             return ResponseModel(
                 status_code=400,
                 error_code='VAULT003',
@@ -76,7 +76,7 @@ class VaultService:
             vault_entries_collection, {'username': username, 'key_name': entry_data.key_name}
         )
         if existing:
-            logger.error(f'{request_id} | Vault entry already exists: {entry_data.key_name}')
+            logger.error(f'Vault entry already exists: {entry_data.key_name}')
             return ResponseModel(
                 status_code=409,
                 error_code='VAULT004',
@@ -87,7 +87,7 @@ class VaultService:
         try:
             encrypted_value = encrypt_vault_value(entry_data.value, email, username)
         except Exception as e:
-            logger.error(f'{request_id} | Encryption failed: {str(e)}')
+            logger.error(f'Encryption failed: {str(e)}')
             return ResponseModel(
                 status_code=500,
                 error_code='VAULT005',
@@ -109,7 +109,7 @@ class VaultService:
             result = await db_insert_one(vault_entries_collection, vault_entry)
             if result.acknowledged:
                 logger.info(
-                    f'{request_id} | Vault entry created successfully: {entry_data.key_name}'
+                    f'Vault entry created successfully: {entry_data.key_name}'
                 )
                 return ResponseModel(
                     status_code=201,
@@ -117,14 +117,14 @@ class VaultService:
                     data={'key_name': entry_data.key_name},
                 ).dict()
             else:
-                logger.error(f'{request_id} | Failed to create vault entry')
+                logger.error(f'Failed to create vault entry')
                 return ResponseModel(
                     status_code=500,
                     error_code='VAULT006',
                     error_message='Failed to create vault entry',
                 ).dict()
         except Exception as e:
-            logger.error(f'{request_id} | Error creating vault entry: {str(e)}')
+            logger.error(f'Error creating vault entry: {str(e)}')
             return ResponseModel(
                 status_code=500, error_code=ErrorCodes.UNEXPECTED, error_message=Messages.UNEXPECTED
             ).dict()
@@ -142,14 +142,14 @@ class VaultService:
         Returns:
             ResponseModel dict with vault entry (without value) or error
         """
-        logger.info(f'{request_id} | Getting vault entry: {key_name} for user: {username}')
+        logger.info(f'Getting vault entry: {key_name} for user: {username}')
 
         entry = await db_find_one(
             vault_entries_collection, {'username': username, 'key_name': key_name}
         )
 
         if not entry:
-            logger.error(f'{request_id} | Vault entry not found: {key_name}')
+            logger.error(f'Vault entry not found: {key_name}')
             return ResponseModel(
                 status_code=404, error_code='VAULT007', error_message='Vault entry not found'
             ).dict()
@@ -174,7 +174,7 @@ class VaultService:
         Returns:
             ResponseModel dict with list of vault entries (without values)
         """
-        logger.info(f'{request_id} | Listing vault entries for user: {username}')
+        logger.info(f'Listing vault entries for user: {username}')
 
         try:
             entries = await db_find_list(vault_entries_collection, {'username': username})
@@ -192,7 +192,7 @@ class VaultService:
                 status_code=200, data={'entries': clean_entries, 'count': len(clean_entries)}
             ).dict()
         except Exception as e:
-            logger.error(f'{request_id} | Error listing vault entries: {str(e)}')
+            logger.error(f'Error listing vault entries: {str(e)}')
             return ResponseModel(
                 status_code=500, error_code=ErrorCodes.UNEXPECTED, error_message=Messages.UNEXPECTED
             ).dict()
@@ -213,7 +213,7 @@ class VaultService:
         Returns:
             ResponseModel dict with success or error
         """
-        logger.info(f'{request_id} | Updating vault entry: {key_name} for user: {username}')
+        logger.info(f'Updating vault entry: {key_name} for user: {username}')
 
         # Check if entry exists
         entry = await db_find_one(
@@ -221,7 +221,7 @@ class VaultService:
         )
 
         if not entry:
-            logger.error(f'{request_id} | Vault entry not found: {key_name}')
+            logger.error(f'Vault entry not found: {key_name}')
             return ResponseModel(
                 status_code=404, error_code='VAULT007', error_message='Vault entry not found'
             ).dict()
@@ -241,17 +241,17 @@ class VaultService:
             )
 
             if result.modified_count > 0:
-                logger.info(f'{request_id} | Vault entry updated successfully: {key_name}')
+                logger.info(f'Vault entry updated successfully: {key_name}')
                 return ResponseModel(
                     status_code=200, message='Vault entry updated successfully'
                 ).dict()
             else:
-                logger.warning(f'{request_id} | No changes made to vault entry: {key_name}')
+                logger.warning(f'No changes made to vault entry: {key_name}')
                 return ResponseModel(
                     status_code=200, message='No changes made to vault entry'
                 ).dict()
         except Exception as e:
-            logger.error(f'{request_id} | Error updating vault entry: {str(e)}')
+            logger.error(f'Error updating vault entry: {str(e)}')
             return ResponseModel(
                 status_code=500, error_code=ErrorCodes.UNEXPECTED, error_message=Messages.UNEXPECTED
             ).dict()
@@ -269,7 +269,7 @@ class VaultService:
         Returns:
             ResponseModel dict with success or error
         """
-        logger.info(f'{request_id} | Deleting vault entry: {key_name} for user: {username}')
+        logger.info(f'Deleting vault entry: {key_name} for user: {username}')
 
         # Check if entry exists
         entry = await db_find_one(
@@ -277,7 +277,7 @@ class VaultService:
         )
 
         if not entry:
-            logger.error(f'{request_id} | Vault entry not found: {key_name}')
+            logger.error(f'Vault entry not found: {key_name}')
             return ResponseModel(
                 status_code=404, error_code='VAULT007', error_message='Vault entry not found'
             ).dict()
@@ -288,19 +288,19 @@ class VaultService:
             )
 
             if result.deleted_count > 0:
-                logger.info(f'{request_id} | Vault entry deleted successfully: {key_name}')
+                logger.info(f'Vault entry deleted successfully: {key_name}')
                 return ResponseModel(
                     status_code=200, message='Vault entry deleted successfully'
                 ).dict()
             else:
-                logger.error(f'{request_id} | Failed to delete vault entry: {key_name}')
+                logger.error(f'Failed to delete vault entry: {key_name}')
                 return ResponseModel(
                     status_code=500,
                     error_code='VAULT008',
                     error_message='Failed to delete vault entry',
                 ).dict()
         except Exception as e:
-            logger.error(f'{request_id} | Error deleting vault entry: {str(e)}')
+            logger.error(f'Error deleting vault entry: {str(e)}')
             return ResponseModel(
                 status_code=500, error_code=ErrorCodes.UNEXPECTED, error_message=Messages.UNEXPECTED
             ).dict()

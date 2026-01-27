@@ -109,9 +109,9 @@ async def get_analytics_overview(
         username = payload.get('sub')
 
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await platform_role_required_bool(username, 'view_analytics'):
             return respond_rest(
@@ -169,7 +169,7 @@ async def get_analytics_overview(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
+        logger.error(f'Error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -181,7 +181,7 @@ async def get_analytics_overview(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
 # ============================================================================
@@ -285,7 +285,7 @@ async def get_analytics_timeseries(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
+        logger.error(f'Error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -297,7 +297,7 @@ async def get_analytics_timeseries(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
 # ============================================================================
@@ -372,7 +372,7 @@ async def get_top_apis(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
+        logger.error(f'Error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -384,7 +384,7 @@ async def get_top_apis(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
 # ============================================================================
@@ -454,7 +454,7 @@ async def get_top_users(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
+        logger.error(f'Error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -466,7 +466,7 @@ async def get_top_users(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
 # ============================================================================
@@ -552,7 +552,7 @@ async def get_top_endpoints(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
+        logger.error(f'Error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -564,7 +564,7 @@ async def get_top_endpoints(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
 # ============================================================================
@@ -668,7 +668,7 @@ async def get_api_analytics(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
+        logger.error(f'Error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -680,7 +680,7 @@ async def get_api_analytics(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
 # ============================================================================
@@ -767,7 +767,7 @@ async def get_user_analytics(
         )
 
     except Exception as e:
-        logger.error(f'{request_id} | Error: {str(e)}', exc_info=True)
+        logger.error(f'Error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -779,4 +779,4 @@ async def get_user_analytics(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')

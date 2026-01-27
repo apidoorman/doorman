@@ -131,6 +131,9 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         except Exception:
             pass
 
+        # Extract request_id for logging
+        request_id = getattr(request.state, 'request_id', None) or request.headers.get('X-Request-ID') or 'unknown'
+
         # Parse API and endpoint from path
         api_key, endpoint_uri = self._parse_api_endpoint(path)
 

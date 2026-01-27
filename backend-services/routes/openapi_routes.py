@@ -189,7 +189,7 @@ async def get_openapi_spec(api_name: str, api_version: str, request: Request):
         return respond_rest(None, None, spec, request_id, 200, start_time)
         
     except Exception as e:
-        logger.error(f'{request_id} | Error getting OpenAPI spec: {e}', exc_info=True)
+        logger.error(f'Error getting OpenAPI spec: {e}', exc_info=True)
         return respond_rest('OPENAPI999', str(e), None, None, 500, start_time)
 
 
@@ -265,7 +265,7 @@ async def refresh_openapi_spec(api_name: str, api_version: str, request: Request
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error refreshing OpenAPI spec: {e}', exc_info=True)
+        logger.error(f'Error refreshing OpenAPI spec: {e}', exc_info=True)
         return respond_rest('OPENAPI999', str(e), None, None, 500, start_time)
 
 
@@ -368,7 +368,7 @@ async def import_openapi_endpoints(api_name: str, api_version: str, request: Req
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error importing OpenAPI endpoints: {e}', exc_info=True)
+        logger.error(f'Error importing OpenAPI endpoints: {e}', exc_info=True)
         return respond_rest('OPENAPI999', str(e), None, None, 500, start_time)
 
 
@@ -418,5 +418,5 @@ async def parse_openapi_spec(request: Request):
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error parsing OpenAPI spec: {e}', exc_info=True)
+        logger.error(f'Error parsing OpenAPI spec: {e}', exc_info=True)
         return respond_rest('OPENAPI999', str(e), None, None, 500, start_time)
