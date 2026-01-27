@@ -267,22 +267,25 @@ class EnhancedMetricsStore:
         # Count unique users
         unique_users = set()
         for bucket in buckets:
+            # EnhancedMinuteBucket has unique_users as set
             if hasattr(bucket, 'unique_users') and isinstance(bucket.unique_users, set):
                 unique_users.update(bucket.unique_users)
-            elif hasattr(bucket, 'unique_users_set') and bucket.unique_users_set:
+            # AggregatedMetrics has unique_users_set
+            elif hasattr(bucket, 'unique_users_set') and isinstance(bucket.unique_users_set, set):
                 unique_users.update(bucket.unique_users_set)
+            # MinuteBucket has user_counts keys
+            elif hasattr(bucket, 'user_counts') and bucket.user_counts:
+                unique_users.update(bucket.user_counts.keys())
 
-        # Fallback: If we couldn't build a set (e.g. old aggregated data), sum the counts
-        # This overcounts, but is better than 0 for historical data
-        unique_users_count = len(unique_users)
         unique_users_count = len(unique_users)
         if unique_users_count == 0 and buckets:
-             unique_users_count = sum(
-                 len(getattr(b, 'unique_users', set())) 
-                 if isinstance(getattr(b, 'unique_users', 0), set) 
-                 else getattr(b, 'unique_users', 0) 
-                 for b in buckets
-             )
+            # Fallback: sum counts if we have no actual user identifiers
+            unique_users_count = sum(
+                getattr(b, 'unique_users', 0)
+                if not isinstance(getattr(b, 'unique_users', 0), (set, list))
+                else len(getattr(b, 'unique_users', []))
+                for b in buckets
+            )
 
         # Aggregate status counts
         status_distribution: dict[str, int] = defaultdict(int)
@@ -490,14 +493,13 @@ class EnhancedMetricsStore:
         status = {str(k): v for k, v in self.status_counts.items()}
         
         unique_users = set()
-        unique_users = set()
         for b in buckets:
             # EnhancedMinuteBucket has unique_users as set
             if hasattr(b, 'unique_users') and isinstance(b.unique_users, set):
                 unique_users.update(b.unique_users)
             
-            # AggregatedMetrics has unique_users_set (if we added it)
-            elif hasattr(b, 'unique_users_set') and b.unique_users_set:
+            # AggregatedMetrics has unique_users_set
+            elif hasattr(b, 'unique_users_set') and isinstance(b.unique_users_set, set):
                 unique_users.update(b.unique_users_set)
                 
             # Fallback to user_counts keys (MinuteBucket compatibility)
@@ -505,14 +507,14 @@ class EnhancedMetricsStore:
                 unique_users.update(b.user_counts.keys())
 
         unique_users_count = len(unique_users)
-        unique_users_count = len(unique_users)
         if unique_users_count == 0 and buckets:
-             unique_users_count = sum(
-                 len(getattr(b, 'unique_users', set())) 
-                 if isinstance(getattr(b, 'unique_users', 0), set) 
-                 else getattr(b, 'unique_users', 0) 
-                 for b in buckets
-             )
+            # Fallback: sum counts if sets are not available
+            unique_users_count = sum(
+                getattr(b, 'unique_users', 0)
+                if not isinstance(getattr(b, 'unique_users', 0), (set, list))
+                else len(getattr(b, 'unique_users', []))
+                for b in buckets
+            )
 
         return {
             'unique_users': unique_users_count,
