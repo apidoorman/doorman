@@ -14,7 +14,7 @@ from fastapi import APIRouter, Request, HTTPException
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required
 from utils.database import api_collection, subscriptions_collection, user_collection
-from utils.metrics_util import metrics_store
+from utils.enhanced_metrics_util import enhanced_metrics_store
 from utils.response_util import respond_rest
 
 dashboard_router = APIRouter()
@@ -43,10 +43,10 @@ async def get_dashboard_data(request: Request):
         )
         logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
 
-        total_users = user_collection.count_documents({'active': True})
         total_apis = api_collection.count_documents({})
 
-        snap = metrics_store.snapshot('30d')
+        snap = enhanced_metrics_store.snapshot('30d')
+        total_users = len(set(snap.get('top_users', [])))  # Unique users from metrics
         monthly_usage: dict[str, int] = {}
         for pt in snap.get('series', []):
             try:

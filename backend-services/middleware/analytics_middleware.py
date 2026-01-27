@@ -47,14 +47,27 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         method = request.method
         path = str(request.url.path)
 
-        # Estimate request size (headers + body)
+        # Estimate request size (headers + body + protocol overhead)
         request_size = 0
         try:
-            # Headers size
-            request_size += sum(len(k) + len(v) for k, v in request.headers.items())
-            # Body size (if available)
+            # Request line: "METHOD /path?query HTTP/1.1\r\n"
+            request_line = f"{request.method} {request.url.path}"
+            if request.url.query:
+                request_line += f"?{request.url.query}"
+            request_line += " HTTP/1.1\r\n"
+            request_size += len(request_line)
+            
+            # Headers with proper separators (key: value\r\n)
+            for k, v in request.headers.items():
+                request_size += len(f"{k}: {v}\r\n")
+            request_size += 2  # Final \r\n separator
+            
+            # Body size
             if 'content-length' in request.headers:
                 request_size += int(request.headers['content-length'])
+            elif hasattr(request, '_body') and request._body:
+                # Fallback: use actual body if available
+                request_size += len(request._body)
         except Exception:
             pass
 
@@ -82,14 +95,29 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         # Extract response metadata
         status_code = response.status_code
 
-        # Estimate response size
+        # Estimate response size (headers + body + protocol overhead)
         response_size = 0
         try:
-            # Headers size
-            response_size += sum(len(k) + len(v) for k, v in response.headers.items())
-            # Body size (if available)
+            # Status line: "HTTP/1.1 200 OK\r\n"
+            status_text = response.status_code
+            try:
+                from http import HTTPStatus
+                status_text = f"{response.status_code} {HTTPStatus(response.status_code).phrase}"
+            except Exception:
+                status_text = str(response.status_code)
+            response_size += len(f"HTTP/1.1 {status_text}\r\n")
+            
+            # Headers with proper separators (key: value\r\n)
+            for k, v in response.headers.items():
+                response_size += len(f"{k}: {v}\r\n")
+            response_size += 2  # Final \r\n separator
+            
+            # Body size
             if 'content-length' in response.headers:
                 response_size += int(response.headers['content-length'])
+            # Note: For streaming/chunked responses without Content-Length,
+            # we can't accurately measure body size in middleware without wrapping.
+            # This is acceptable as most responses have Content-Length.
         except Exception:
             pass
 

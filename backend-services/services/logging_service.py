@@ -83,6 +83,8 @@ class LoggingService:
 
             # Case A: Use in-memory buffer when it has content; it's fastest and covers both envs
             if buffer_lines:
+                # Collect all matching logs first (newest first from reversed buffer)
+                matching_logs = []
                 for line in reversed(buffer_lines):
                     log_entry = self._parse_log_line(line)
                     if log_entry and self._matches_filters(
@@ -103,17 +105,18 @@ class LoggingService:
                             'level': level,
                         },
                     ):
-                        total_count += 1
-                        if total_count > offset and len(logs) < limit:
-                            logs.append(log_entry)
-                        if len(logs) >= limit:
-                            break
-                logs.reverse()
+                        matching_logs.append(log_entry)
+                
+                total_count = len(matching_logs)
+                # Paginate: skip offset, take limit (already in newest-first order)
+                logs = matching_logs[offset:offset + limit]
             elif log_files:
                 log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-                # Cap file scanning to a few recent files for performance
-                log_files = log_files[:3]
+                # Scan more files to ensure we don't miss logs (increased from 3 to 20)
+                log_files = log_files[:20]
 
+                # Collect all matching logs from all files
+                all_logs = []
                 for log_file in log_files:
                     if not os.path.exists(log_file):
                         continue
@@ -140,19 +143,17 @@ class LoggingService:
                                         'level': level,
                                     },
                                 ):
-                                    total_count += 1
-                                    if len(logs) < limit and total_count > offset:
-                                        logs.append(log_entry)
-
-                                    if len(logs) >= limit:
-                                        break
-
-                        if len(logs) >= limit:
-                            break
+                                    all_logs.append(log_entry)
 
                     except Exception as e:
                         logger.warning(f'Error reading log file {log_file}: {str(e)}')
                         continue
+                
+                # Sort by timestamp descending (newest first)
+                all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+                total_count = len(all_logs)
+                # Paginate: skip offset, take limit
+                logs = all_logs[offset:offset + limit]
             else:
                 # Nothing to read
                 pass
@@ -470,6 +471,12 @@ class LoggingService:
                 else:
                     start_time = datetime.strptime(filters['start_time'], '%H:%M').time()
                     start_datetime = datetime.combine(timestamp.date(), start_time)
+                
+                # Make timezone-aware if timestamp is timezone-aware
+                if timestamp.tzinfo is not None and start_datetime.tzinfo is None:
+                    start_datetime = start_datetime.replace(tzinfo=timezone.utc)
+                elif timestamp.tzinfo is None and start_datetime.tzinfo is not None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
 
                 if timestamp < start_datetime:
                     return False
@@ -486,6 +493,12 @@ class LoggingService:
                 else:
                     end_time = datetime.strptime(filters['end_time'], '%H:%M').time()
                     end_datetime = datetime.combine(timestamp.date(), end_time)
+                
+                # Make timezone-aware if timestamp is timezone-aware
+                if timestamp.tzinfo is not None and end_datetime.tzinfo is None:
+                    end_datetime = end_datetime.replace(tzinfo=timezone.utc)
+                elif timestamp.tzinfo is None and end_datetime.tzinfo is not None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
 
                 if timestamp > end_datetime:
                     return False
