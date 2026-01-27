@@ -1521,28 +1521,29 @@ except Exception as e:
 @doorman.middleware('http')
 async def request_id_middleware(request: Request, call_next):
     try:
+        from utils.correlation_util import get_correlation_id, set_correlation_id
+
         rid = (
-            request.headers.get('x-request-id')
+            getattr(request.state, 'request_id', None)
+            or get_correlation_id()
+            or request.headers.get('x-request-id')
             or request.headers.get('request-id')
-            or request.headers.get('x-request-id'.title())
+            or request.headers.get('X-Request-ID')
         )
         if not rid:
             rid = str(uuid.uuid4())
 
-        try:
+        # Store in state
+        if not hasattr(request.state, 'request_id'):
             request.state.request_id = rid
-        except Exception:
-            pass
 
-        try:
-            from utils.correlation_util import set_correlation_id
+        # Ensure correlation ID is set
+        set_correlation_id(rid)
 
-            set_correlation_id(rid)
-        except Exception:
-            pass
+        # Optional logging
         try:
             settings = get_cached_settings()
-            trust_xff = bool(settings.get('trust_x_forwarded_for'))
+            trust_xff = bool(settings.get('trust_x_forwarded_for', False))
             direct_ip = getattr(getattr(request, 'client', None), 'host', None)
             effective_ip = _policy_get_client_ip(request, trust_xff)
             gateway_logger.info(
@@ -1550,12 +1551,15 @@ async def request_id_middleware(request: Request, call_next):
             )
         except Exception:
             pass
+
         response = await call_next(request)
+        
         try:
             response.headers['X-Request-ID'] = rid
             response.headers['request_id'] = rid
         except Exception as e:
             gateway_logger.warning(f'Failed to set response headers: {str(e)}')
+            
         return response
     except Exception as e:
         gateway_logger.error(f'Request ID middleware error: {str(e)}', exc_info=True)

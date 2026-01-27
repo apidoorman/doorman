@@ -5,8 +5,11 @@ def test_redaction_handles_cookies_csrf_and_mixed_cases():
     logger = logging.getLogger('doorman.gateway')
     filt = None
     for h in logger.handlers:
-        if h.filters:
-            filt = h.filters[0]
+        for f in h.filters:
+            if type(f).__name__ == 'RedactFilter':
+                filt = f
+                break
+        if filt:
             break
     assert filt is not None
 

@@ -9,15 +9,22 @@ logger = logging.getLogger('doorman.gateway')
 class GlobalLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # 1. Generate or extract Request ID
-        request_id = request.headers.get('X-Request-ID')
+        from utils.correlation_util import correlation_id
+        
+        request_id = (
+            getattr(request.state, 'request_id', None)
+            or correlation_id.get()
+            or request.headers.get('X-Request-ID')
+            or request.headers.get('request-id')
+        )
         if not request_id:
             request_id = str(uuid.uuid4())
         
-        from utils.correlation_util import correlation_id
         correlation_id.set(request_id)
         
-        # Store in state for other parts of the app to use
-        request.state.request_id = request_id
+        # Store in state if not already present
+        if not hasattr(request.state, 'request_id'):
+            request.state.request_id = request_id
         
         # 2. Start Timer
         start_time = time.time()
