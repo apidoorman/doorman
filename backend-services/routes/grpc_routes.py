@@ -81,7 +81,7 @@ async def list_grpc_services(api_name: str, api_version: str, request: Request):
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error listing gRPC services: {e}', exc_info=True)
+        logger.error(f'Error listing gRPC services: {e}', exc_info=True)
         return respond_rest('GRPC999', str(e), None, None, 500, start_time)
 
 
@@ -102,7 +102,7 @@ async def grpc_web_proxy(api_name: str, service: str, method: str, request: Requ
     and responses back to gRPC-Web frames.
     """
     request_id = str(uuid.uuid4())
-    logger.info(f'{request_id} | gRPC-Web request: {api_name} -> {service}/{method}')
+    logger.info(f'gRPC-Web request: {api_name} -> {service}/{method}')
     
     # Check headers
     content_type = request.headers.get('content-type', '')
@@ -156,7 +156,7 @@ async def grpc_web_proxy(api_name: str, service: str, method: str, request: Requ
         # Since we don't have a full gRPC client setup here that can handle raw bytes,
         # we'll stub the response to prove the route infrastructure works.
         
-        logger.info(f'{request_id} | gRPC-Web proxy to {servers[0]}')
+        logger.info(f'gRPC-Web proxy to {servers[0]}')
         
         # Simulate successful empty response
         resp_body = create_grpc_web_response(b'', {'grpc-status': '0', 'grpc-message': 'OK'})
@@ -170,5 +170,5 @@ async def grpc_web_proxy(api_name: str, service: str, method: str, request: Requ
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | gRPC-Web error: {e}', exc_info=True)
+        logger.error(f'gRPC-Web error: {e}', exc_info=True)
         return Response(status_code=500)

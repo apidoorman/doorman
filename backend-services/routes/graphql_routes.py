@@ -108,7 +108,7 @@ async def get_graphql_schema(api_name: str, api_version: str, request: Request):
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error getting GraphQL schema: {e}', exc_info=True)
+        logger.error(f'Error getting GraphQL schema: {e}', exc_info=True)
         return respond_rest('GQL999', str(e), None, None, 500, start_time)
 
 
@@ -171,7 +171,7 @@ async def refresh_graphql_schema(api_name: str, api_version: str, request: Reque
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error refreshing GraphQL schema: {e}', exc_info=True)
+        logger.error(f'Error refreshing GraphQL schema: {e}', exc_info=True)
         return respond_rest('GQL999', str(e), None, None, 500, start_time)
 
 
@@ -222,7 +222,7 @@ async def get_graphql_types(api_name: str, api_version: str, request: Request):
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error getting GraphQL types: {e}', exc_info=True)
+        logger.error(f'Error getting GraphQL types: {e}', exc_info=True)
         return respond_rest('GQL999', str(e), None, None, 500, start_time)
 
 
@@ -243,7 +243,7 @@ async def graphql_subscription_proxy(websocket: WebSocket, api_name: str):
     - subscribe -> next/error/complete
     """
     request_id = str(uuid.uuid4())
-    logger.info(f'{request_id} | GraphQL WebSocket connection attempt for {api_name}')
+    logger.info(f'GraphQL WebSocket connection attempt for {api_name}')
     
     # Accept the connection
     await websocket.accept(subprotocol='graphql-transport-ws')
@@ -289,7 +289,7 @@ async def graphql_subscription_proxy(websocket: WebSocket, api_name: str):
         else:
             ws_url = upstream_url.replace('http://', 'ws://') + '/graphql'
         
-        logger.info(f'{request_id} | Connecting to upstream WebSocket: {ws_url}')
+        logger.info(f'Connecting to upstream WebSocket: {ws_url}')
         
         # Connect to upstream (using websockets library if available)
         try:
@@ -301,7 +301,7 @@ async def graphql_subscription_proxy(websocket: WebSocket, api_name: str):
             )
         except ImportError:
             # Fallback: just proxy messages without upstream connection
-            logger.warning(f'{request_id} | websockets library not available, subscription proxy disabled')
+            logger.warning(f'websockets library not available, subscription proxy disabled')
             await websocket.send_json({
                 'type': 'connection_error',
                 'payload': {'message': 'WebSocket subscriptions require websockets library'},
@@ -314,21 +314,21 @@ async def graphql_subscription_proxy(websocket: WebSocket, api_name: str):
             try:
                 while True:
                     data = await websocket.receive_text()
-                    logger.debug(f'{request_id} | Client -> Upstream: {data[:100]}...')
+                    logger.debug(f'Client -> Upstream: {data[:100]}...')
                     await upstream_ws.send(data)
             except WebSocketDisconnect:
-                logger.info(f'{request_id} | Client disconnected')
+                logger.info(f'Client disconnected')
             except Exception as e:
-                logger.error(f'{request_id} | Client receive error: {e}')
+                logger.error(f'Client receive error: {e}')
         
         async def upstream_to_client():
             try:
                 async for message in upstream_ws:
-                    logger.debug(f'{request_id} | Upstream -> Client: {str(message)[:100]}...')
+                    logger.debug(f'Upstream -> Client: {str(message)[:100]}...')
                     if websocket.client_state == WebSocketState.CONNECTED:
                         await websocket.send_text(message)
             except Exception as e:
-                logger.error(f'{request_id} | Upstream receive error: {e}')
+                logger.error(f'Upstream receive error: {e}')
         
         # Run both directions concurrently
         await asyncio.gather(
@@ -338,9 +338,9 @@ async def graphql_subscription_proxy(websocket: WebSocket, api_name: str):
         )
         
     except WebSocketDisconnect:
-        logger.info(f'{request_id} | WebSocket disconnected')
+        logger.info(f'WebSocket disconnected')
     except Exception as e:
-        logger.error(f'{request_id} | WebSocket error: {e}', exc_info=True)
+        logger.error(f'WebSocket error: {e}', exc_info=True)
         try:
             await websocket.send_json({
                 'type': 'connection_error',
@@ -363,4 +363,4 @@ async def graphql_subscription_proxy(websocket: WebSocket, api_name: str):
         except Exception:
             pass
         
-        logger.info(f'{request_id} | GraphQL WebSocket connection closed')
+        logger.info(f'GraphQL WebSocket connection closed')

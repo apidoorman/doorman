@@ -47,9 +47,9 @@ async def demo_seed(
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await is_admin_user(username):
             return respond_rest(
@@ -72,7 +72,7 @@ async def demo_seed(
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f'{request_id} | Demo seed error: {str(e)}', exc_info=True)
+        logger.error(f'Demo seed error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500, error_code='DEMO999', error_message='Failed to seed demo data'
@@ -80,4 +80,4 @@ async def demo_seed(
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

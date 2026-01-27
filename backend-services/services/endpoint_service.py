@@ -138,11 +138,11 @@ class EndpointService:
                 # Validate path stays within proto directory
                 proto_dir_resolved = proto_dir.resolve()
                 if not str(proto_path).startswith(str(proto_dir_resolved)):
-                    logger.error(f'{request_id} | Invalid proto path detected')
+                    logger.error(f'Invalid proto path detected')
                     raise ValueError('Proto path must be within proto directory')
                 # Additional validation before file operations
                 if not str(proto_path).startswith(str(project_root.resolve())):
-                    logger.error(f'{request_id} | Proto path outside project root')
+                    logger.error(f'Proto path outside project root')
                     raise ValueError('Proto path must be within project root')
                 if not proto_path.exists():
                     proto_content = (
@@ -175,7 +175,7 @@ class EndpointService:
                 )
                 if code != 0:
                     logger.warning(
-                        f'{request_id} | Pre-gen gRPC stubs returned {code} for {module_base}'
+                        f'Pre-gen gRPC stubs returned {code} for {module_base}'
                     )
                 try:
                     init_path = (generated_dir / '__init__.py').resolve()
@@ -185,7 +185,7 @@ class EndpointService:
                 except Exception:
                     pass
         except Exception as _e:
-            logger.debug(f'{request_id} | Skipping pre-gen gRPC stubs: {_e}')
+            logger.debug(f'Skipping pre-gen gRPC stubs: {_e}')
         return ResponseModel(
             status_code=201,
             response_headers={'request_id': request_id},

@@ -54,9 +54,9 @@ async def subscribe_api(api_data: SubscribeModel, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         # If targeting a different user, require manage_subscriptions permission
         if api_data.username and api_data.username != username:
@@ -84,7 +84,7 @@ async def subscribe_api(api_data: SubscribeModel, request: Request):
 
         target_user = api_data.username or username
         logger.info(
-            f'{request_id} | Actor: {username} | Action: subscribe | Target: {target_user} | API: {api_data.api_name}/{api_data.api_version}'
+            f'Actor: {username} | Action: subscribe | Target: {target_user} | API: {api_data.api_name}/{api_data.api_version}'
         )
         result = await SubscriptionService.subscribe(api_data, request_id)
         actor_user = username
@@ -109,7 +109,7 @@ async def subscribe_api(api_data: SubscribeModel, request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -120,7 +120,7 @@ async def subscribe_api(api_data: SubscribeModel, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -153,9 +153,9 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         # If targeting a different user, require manage_subscriptions permission
         if api_data.username and api_data.username != username:
@@ -183,7 +183,7 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request):
 
         target_user = api_data.username or username
         logger.info(
-            f'{request_id} | Actor: {username} | Action: unsubscribe | Target: {target_user} | API: {api_data.api_name}/{api_data.api_version}'
+            f'Actor: {username} | Action: unsubscribe | Target: {target_user} | API: {api_data.api_name}/{api_data.api_version}'
         )
         result = await SubscriptionService.unsubscribe(api_data, request_id)
         actor_user = username
@@ -208,7 +208,7 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request):
             )
         )
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -219,7 +219,7 @@ async def unsubscribe_api(api_data: SubscribeModel, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -250,12 +250,12 @@ async def subscriptions_for_current_user(request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
         return respond_rest(await SubscriptionService.get_user_subscriptions(username, request_id))
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -266,7 +266,7 @@ async def subscriptions_for_current_user(request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -297,9 +297,9 @@ async def subscriptions_for_user_by_id(user_id: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         # Restrict to self or users with manage_subscriptions permission
         if user_id != username:
@@ -315,7 +315,7 @@ async def subscriptions_for_user_by_id(user_id: str, request: Request):
 
         return respond_rest(await SubscriptionService.get_user_subscriptions(user_id, request_id))
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -326,7 +326,7 @@ async def subscriptions_for_user_by_id(user_id: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')
 
 
 """
@@ -351,9 +351,9 @@ async def available_apis(username: str, request: Request):
         payload = await auth_required(request)
         actor = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {actor} | From: {request.client.host}:{request.client.port}'
+            f'Username: {actor} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         accesses = (payload or {}).get('accesses') or {}
         can_manage = bool(accesses.get('manage_subscriptions'))
@@ -404,7 +404,7 @@ async def available_apis(username: str, request: Request):
                 )
         return respond_rest(ResponseModel(status_code=200, response={'apis': allowed}))
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -415,4 +415,4 @@ async def available_apis(username: str, request: Request):
         )
     finally:
         end_time = time.time() * 1000
-        logger.info(f'{request_id} | Total time: {str(end_time - start_time)}ms')
+        logger.info(f'Total time: {str(end_time - start_time)}ms')

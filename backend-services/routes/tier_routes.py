@@ -239,9 +239,9 @@ async def list_tiers(
         username = payload.get('sub')
 
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await platform_role_required_bool(username, 'manage_tiers'):
             return respond_rest(
@@ -286,7 +286,7 @@ async def list_tiers(
         )
 
     except Exception as e:
-        logger.error(f'{request_id} | Error listing tiers: {e}', exc_info=True)
+        logger.error(f'Error listing tiers: {e}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -298,7 +298,7 @@ async def list_tiers(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
 @tier_router.get('/{tier_id}', response_model=TierResponse)
@@ -715,9 +715,9 @@ async def get_all_tier_statistics(
         username = payload.get('sub')
 
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await platform_role_required_bool(username, 'manage_tiers'):
             return respond_rest(
@@ -738,7 +738,7 @@ async def get_all_tier_statistics(
         )
 
     except Exception as e:
-        logger.error(f'{request_id} | Error getting all tier statistics: {e}', exc_info=True)
+        logger.error(f'Error getting all tier statistics: {e}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -750,7 +750,7 @@ async def get_all_tier_statistics(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')
 
 
 @tier_router.get('/{tier_id}/statistics', response_model=ResponseModel)
@@ -770,9 +770,9 @@ async def get_tier_statistics(
         username = payload.get('sub')
 
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         if not await platform_role_required_bool(username, 'manage_tiers'):
             return respond_rest(
@@ -793,7 +793,7 @@ async def get_tier_statistics(
         )
 
     except Exception as e:
-        logger.error(f'{request_id} | Error getting tier statistics: {e}', exc_info=True)
+        logger.error(f'Error getting tier statistics: {e}', exc_info=True)
         return respond_rest(
             ResponseModel(
                 status_code=500,
@@ -805,4 +805,4 @@ async def get_tier_statistics(
 
     finally:
         end_time = time.time()
-        logger.info(f'{request_id} | Total time: {(end_time - start_time) * 1000:.2f}ms')
+        logger.info(f'Total time: {(end_time - start_time) * 1000:.2f}ms')

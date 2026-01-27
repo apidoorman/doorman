@@ -105,7 +105,7 @@ async def get_wsdl(api_name: str, api_version: str, request: Request):
         return respond_rest(None, None, {'wsdl': wsdl_content, 'cached': False}, request_id, 200, start_time)
         
     except Exception as e:
-        logger.error(f'{request_id} | Error getting WSDL: {e}', exc_info=True)
+        logger.error(f'Error getting WSDL: {e}', exc_info=True)
         return respond_rest('WSDL999', str(e), None, None, 500, start_time)
 
 
@@ -179,7 +179,7 @@ async def refresh_wsdl(api_name: str, api_version: str, request: Request):
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error refreshing WSDL: {e}', exc_info=True)
+        logger.error(f'Error refreshing WSDL: {e}', exc_info=True)
         return respond_rest('WSDL999', str(e), None, None, 500, start_time)
 
 
@@ -281,7 +281,7 @@ async def import_wsdl_operations(api_name: str, api_version: str, request: Reque
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error importing WSDL: {e}', exc_info=True)
+        logger.error(f'Error importing WSDL: {e}', exc_info=True)
         return respond_rest('WSDL999', str(e), None, None, 500, start_time)
 
 
@@ -340,5 +340,5 @@ async def parse_wsdl_content(request: Request):
         )
         
     except Exception as e:
-        logger.error(f'{request_id} | Error parsing WSDL: {e}', exc_info=True)
+        logger.error(f'Error parsing WSDL: {e}', exc_info=True)
         return respond_rest('WSDL999', str(e), None, None, 500, start_time)

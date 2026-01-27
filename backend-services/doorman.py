@@ -96,6 +96,7 @@ from routes.grpc_routes import grpc_router
 from routes.mfa_routes import mfa_router
 from utils.audit_util import audit
 from middleware.security_audit_middleware import SecurityAuditMiddleware
+from middleware.logging_middleware import GlobalLoggingMiddleware
 from middleware.latency_injection_middleware import LatencyInjectionMiddleware
 from utils.auth_blacklist import purge_expired_tokens
 from utils.cache_manager_util import cache_manager
@@ -110,6 +111,7 @@ from utils.memory_dump_util import (
     restore_memory_from_file,
 )
 from utils.metrics_util import metrics_store
+from utils.enhanced_metrics_util import enhanced_metrics_store
 from utils.response_util import process_response
 from utils.security_settings_util import (
     get_cached_settings,
@@ -367,11 +369,18 @@ async def app_lifespan(app: FastAPI):
     except Exception as e:
         gateway_logger.debug(f'Metrics restore skipped: {e}')
 
+    ENHANCED_METRICS_FILE = os.path.join(LOGS_DIR, 'enhanced_metrics.json')
+    try:
+        enhanced_metrics_store.load_from_file(ENHANCED_METRICS_FILE)
+    except Exception as e:
+        gateway_logger.debug(f'Enhanced metrics restore skipped: {e}')
+
     async def _metrics_autosave(interval_s: int = 60):
         while True:
             try:
                 await asyncio.sleep(interval_s)
                 metrics_store.save_to_file(METRICS_FILE)
+                enhanced_metrics_store.save_to_file(ENHANCED_METRICS_FILE)
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -646,6 +655,8 @@ async def app_lifespan(app: FastAPI):
         try:
             METRICS_FILE = os.path.join(LOGS_DIR, 'metrics.json')
             metrics_store.save_to_file(METRICS_FILE)
+            ENHANCED_METRICS_FILE = os.path.join(LOGS_DIR, 'enhanced_metrics.json')
+            enhanced_metrics_store.save_to_file(ENHANCED_METRICS_FILE)
         except Exception:
             pass
 
@@ -1479,6 +1490,7 @@ class PlatformCORSMiddleware:
 
 
 doorman.add_middleware(PlatformCORSMiddleware)
+doorman.add_middleware(GlobalLoggingMiddleware)
 
 # Add tier-based rate limiting middleware (skip in live/test to avoid 429 floods)
 try:
@@ -1534,7 +1546,7 @@ async def request_id_middleware(request: Request, call_next):
             direct_ip = getattr(getattr(request, 'client', None), 'host', None)
             effective_ip = _policy_get_client_ip(request, trust_xff)
             gateway_logger.info(
-                f'{rid} | Entry: client_ip={direct_ip} effective_ip={effective_ip} method={request.method} path={str(request.url.path)}'
+                f'Entry: client_ip={direct_ip} effective_ip={effective_ip} method={request.method} path={str(request.url.path)}'
             )
         except Exception:
             pass
@@ -1624,10 +1636,12 @@ LOGS_DIR = (
 # Build formatters
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        request_id = getattr(record, 'request_id', 'no-request-id')
         payload = {
             'time': self.formatTime(record, '%Y-%m-%dT%H:%M:%S'),
             'name': record.name,
             'level': record.levelname,
+            'request_id': request_id,
             'message': record.getMessage(),
         }
         try:
@@ -1649,7 +1663,7 @@ try:
     _file_handler.setFormatter(
         JSONFormatter()
         if _fmt_is_json
-        else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(request_id)s | %(message)s')
     )
 except Exception as _e:
     # Attempt fallback to /tmp which is commonly writable on containers
@@ -1665,7 +1679,7 @@ except Exception as _e:
         _file_handler.setFormatter(
             JSONFormatter()
             if _fmt_is_json
-            else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(request_id)s | %(message)s')
         )
         logging.getLogger('doorman.gateway').warning(
             f'Primary LOGS_DIR={LOGS_DIR} not writable ({_e}); falling back to {_tmp_dir}'
@@ -1680,11 +1694,15 @@ except Exception as _e:
 # Configure all doorman loggers to use the same handler and prevent propagation
 def configure_logger(logger_name: str) -> logging.Logger:
     logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.INFO)
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    numeric_level = getattr(logging, log_level, logging.INFO)
+    logger.setLevel(numeric_level)
     logger.propagate = False
 
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
+
+    from utils.correlation_util import correlation_id, RequestIdFilter
 
     class RedactFilter(logging.Filter):
         """Comprehensive logging redaction filter for sensitive data.
@@ -1762,12 +1780,13 @@ def configure_logger(logger_name: str) -> logging.Logger:
             return True
 
     console = logging.StreamHandler(stream=sys.stdout)
-    console.setLevel(logging.INFO)
+    console.setLevel(numeric_level)
     console.setFormatter(
         JSONFormatter()
         if _fmt_is_json
-        else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        else logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(request_id)s | %(message)s')
     )
+    console.addFilter(RequestIdFilter())
     console.addFilter(RedactFilter())
     logger.addHandler(console)
 
@@ -1775,6 +1794,7 @@ def configure_logger(logger_name: str) -> logging.Logger:
         if not any(
             isinstance(f, logging.Filter) and hasattr(f, 'PATTERNS') for f in _file_handler.filters
         ):
+            _file_handler.addFilter(RequestIdFilter())
             _file_handler.addFilter(RedactFilter())
         logger.addHandler(_file_handler)
     return logger
@@ -1790,7 +1810,9 @@ try:
 
     _mem_enabled = os.getenv('MEMORY_LOG_ENABLED', 'true').lower() != 'false'
     if _mem_enabled:
-        _mem_handler = MemoryLogHandler()
+        _lvl = os.getenv('LOG_LEVEL', 'INFO').upper()
+        _num_lvl = getattr(logging, _lvl, logging.INFO)
+        _mem_handler = MemoryLogHandler(level=_num_lvl)
         for _name in (
             'doorman.gateway',
             'doorman.logging',

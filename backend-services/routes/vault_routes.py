@@ -52,15 +52,15 @@ async def create_vault_entry(entry_data: CreateVaultEntryModel, request: Request
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(await VaultService.create_vault_entry(username, entry_data, request_id))
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -71,7 +71,7 @@ async def create_vault_entry(entry_data: CreateVaultEntryModel, request: Request
         )
     finally:
         elapsed = time.time() * 1000 - start_time
-        logger.info(f'{request_id} | Total time: {elapsed:.2f}ms')
+        logger.info(f'Total time: {elapsed:.2f}ms')
 
 
 @vault_router.get(
@@ -113,15 +113,15 @@ async def list_vault_entries(request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(await VaultService.list_vault_entries(username, request_id))
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -132,7 +132,7 @@ async def list_vault_entries(request: Request):
         )
     finally:
         elapsed = time.time() * 1000 - start_time
-        logger.info(f'{request_id} | Total time: {elapsed:.2f}ms')
+        logger.info(f'Total time: {elapsed:.2f}ms')
 
 
 @vault_router.get(
@@ -169,15 +169,15 @@ async def get_vault_entry(key_name: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(await VaultService.get_vault_entry(username, key_name, request_id))
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -188,7 +188,7 @@ async def get_vault_entry(key_name: str, request: Request):
         )
     finally:
         elapsed = time.time() * 1000 - start_time
-        logger.info(f'{request_id} | Total time: {elapsed:.2f}ms')
+        logger.info(f'Total time: {elapsed:.2f}ms')
 
 
 @vault_router.put(
@@ -215,9 +215,9 @@ async def update_vault_entry(key_name: str, update_data: UpdateVaultEntryModel, 
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(
             await VaultService.update_vault_entry(username, key_name, update_data, request_id)
@@ -225,7 +225,7 @@ async def update_vault_entry(key_name: str, update_data: UpdateVaultEntryModel, 
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -236,7 +236,7 @@ async def update_vault_entry(key_name: str, update_data: UpdateVaultEntryModel, 
         )
     finally:
         elapsed = time.time() * 1000 - start_time
-        logger.info(f'{request_id} | Total time: {elapsed:.2f}ms')
+        logger.info(f'Total time: {elapsed:.2f}ms')
 
 
 @vault_router.delete(
@@ -263,15 +263,15 @@ async def delete_vault_entry(key_name: str, request: Request):
         payload = await auth_required(request)
         username = payload.get('sub')
         logger.info(
-            f'{request_id} | Username: {username} | From: {request.client.host}:{request.client.port}'
+            f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
-        logger.info(f'{request_id} | Endpoint: {request.method} {str(request.url.path)}')
+        logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
 
         return respond_rest(await VaultService.delete_vault_entry(username, key_name, request_id))
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.critical(f'{request_id} | Unexpected error: {str(e)}', exc_info=True)
+        logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
             ResponseModel(
                 status_code=500,
@@ -282,4 +282,4 @@ async def delete_vault_entry(key_name: str, request: Request):
         )
     finally:
         elapsed = time.time() * 1000 - start_time
-        logger.info(f'{request_id} | Total time: {elapsed:.2f}ms')
+        logger.info(f'Total time: {elapsed:.2f}ms')
