@@ -92,7 +92,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }
 
   const handleLogout = () => {
+    const theme = localStorage.getItem('theme')
     localStorage.clear()
+    if (theme) localStorage.setItem('theme', theme)
     sessionStorage.clear()
     document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
     window.location.href = '/login'
@@ -118,8 +120,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     key={item.href}
                     href={item.href}
                     className={`flex items-center px-3 py-1.5 text-[13px] font-medium rounded-sm transition-colors ${isActive
-                        ? 'bg-gray-100 text-gray-900 dark:bg-white/5 dark:text-white'
-                        : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-white/60 dark:hover:bg-white/5 dark:hover:text-white/80'
+                      ? 'bg-gray-100 text-gray-900 dark:bg-white/5 dark:text-white'
+                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-white/60 dark:hover:bg-white/5 dark:hover:text-white/80'
                       }`}
                   >
                     <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

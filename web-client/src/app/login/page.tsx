@@ -27,12 +27,14 @@ const LoginPage = () => {
     } else if (isAuthenticated && !hasUIAccess) {
       // Authenticated but not allowed to use UI
       setErrorMessage('Your account does not have UI access. Contact an administrator.')
-      try { void postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
+      try { void postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch { }
       try {
+        const theme = localStorage.getItem('theme')
         localStorage.clear(); sessionStorage.clear()
+        if (theme) localStorage.setItem('theme', theme)
         // Attempt to clear non-HttpOnly cookie (best-effort)
         document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-      } catch {}
+      } catch { }
     }
   }, [isAuthenticated, hasUIAccess, router])
 
@@ -44,7 +46,7 @@ const LoginPage = () => {
     try {
       try {
         await postJson(`${SERVER_URL}/platform/authorization`, { email, password })
-      } catch (e:any) {
+      } catch (e: any) {
         setErrorMessage(e?.message || 'Invalid email or password')
         setIsLoading(false)
         return
@@ -55,14 +57,14 @@ const LoginPage = () => {
         const allowUi = !!(meData && (isSuperAdmin || meData.ui_access === true))
         if (!allowUi) {
           setErrorMessage('Your account does not have UI access. Contact an administrator.')
-          try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
+          try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch { }
           setIsLoading(false)
           return
         }
       } catch (e: any) {
         // If we cannot fetch account details, surface a clearer error
         setErrorMessage(e?.message || 'Unable to verify account access. Please try again.')
-        try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch {}
+        try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch { }
         setIsLoading(false)
         return
       }
@@ -105,7 +107,9 @@ const LoginPage = () => {
         <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-white/[0.08] rounded-lg p-8 shadow-xl">
           {/* Header */}
           <div className="text-center mb-8">
-            <img src="/android-chrome-192x192.png" alt="Doorman logo" className="mx-auto mb-4 w-12 h-12 object-contain" />
+            <a href="https://doorman.dev" className="inline-block transition-opacity hover:opacity-80">
+              <img src="/android-chrome-192x192.png" alt="Doorman logo" className="mx-auto mb-4 w-12 h-12 object-contain" />
+            </a>
             <h1 className="text-[22px] font-medium text-gray-900 dark:text-white/90 mb-1">Welcome to Doorman</h1>
             <p className="text-gray-600 dark:text-white/40 text-[13px]">Sign in to manage your API gateway</p>
           </div>
