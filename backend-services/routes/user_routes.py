@@ -176,6 +176,27 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
                     error_message='Can only update your own information',
                 )
             )
+        # Field-level authorization: when users update their own profile (self-service)
+        # without manage_users permission, they cannot modify restricted fields
+        is_self_update = auth_username == username
+        has_manage_users = await platform_role_required_bool(auth_username, Roles.MANAGE_USERS)
+        if is_self_update and not has_manage_users:
+            restricted_fields = {'role', 'groups', 'active', 'username'}
+            try:
+                incoming_fields = {
+                    k for k, v in (api_data.dict(exclude_unset=True) or {}).items() if v is not None
+                }
+            except Exception:
+                incoming_fields = set()
+            attempted_restricted = incoming_fields & restricted_fields
+            if attempted_restricted:
+                return respond_rest(
+                    ResponseModel(
+                        status_code=403,
+                        error_code='USR023',
+                        error_message=f'Cannot modify restricted fields without manage_users permission: {", ".join(sorted(attempted_restricted))}',
+                    )
+                )
         if await _safe_is_admin_user(username) and not await _safe_is_admin_user(auth_username):
             return respond_rest(
                 ResponseModel(
