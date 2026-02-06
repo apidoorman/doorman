@@ -16,6 +16,7 @@ from starlette.types import ASGIApp
 
 from utils.enhanced_metrics_util import enhanced_metrics_store
 from utils.metrics_util import metrics_store
+from utils.prometheus_metrics import observe_request
 
 logger = logging.getLogger('doorman.analytics')
 
@@ -131,6 +132,7 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
                         bytes_out=response_size,
                         is_test=False,
                     )
+                    observe_request(duration_ms, status_code)
                 else:
                     # Still capture test count in legacy store to keep test-aware totals accurate
                     metrics_store.record(

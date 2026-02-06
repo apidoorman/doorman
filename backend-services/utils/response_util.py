@@ -37,16 +37,41 @@ def _add_token_compat(enveloped: dict, payload: dict):
         pass
 
 
-def respond_rest(model):
+def respond_rest(*args, **kwargs):
     """Return a REST JSONResponse using the normalized envelope logic.
 
-    Accepts either a ResponseModel instance or a dict suitable for ResponseModel.
+    Accepts:
+    - ResponseModel instance
+    - dict suitable for ResponseModel
+    - legacy signature: (error_code, error_message, response, request_id, status_code, start_time?)
     """
-    if isinstance(model, dict):
-        rm = ResponseModel(**model)
-    else:
-        rm = model
-    return process_rest_response(rm)
+    if len(args) == 1 and not kwargs:
+        model = args[0]
+        if isinstance(model, dict):
+            rm = ResponseModel(**model)
+        else:
+            rm = model
+        return process_rest_response(rm)
+
+    if not args and kwargs:
+        return process_rest_response(ResponseModel(**kwargs))
+
+    if len(args) >= 5 and not kwargs:
+        error_code, error_message, response, request_id, status_code = args[:5]
+        headers = {'request_id': request_id} if request_id else None
+        rm = ResponseModel(
+            status_code=status_code,
+            response_headers=headers,
+            response=response,
+            error_code=error_code,
+            error_message=error_message,
+        )
+        if response is None and error_code is None and error_message:
+            rm.message = error_message
+            rm.error_message = None
+        return process_rest_response(rm)
+
+    raise TypeError('respond_rest expected a ResponseModel, dict, or legacy signature')
 
 
 def process_rest_response(response):

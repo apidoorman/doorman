@@ -25,6 +25,7 @@ from typing import Any
 import httpx
 
 from utils.metrics_util import metrics_store
+from utils.prometheus_metrics import record_retry, record_upstream_timeout
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -156,6 +157,7 @@ async def request_with_resilience(
                 metrics_store.record_retry(api_key)
             except Exception:
                 pass
+            record_retry()
             await asyncio.sleep(_backoff_delay(attempt))
         try:
             try:
@@ -217,6 +219,7 @@ async def request_with_resilience(
                     metrics_store.record_upstream_timeout(api_key)
                 except Exception:
                     pass
+                record_upstream_timeout()
             if enabled:
                 circuit_manager.record_failure(api_key, threshold)
             if attempt >= attempts:

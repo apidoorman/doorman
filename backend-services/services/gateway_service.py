@@ -1129,7 +1129,10 @@ class GatewayService:
                     except Exception:
                         pass
             response_content = http_response.text
-            logger.info(f'{request_id} | SOAP gateway response: {response_content}')
+            try:
+                logger.info(f'SOAP gateway response size: {len(response_content)} bytes')
+            except Exception:
+                pass
             backend_end_time = time.time() * 1000
             if http_response.status_code == 404:
                 return GatewayService.error_response(

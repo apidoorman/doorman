@@ -150,24 +150,27 @@ class RateLimiter:
         """
         self.redis = redis_client or get_redis_client()
         self._fallback_mode = False
-        
-        # Check if Redis is actually usable
-        import os
-        mem_only = os.getenv('MEM_OR_EXTERNAL', 'MEM') == 'MEM'
-        
-        try:
-            import redis as _redis_pkg
-            if mem_only:
-                raise Exception("Memory mode forced")
-            
-            # Connection testing is done in RedisClient.__init__ too, 
-            # but we verify here to be sure we should use fallback.
-            if hasattr(self.redis, 'client'):
-                self.redis.client.ping()
-        except Exception:
-            logger.warning("Redis unavailable or MEM mode enabled, using in-memory rate limiting fallback")
-            self.redis = InMemoryRateLimitStorage()
-            self._fallback_mode = True
+
+        # Only auto-fallback when we create the client internally.
+        # If a caller injects a client (e.g., tests), trust it.
+        if redis_client is None:
+            import os
+            mem_only = os.getenv('MEM_OR_EXTERNAL', 'MEM') == 'MEM'
+
+            try:
+                if mem_only:
+                    raise Exception("Memory mode forced")
+
+                # Connection testing is done in RedisClient.__init__ too,
+                # but we verify here to be sure we should use fallback.
+                if hasattr(self.redis, 'client'):
+                    self.redis.client.ping()
+            except Exception:
+                logger.warning(
+                    "Redis unavailable or MEM mode enabled, using in-memory rate limiting fallback"
+                )
+                self.redis = InMemoryRateLimitStorage()
+                self._fallback_mode = True
 
     def check_rate_limit(self, rule: RateLimitRule, identifier: str) -> RateLimitResult:
         """

@@ -1,5 +1,8 @@
 import type { NextConfig } from 'next'
 
+const isDemo = process.env.DEMO_MODE === 'true'
+const gatewayTarget = process.env.GATEWAY_INTERNAL_URL || 'http://localhost:3001'
+
 const securityHeaders = [
   {
     key: 'X-Content-Type-Options',
@@ -28,10 +31,6 @@ function buildRemotePatterns() {
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
-  eslint: {
-    // Allow production builds to succeed even if there are ESLint errors.
-    ignoreDuringBuilds: true,
-  },
   // Harden Next/Image to mitigate known issues around the optimization route
   images: {
     // Allow remote image hosts via env: NEXT_IMAGE_DOMAINS=cdn.example.com,images.example.org
@@ -49,6 +48,13 @@ const nextConfig: NextConfig = {
         destination: '/favicon-32x32.png',
         permanent: true,
       },
+    ]
+  },
+  async rewrites() {
+    if (!isDemo) return []
+    return [
+      { source: '/platform/:path*', destination: `${gatewayTarget}/platform/:path*` },
+      { source: '/api/:path*', destination: `${gatewayTarget}/api/:path*` },
     ]
   },
   async headers() {
