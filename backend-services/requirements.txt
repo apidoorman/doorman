@@ -19,6 +19,9 @@ slowapi>=0.1.8
 # Caching
 aiocache>=0.12.2
 
+# Observability
+prometheus_client>=0.20.0
+
 # HTTP client
 requests>=2.31.0
 httpx>=0.24.1,<0.25.0  # Pinned to avoid breaking changes

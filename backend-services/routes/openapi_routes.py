@@ -16,6 +16,7 @@ from models.response_model import ResponseModel
 from services.endpoint_service import EndpointService
 from utils import api_util
 from utils.auth_util import auth_required
+from utils.constants import Roles
 from utils.doorman_cache_util import doorman_cache
 from utils.response_util import respond_rest
 from utils.role_util import platform_role_required_bool
@@ -137,8 +138,9 @@ async def get_openapi_spec(api_name: str, api_version: str, request: Request):
         payload = await auth_required(request)
         if not payload:
             return respond_rest('AUTHN001', 'Not authenticated', None, None, 401, start_time)
-        
-        if not await platform_role_required_bool(request, 'manage_api'):
+
+        username = payload.get('sub')
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return respond_rest('AUTHZ001', 'Not authorized', None, None, 403, start_time)
         
         api_path = f'{api_name}/{api_version}'
@@ -215,8 +217,9 @@ async def refresh_openapi_spec(api_name: str, api_version: str, request: Request
         payload = await auth_required(request)
         if not payload:
             return respond_rest('AUTHN001', 'Not authenticated', None, None, 401, start_time)
-        
-        if not await platform_role_required_bool(request, 'manage_api'):
+
+        username = payload.get('sub')
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return respond_rest('AUTHZ001', 'Not authorized', None, None, 403, start_time)
         
         api_path = f'{api_name}/{api_version}'
@@ -295,7 +298,8 @@ async def import_openapi_endpoints(api_name: str, api_version: str, request: Req
         if not payload:
             return respond_rest('AUTHN001', 'Not authenticated', None, None, 401, start_time)
         
-        if not await platform_role_required_bool(request, 'manage_endpoint'):
+        username = payload.get('sub')
+        if not await platform_role_required_bool(username, Roles.MANAGE_ENDPOINTS):
             return respond_rest('AUTHZ001', 'Not authorized', None, None, 403, start_time)
         
         api_path = f'{api_name}/{api_version}'
@@ -396,8 +400,9 @@ async def parse_openapi_spec(request: Request):
         payload = await auth_required(request)
         if not payload:
             return respond_rest('AUTHN001', 'Not authenticated', None, None, 401, start_time)
-        
-        if not await platform_role_required_bool(request, 'manage_api'):
+
+        username = payload.get('sub')
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return respond_rest('AUTHZ001', 'Not authorized', None, None, 403, start_time)
         
         body = await request.json()

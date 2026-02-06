@@ -218,6 +218,12 @@ def reset_counters():
         _fallback_counter._store.clear()
     except Exception:
         pass
+    
+    try:
+        from utils.rate_limiter import get_rate_limiter
+        get_rate_limiter().reset_all()
+    except Exception:
+        pass
 
 
 async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):

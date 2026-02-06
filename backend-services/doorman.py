@@ -77,6 +77,7 @@ from routes.gateway_routes import gateway_router
 from routes.group_routes import group_router
 from routes.logging_routes import logging_router
 from routes.memory_routes import memory_router
+from routes.metrics_routes import metrics_router
 from routes.monitor_routes import monitor_router
 from routes.proto_routes import proto_router
 from routes.quota_routes import quota_router
@@ -93,11 +94,11 @@ from routes.openapi_routes import openapi_router
 from routes.wsdl_routes import wsdl_router
 from routes.graphql_routes import graphql_routes_router
 from routes.grpc_routes import grpc_router
-from routes.mfa_routes import mfa_router
 from utils.audit_util import audit
 from middleware.security_audit_middleware import SecurityAuditMiddleware
 from middleware.logging_middleware import GlobalLoggingMiddleware
 from middleware.latency_injection_middleware import LatencyInjectionMiddleware
+from middleware.websocket_reject_middleware import WebSocketRejectMiddleware
 from utils.auth_blacklist import purge_expired_tokens
 from utils.cache_manager_util import cache_manager
 from utils.database import database
@@ -941,6 +942,10 @@ doorman = FastAPI(
     },
 )
 
+# Reject websocket connections unless explicitly enabled
+WEBSOCKETS_ENABLED = os.getenv('WEBSOCKETS_ENABLED', 'false').lower() in ('1', 'true', 'yes', 'on')
+doorman.add_middleware(WebSocketRejectMiddleware, enabled=WEBSOCKETS_ENABLED)
+
 # Middleware to handle X-Forwarded-Proto for correct HTTPS redirects behind reverse proxy
 @doorman.middleware('http')
 async def forwarded_proto_middleware(request: Request, call_next):
@@ -1507,7 +1512,7 @@ try:
         _is_pytest = 'PYTEST_CURRENT_TEST' in _os.environ or 'pytest' in __sys.modules
     except Exception:
         _is_pytest = False
-    if not (_skip_tier or _live or _is_pytest):
+    if not _skip_tier:
         doorman.add_middleware(TierRateLimitMiddleware)
         logging.getLogger('doorman.gateway').info('Tier-based rate limiting middleware enabled')
     else:
@@ -2216,6 +2221,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 cache_manager.init_app(doorman)
 
 doorman.include_router(gateway_router, prefix='/api', tags=['Gateway'])
+doorman.include_router(metrics_router, tags=['Metrics'])
 doorman.include_router(authorization_router, prefix='/platform', tags=['Authorization'])
 doorman.include_router(user_router, prefix='/platform/user', tags=['User'])
 doorman.include_router(api_router, prefix='/platform/api', tags=['API'])
@@ -2244,7 +2250,6 @@ doorman.include_router(openapi_router, tags=['OpenAPI Discovery'])
 doorman.include_router(wsdl_router, tags=['WSDL Discovery'])
 doorman.include_router(graphql_routes_router, tags=['GraphQL'])
 doorman.include_router(grpc_router, tags=['gRPC Discovery'])
-doorman.include_router(mfa_router, tags=['MFA'])
 
 
 def start() -> None:

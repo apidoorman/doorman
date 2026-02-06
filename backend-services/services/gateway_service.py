@@ -45,6 +45,7 @@ from utils.gateway_utils import get_headers
 from utils.http_client import CircuitOpenError, request_with_resilience
 from utils.transform_util import apply_request_transforms, apply_response_transforms
 from utils.validation_util import validation_util
+from services.crud_service import CrudService
 
 logging.getLogger('gql').setLevel(logging.WARNING)
 
@@ -544,6 +545,7 @@ class GatewayService:
                     pass
                 if not api:
                     api = await api_util.get_api(api_key, api_name_version)
+                logger.info(f"{request_id} | REST api resolution: {'found' if api else 'not found'}")
                 if not api:
                     return GatewayService.error_response(
                         request_id,
@@ -565,7 +567,9 @@ class GatewayService:
                 if not any(
                     re.fullmatch(regex_pattern.sub(r'([^/]+)', ep), composite) for ep in endpoints
                 ):
-                    logger.error(f'REST gateway failed with code GTW003 - Endpoints: {endpoints}')
+                    logger.error(
+                        f'{request_id} | {endpoints} | REST gateway failed with code GTW003 (no endpoint match for {composite})'
+                    )
                     return GatewayService.error_response(
                         request_id, 'GTW003', 'Endpoint does not exist for the requested API'
                     )
@@ -585,11 +589,16 @@ class GatewayService:
                 server = await routing_util.pick_upstream_server(
                     api, request.method, endpoint_uri, client_key
                 )
-                if not server:
+                if not server and not api.get('api_is_crud'):
                     return GatewayService.error_response(
                         request_id, 'GTW001', 'No upstream servers configured'
                     )
-                logger.info(f'REST gateway to: {server}')
+
+                if api.get('api_is_crud'):
+                    logger.info(f'{request_id} | REST gateway: internal CRUD for {api_name_version}')
+                    return await CrudService.handle_rest(api, request, request_id, endpoint_uri)
+
+                logger.info(f'{request_id} | REST gateway to: {server}')
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
                 method = request.method.upper()
                 retry = api.get('api_allowed_retry_count') or 0
@@ -946,6 +955,13 @@ class GatewayService:
                     return GatewayService.error_response(
                         request_id, 'GTW012', 'API is disabled', status=403
                     )
+
+                # Internal CRUD Handling
+                if api.get('api_is_crud'):
+                    logger.info(f'{request_id} | SOAP gateway: internal CRUD for {path}')
+                    from services.crud_service import CrudService
+                    return await CrudService.handle_soap(api, request, request_id, body=request._body if hasattr(request, '_body') else await request.body())
+
                 endpoints = await api_util.get_api_endpoints(api.get('api_id'))
                 logger.info(f'SOAP gateway endpoints: {endpoints}')
                 if not endpoints:
@@ -969,7 +985,7 @@ class GatewayService:
                         request_id, 'GTW001', 'No upstream servers configured'
                     )
                 url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
-                logger.info(f'SOAP gateway to: {url}')
+                logger.info(f'{request_id} | SOAP gateway to: {url}')
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
                     if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
@@ -1125,7 +1141,10 @@ class GatewayService:
                     except Exception:
                         pass
             response_content = http_response.text
-            logger.info(f'SOAP gateway response: {response_content}')
+            try:
+                logger.info(f'SOAP gateway response size: {len(response_content)} bytes')
+            except Exception:
+                pass
             backend_end_time = time.time() * 1000
             if http_response.status_code == 404:
                 return GatewayService.error_response(
@@ -1279,6 +1298,12 @@ class GatewayService:
             except Exception as e:
                 return GatewayService.error_response(request_id, 'GTW011', str(e), status=400)
 
+            # Internal CRUD Handling
+            if api.get('api_is_crud'):
+                logger.info(f'{request_id} | GraphQL gateway: internal CRUD for {api_path}')
+                from services.crud_service import CrudService
+                return await CrudService.handle_graphql(api, request, request_id, body)
+
             # Choose upstream server (used by gql.Client and HTTP fallback)
             client_key = request.headers.get('client-key')
             server = await routing_util.pick_upstream_server(api, 'POST', '/graphql', client_key)
@@ -1411,7 +1436,8 @@ class GatewayService:
     async def grpc_gateway(
         username, request, request_id, start_time, path, api_name=None, url=None, retry=0
     ):
-        logger.info(f'gRPC gateway processing request')
+        import importlib
+        logger.info(f'{request_id} | gRPC gateway processing request')
         current_time = backend_end_time = None
         try:
             if not url:
@@ -1427,13 +1453,26 @@ class GatewayService:
                 api_path = f'{api_name}/{api_version}'
                 logger.info(f'Processing gRPC request for API: {api_path}')
 
+                # Internal CRUD Hook (Early)
+                api_check = doorman_cache.get_cache('api_cache', api_path)
+                if not api_check:
+                    api_check = await api_util.get_api(None, api_path)
+                
+                if api_check and api_check.get('api_is_crud'):
+                    logger.info(f'{request_id} | gRPC gateway: internal CRUD for {path}')
+                    from services.crud_service import CrudService
+                    return await CrudService.handle_grpc(api_check, request, request_id)
+
                 try:
-                    body = await request.json()
-                    if not isinstance(body, dict):
-                        logger.error(f'Invalid request body format')
-                        return GatewayService.error_response(
-                            request_id, 'GTW011', 'Invalid request body format', status=400
-                        )
+                    if request.method == 'GET':
+                        body = {}
+                    else:
+                        body = await request.json()
+                        if not isinstance(body, dict):
+                            logger.error(f'{request_id} | Invalid request body format')
+                            return GatewayService.error_response(
+                                request_id, 'GTW011', 'Invalid request body format', status=400
+                            )
                 except json.JSONDecodeError:
                     logger.error(f'Invalid JSON in request body')
                     return GatewayService.error_response(
@@ -1462,6 +1501,12 @@ class GatewayService:
                 api = doorman_cache.get_cache('api_cache', api_path)
                 if not api:
                     api = await api_util.get_api(None, api_path)
+                
+                if api and api.get('api_is_crud'):
+                    logger.info(f'{request_id} | gRPC gateway: internal CRUD for {path}')
+                    from services.crud_service import CrudService
+                    return await CrudService.handle_grpc(api, request, request_id)
+
                 if api:
                     try:
                         endpoint_doc = await api_util.get_endpoint(api, 'POST', '/grpc')
@@ -1576,6 +1621,7 @@ class GatewayService:
                         f'Successfully imported gRPC modules: {pb2.__name__} and {pb2_grpc.__name__}'
                     )
                 except ModuleNotFoundError as mnf_exc:
+                    importlib.invalidate_caches()
                     logger.warning(
                         f'gRPC modules not found, will attempt proto generation: {str(mnf_exc)}'
                     )
@@ -1622,29 +1668,32 @@ class GatewayService:
                         if not parsed_m:
                             raise ValueError('Invalid method format')
                         service_name, method_name = parsed_m
-                        module_name = module_base
-                        proto_content = (
-                            'syntax = "proto3";\n'
-                            f'package {module_name};\n'
-                            f'service {service_name} {{\n'
-                            '  rpc Create (CreateRequest) returns (CreateReply) {}\n'
-                            '  rpc Read (ReadRequest) returns (ReadReply) {}\n'
-                            '  rpc Update (UpdateRequest) returns (UpdateReply) {}\n'
-                            '  rpc Delete (DeleteRequest) returns (DeleteReply) {}\n'
-                            '}\n'
-                            'message CreateRequest { string name = 1; }\n'
-                            'message CreateReply { string message = 1; }\n'
-                            'message ReadRequest { int32 id = 1; }\n'
-                            'message ReadReply { string message = 1; }\n'
-                            'message UpdateRequest { int32 id = 1; string name = 2; }\n'
-                            'message UpdateReply { string message = 1; }\n'
-                            'message DeleteRequest { int32 id = 1; }\n'
-                            'message DeleteReply { bool ok = 1; }\n'
-                        )
-                        # Validate proto_path again before writing
-                        if not GatewayService._validate_under_base(proto_dir, proto_path):
-                            raise ValueError('Proto path validation failed before write')
-                        proto_path.write_text(proto_content, encoding='utf-8')
+                        if api.get('api_is_crud'):
+                            proto_content = (
+                                'syntax = "proto3";\n'
+                                f'package {module_name};\n'
+                                f'service {service_name} {{\n'
+                                '  rpc Create (CreateRequest) returns (CreateReply) {}\n'
+                                '  rpc Read (ReadRequest) returns (ReadReply) {}\n'
+                                '  rpc Update (UpdateRequest) returns (UpdateReply) {}\n'
+                                '  rpc Delete (DeleteRequest) returns (DeleteReply) {}\n'
+                                '}\n'
+                                'message CreateRequest { string name = 1; }\n'
+                                'message CreateReply { string message = 1; }\n'
+                                'message ReadRequest { int32 id = 1; }\n'
+                                'message ReadReply { string message = 1; }\n'
+                                'message UpdateRequest { int32 id = 1; string name = 2; }\n'
+                                'message UpdateReply { string message = 1; }\n'
+                                'message DeleteRequest { int32 id = 1; }\n'
+                                'message DeleteReply { bool ok = 1; }\n'
+                            )
+                            # Validate proto_path again before writing
+                            if not GatewayService._validate_under_base(proto_dir, proto_path):
+                                raise ValueError('Proto path validation failed before write')
+                            proto_path.write_text(proto_content, encoding='utf-8')
+                        elif not proto_path.exists():
+                            # If it's not CRUD and the file is missing, we can't do anything
+                            raise FileNotFoundError(f"Proto file not found at {proto_path} and api is not CRUD")
                         generated_dir = project_root / 'generated'
                         generated_dir.mkdir(exist_ok=True)
                         try:

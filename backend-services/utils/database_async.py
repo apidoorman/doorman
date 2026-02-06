@@ -71,6 +71,26 @@ class AsyncDatabase:
                         self.user_tier_assignments = _AIC(sync_db._sync_user_tier_assignments)
                         self.rate_limit_rules = _AIC(sync_db._sync_rate_limit_rules)
 
+                    def get_collection(self, name):
+                        # Check if collection already exists
+                        if name in self._sync.list_collection_names():
+                            # Return existing collection
+                            sync_coll = getattr(self._sync, name)
+                        else:
+                            # Create new collection
+                            sync_coll = self._sync.create_collection(name)
+                        from utils.database import AsyncInMemoryCollection as _AIC
+                        return _AIC(sync_coll)
+
+                    def __getitem__(self, name):
+                        return self.get_collection(name)
+
+                    def __getattr__(self, name):
+                        try:
+                            return super().__getattribute__(name)
+                        except AttributeError:
+                            return self.get_collection(name)
+
                     def list_collection_names(self):
                         return self._sync.list_collection_names()
 
@@ -115,6 +135,12 @@ class AsyncDatabase:
             connection_uri, serverSelectionTimeoutMS=5000, maxPoolSize=100, minPoolSize=5
         )
         self.db = self.client.get_database()
+
+    def get_collection(self, name):
+        if self.memory_only:
+            # motor.db.get_collection equivalent for memory view
+            return self.db.get_collection(name)
+        return self.db.get_collection(name)
 
     async def initialize_collections(self):
         """Initialize collections and default data."""

@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 
 from utils import api_util
 from utils.auth_util import auth_required
+from utils.constants import Roles
 from utils.doorman_cache_util import doorman_cache
 from utils.grpc_util import create_grpc_web_response, encode_grpc_web_frame, GRPC_WEB_FLAGS_NONE
 from utils.response_util import respond_rest
@@ -50,8 +51,9 @@ async def list_grpc_services(api_name: str, api_version: str, request: Request):
         payload = await auth_required(request)
         if not payload:
             return respond_rest('AUTHN001', 'Not authenticated', None, None, 401, start_time)
-        
-        if not await platform_role_required_bool(request, 'manage_api'):
+
+        username = payload.get('sub')
+        if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
             return respond_rest('AUTHZ001', 'Not authorized', None, None, 403, start_time)
         
         api_path = f'{api_name}/{api_version}'

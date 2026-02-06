@@ -8,6 +8,7 @@ Supports distributed rate limiting across multiple server instances using Redis.
 import logging
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from models.rate_limit_models import (
     RateLimitCounter,
@@ -43,6 +44,92 @@ class RateLimitResult:
         )
 
 
+class InMemoryRateLimitStorage:
+    """
+    Thread-safe in-memory storage for rate limiting that mimics Redis interface.
+    Used as fallback when Redis is unavailable.
+    """
+
+    def __init__(self):
+        self._data = {}
+        self._expirations = {}
+        import threading
+        self._lock = threading.Lock()
+
+    def _cleanup(self, key):
+        now = time.time()
+        if key in self._expirations and self._expirations[key] < now:
+            if key in self._data:
+                del self._data[key]
+            del self._expirations[key]
+
+    def get(self, key: str) -> str | None:
+        with self._lock:
+            self._cleanup(key)
+            val = self._data.get(key)
+            if val is None:
+                return None
+            return str(val)
+
+    def set(self, key: str, value: Any, ex: int | None = None) -> bool:
+        with self._lock:
+            self._data[key] = value
+            if ex:
+                self._expirations[key] = time.time() + ex
+            return True
+
+    def incr(self, key: str, amount: int = 1) -> int:
+        with self._lock:
+            self._cleanup(key)
+            val = int(self._data.get(key) or 0) + amount
+            self._data[key] = str(val)
+            return val
+
+    def expire(self, key: str, seconds: int) -> bool:
+        with self._lock:
+            self._expirations[key] = time.time() + seconds
+            return True
+
+    def delete(self, *keys: str) -> int:
+        with self._lock:
+            count = 0
+            for key in keys:
+                if key in self._data:
+                    del self._data[key]
+                    count += 1
+                if key in self._expirations:
+                    del self._expirations[key]
+            return count
+
+    def hmget(self, name: str, keys: list) -> list:
+        with self._lock:
+            self._cleanup(name)
+            mapping = self._data.get(name, {})
+            if not isinstance(mapping, dict):
+                return [None] * len(keys)
+            return [str(mapping.get(k)) if mapping.get(k) is not None else None for k in keys]
+
+    def hmset(self, name: str, mapping: dict) -> bool:
+        with self._lock:
+            self._cleanup(name)
+            current = self._data.get(name, {})
+            if not isinstance(current, dict):
+                current = {}
+            current.update(mapping)
+            self._data[name] = current
+            return True
+            
+    def hset(self, name: str, key: str = None, value: Any = None, mapping: dict = None) -> bool:
+        if mapping:
+            return self.hmset(name, mapping)
+        return self.hmset(name, {key: value})
+
+    def flushall(self):
+        with self._lock:
+            self._data.clear()
+            self._expirations.clear()
+
+
 class RateLimiter:
     """
     Rate limiter with token bucket and sliding window algorithms
@@ -63,6 +150,27 @@ class RateLimiter:
         """
         self.redis = redis_client or get_redis_client()
         self._fallback_mode = False
+
+        # Only auto-fallback when we create the client internally.
+        # If a caller injects a client (e.g., tests), trust it.
+        if redis_client is None:
+            import os
+            mem_only = os.getenv('MEM_OR_EXTERNAL', 'MEM') == 'MEM'
+
+            try:
+                if mem_only:
+                    raise Exception("Memory mode forced")
+
+                # Connection testing is done in RedisClient.__init__ too,
+                # but we verify here to be sure we should use fallback.
+                if hasattr(self.redis, 'client'):
+                    self.redis.client.ping()
+            except Exception:
+                logger.warning(
+                    "Redis unavailable or MEM mode enabled, using in-memory rate limiting fallback"
+                )
+                self.redis = InMemoryRateLimitStorage()
+                self._fallback_mode = True
 
     def check_rate_limit(self, rule: RateLimitRule, identifier: str) -> RateLimitResult:
         """
@@ -417,6 +525,19 @@ class RateLimiter:
                 count=0,
                 limit=rule.limit,
             )
+
+
+    def reset_all(self) -> bool:
+        """
+        Reset all rate limits (admin/test function)
+        """
+        try:
+            if hasattr(self.redis, 'flushall'):
+                self.redis.flushall()
+            return True
+        except Exception as e:
+            logger.error(f'Error resetting all rate limits: {e}')
+            return False
 
 
 # Global rate limiter instance

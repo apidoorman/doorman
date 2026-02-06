@@ -53,9 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const role = await fetchJson(`${SERVER_URL}/platform/role/${encodeURIComponent(user.role)}`)
             permissions = role || null
-          } catch {}
+          } catch { }
         }
-      } catch {}
+      } catch { }
 
       setAuthState({
         isAuthenticated: true,
@@ -90,11 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (DEBUG) console.warn('Logout invalidate failed (continuing):', e)
     }
     try {
-      // Clear any local/session storage and best-effort cookie removal
+      // Clear any local/session storage and best-effort cookie removal (preserve theme)
+      const theme = localStorage.getItem('theme')
       localStorage.clear()
+      if (theme) localStorage.setItem('theme', theme)
       sessionStorage.clear()
       document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    } catch {}
+    } catch { }
     setAuthState({
       isAuthenticated: false,
       hasUIAccess: false,

@@ -214,3 +214,48 @@ async def test_soap_auto_allows_common_request_headers(monkeypatch, authed_clien
     assert h.get('user-agent') == 'doorman-tests/1.0'
     # SOAPAction auto-added
     assert 'soapaction' in h
+
+
+@pytest.mark.asyncio
+async def test_soap_gateway_does_not_log_response_body(monkeypatch, authed_client):
+    import services.gateway_service as gs
+
+    name, ver = 'soaplog1', 'v1'
+    await _setup_api(authed_client, name, ver)
+    sensitive = '<secret>TOP-SECRET</secret>'
+
+    class _SensitiveXMLClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, method, url, **kwargs):
+            return _FakeXMLResponse(200, sensitive, {'X-Upstream': 'yes', 'Content-Type': 'text/xml'})
+
+    messages = []
+
+    def _capture_info(msg, *args, **kwargs):
+        try:
+            if args:
+                msg = msg % args
+        except Exception:
+            pass
+        messages.append(str(msg))
+
+    monkeypatch.setattr(gs.httpx, 'AsyncClient', _SensitiveXMLClient)
+    monkeypatch.setattr(gs.logger, 'info', _capture_info)
+
+    r = await authed_client.post(
+        f'/api/soap/{name}/{ver}/call',
+        headers={'Content-Type': 'application/xml'},
+        content='<Envelope/>',
+    )
+    assert r.status_code == 200
+    assert messages
+    combined = ' '.join(messages)
+    assert sensitive not in combined

@@ -145,7 +145,9 @@ class DoormanCacheManager:
             'api_id_cache': 'api_id_cache:',
             'endpoint_cache': 'endpoint_cache:',
             'endpoint_validation_cache': 'endpoint_validation_cache:',
+            'graphql_schema_cache': 'graphql_schema_cache:',
             'group_cache': 'group_cache:',
+            'openapi_cache': 'openapi_cache:',
             'role_cache': 'role_cache:',
             'user_subscription_cache': 'user_subscription_cache:',
             'user_cache': 'user_cache:',
@@ -157,13 +159,16 @@ class DoormanCacheManager:
             'token_def_cache': 'token_def_cache:',
             'credit_def_cache': 'credit_def_cache:',
             'csrf_token_map': 'csrf_token_map:',
+            'wsdl_cache': 'wsdl_cache:',
         }
         self.default_ttls = {
             'api_cache': 86400,
             'api_endpoint_cache': 86400,
             'api_id_cache': 86400,
             'endpoint_cache': 86400,
+            'graphql_schema_cache': 3600,
             'group_cache': 86400,
+            'openapi_cache': 3600,
             'role_cache': 86400,
             'user_subscription_cache': 86400,
             'user_cache': 86400,
@@ -175,6 +180,7 @@ class DoormanCacheManager:
             'token_def_cache': 86400,
             'credit_def_cache': 86400,
             'csrf_token_map': 1800,
+            'wsdl_cache': 3600,
         }
 
     def _get_key(self, cache_name, key):
@@ -202,8 +208,8 @@ class DoormanCacheManager:
         except Exception:
             return value
 
-    def set_cache(self, cache_name, key, value):
-        ttl = self.default_ttls.get(cache_name, 86400)
+    def set_cache(self, cache_name, key, value, ttl: int | None = None):
+        ttl = ttl if ttl is not None else self.default_ttls.get(cache_name, 86400)
         cache_key = self._get_key(cache_name, key)
         if chaos_util.should_fail('redis'):
             chaos_util.burn_error_budget('redis')

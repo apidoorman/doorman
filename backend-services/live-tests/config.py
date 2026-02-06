@@ -1,6 +1,6 @@
 import os
 
-BASE_URL = os.getenv('DOORMAN_BASE_URL', 'http://localhost:3001').rstrip('/')
+BASE_URL = os.getenv('DOORMAN_BASE_URL', 'http://localhost:4444').rstrip('/')
 ADMIN_EMAIL = os.getenv('DOORMAN_ADMIN_EMAIL')
 
 # Resolve admin email/password from environment or the repo root .env.
