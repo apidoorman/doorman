@@ -25,7 +25,7 @@ from utils.role_util import platform_role_required_bool
 proto_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
 
-PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+PROJECT_ROOT = Path(__file__).parent.resolve()
 
 
 def sanitize_filename(filename: str):
