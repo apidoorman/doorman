@@ -2,9 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import Layout from '@/components/Layout'
-import InfoTooltip from '@/components/InfoTooltip'
 import { SERVER_URL } from '@/utils/config'
 import { postJson, fetchAllPaginated } from '@/utils/api'
 import SearchableSelect from '@/components/SearchableSelect'
@@ -264,7 +262,7 @@ const ApiBuilderPage = () => {
   const generateJsonPreview = (currentFields: SchemaField[]) => {
     const obj: any = {}
     currentFields.forEach(f => {
-      if (f.type === 'string') obj[f.name] = "example"
+      if (f.type === 'string') obj[f.name] = 'example'
       if (f.type === 'number') obj[f.name] = 123
       if (f.type === 'boolean') obj[f.name] = true
       if (f.type === 'array') obj[f.name] = []

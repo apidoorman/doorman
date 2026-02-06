@@ -49,7 +49,7 @@ export function ProtectedRoute({
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   if (!isAuthenticated) {

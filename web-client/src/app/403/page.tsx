@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import Layout from '@/components/Layout'
 
 export default function ForbiddenPage() {
@@ -16,12 +17,15 @@ export default function ForbiddenPage() {
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">403 — Forbidden</h1>
           <p className="text-gray-600 dark:text-gray-300 mb-6">You do not have permission to access the admin UI.</p>
           <div className="flex gap-3 justify-center">
-            <a href="/login" className="btn btn-secondary">Back to Login</a>
-            <a href="/" className="btn btn-outline">Home</a>
+            <Link href="/login" className="btn btn-secondary">
+              Back to Login
+            </Link>
+            <Link href="/" className="btn btn-outline">
+              Home
+            </Link>
           </div>
         </div>
       </div>
     </Layout>
   )
 }
-

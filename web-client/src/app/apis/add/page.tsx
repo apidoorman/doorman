@@ -446,7 +446,7 @@ const AddApiPage = () => {
                     className="input min-h-[120px]"
                     value={ipWhitelistText}
                     onChange={(e)=>setIpWhitelistText(e.target.value)}
-                    placeholder={"10.0.0.0/8\n192.168.1.100"}
+                    placeholder={'10.0.0.0/8\n192.168.1.100'}
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Used only when Policy is <span className="font-semibold">Whitelist</span>. Clients must match one of these IPs/CIDRs (after global platform IP rules).
@@ -458,7 +458,7 @@ const AddApiPage = () => {
                     className="input min-h-[120px]"
                     value={ipBlacklistText}
                     onChange={(e)=>setIpBlacklistText(e.target.value)}
-                    placeholder={"203.0.113.0/24\n203.0.113.50"}
+                    placeholder={'203.0.113.0/24\n203.0.113.50'}
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Always evaluated first. Any matching IP/CIDR is denied before whitelist or other checks.

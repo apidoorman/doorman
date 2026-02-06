@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import React, { useState } from 'react'
 
@@ -33,4 +33,3 @@ export default function InfoTooltip({ text, className }: InfoTooltipProps) {
     </span>
   )
 }
-
