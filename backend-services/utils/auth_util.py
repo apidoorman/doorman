@@ -313,6 +313,7 @@ def create_access_token(data: dict, refresh: bool = False) -> str:
         'manage_gateway': role.get('manage_gateway', False) if role else False,
         'manage_subscriptions': role.get('manage_subscriptions', False) if role else False,
         'manage_security': role.get('manage_security', False) if role else False,
+        'view_builder_tables': role.get('view_builder_tables', False) if role else False,
         'export_logs': role.get('export_logs', False) if role else False,
         'view_logs': role.get('view_logs', False) if role else False,
     }

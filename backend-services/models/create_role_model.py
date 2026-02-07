@@ -45,6 +45,7 @@ class CreateRoleModel(BaseModel):
     view_analytics: bool = Field(
         False, description='Permission to view analytics dashboard', example=True
     )
+    view_builder_tables: bool = Field(False, description='Permission to explore tables', example=True)
     view_logs: bool = Field(False, description='Permission to view logs', example=True)
     export_logs: bool = Field(False, description='Permission to export logs', example=True)
 

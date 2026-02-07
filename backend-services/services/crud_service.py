@@ -17,8 +17,30 @@ logger = logging.getLogger('doorman.gateway')
 
 class CrudService:
     @staticmethod
-    def _get_collection(api: dict):
-        collection_name = api.get('api_crud_collection')
+    def _resource_from_endpoint_uri(endpoint_uri: str | None):
+        parts = [p for p in str(endpoint_uri or '').split('/') if p]
+        return parts[0] if parts else ''
+
+    @staticmethod
+    def _resolve_binding(api: dict, endpoint_uri: str | None):
+        resource = CrudService._resource_from_endpoint_uri(endpoint_uri)
+        bindings = api.get('api_crud_bindings')
+        if isinstance(bindings, list) and resource:
+            for binding in bindings:
+                if not isinstance(binding, dict):
+                    continue
+                if str(binding.get('resource_name') or '').strip() == resource:
+                    return binding
+        return None
+
+    @staticmethod
+    def _get_collection(api: dict, endpoint_uri: str | None = None):
+        binding = CrudService._resolve_binding(api, endpoint_uri)
+        collection_name = ''
+        if isinstance(binding, dict):
+            collection_name = str(binding.get('collection_name') or '').strip()
+        if not collection_name:
+            collection_name = api.get('api_crud_collection')
         if not collection_name:
             # Fallback to a default name if not specified
             api_id = api.get('api_id', 'default')
@@ -39,6 +61,138 @@ class CrudService:
                 return async_db.create_collection(collection_name)
             # Motor database access
             return async_db[collection_name]
+
+    @staticmethod
+    def _get_schema(api: dict, endpoint_uri: str | None = None):
+        binding = CrudService._resolve_binding(api, endpoint_uri)
+        if isinstance(binding, dict):
+            schema = binding.get('schema')
+            if isinstance(schema, dict):
+                return schema
+        return api.get('api_crud_schema')
+
+    @staticmethod
+    def _get_field_mappings(api: dict, endpoint_uri: str | None = None) -> list[dict]:
+        binding = CrudService._resolve_binding(api, endpoint_uri)
+        if not isinstance(binding, dict):
+            return []
+        raw = binding.get('field_mappings')
+        if not isinstance(raw, list):
+            return []
+        mappings: list[dict] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            field = str(entry.get('field') or '').strip()
+            if not field:
+                continue
+            request_path = str(
+                entry.get('request_path') or entry.get('json_path') or field
+            ).strip()
+            response_path = str(
+                entry.get('response_path') or entry.get('json_path') or request_path or field
+            ).strip()
+            mappings.append(
+                {
+                    'field': field,
+                    'request_path': request_path or field,
+                    'response_path': response_path or field,
+                }
+            )
+        return mappings
+
+    @staticmethod
+    def _read_path(payload: dict, path: str):
+        if not isinstance(payload, dict) or not path:
+            return False, None
+        if path in payload:
+            return True, payload.get(path)
+
+        current = payload
+        parts = [p for p in str(path).split('.') if p]
+        for part in parts:
+            if isinstance(current, dict):
+                if part not in current:
+                    return False, None
+                current = current.get(part)
+                continue
+            if isinstance(current, list):
+                try:
+                    idx = int(part)
+                except Exception:
+                    return False, None
+                if idx < 0 or idx >= len(current):
+                    return False, None
+                current = current[idx]
+                continue
+            return False, None
+        return True, current
+
+    @staticmethod
+    def _write_path(payload: dict, path: str, value):
+        if not path:
+            return
+        parts = [p for p in str(path).split('.') if p]
+        if not parts:
+            return
+        current = payload
+        for idx, part in enumerate(parts):
+            is_last = idx == len(parts) - 1
+            if is_last:
+                if isinstance(current, dict):
+                    current[part] = value
+                return
+            if isinstance(current, dict):
+                nxt = current.get(part)
+                if not isinstance(nxt, dict):
+                    nxt = {}
+                    current[part] = nxt
+                current = nxt
+                continue
+            return
+
+    @staticmethod
+    def _transform_incoming_payload(payload: dict, mappings: list[dict]) -> dict:
+        if not isinstance(payload, dict) or not mappings:
+            return payload if isinstance(payload, dict) else {}
+
+        transformed: dict = {}
+        for mapping in mappings:
+            field = mapping.get('field')
+            request_path = mapping.get('request_path')
+            if not field or not request_path:
+                continue
+            exists, value = CrudService._read_path(payload, request_path)
+            if exists:
+                transformed[field] = value
+
+        if '_id' in payload and '_id' not in transformed:
+            transformed['_id'] = payload['_id']
+        return transformed
+
+    @staticmethod
+    def _transform_outgoing_payload(payload: dict, mappings: list[dict]) -> dict:
+        if not isinstance(payload, dict) or not mappings:
+            return payload if isinstance(payload, dict) else {}
+
+        transformed: dict = {}
+        if payload.get('_id') is not None:
+            transformed['_id'] = payload.get('_id')
+        for mapping in mappings:
+            field = mapping.get('field')
+            response_path = mapping.get('response_path')
+            if not field or not response_path:
+                continue
+            if field not in payload:
+                continue
+            CrudService._write_path(transformed, response_path, payload.get(field))
+        return transformed
+
+    @staticmethod
+    def _transform_outgoing_list(payloads: list[dict], mappings: list[dict]) -> list[dict]:
+        if not mappings:
+            return payloads
+        return [CrudService._transform_outgoing_payload(p, mappings) for p in payloads]
 
     @staticmethod
     def _validate_schema(schema: dict, data: dict, partial: bool = False, path: str = ""):
@@ -128,7 +282,9 @@ class CrudService:
         Handle REST CRUD operations.
         """
         method = request.method.upper()
-        collection = CrudService._get_collection(api)
+        collection = CrudService._get_collection(api, endpoint_uri)
+        schema = CrudService._get_schema(api, endpoint_uri)
+        field_mappings = CrudService._get_field_mappings(api, endpoint_uri)
         
         # Normalize endpoint_uri to see if it's a specific resource lookup
         # /items -> list all
@@ -152,6 +308,8 @@ class CrudService:
                         ).dict()
                     if '_id' in doc:
                         doc['_id'] = str(doc['_id'])
+                    if field_mappings:
+                        doc = CrudService._transform_outgoing_payload(doc, field_mappings)
                     return ResponseModel(status_code=200, response=doc).dict()
                 else:
                     # List all
@@ -159,6 +317,8 @@ class CrudService:
                     for doc in docs:
                         if '_id' in doc:
                             doc['_id'] = str(doc['_id'])
+                    if field_mappings:
+                        docs = CrudService._transform_outgoing_list(docs, field_mappings)
                     return ResponseModel(status_code=200, response={'items': docs}).dict()
 
             elif method == 'POST':
@@ -166,12 +326,13 @@ class CrudService:
                     body = await request.json()
                 except Exception:
                     body = {}
+
+                body = CrudService._transform_incoming_payload(body, field_mappings)
                 
                 if '_id' not in body:
                     body['_id'] = str(uuid.uuid4())
                 
                 # Validation
-                schema = api.get('api_crud_schema')
                 if schema:
                     errors = CrudService._validate_schema(schema, body, partial=False)
                     if errors:
@@ -187,10 +348,15 @@ class CrudService:
                     # Motor returns inserted_id, use it if available, otherwise use the _id we set
                     if hasattr(result, 'inserted_id') and result.inserted_id:
                         body['_id'] = str(result.inserted_id)
+                    response_body = (
+                        CrudService._transform_outgoing_payload(body, field_mappings)
+                        if field_mappings
+                        else body
+                    )
                     return ResponseModel(
                         status_code=201, 
                         message='Resource created successfully',
-                        response=body
+                        response=response_body
                     ).dict()
                 return ResponseModel(
                     status_code=500,
@@ -210,9 +376,9 @@ class CrudService:
                     body = await request.json()
                 except Exception:
                     body = {}
+                body = CrudService._transform_incoming_payload(body, field_mappings)
                 
                 # Validation
-                schema = api.get('api_crud_schema')
                 if schema:
                     errors = CrudService._validate_schema(schema, body, partial=True)
                     if errors:
@@ -239,6 +405,8 @@ class CrudService:
                     if updated:
                         if '_id' in updated:
                             updated['_id'] = str(updated['_id'])
+                        if field_mappings:
+                            updated = CrudService._transform_outgoing_payload(updated, field_mappings)
                         return ResponseModel(
                             status_code=200,
                             message='Resource updated successfully',
@@ -742,4 +910,3 @@ message ListItemsResponse {{
                 error_code='CRUD999',
                 error_message=str(e)
             ).dict()
-

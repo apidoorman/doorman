@@ -54,6 +54,9 @@ class UpdateRoleModel(BaseModel):
     view_analytics: bool | None = Field(
         None, description='Permission to view analytics dashboard', example=True
     )
+    view_builder_tables: bool | None = Field(
+        None, description='Permission to explore tables', example=True
+    )
     view_logs: bool | None = Field(None, description='Permission to view logs', example=True)
     export_logs: bool | None = Field(None, description='Permission to export logs', example=True)
 

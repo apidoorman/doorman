@@ -116,6 +116,8 @@ async def validate_platform_role(role_name, action):
             return True
         elif action == 'view_analytics' and role.get('view_analytics'):
             return True
+        elif action == 'view_builder_tables' and role.get('view_builder_tables'):
+            return True
         return False
     except Exception as e:
         logger.error(f'validate_platform_role error: {e}')

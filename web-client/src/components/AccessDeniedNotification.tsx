@@ -30,6 +30,7 @@ export function AccessDeniedNotification({ requiredPermission }: AccessDeniedNot
     'manage_routings': 'Routing Management',
     'manage_gateway': 'Gateway Management',
     'manage_subscriptions': 'Subscription Management',
+    'view_builder_tables': 'Tables',
     'view_logs': 'Log Viewing',
     'export_logs': 'Log Export'
   }

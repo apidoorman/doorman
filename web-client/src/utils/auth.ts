@@ -12,6 +12,7 @@ interface JWTPayload {
     manage_gateway: boolean
     manage_subscriptions: boolean
     manage_security: boolean
+    view_builder_tables: boolean
   }
   exp: number
   jti: string

@@ -191,6 +191,10 @@ class UpdateApiModel(BaseModel):
         None,
         description="Schema definition for CRUD validation. Dict of field_name -> rules.",
     )
+    api_crud_bindings: Optional[list[dict]] = Field(
+        None,
+        description='Optional multi-table CRUD bindings with per-resource schema',
+    )
 
     class Config:
         arbitrary_types_allowed = True

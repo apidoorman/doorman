@@ -109,6 +109,50 @@ async def limit_and_throttle(request: Request):
     payload = await auth_required(request)
     username = payload.get('sub')
     redis_client = getattr(request.app.state, 'redis', None)
+    # Fallback tier enforcement for cases where tier middleware is not active
+    # or not applied for this request context.
+    try:
+        skip_tier = os.getenv('SKIP_TIER_RATE_LIMIT', '').lower() in ('1', 'true', 'yes', 'on')
+        already_enforced = bool(getattr(request.state, 'tier_limits_enforced', False))
+        enforced_user = getattr(request.state, 'tier_limits_user_id', None)
+        if not skip_tier and (not already_enforced or enforced_user != username):
+            from models.rate_limit_models import RateLimitRule, RuleType, TimeWindow
+            from services.tier_service import get_tier_service
+            from utils.database_async import async_database
+            from utils.rate_limiter import get_rate_limiter
+
+            tier_service = get_tier_service(async_database.db)
+            limits = await tier_service.get_user_limits(username)
+            if limits:
+                rate_limiter = get_rate_limiter()
+                checks = (
+                    ('minute', limits.requests_per_minute, limits.burst_per_minute, TimeWindow.MINUTE),
+                    ('hour', limits.requests_per_hour, limits.burst_per_hour, TimeWindow.HOUR),
+                    ('day', limits.requests_per_day, 0, TimeWindow.DAY),
+                )
+                for period, limit, burst, window in checks:
+                    if limit and limit < 999999:
+                        rule = RateLimitRule(
+                            rule_id=f'tier_{period}_{username}',
+                            rule_type=RuleType.PER_USER,
+                            time_window=window,
+                            limit=limit,
+                            burst_allowance=burst or 0,
+                        )
+                        result = await asyncio.to_thread(rate_limiter.check_hybrid, rule, username)
+                        if not result.allowed:
+                            raise HTTPException(status_code=429, detail='Rate limit exceeded')
+                try:
+                    request.state.tier_limits_enforced = True
+                    request.state.tier_limits_user_id = username
+                except Exception:
+                    pass
+    except HTTPException:
+        raise
+    except Exception:
+        # Tier fallback must never break gateway traffic.
+        pass
+
     user = doorman_cache.get_cache('user_cache', username)
     if not user:
         user = await db_find_one(user_collection, {'username': username})

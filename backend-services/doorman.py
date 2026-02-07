@@ -63,6 +63,7 @@ except Exception:
 
 from models.response_model import ResponseModel
 from routes.analytics_routes import analytics_router
+from routes.api_builder_routes import api_builder_router
 from middleware.analytics_middleware import setup_analytics_middleware
 from utils.analytics_scheduler import analytics_scheduler
 from routes.api_routes import api_router
@@ -2225,6 +2226,7 @@ doorman.include_router(metrics_router, tags=['Metrics'])
 doorman.include_router(authorization_router, prefix='/platform', tags=['Authorization'])
 doorman.include_router(user_router, prefix='/platform/user', tags=['User'])
 doorman.include_router(api_router, prefix='/platform/api', tags=['API'])
+doorman.include_router(api_builder_router, prefix='/platform/api-builder', tags=['API Builder'])
 doorman.include_router(endpoint_router, prefix='/platform/endpoint', tags=['Endpoint'])
 doorman.include_router(group_router, prefix='/platform/group', tags=['Group'])
 doorman.include_router(role_router, prefix='/platform/role', tags=['Role'])

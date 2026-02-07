@@ -246,10 +246,15 @@ class AsyncDatabase:
                     'manage_subscriptions': True,
                     'manage_credits': True,
                     'manage_auth': True,
+                    'view_builder_tables': True,
                     'view_logs': True,
                     'export_logs': True,
                     'manage_security': True,
                 }
+            )
+        else:
+            await self.db.roles.update_one(
+                {'role_name': 'admin'}, {'$set': {'view_builder_tables': True}}
             )
 
         admin_group = await self.db.groups.find_one({'group_name': 'admin'})

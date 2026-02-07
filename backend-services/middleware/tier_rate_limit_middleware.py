@@ -60,7 +60,7 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Extract user ID
-        user_id = self._get_user_id(request)
+        user_id = await self._get_user_id(request)
         logger.info(f'[tier_rl] user_id={user_id} path={request.url.path}')
 
         if not user_id:
@@ -77,6 +77,11 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
         if not limits:
             logger.info(f'[tier_rl] no limits found for user_id={user_id}')
             return await call_next(request)
+        try:
+            request.state.tier_limits_enforced = True
+            request.state.tier_limits_user_id = user_id
+        except Exception:
+            pass
         
         logger.info(f'[tier_rl] applying limits for {user_id}: minute={limits.requests_per_minute}')
 
@@ -198,7 +203,7 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
         logger.info(f'[tier_rl] checking path={request.url.path}')
         return False
 
-    def _get_user_id(self, request: Request) -> str | None:
+    async def _get_user_id(self, request: Request) -> str | None:
         """Extract user ID with support for previously decoded state"""
         # 1) Previously decoded payload
         try:
@@ -206,19 +211,21 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
                  return request.state.jwt_payload.get('sub')
         except Exception:
             pass
+        # 1b) Attempt standard auth decoding to align with gateway auth behavior
+        try:
+            from utils.auth_util import auth_required
+            payload = await auth_required(request)
+            if payload:
+                try:
+                    request.state.jwt_payload = payload
+                except Exception:
+                    pass
+                return payload.get('sub')
+        except Exception:
+            pass
 
         # 2) Cookie/Header decode logic duplicate from auth_util handled by earlier middleware usually,
         # but re-implemented here for safety if middleware order varies.
-        try:
-            from utils.auth_util import auth_required
-            # We don't call auth_required because it raises 401. We just want to peek.
-            # Reuse existing methods if possible or simplified peek:
-            pass 
-        except Exception:
-            pass
-            
-        # Fallback to existing logic if needed, but for now assuming auth middleware ran first
-        # or we accept checking cookies directly
         import os
         token = request.cookies.get('access_token_cookie')
         if not token:

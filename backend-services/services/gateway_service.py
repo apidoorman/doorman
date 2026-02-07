@@ -53,6 +53,7 @@ logger = logging.getLogger('doorman.gateway')
 
 # Maximum safe recursion depth for protobuf message conversion to prevent CVE-2026-0994
 MAX_PROTOBUF_RECURSION_DEPTH = 64
+_HTTPX_TIMEOUT_EXCEPTION = getattr(httpx, 'TimeoutException', Exception)
 
 
 class GatewayService:
@@ -75,7 +76,7 @@ class GatewayService:
     }
 
     @staticmethod
-    def _build_limits() -> httpx.Limits:
+    def _build_limits() -> httpx.Limits | None:
         """Pool limits tuned for small/medium projects with env overrides.
 
         Defaults:
@@ -95,9 +96,16 @@ class GatewayService:
             expiry = float(os.getenv('HTTP_KEEPALIVE_EXPIRY', 30.0))
         except Exception:
             expiry = 30.0
-        return httpx.Limits(
-            max_connections=max_conns, max_keepalive_connections=max_keep, keepalive_expiry=expiry
-        )
+        try:
+            return httpx.Limits(
+                max_connections=max_conns,
+                max_keepalive_connections=max_keep,
+                keepalive_expiry=expiry,
+            )
+        except Exception:
+            # Some tests monkeypatch module-level httpx with minimal stubs that
+            # do not expose Limits. In that case, let AsyncClient use defaults.
+            return None
 
     @classmethod
     def get_http_client(cls) -> httpx.AsyncClient:
@@ -106,19 +114,6 @@ class GatewayService:
         Set ENABLE_HTTPX_CLIENT_CACHE=false to disable pooling and create a
         fresh client per request.
         """
-        # Disable pooling during live tests to allow monkeypatching of httpx.AsyncClient
-        if os.getenv('DOORMAN_RUN_LIVE', '').lower() in ('1', 'true', 'yes', 'on'):
-            try:
-                return httpx.AsyncClient(
-                    timeout=cls.timeout,
-                    limits=cls._build_limits(),
-                    http2=(os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
-                    trust_env=False,
-                )
-            except TypeError:
-                # Some monkeypatched test stubs may not accept arguments
-                return httpx.AsyncClient()
-
         if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'true').lower() != 'false':
             # If a cached client exists but its class differs from the current
             # httpx.AsyncClient (e.g., monkeypatched during tests), drop cache.
@@ -134,21 +129,31 @@ class GatewayService:
 
             if cls._http_client is None:
                 try:
+                    kwargs = {
+                        'timeout': cls.timeout,
+                        'http2': (os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
+                        'trust_env': False,
+                    }
+                    limits = cls._build_limits()
+                    if limits is not None:
+                        kwargs['limits'] = limits
                     cls._http_client = httpx.AsyncClient(
-                        timeout=cls.timeout,
-                        limits=cls._build_limits(),
-                        http2=(os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
-                        trust_env=False,
+                        **kwargs,
                     )
                 except TypeError:
                     cls._http_client = httpx.AsyncClient()
             return cls._http_client
         try:
+            kwargs = {
+                'timeout': cls.timeout,
+                'http2': (os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
+                'trust_env': False,
+            }
+            limits = cls._build_limits()
+            if limits is not None:
+                kwargs['limits'] = limits
             return httpx.AsyncClient(
-                timeout=cls.timeout,
-                limits=cls._build_limits(),
-                http2=(os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
-                trust_env=False,
+                **kwargs,
             )
         except TypeError:
             return httpx.AsyncClient()
@@ -881,7 +886,7 @@ class GatewayService:
                 error_code='GTW999',
                 error_message='Upstream circuit open',
             ).dict()
-        except httpx.TimeoutException:
+        except _HTTPX_TIMEOUT_EXCEPTION:
             try:
                 metrics_store.record_upstream_timeout(
                     'rest:' + (api.get('api_path') if api else (api_name_version or '/api/rest'))
@@ -1183,7 +1188,7 @@ class GatewayService:
                 error_code='GTW999',
                 error_message='Upstream circuit open',
             ).dict()
-        except httpx.TimeoutException:
+        except _HTTPX_TIMEOUT_EXCEPTION:
             try:
                 metrics_store.record_upstream_timeout(
                     'soap:' + (api.get('api_path') if api else '/api/soap')
@@ -1409,7 +1414,7 @@ class GatewayService:
                 error_code='GTW999',
                 error_message='Upstream circuit open',
             ).dict()
-        except httpx.TimeoutException:
+        except _HTTPX_TIMEOUT_EXCEPTION:
             try:
                 metrics_store.record_upstream_timeout(
                     'graphql:' + (api.get('api_path') if api else '/api/graphql')
@@ -2899,7 +2904,7 @@ class GatewayService:
             return ResponseModel(
                 status_code=200, response_headers=response_headers, response=response_dict
             ).dict()
-        except httpx.TimeoutException:
+        except _HTTPX_TIMEOUT_EXCEPTION:
             return ResponseModel(
                 status_code=504,
                 response_headers={'request_id': request_id},

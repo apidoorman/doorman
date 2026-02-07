@@ -19,6 +19,7 @@ class Roles:
     VIEW_LOGS = 'view_logs'
     EXPORT_LOGS = 'export_logs'
     MANAGE_ROLES = 'manage_roles'
+    VIEW_BUILDER_TABLES = 'view_builder_tables'
 
 
 class ErrorCodes:

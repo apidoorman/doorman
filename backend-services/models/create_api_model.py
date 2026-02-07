@@ -229,6 +229,18 @@ class CreateApiModel(BaseModel):
             "age": {"type": "number", "min_value": 0}
         }
     )
+    api_crud_bindings: Optional[list[dict]] = Field(
+        None,
+        description='Optional multi-table CRUD bindings with per-resource schema',
+        example=[
+            {
+                'resource_name': 'customers',
+                'collection_name': 'crud_data_customers',
+                'table_name': 'Customers',
+                'schema': {'name': {'type': 'string', 'required': True}},
+            }
+        ],
+    )
 
     class Config:
         arbitrary_types_allowed = True

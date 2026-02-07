@@ -126,10 +126,16 @@ class Database:
                         'manage_auth': True,
                         'manage_security': True,
                         'view_analytics': True,
+                        'view_builder_tables': True,
                         'view_logs': True,
                         'export_logs': True,
                         'ui_access': True,
                     }
+                )
+            else:
+                roles.update_one(
+                    {'role_name': 'admin'},
+                    {'$set': {'view_builder_tables': True}},
                 )
 
             if not groups.find_one({'group_name': 'admin'}):
@@ -286,11 +292,13 @@ class Database:
                         'manage_credits': True,
                         'manage_auth': True,
                         'view_analytics': True,
+                        'view_builder_tables': True,
                         'view_logs': True,
                         'export_logs': True,
                         'manage_security': True,
                     }
                 )
+            self.db.roles.update_one({'role_name': 'admin'}, {'$set': {'view_builder_tables': True}})
         except Exception:
             pass
             if not self.db.groups.find_one({'group_name': 'admin'}):
