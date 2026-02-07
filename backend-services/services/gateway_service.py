@@ -1577,6 +1577,14 @@ class GatewayService:
                 project_root = GatewayService._PROJECT_ROOT
                 proto_dir = project_root / 'proto'
                 proto_path = (proto_dir / proto_rel.with_suffix('.proto')).resolve()
+                # Back-compat: some uploads used routes/proto/ when PROJECT_ROOT was mis-set.
+                if not proto_path.exists():
+                    legacy_proto_dir = project_root / 'routes' / 'proto'
+                    legacy_proto_path = (legacy_proto_dir / proto_rel.with_suffix('.proto')).resolve()
+                    if GatewayService._validate_under_base(project_root, legacy_proto_path):
+                        if legacy_proto_path.exists():
+                            proto_dir = legacy_proto_dir
+                            proto_path = legacy_proto_path
                 # Validate resolved path stays within project bounds
                 if not GatewayService._validate_under_base(project_root, proto_path):
                     return GatewayService.error_response(
@@ -1698,16 +1706,29 @@ class GatewayService:
                         generated_dir.mkdir(exist_ok=True)
                         try:
                             from grpc_tools import protoc as _protoc
+                            proto_args = [
+                                'protoc',
+                                f'--proto_path={str(proto_dir)}',
+                            ]
+                            # Ensure bundled Google protos are resolvable (e.g., google/protobuf/empty.proto).
+                            try:
+                                import grpc_tools as _grpc_tools
 
-                            code = _protoc.main(
+                                _grpc_include = (
+                                    Path(_grpc_tools.__file__).resolve().parent / '_proto'
+                                )
+                                if _grpc_include.exists():
+                                    proto_args.append(f'--proto_path={str(_grpc_include)}')
+                            except Exception:
+                                pass
+                            proto_args.extend(
                                 [
-                                    'protoc',
-                                    f'--proto_path={str(proto_dir)}',
                                     f'--python_out={str(generated_dir)}',
                                     f'--grpc_python_out={str(generated_dir)}',
                                     str(proto_path),
                                 ]
                             )
+                            code = _protoc.main(proto_args)
                             if code != 0:
                                 raise RuntimeError(f'protoc returned {code}')
                             init_path = generated_dir / '__init__.py'

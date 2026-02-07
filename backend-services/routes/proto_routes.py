@@ -25,7 +25,7 @@ from utils.role_util import platform_role_required_bool
 proto_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
 
-PROJECT_ROOT = Path(__file__).parent.resolve()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def sanitize_filename(filename: str):
@@ -381,18 +381,29 @@ async def upload_proto_file(
                     compile_input = pkg_proto_path
                     used_pkg_generation = True
 
-            subprocess.run(
+            proto_args = [
+                sys.executable,
+                '-m',
+                'grpc_tools.protoc',
+                f'--proto_path={compile_proto_root}',
+            ]
+            # Ensure bundled Google protos are resolvable (e.g., google/protobuf/empty.proto).
+            try:
+                import grpc_tools as _grpc_tools
+
+                _grpc_include = (Path(_grpc_tools.__file__).resolve().parent / '_proto')
+                if _grpc_include.exists():
+                    proto_args.append(f'--proto_path={_grpc_include}')
+            except Exception:
+                pass
+            proto_args.extend(
                 [
-                    sys.executable,
-                    '-m',
-                    'grpc_tools.protoc',
-                    f'--proto_path={compile_proto_root}',
                     f'--python_out={generated_dir}',
                     f'--grpc_python_out={generated_dir}',
                     str(compile_input),
-                ],
-                check=True,
+                ]
             )
+            subprocess.run(proto_args, check=True)
             logger.info(f'Proto compiled: src={compile_input} out={generated_dir}')
             init_path = (generated_dir / '__init__.py').resolve()
             if not validate_path(generated_dir, init_path):
@@ -657,18 +668,29 @@ async def update_proto_file(
                     ).dict(),
                     'rest',
                 )
-            subprocess.run(
+            proto_args = [
+                sys.executable,
+                '-m',
+                'grpc_tools.protoc',
+                f'--proto_path={proto_path.parent}',
+            ]
+            # Ensure bundled Google protos are resolvable (e.g., google/protobuf/empty.proto).
+            try:
+                import grpc_tools as _grpc_tools
+
+                _grpc_include = (Path(_grpc_tools.__file__).resolve().parent / '_proto')
+                if _grpc_include.exists():
+                    proto_args.append(f'--proto_path={_grpc_include}')
+            except Exception:
+                pass
+            proto_args.extend(
                 [
-                    sys.executable,
-                    '-m',
-                    'grpc_tools.protoc',
-                    f'--proto_path={proto_path.parent}',
                     f'--python_out={generated_dir}',
                     f'--grpc_python_out={generated_dir}',
                     str(proto_path),
-                ],
-                check=True,
+                ]
             )
+            subprocess.run(proto_args, check=True)
         except subprocess.CalledProcessError as e:
             logger.error(f'Failed to generate gRPC code: {str(e)}')
             return process_response(

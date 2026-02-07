@@ -305,6 +305,9 @@ def _setup_api(
     client: LiveClient, kind: str, idx: int
 ) -> Tuple[str, str, Dict[str, Any]]:
     name = f"live-{kind.lower()}-{int(time.time())}-{idx}"
+    if kind == "GRPC":
+        # Avoid dashes in gRPC API names to align proto/module naming
+        name = f"live_grpc_{int(time.time())}_{idx}"
     ver = "v1"
     credit_group = f"cg-{kind.lower()}-{int(time.time())}-{idx}"
     _mk_credit_def(client, credit_group, credits=5)

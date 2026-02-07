@@ -128,7 +128,7 @@ def provisioned_public_apis(client):
             ver,
             [server_url],
             "GRPC",
-            extra={"api_grpc_package": "grpcbin"},
+            extra=None,
         )
         _mk_endpoint(client, name, ver, "POST", "/grpc")
         catalog.append(("GRPC", name, ver, {"method": method, "message": message}))

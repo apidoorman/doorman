@@ -26,13 +26,15 @@ def test_graphql_missing_version_header_returns_400(client):
     schema = make_executable_schema(type_defs, query)
     import socket
     import threading
+    from servers import _get_host_from_container
 
     s = socket.socket()
     s.bind(('127.0.0.1', 0))
     port = s.getsockname()[1]
     s.close()
+    host = _get_host_from_container()
     server = uvicorn.Server(
-        uvicorn.Config(GraphQL(schema), host='127.0.0.1', port=port, log_level='warning')
+        uvicorn.Config(GraphQL(schema), host='0.0.0.0', port=port, log_level='warning')
     )
     t = threading.Thread(target=server.run, daemon=True)
     t.start()
@@ -50,7 +52,7 @@ def test_graphql_missing_version_header_returns_400(client):
             'api_description': 'gql',
             'api_allowed_roles': ['admin'],
             'api_allowed_groups': ['ALL'],
-            'api_servers': [f'http://127.0.0.1:{port}'],
+            'api_servers': [f'http://{host}:{port}'],
             'api_type': 'GRAPHQL',
             'active': True,
         },

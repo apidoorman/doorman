@@ -49,8 +49,14 @@ def test_endpoint_level_servers_override(client):
         data = r.json().get('response', r.json())
         headers = {k.lower(): v for k, v in (data.get('headers') or {}).items()}
         host_hdr = headers.get('host', '')
-        ep_hostport = srv_ep.url.replace('http://', '')
-        assert host_hdr.endswith(ep_hostport)
+        ep_hostport = srv_ep.url.replace('http://', '').replace('https://', '')
+        # Allow gateway to rewrite localhost to Docker-reachable aliases; assert port matches.
+        try:
+            expected_port = ep_hostport.split(':')[-1]
+            got_port = host_hdr.split(':')[-1]
+            assert got_port == expected_port
+        except Exception:
+            assert host_hdr.endswith(ep_hostport)
     finally:
         try:
             client.delete(f'/platform/endpoint/GET/{api_name}/{api_version}/who')
