@@ -82,6 +82,14 @@ def duration_to_seconds(duration: str) -> int:
     return mapping.get(duration.lower(), 60)
 
 
+async def _incr_window_counter(client, key: str, ttl_seconds: int) -> int:
+    """Increment a counter and set TTL on first write."""
+    count = await client.incr(key)
+    if count == 1:
+        await client.expire(key, ttl_seconds)
+    return int(count)
+
+
 async def limit_and_throttle(request: Request):
     """Enforce user-level rate limiting and throttling.
 
@@ -109,38 +117,34 @@ async def limit_and_throttle(request: Request):
     payload = await auth_required(request)
     username = payload.get('sub')
     redis_client = getattr(request.app.state, 'redis', None)
-    # Fallback tier enforcement for cases where tier middleware is not active
-    # or not applied for this request context.
+    # Enforce tier limits here as the authoritative gate for gateway requests.
+    # This path uses app.state.redis when configured, which keeps enforcement
+    # consistent across workers.
     try:
         skip_tier = os.getenv('SKIP_TIER_RATE_LIMIT', '').lower() in ('1', 'true', 'yes', 'on')
-        already_enforced = bool(getattr(request.state, 'tier_limits_enforced', False))
-        enforced_user = getattr(request.state, 'tier_limits_user_id', None)
-        if not skip_tier and (not already_enforced or enforced_user != username):
-            from models.rate_limit_models import RateLimitRule, RuleType, TimeWindow
+        if not skip_tier:
             from services.tier_service import get_tier_service
             from utils.database_async import async_database
-            from utils.rate_limiter import get_rate_limiter
 
             tier_service = get_tier_service(async_database.db)
             limits = await tier_service.get_user_limits(username)
             if limits:
-                rate_limiter = get_rate_limiter()
+                now = int(time.time())
                 checks = (
-                    ('minute', limits.requests_per_minute, limits.burst_per_minute, TimeWindow.MINUTE),
-                    ('hour', limits.requests_per_hour, limits.burst_per_hour, TimeWindow.HOUR),
-                    ('day', limits.requests_per_day, 0, TimeWindow.DAY),
+                    ('minute', limits.requests_per_minute, 60),
+                    ('hour', limits.requests_per_hour, 3600),
+                    ('day', limits.requests_per_day, 86400),
                 )
-                for period, limit, burst, window in checks:
+                for period, limit, window_seconds in checks:
                     if limit and limit < 999999:
-                        rule = RateLimitRule(
-                            rule_id=f'tier_{period}_{username}',
-                            rule_type=RuleType.PER_USER,
-                            time_window=window,
-                            limit=limit,
-                            burst_allowance=burst or 0,
-                        )
-                        result = await asyncio.to_thread(rate_limiter.check_hybrid, rule, username)
-                        if not result.allowed:
+                        window_index = now // window_seconds
+                        key = f'tier_rate_limit:{username}:{period}:{window_index}'
+                        client = redis_client or _fallback_counter
+                        try:
+                            count = await _incr_window_counter(client, key, window_seconds)
+                        except Exception:
+                            count = await _incr_window_counter(_fallback_counter, key, window_seconds)
+                        if count > int(limit):
                             raise HTTPException(status_code=429, detail='Rate limit exceeded')
                 try:
                     request.state.tier_limits_enforced = True
@@ -149,9 +153,9 @@ async def limit_and_throttle(request: Request):
                     pass
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
         # Tier fallback must never break gateway traffic.
-        pass
+        logger.warning(f'Tier fallback enforcement error for {username}: {e}')
 
     user = doorman_cache.get_cache('user_cache', username)
     if not user:

@@ -9,7 +9,9 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
+
+from services.realtime_service import realtime_service
 
 from models.response_model import ResponseModel
 from utils.async_db import (
@@ -124,6 +126,20 @@ def _validate_schema(schema: Any) -> tuple[bool, str | None]:
             return False, 'schema field names must be non-empty strings'
         if not isinstance(rules, dict):
             return False, 'schema field rules must be objects'
+    return True, None
+
+
+def _validate_rules(rules: Any) -> tuple[bool, str | None]:
+    if not rules:
+        return True, None
+    if not isinstance(rules, dict):
+        return False, 'rules must be an object'
+    allowed_keys = {'read', 'write', 'create', 'update', 'delete', 'list'}
+    for k, v in rules.items():
+        if k not in allowed_keys:
+            return False, f'Invalid rule type: {k}. Allowed: {", ".join(allowed_keys)}'
+        if not isinstance(v, str):
+            return False, f'Rule for {k} must be a string expression'
     return True, None
 
 
@@ -280,6 +296,7 @@ async def _table_map() -> dict[str, dict[str, Any]]:
             'created_at': table_doc.get('created_at'),
             'updated_at': table_doc.get('updated_at'),
             'created_by': table_doc.get('created_by'),
+            'rules': table_doc.get('rules') or {},
         }
 
     legacy_map = await _legacy_table_map()
@@ -358,6 +375,18 @@ async def create_table(request: Request) -> Response:
                 )
             )
 
+        rules = body.get('rules') or {}
+        rules_valid, rules_error = _validate_rules(rules)
+        if not rules_valid:
+            return respond_rest(
+                ResponseModel(
+                    status_code=400,
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_code='ABT013',
+                    error_message=rules_error or 'Invalid rules',
+                )
+            )
+
         existing = await db_find_one(_table_registry_collection(), {'collection_name': collection_name})
         if existing:
             return respond_rest(
@@ -377,6 +406,7 @@ async def create_table(request: Request) -> Response:
             'created_at': now,
             'updated_at': now,
             'created_by': username,
+            'rules': rules,
         }
         inserted = await db_insert_one(_table_registry_collection(), table_doc)
         if not inserted or not getattr(inserted, 'acknowledged', False):
@@ -398,6 +428,7 @@ async def create_table(request: Request) -> Response:
         response_doc['row_count'] = 0
         response_doc['api_refs'] = []
         response_doc['source'] = 'table_registry'
+        response_doc['rules'] = rules
 
         return respond_rest(
             ResponseModel(
@@ -548,6 +579,19 @@ async def update_table(collection_name: str, request: Request) -> Response:
                     )
                 )
             updates['schema'] = body.get('schema') or {}
+
+        if 'rules' in body:
+            rules_valid, rules_error = _validate_rules(body.get('rules'))
+            if not rules_valid:
+                return respond_rest(
+                    ResponseModel(
+                        status_code=400,
+                        response_headers={Headers.REQUEST_ID: request_id},
+                        error_code='ABT023',
+                        error_message=rules_error or 'Invalid rules',
+                    )
+                )
+            updates['rules'] = body.get('rules') or {}
 
         if not updates:
             return respond_rest(
@@ -1008,3 +1052,22 @@ async def query_table_rows(collection_name: str, request: Request) -> Response:
     finally:
         end_time = time.time() * 1000
         logger.info(f'Total time: {str(end_time - start_time)}ms')
+
+
+@api_builder_router.websocket('/ws/subscribe/{collection_name}')
+async def subscribe_collection(websocket: WebSocket, collection_name: str):
+    """
+    WebSocket endpoint for real-time collection updates.
+    """
+    try:
+        await realtime_service.connect(websocket, collection_name)
+        while True:
+            # Keep connection alive; we only send data, don't expect much input
+            # But we must await something to detect disconnects
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        realtime_service.disconnect(websocket, collection_name)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        realtime_service.disconnect(websocket, collection_name)
+

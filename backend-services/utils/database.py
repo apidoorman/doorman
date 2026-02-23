@@ -230,6 +230,7 @@ class Database:
             'settings',
             'revocations',
             'vault_entries',
+            'api_builder_tables',
             'tiers',
             'user_tier_assignments',
         ]
@@ -735,9 +736,9 @@ class InMemoryDB:
             self.user_tier_assignments = self._sync_user_tier_assignments
             self.rate_limit_rules = self._sync_rate_limit_rules
 
-    def list_collection_names(self):
-        # Return all InMemoryCollection attributes
-        base_collections = [
+    @staticmethod
+    def _base_collection_names() -> list[str]:
+        return [
             'users',
             'apis',
             'endpoints',
@@ -755,20 +756,39 @@ class InMemoryDB:
             'user_tier_assignments',
             'rate_limit_rules',
         ]
-        # Also include any dynamically created collections
+
+    def _resolve_sync_collection(self, name: str) -> InMemoryCollection | None:
+        sync_attr = f'_sync_{name}'
+        coll = getattr(self, sync_attr, None)
+        if isinstance(coll, InMemoryCollection):
+            return coll
+
+        exposed = getattr(self, name, None)
+        if isinstance(exposed, InMemoryCollection):
+            return exposed
+        if isinstance(exposed, AsyncInMemoryCollection):
+            return exposed._sync
+        return None
+
+    def list_collection_names(self):
+        base_collections = self._base_collection_names()
+        # Also include any dynamically created collections.
         dynamic_collections = [
             name for name in dir(self)
-            if not name.startswith('_') 
+            if not name.startswith('_')
             and hasattr(self, name)
-            and isinstance(getattr(self, name), InMemoryCollection)
+            and isinstance(getattr(self, name), (InMemoryCollection, AsyncInMemoryCollection))
             and name not in base_collections
         ]
-        return base_collections + dynamic_collections
+        return list(dict.fromkeys([*base_collections, *dynamic_collections]))
 
     def create_collection(self, name):
         if name not in self.list_collection_names():
-            from utils.database import InMemoryCollection
-            setattr(self, name, InMemoryCollection(name))
+            sync_coll = InMemoryCollection(name)
+            if self._async_mode:
+                setattr(self, name, AsyncInMemoryCollection(sync_coll))
+            else:
+                setattr(self, name, sync_coll)
         return getattr(self, name)
 
     def __getitem__(self, name):
@@ -781,43 +801,37 @@ class InMemoryDB:
         def coll_docs(coll: InMemoryCollection):
             return [copy.deepcopy(d) for d in coll._docs]
 
-        return {
-            'users': coll_docs(self._sync_users),
-            'apis': coll_docs(self._sync_apis),
-            'endpoints': coll_docs(self._sync_endpoints),
-            'groups': coll_docs(self._sync_groups),
-            'roles': coll_docs(self._sync_roles),
-            'subscriptions': coll_docs(self._sync_subscriptions),
-            'routings': coll_docs(self._sync_routings),
-            'credit_defs': coll_docs(self._sync_credit_defs),
-            'user_credits': coll_docs(self._sync_user_credits),
-            'endpoint_validations': coll_docs(self._sync_endpoint_validations),
-            'settings': coll_docs(self._sync_settings),
-            'revocations': coll_docs(self._sync_revocations),
-            'vault_entries': coll_docs(self._sync_vault_entries),
-            'tiers': coll_docs(self._sync_tiers),
-            'user_tier_assignments': coll_docs(self._sync_user_tier_assignments),
-        }
+        data: dict[str, list[dict]] = {}
+        for name in self.list_collection_names():
+            coll = self._resolve_sync_collection(name)
+            if coll is None:
+                continue
+            data[name] = coll_docs(coll)
+        return data
 
     def load_data(self, data: dict):
         def load_coll(coll: InMemoryCollection, docs: list):
             coll._docs = [copy.deepcopy(d) for d in (docs or [])]
 
-        load_coll(self._sync_users, data.get('users', []))
-        load_coll(self._sync_apis, data.get('apis', []))
-        load_coll(self._sync_endpoints, data.get('endpoints', []))
-        load_coll(self._sync_groups, data.get('groups', []))
-        load_coll(self._sync_roles, data.get('roles', []))
-        load_coll(self._sync_subscriptions, data.get('subscriptions', []))
-        load_coll(self._sync_routings, data.get('routings', []))
-        load_coll(self._sync_credit_defs, data.get('credit_defs', []))
-        load_coll(self._sync_user_credits, data.get('user_credits', []))
-        load_coll(self._sync_endpoint_validations, data.get('endpoint_validations', []))
-        load_coll(self._sync_settings, data.get('settings', []))
-        load_coll(self._sync_revocations, data.get('revocations', []))
-        load_coll(self._sync_vault_entries, data.get('vault_entries', []))
-        load_coll(self._sync_tiers, data.get('tiers', []))
-        load_coll(self._sync_user_tier_assignments, data.get('user_tier_assignments', []))
+        if not isinstance(data, dict):
+            data = {}
+
+        current_names = self.list_collection_names()
+
+        for name in current_names:
+            coll = self._resolve_sync_collection(name)
+            if coll is None:
+                continue
+            load_coll(coll, data.get(name, []))
+
+        for name, docs in data.items():
+            if name in current_names:
+                continue
+            self.create_collection(name)
+            coll = self._resolve_sync_collection(name)
+            if coll is None:
+                continue
+            load_coll(coll, docs if isinstance(docs, list) else [])
 
 
 database = Database()

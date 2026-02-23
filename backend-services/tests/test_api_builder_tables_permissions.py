@@ -179,7 +179,8 @@ async def test_table_registry_update_query_and_delete_flow(authed_client):
     assert len(items) == 1
     assert items[0].get('name') == 'Laptop'
 
-    deleted = await authed_client.delete(
+    deleted = await authed_client.request(
+        'DELETE',
         f'/platform/api-builder/tables/{collection_name}',
         json={'drop_data': True},
     )

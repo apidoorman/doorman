@@ -160,6 +160,7 @@ class DoormanCacheManager:
             'credit_def_cache': 'credit_def_cache:',
             'csrf_token_map': 'csrf_token_map:',
             'wsdl_cache': 'wsdl_cache:',
+            'trigger_cache': 'trigger_cache:',
         }
         self.default_ttls = {
             'api_cache': 86400,
@@ -181,6 +182,7 @@ class DoormanCacheManager:
             'credit_def_cache': 86400,
             'csrf_token_map': 1800,
             'wsdl_cache': 3600,
+            'trigger_cache': 300,
         }
 
     def _get_key(self, cache_name, key):

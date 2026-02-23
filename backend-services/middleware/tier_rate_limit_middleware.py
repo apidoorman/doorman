@@ -51,6 +51,16 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
         # Use simple local queue for throttling, but rate limiting itself is distributed via Redis
         self._request_queue = {}
 
+    @classmethod
+    def reset_counters(cls):
+        """Reset shared tier rate-limit counters."""
+        try:
+            from utils.rate_limiter import get_rate_limiter
+
+            get_rate_limiter().reset_all()
+        except Exception:
+            pass
+
     async def dispatch(self, request: Request, call_next):
         """
         Process request through tier-based rate limiting

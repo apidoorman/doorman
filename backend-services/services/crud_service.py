@@ -10,8 +10,11 @@ from fastapi import Request
 from models.response_model import ResponseModel
 from utils.async_db import db_delete_one, db_find_list, db_find_one, db_insert_one, db_update_one
 from utils.database_async import db as async_db
+from utils.rules_engine import evaluate_rule
 from ariadne import make_executable_schema, graphql, ObjectType, QueryType, MutationType
 import json
+
+TABLE_REGISTRY_COLLECTION = 'api_builder_tables'
 
 logger = logging.getLogger('doorman.gateway')
 
@@ -277,6 +280,126 @@ class CrudService:
         return errors
 
     @staticmethod
+    async def _get_table_rules(collection_name: str) -> dict:
+        if not collection_name:
+            return {}
+        try:
+            # We need to access the registry. 
+            # Ideally this should be cached or stored in the API definition to avoid extra lookups.
+            # For now, we look it up.
+            registry = None
+            if hasattr(async_db, 'get_collection'):
+                registry = async_db.get_collection(TABLE_REGISTRY_COLLECTION)
+            else:
+                registry = getattr(async_db, TABLE_REGISTRY_COLLECTION)
+            
+            doc = await db_find_one(registry, {'collection_name': collection_name})
+            if doc and 'rules' in doc:
+                return doc['rules']
+        except Exception:
+            pass
+        return {}
+
+    @staticmethod
+    async def _check_security(api: dict, method: str, collection_name: str, payload: dict | None, request: Request, resource_id: str | None = None) -> bool:
+        # 1. Fetch Rules
+        rules = await CrudService._get_table_rules(collection_name)
+        if not rules:
+            return True # No rules = allow
+
+        # 2. Determine Rule Type
+        # read, write, create, update, delete, list
+        rule_type = 'read'
+        if method == 'GET':
+            rule_type = 'read' if resource_id else 'list'
+            if rule_type == 'list' and 'list' not in rules and 'read' in rules:
+                rule_type = 'read' # Fallback
+        elif method == 'POST':
+            rule_type = 'create'
+            if 'create' not in rules and 'write' in rules:
+                rule_type = 'write'
+        elif method in ('PUT', 'PATCH'):
+            rule_type = 'update'
+            if 'update' not in rules and 'write' in rules:
+                rule_type = 'write'
+        elif method == 'DELETE':
+            rule_type = 'delete'
+            if 'delete' not in rules and 'write' in rules:
+                rule_type = 'write'
+
+        if rule_type not in rules:
+             # If specific rule missing, check generic 'write' or 'read' again?
+             # Handled above. If still not found, allow? or deny?
+             # Let's assume allowed if not specified.
+             return True
+
+        expression = rules[rule_type]
+        if not expression:
+            return True
+
+        # 3. Build Context
+        # auth, request, resource
+        # auth: needs payload from auth middleware. 
+        # request: headers, etc.
+        # resource: current data (for update/delete/read) - requires fetch!
+        
+        ctx = {}
+        
+        # Auth
+        user = getattr(request.state, 'user', None)
+        # If using auth_required utility elsewhere, it might set request.state.user or similar?
+        # api_routes usually protects the endpoint and passes user info?
+        # request.user is standard in some frameworks, but here we might rely on the token being parsed.
+        # Let's check how auth is handled in api_routes.
+        # If not available, we used 'sub' from payload in other routes.
+        # We will expose 'auth' -> {'uid': ..., 'token': ...}
+        
+        # Mocking auth for now if not present, needs integration with Auth middleware.
+        # But wait, request.state.user is populated by some middleware? 
+        # Looking at doorman.py, there is AuthorizationMiddleware? No, specific routes use auth_required.
+        # api_routes.py likely calls handle_rest. 
+        
+        # Let's try to get auth info from request.state or JWT.
+        auth_context = {'uid': None, 'role': None}
+        if hasattr(request, 'auth') and request.auth:
+             auth_context['uid'] = request.auth
+        elif hasattr(request.state, 'user'):
+             auth_context['uid'] = request.state.user
+
+        ctx['auth'] = auth_context
+        
+        # Request
+        ctx['request'] = {
+            'method': method,
+            'path': request.url.path,
+            'ip': request.client.host if request.client else '',
+            'time': 0 # TODO
+        }
+        
+        # Resource (Data)
+        # For update/delete/get, we might need the EXISTING data. 
+        # This is expensive (double query). Firebase does it.
+        # We will fetch it if rule uses 'resource'.
+        if 'resource' in expression and resource_id:
+             # Fetch resource
+             if hasattr(async_db, 'get_collection'):
+                 coll = async_db.get_collection(collection_name)
+             else:
+                 coll = getattr(async_db, collection_name)
+             
+             data = await db_find_one(coll, {'_id': resource_id})
+             ctx['resource'] = {'data': data} if data else None
+        else:
+             ctx['resource'] = None
+
+        # Request Data (for create/update)
+        if payload:
+            ctx['request']['resource'] = {'data': payload}
+
+        return evaluate_rule(expression, ctx)
+
+
+    @staticmethod
     async def handle_rest(api: dict, request: Request, request_id: str, endpoint_uri: str):
         """
         Handle REST CRUD operations.
@@ -295,8 +418,23 @@ class CrudService:
             # More than one part means the last part is the resource ID
             resource_id = parts[-1]
 
+        # Security Check (Pre-Action)
+        # Note: payload for POST/PUT is parsed inside specific blocks, 
+        # so for create/update validation involving request data, we might need to parse first.
+        # We'll do a preliminary check here, and if payload is needed, do it after parse.
+        
+        # However, to avoid parsing twice, we might restructure.
+        # For now, let's catch basic rules (auth-only) or fetch resource rules.
+        # If rule requires 'request.resource', we need the body.
+        
+        # Let's postpone security check to inside method blocks where we have body.
+
+
         try:
             if method == 'GET':
+                if not await CrudService._check_security(api, method, CrudService._get_collection(api, endpoint_uri).name, None, request, resource_id):
+                    return ResponseModel(status_code=403, error_code='CRUD403', error_message='Permission denied').dict()
+
                 if resource_id:
                     # Attempt to find by ID
                     doc = await db_find_one(collection, {'_id': resource_id})
@@ -328,6 +466,10 @@ class CrudService:
                     body = {}
 
                 body = CrudService._transform_incoming_payload(body, field_mappings)
+                
+                collection_name = CrudService._get_collection(api, endpoint_uri).name
+                if not await CrudService._check_security(api, method, collection_name, body, request, None):
+                    return ResponseModel(status_code=403, error_code='CRUD403', error_message='Permission denied').dict()
                 
                 if '_id' not in body:
                     body['_id'] = str(uuid.uuid4())
@@ -378,6 +520,10 @@ class CrudService:
                     body = {}
                 body = CrudService._transform_incoming_payload(body, field_mappings)
                 
+                collection_name = CrudService._get_collection(api, endpoint_uri).name
+                if not await CrudService._check_security(api, method, collection_name, body, request, resource_id):
+                    return ResponseModel(status_code=403, error_code='CRUD403', error_message='Permission denied').dict()
+                
                 # Validation
                 if schema:
                     errors = CrudService._validate_schema(schema, body, partial=True)
@@ -419,6 +565,10 @@ class CrudService:
                 ).dict()
 
             elif method == 'DELETE':
+                collection_name = CrudService._get_collection(api, endpoint_uri).name
+                if not await CrudService._check_security(api, method, collection_name, None, request, resource_id):
+                     return ResponseModel(status_code=403, error_code='CRUD403', error_message='Permission denied').dict()
+
                 if not resource_id:
                     return ResponseModel(
                         status_code=400,

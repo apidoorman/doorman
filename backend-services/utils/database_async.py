@@ -164,6 +164,7 @@ class AsyncDatabase:
             'settings',
             'revocations',
             'vault_entries',
+            'api_builder_tables',
         ]
 
         existing_collections = await self.db.list_collection_names()

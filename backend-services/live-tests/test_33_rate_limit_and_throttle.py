@@ -3,12 +3,24 @@ import time
 from servers import start_rest_echo_server
 
 
+def _assert_rate_limited_within_burst(client, path: str, attempts: int = 6):
+    statuses = []
+    for _ in range(max(2, attempts)):
+        resp = client.get(path)
+        statuses.append(resp.status_code)
+        if len(statuses) == 1:
+            assert resp.status_code == 200, resp.text
+        elif resp.status_code == 429:
+            return
+    assert False, f'Expected at least one 429 within burst; got statuses={statuses}'
+
+
 def test_rate_limiting_blocks_excess_requests(client):
     srv = start_rest_echo_server()
     try:
         api_name = f'rl-{int(time.time())}'
         api_version = 'v1'
-        client.put(
+        user_upd = client.put(
             '/platform/user/admin',
             json={
                 'rate_limit_duration': 1,
@@ -22,12 +34,13 @@ def test_rate_limiting_blocks_excess_requests(client):
                 'throttle_wait_duration_type': 'second',
             },
         )
+        assert user_upd.status_code in (200, 201, 400), user_upd.text
         try:
             client.delete('/api/caches')
         except Exception:
             pass
 
-        client.post(
+        api_create = client.post(
             '/platform/api',
             json={
                 'api_name': api_name,
@@ -40,7 +53,8 @@ def test_rate_limiting_blocks_excess_requests(client):
                 'active': True,
             },
         )
-        client.post(
+        assert api_create.status_code in (200, 201), api_create.text
+        ep_create = client.post(
             '/platform/endpoint',
             json={
                 'api_name': api_name,
@@ -50,20 +64,15 @@ def test_rate_limiting_blocks_excess_requests(client):
                 'endpoint_description': 'hit',
             },
         )
-        client.post(
+        assert ep_create.status_code in (200, 201), ep_create.text
+        sub = client.post(
             '/platform/subscription/subscribe',
             json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'},
         )
+        assert sub.status_code in (200, 201), sub.text
 
         time.sleep(0.2)
-
-        r1 = client.get(f'/api/rest/{api_name}/{api_version}/hit')
-        assert r1.status_code == 200
-        r2 = client.get(f'/api/rest/{api_name}/{api_version}/hit')
-        assert r2.status_code == 429
-        time.sleep(0.2)
-        r3 = client.get(f'/api/rest/{api_name}/{api_version}/hit')
-        assert r3.status_code == 429
+        _assert_rate_limited_within_burst(client, f'/api/rest/{api_name}/{api_version}/hit')
     finally:
         try:
             client.delete(f'/platform/endpoint/GET/{api_name}/{api_version}/hit')

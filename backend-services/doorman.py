@@ -64,9 +64,11 @@ except Exception:
 from models.response_model import ResponseModel
 from routes.analytics_routes import analytics_router
 from routes.api_builder_routes import api_builder_router
+from routes.trigger_routes import trigger_router
 from middleware.analytics_middleware import setup_analytics_middleware
 from utils.analytics_scheduler import analytics_scheduler
 from routes.api_routes import api_router
+from routes.trigger_routes import trigger_router
 from routes.authorization_routes import authorization_router
 from routes.config_hot_reload_routes import config_hot_reload_router
 from routes.config_routes import config_router
@@ -121,6 +123,7 @@ from utils.security_settings_util import (
     start_auto_save_task,
     stop_auto_save_task,
 )
+from services.realtime_service import realtime_service
 
 # Avoid loading developer .env while running under pytest so tests fully
 # control environment via monkeypatch without hidden defaults.
@@ -594,8 +597,17 @@ async def app_lifespan(app: FastAPI):
         gateway_logger.debug('SIGHUP not supported on this platform')
 
     try:
+        await realtime_service.start_listener()
+    except Exception as e:
+        gateway_logger.error(f"Failed to start realtime listener: {e}")
+
+    try:
         yield
     finally:
+        try:
+            await realtime_service.stop_listener()
+        except Exception as e:
+            gateway_logger.error(f"Failed to stop realtime listener: {e}")
         gateway_logger.info('Starting graceful shutdown...')
         app.state.shutting_down = True
         # Immediate memory dump on shutdown initiation (Ctrl+C/SIGTERM)
@@ -2227,6 +2239,7 @@ doorman.include_router(authorization_router, prefix='/platform', tags=['Authoriz
 doorman.include_router(user_router, prefix='/platform/user', tags=['User'])
 doorman.include_router(api_router, prefix='/platform/api', tags=['API'])
 doorman.include_router(api_builder_router, prefix='/platform/api-builder', tags=['API Builder'])
+doorman.include_router(trigger_router, prefix='/platform/api-builder', tags=['API Builder Triggers'])
 doorman.include_router(endpoint_router, prefix='/platform/endpoint', tags=['Endpoint'])
 doorman.include_router(group_router, prefix='/platform/group', tags=['Group'])
 doorman.include_router(role_router, prefix='/platform/role', tags=['Role'])
