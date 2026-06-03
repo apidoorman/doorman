@@ -304,6 +304,12 @@ async def gateway(request: Request, path: str):
             resolved_api = await api_util.get_api(api_key, key1)
             if resolved_api:
                 try:
+                    request.state.gateway_resolved_api = resolved_api
+                    request.state.gateway_api_name_version = key1
+                    request.state.gateway_endpoint_uri = '/'.join(endpoint_parts) if endpoint_parts else ''
+                except Exception:
+                    pass
+                try:
                     enforce_api_ip_policy(request, resolved_api)
                 except HTTPException as e:
                     return process_response(

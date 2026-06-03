@@ -200,6 +200,8 @@ class TierRateLimitMiddleware(BaseHTTPMiddleware):
             return True
 
         if request.url.path.startswith('/health') or \
+           request.url.path.startswith('/api/health') or \
+           request.url.path == '/api/caches' or \
            request.url.path.startswith('/metrics') or \
            request.url.path.startswith('/docs') or \
            request.url.path.startswith('/redoc') or \

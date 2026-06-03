@@ -1,10 +1,11 @@
 import pytest
+from uuid import uuid4
 from live_targets import GRAPHQL_TARGETS
 
 
 def test_graphql_public_local_via_gateway(client):
     """Exercise a public GraphQL API through the gateway using a live upstream."""
-    api_name = 'gqlpub'
+    api_name = f'gqlpub-{uuid4().hex[:8]}'
     api_version = 'v1'
 
     server_url, query = GRAPHQL_TARGETS[0]
