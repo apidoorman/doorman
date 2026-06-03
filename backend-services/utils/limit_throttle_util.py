@@ -122,7 +122,8 @@ async def limit_and_throttle(request: Request):
     # consistent across workers.
     try:
         skip_tier = os.getenv('SKIP_TIER_RATE_LIMIT', '').lower() in ('1', 'true', 'yes', 'on')
-        if not skip_tier:
+        already_enforced = bool(getattr(request.state, 'tier_limits_enforced', False))
+        if not skip_tier and not already_enforced:
             from services.tier_service import get_tier_service
             from utils.database_async import async_database
 

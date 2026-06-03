@@ -364,13 +364,18 @@ class TierService:
             # User has custom limits
             return assignment.override_limits
 
-        # Check cache for tier limits
-        cached_limits = doorman_cache.get_cache('user_cache', f'tier_limits_{user_id}')
-        if cached_limits:
-             try:
-                 return TierLimits.from_dict(cached_limits)
-             except Exception:
-                 pass
+        # Check cache for assigned-user tier limits only after confirming an
+        # assignment still exists. Otherwise a removed assignment can leave a
+        # stale strict tier in cache and keep rate-limiting the user.
+        if assignment:
+            cached_limits = doorman_cache.get_cache('user_cache', f'tier_limits_{user_id}')
+            if cached_limits:
+                try:
+                    return TierLimits.from_dict(cached_limits)
+                except Exception:
+                    pass
+        else:
+            doorman_cache.delete_cache('user_cache', f'tier_limits_{user_id}')
 
         # Get tier limits
         tier = await self.get_user_tier(user_id)
@@ -393,9 +398,10 @@ class TierService:
         """
         result = await self.assignments_collection.delete_one({'user_id': user_id})
 
+        doorman_cache.delete_cache('user_cache', f'tier_limits_{user_id}')
+
         if result.deleted_count > 0:
             logger.info(f'Removed tier assignment for user {user_id}')
-            doorman_cache.delete_cache('user_cache', f'tier_limits_{user_id}')
             return True
 
         return False

@@ -538,35 +538,38 @@ class GatewayService:
         endpoint_uri = ''
         try:
             if not url and not method:
-                parts = [p for p in (path or '').split('/') if p]
-                api_name_version = ''
-                endpoint_uri = ''
-                if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
-                    api_name_version = f'/{parts[0]}/{parts[1]}'
-                    endpoint_uri = '/'.join(parts[2:])
-                key1 = api_name_version
-                key2 = api_name_version.lstrip('/') if api_name_version else ''
-                # Prefer direct API cache by name/version for robustness
-                api = None
-                nv = key2
-                if nv:
-                    api = doorman_cache.get_cache('api_cache', nv) or doorman_cache.get_cache(
-                        'api_cache', key1
-                    )
-                api_key = None
+                api = getattr(request.state, 'gateway_resolved_api', None)
+                api_name_version = getattr(request.state, 'gateway_api_name_version', '') or ''
+                endpoint_uri = getattr(request.state, 'gateway_endpoint_uri', '') or ''
                 if not api:
-                    api_key = (
-                        doorman_cache.get_cache('api_id_cache', key1)
-                        or (doorman_cache.get_cache('api_id_cache', key2) if key2 else None)
-                    )
-                try:
-                    logger.debug(
-                        f"REST resolve: path={path} api_name_version={api_name_version} key1={key1} key2={key2} api_cache={'hit' if api else 'miss'} api_id_key={'set' if api_key else 'none'}"
-                    )
-                except Exception:
-                    pass
-                if not api:
-                    api = await api_util.get_api(api_key, api_name_version)
+                    parts = [p for p in (path or '').split('/') if p]
+                    api_name_version = ''
+                    endpoint_uri = ''
+                    if len(parts) >= 2 and parts[1].startswith('v') and parts[1][1:].isdigit():
+                        api_name_version = f'/{parts[0]}/{parts[1]}'
+                        endpoint_uri = '/'.join(parts[2:])
+                    key1 = api_name_version
+                    key2 = api_name_version.lstrip('/') if api_name_version else ''
+                    # Prefer direct API cache by name/version for robustness
+                    nv = key2
+                    if nv:
+                        api = doorman_cache.get_cache('api_cache', nv) or doorman_cache.get_cache(
+                            'api_cache', key1
+                        )
+                    api_key = None
+                    if not api:
+                        api_key = (
+                            doorman_cache.get_cache('api_id_cache', key1)
+                            or (doorman_cache.get_cache('api_id_cache', key2) if key2 else None)
+                        )
+                    try:
+                        logger.debug(
+                            f"REST resolve: path={path} api_name_version={api_name_version} key1={key1} key2={key2} api_cache={'hit' if api else 'miss'} api_id_key={'set' if api_key else 'none'}"
+                        )
+                    except Exception:
+                        pass
+                    if not api:
+                        api = await api_util.get_api(api_key, api_name_version)
                 logger.info(f"{request_id} | REST api resolution: {'found' if api else 'not found'}")
                 if not api:
                     return GatewayService.error_response(
