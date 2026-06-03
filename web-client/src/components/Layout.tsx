@@ -28,6 +28,7 @@ const menuItems: MenuItem[] = [
   { label: 'APIs', href: '/apis', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10', permission: 'manage_apis' },
   { label: 'Documentation', href: '/documentation', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
   { label: 'Builder', href: '/api-builder', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
+  { label: 'Tables', href: '/api-builder/tables', icon: 'M3 7h18M3 12h18M3 17h18', permission: 'view_builder_tables' },
 
   // Identity and access
   { label: 'Users', href: '/users', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z', permission: 'manage_users' },
@@ -55,12 +56,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [theme, setTheme] = useState('light')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
-  const { isAuthenticated, hasUIAccess, user, permissions, logout } = useAuth()
+  const { isAuthenticated, authResolved, hasUIAccess, user, permissions, logout } = useAuth()
   const router = useRouter()
+  const isPublicLayoutRoute = pathname === '/login' || pathname === '/403'
 
   useEffect(() => {
     // Only redirect when outside public routes
-    if (pathname === '/login' || pathname === '/403') return
+    if (isPublicLayoutRoute || !authResolved) return
     if (!isAuthenticated) {
       if (DEBUG) console.log('Layout - Redirecting to login:', { pathname })
       router.push('/login')
@@ -71,12 +73,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       router.push('/403')
       return
     }
-  }, [pathname, isAuthenticated, hasUIAccess, router])
-
-  const filteredMenuItems = menuItems.filter(item => {
-    if (!item.permission) return true
-    return permissions?.[item.permission] || false
-  })
+  }, [pathname, isPublicLayoutRoute, authResolved, isAuthenticated, hasUIAccess, router])
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light'
@@ -84,20 +81,31 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     document.documentElement.classList.toggle('dark', savedTheme === 'dark')
   }, [])
 
+  if (!isPublicLayoutRoute && !authResolved) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-dark-bg flex items-center justify-center">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              Loading...
+            </h2>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const filteredMenuItems = menuItems.filter(item => {
+    if (!item.permission) return true
+    return permissions?.[item.permission] || false
+  })
+
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light'
     setTheme(newTheme)
     localStorage.setItem('theme', newTheme)
     document.documentElement.classList.toggle('dark', newTheme === 'dark')
-  }
-
-  const handleLogout = () => {
-    const theme = localStorage.getItem('theme')
-    localStorage.clear()
-    if (theme) localStorage.setItem('theme', theme)
-    sessionStorage.clear()
-    document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    window.location.href = '/login'
   }
 
   return (

@@ -2,7 +2,7 @@
 redis>=5.0.1
 gevent>=23.9.1
 greenlet>=3.0.3
-pymongo>=4.6.1
+pymongo>=4.6.1,<4.16.0  # 4.16.0 has very slow imports on Python 3.13/macOS
 motor>=3.3.2  # Async MongoDB driver
 bcrypt>=4.1.2
 psutil>=5.9.8

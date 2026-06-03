@@ -25,7 +25,7 @@ from utils.role_util import platform_role_required_bool
 proto_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
 
-PROJECT_ROOT = Path(__file__).parent.resolve()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def sanitize_filename(filename: str):
@@ -149,6 +149,33 @@ def _ensure_package_inits(base: Path, rel_pkg_path: Path) -> None:
             initf = (cur / '__init__.py').resolve()
             if validate_path(base, initf) and not initf.exists():
                 initf.write_text('')
+    except Exception:
+        # Best-effort only
+        pass
+
+
+def _mirror_generated_files_to_routes(generated_dir: Path, rel_files: list[Path]) -> None:
+    """Best-effort mirror of generated files into routes/generated for compatibility."""
+    try:
+        routes_generated_dir = (PROJECT_ROOT / 'routes' / 'generated').resolve()
+        if not validate_path(PROJECT_ROOT, routes_generated_dir):
+            return
+        routes_generated_dir.mkdir(parents=True, exist_ok=True)
+        init_path = (routes_generated_dir / '__init__.py').resolve()
+        if validate_path(routes_generated_dir, init_path) and not init_path.exists():
+            init_path.write_text('"""Generated gRPC code."""\n')
+        for rel_file in rel_files:
+            src_path = (generated_dir / rel_file).resolve()
+            dst_path = (routes_generated_dir / rel_file).resolve()
+            if not validate_path(generated_dir, src_path):
+                continue
+            if not src_path.exists() or not src_path.is_file():
+                continue
+            if not validate_path(routes_generated_dir, dst_path):
+                continue
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            _ensure_package_inits(routes_generated_dir, rel_file)
+            copy2(src_path, dst_path)
     except Exception:
         # Best-effort only
         pass
@@ -381,30 +408,43 @@ async def upload_proto_file(
                     compile_input = pkg_proto_path
                     used_pkg_generation = True
 
-            subprocess.run(
+            proto_args = [
+                sys.executable,
+                '-m',
+                'grpc_tools.protoc',
+                f'--proto_path={compile_proto_root}',
+            ]
+            # Ensure bundled Google protos are resolvable (e.g., google/protobuf/empty.proto).
+            try:
+                import grpc_tools as _grpc_tools
+
+                _grpc_include = (Path(_grpc_tools.__file__).resolve().parent / '_proto')
+                if _grpc_include.exists():
+                    proto_args.append(f'--proto_path={_grpc_include}')
+            except Exception:
+                pass
+            proto_args.extend(
                 [
-                    sys.executable,
-                    '-m',
-                    'grpc_tools.protoc',
-                    f'--proto_path={compile_proto_root}',
                     f'--python_out={generated_dir}',
                     f'--grpc_python_out={generated_dir}',
                     str(compile_input),
-                ],
-                check=True,
+                ]
             )
+            subprocess.run(proto_args, check=True)
             logger.info(f'Proto compiled: src={compile_input} out={generated_dir}')
             init_path = (generated_dir / '__init__.py').resolve()
             if not validate_path(generated_dir, init_path):
                 raise ValueError('Invalid init path')
             if not init_path.exists():
                 init_path.write_text('"""Generated gRPC code."""\n')
+            package_rel_files: list[Path] = []
             if used_pkg_generation:
                 rel_base = (compile_input.relative_to(compile_proto_root)).with_suffix('')
                 pb2_py = rel_base.with_name(rel_base.name + '_pb2.py')
                 pb2_grpc_py = rel_base.with_name(rel_base.name + '_pb2_grpc.py')
                 _ensure_package_inits(generated_dir, pb2_py)
                 _ensure_package_inits(generated_dir, pb2_grpc_py)
+                package_rel_files = [pb2_py, pb2_grpc_py]
             # Regardless of package generation, adjust root-level grpc file if protoc wrote one
             pb2_grpc_file = (
                 generated_dir / f'{safe_api_name}_{safe_api_version}_pb2_grpc.py'
@@ -426,6 +466,8 @@ async def upload_proto_file(
                         pb2_grpc_file.write_text(new_content)
                 except Exception:
                     pass
+            if package_rel_files:
+                _mirror_generated_files_to_routes(generated_dir, package_rel_files)
             return process_response(
                 ResponseModel(
                     status_code=200,
@@ -657,18 +699,29 @@ async def update_proto_file(
                     ).dict(),
                     'rest',
                 )
-            subprocess.run(
+            proto_args = [
+                sys.executable,
+                '-m',
+                'grpc_tools.protoc',
+                f'--proto_path={proto_path.parent}',
+            ]
+            # Ensure bundled Google protos are resolvable (e.g., google/protobuf/empty.proto).
+            try:
+                import grpc_tools as _grpc_tools
+
+                _grpc_include = (Path(_grpc_tools.__file__).resolve().parent / '_proto')
+                if _grpc_include.exists():
+                    proto_args.append(f'--proto_path={_grpc_include}')
+            except Exception:
+                pass
+            proto_args.extend(
                 [
-                    sys.executable,
-                    '-m',
-                    'grpc_tools.protoc',
-                    f'--proto_path={proto_path.parent}',
                     f'--python_out={generated_dir}',
                     f'--grpc_python_out={generated_dir}',
                     str(proto_path),
-                ],
-                check=True,
+                ]
             )
+            subprocess.run(proto_args, check=True)
         except subprocess.CalledProcessError as e:
             logger.error(f'Failed to generate gRPC code: {str(e)}')
             return process_response(

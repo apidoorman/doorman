@@ -6,6 +6,7 @@ See https://github.com/apidoorman/doorman for more information
 
 import logging
 import secrets
+from datetime import datetime
 
 from pymongo.errors import PyMongoError
 
@@ -457,7 +458,7 @@ class CreditService:
             ).dict()
 
     @staticmethod
-    async def rotate_api_key(username: str, group: str, request_id):
+    async def rotate_api_key(username: str, group: str, request_id, expires_in_days: int | None = None):
         logger.info(request_id + f' | Rotating API key for user: {username}, group: {group}')
         try:
             doc = await db_find_one(user_credit_collection, {'username': username})
@@ -486,6 +487,16 @@ class CreditService:
                     'available_credits': 0,
                     'tier_name': 'default',
                 }
+
+            # Set expiry when requested
+            if expires_in_days is not None and expires_in_days > 0:
+                from datetime import UTC, timedelta
+                group_credits['user_api_key_expires_at'] = (
+                    datetime.now(UTC) + timedelta(days=expires_in_days)
+                ).isoformat()
+            elif 'user_api_key_expires_at' in group_credits and expires_in_days == 0:
+                # expires_in_days=0 explicitly clears the expiry
+                group_credits.pop('user_api_key_expires_at', None)
 
             users_credits[group] = group_credits
 

@@ -27,6 +27,18 @@ user_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
 
 
+def _http_exception_response(request_id: str, exc: HTTPException):
+    return process_response(
+        ResponseModel(
+            status_code=exc.status_code,
+            response_headers={Headers.REQUEST_ID: request_id},
+            error_code=ErrorCodes.HTTP_EXCEPTION,
+            error_message=exc.detail,
+        ).dict(),
+        'rest',
+    )
+
+
 async def _safe_is_admin_user(username: str) -> bool:
     try:
         return await is_admin_user(username)
@@ -90,6 +102,8 @@ async def create_user(user_data: CreateUserModel, request: Request):
                     )
                 )
         return respond_rest(await UserService.create_user(user_data, request_id))
+    except HTTPException as e:
+        return _http_exception_response(request_id, e)
     except Exception as e:
         logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -137,6 +151,21 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
             f'Username: {username} | From: {request.client.host}:{request.client.port}'
         )
         logger.info(f'Endpoint: {request.method} {str(request.url.path)}')
+        try:
+            incoming_fields = {
+                k for k, v in (api_data.dict(exclude_unset=True) or {}).items() if v is not None
+            }
+        except Exception:
+            incoming_fields = set()
+        if 'password' in incoming_fields:
+            return respond_rest(
+                ResponseModel(
+                    status_code=400,
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_code='USR024',
+                    error_message='Password updates must use the update-password endpoint',
+                )
+            )
         # Block modifications to bootstrap admin user, except for limited operational fields
         if username == 'admin':
             allowed_keys = {
@@ -152,13 +181,7 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
                 'throttle_queue_limit',
                 'throttle_enabled',
             }
-            try:
-                incoming = {
-                    k for k, v in (api_data.dict(exclude_unset=True) or {}).items() if v is not None
-                }
-            except Exception:
-                incoming = set()
-            if not incoming.issubset(allowed_keys):
+            if not incoming_fields.issubset(allowed_keys):
                 return respond_rest(
                     ResponseModel(
                         status_code=403,
@@ -182,12 +205,6 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
         has_manage_users = await platform_role_required_bool(auth_username, Roles.MANAGE_USERS)
         if is_self_update and not has_manage_users:
             restricted_fields = {'role', 'groups', 'active', 'username'}
-            try:
-                incoming_fields = {
-                    k for k, v in (api_data.dict(exclude_unset=True) or {}).items() if v is not None
-                }
-            except Exception:
-                incoming_fields = set()
             attempted_restricted = incoming_fields & restricted_fields
             if attempted_restricted:
                 return respond_rest(
@@ -218,6 +235,8 @@ async def update_user(username: str, api_data: UpdateUserModel, request: Request
                     )
                 )
         return respond_rest(await UserService.update_user(username, api_data, request_id))
+    except HTTPException as e:
+        return _http_exception_response(request_id, e)
     except Exception as e:
         logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -293,6 +312,8 @@ async def delete_user(username: str, request: Request):
                 )
             )
         return respond_rest(await UserService.delete_user(username, request_id))
+    except HTTPException as e:
+        return _http_exception_response(request_id, e)
     except Exception as e:
         logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -363,7 +384,33 @@ async def update_user_password(username: str, api_data: UpdatePasswordModel, req
                     error_message='Can only update your own password',
                 )
             )
+        if auth_username == username:
+            current_password = api_data.provided_current_password()
+            if not current_password:
+                return respond_rest(
+                    ResponseModel(
+                        status_code=400,
+                        response_headers={Headers.REQUEST_ID: request_id},
+                        error_code='USR025',
+                        error_message='Current password is required to change your password',
+                    )
+                )
+            try:
+                await UserService.check_password_return_user(username, current_password)
+            except HTTPException as e:
+                if e.status_code == 400:
+                    return respond_rest(
+                        ResponseModel(
+                            status_code=400,
+                            response_headers={Headers.REQUEST_ID: request_id},
+                            error_code='USR026',
+                            error_message='Current password is incorrect',
+                        )
+                    )
+                raise
         return respond_rest(await UserService.update_password(username, api_data, request_id))
+    except HTTPException as e:
+        return _http_exception_response(request_id, e)
     except Exception as e:
         logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -553,6 +600,8 @@ async def get_user_by_username(username: str, request: Request):
         return process_response(
             await UserService.get_user_by_username(username, request_id), 'rest'
         )
+    except HTTPException as e:
+        return _http_exception_response(request_id, e)
     except Exception as e:
         logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(
@@ -616,6 +665,8 @@ async def get_user_by_email(email: str, request: Request):
                     'rest',
                 )
         return process_response(data, 'rest')
+    except HTTPException as e:
+        return _http_exception_response(request_id, e)
     except Exception as e:
         logger.critical(f'Unexpected error: {str(e)}', exc_info=True)
         return process_response(

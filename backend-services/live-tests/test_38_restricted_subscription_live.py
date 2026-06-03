@@ -2,6 +2,7 @@ import time
 
 import pytest
 from live_targets import GRAPHQL_TARGETS, GRPC_TARGETS, REST_TARGETS, SOAP_TARGETS
+from client import LiveClient
 pytestmark = [pytest.mark.public, pytest.mark.auth]
 
 
@@ -12,6 +13,7 @@ def _mk_api(
     servers: list[str],
     api_type: str,
     extra: dict | None = None,
+    allowed_roles: list[str] | None = None,
 ):
     r = client.post(
         '/platform/api',
@@ -22,7 +24,7 @@ def _mk_api(
             'api_servers': servers,
             'api_type': api_type,
             'api_public': False,
-            'api_allowed_roles': ['admin'],
+            'api_allowed_roles': allowed_roles or ['admin'],
             'api_allowed_groups': ['ALL'],
             'api_allowed_retry_count': 0,
             'active': True,
@@ -54,23 +56,64 @@ def _mk_endpoint(client, name: str, ver: str, method: str, uri: str):
 
 
 @pytest.fixture(scope='session')
-def restricted_apis(client):
+def restricted_user(client):
+    ts = int(time.time())
+    role_name = f'sub_role_{ts}'
+    r = client.post('/platform/role', json={'role_name': role_name})
+    assert r.status_code in (200, 201), r.text
+
+    uname = f'sub_user_{ts}'
+    email = f'{uname}@example.com'
+    pwd = 'Strong!Passw0rd1234'
+    r = client.post(
+        '/platform/user',
+        json={
+            'username': uname,
+            'email': email,
+            'password': pwd,
+            'role': role_name,
+            'groups': ['ALL'],
+            'ui_access': True,
+            'rate_limit_duration': 1000000,
+            'rate_limit_duration_type': 'second',
+            'throttle_duration': 1000000,
+            'throttle_duration_type': 'second',
+            'throttle_queue_limit': 1000000,
+            'throttle_wait_duration': 0,
+            'throttle_wait_duration_type': 'second',
+        },
+    )
+    assert r.status_code in (200, 201), r.text
+    uclient = LiveClient(client.base_url)
+    uclient.login(email, pwd)
+    try:
+        yield {'client': uclient, 'username': uname, 'role': role_name}
+    finally:
+        try:
+            uclient.cleanup()
+        except Exception:
+            pass
+
+
+@pytest.fixture(scope='session')
+def restricted_apis(client, restricted_user):
     ver = 'v1'
     stamp = str(int(time.time()))
     out = []
+    allowed_roles = [restricted_user['role']]
 
     # REST (requires subscription)
     name = f'rx-rest-{stamp}'
     rest_server, rest_uri = REST_TARGETS[0]
     rest_path = rest_uri.split('?')[0] or '/'
-    _mk_api(client, name, ver, [rest_server], 'REST')
+    _mk_api(client, name, ver, [rest_server], 'REST', allowed_roles=allowed_roles)
     _mk_endpoint(client, name, ver, 'GET', rest_path)
     out.append(('REST', name, ver, {'uri': rest_uri}))
 
     # SOAP (requires subscription)
     name = f'rx-soap-{stamp}'
     soap_server, soap_uri, soap_kind, soap_action = SOAP_TARGETS[0]
-    _mk_api(client, name, ver, [soap_server], 'SOAP')
+    _mk_api(client, name, ver, [soap_server], 'SOAP', allowed_roles=allowed_roles)
     _mk_endpoint(client, name, ver, 'POST', soap_uri)
     out.append(
         ('SOAP', name, ver, {'uri': soap_uri, 'sk': soap_kind, 'soap_action': soap_action})
@@ -79,7 +122,7 @@ def restricted_apis(client):
     # GraphQL (requires subscription)
     name = f'rx-gql-{stamp}'
     gql_server, gql_query = GRAPHQL_TARGETS[0]
-    _mk_api(client, name, ver, [gql_server], 'GRAPHQL')
+    _mk_api(client, name, ver, [gql_server], 'GRAPHQL', allowed_roles=allowed_roles)
     _mk_endpoint(client, name, ver, 'POST', '/graphql')
     out.append(('GRAPHQL', name, ver, {'query': gql_query}))
 
@@ -92,7 +135,8 @@ def restricted_apis(client):
         ver,
         [grpc_server],
         'GRPC',
-        extra={'api_grpc_package': 'grpcbin'},
+        extra=None,
+        allowed_roles=allowed_roles,
     )
     _mk_endpoint(client, name, ver, 'POST', '/grpc')
     out.append(('GRPC', name, ver, {'method': grpc_method, 'message': {}}))
@@ -186,43 +230,47 @@ def _call(client, kind: str, name: str, ver: str, meta: dict):
 
 
 @pytest.mark.parametrize('i', [0, 1, 2, 3])
-def test_restricted_requires_subscription_then_allows(client, restricted_apis, i):
+def test_restricted_requires_subscription_then_allows(client, restricted_apis, restricted_user, i):
     kind, name, ver, meta = restricted_apis[i]
+    uclient = restricted_user['client']
+    uname = restricted_user['username']
     # Before subscription, should be blocked (401/403)
-    r = _call(client, kind, name, ver, meta)
+    r = _call(uclient, kind, name, ver, meta)
     assert r.status_code in (401, 403), r.text
 
     # Subscribe admin
-    s = client.post(
+    s = uclient.post(
         '/platform/subscription/subscribe',
-        json={'api_name': name, 'api_version': ver, 'username': 'admin'},
+        json={'api_name': name, 'api_version': ver, 'username': uname},
     )
     assert s.status_code in (200, 201) or (
         s.json().get('error_code') == 'SUB004'
     ), s.text
 
     # After subscription, avoid auth failure; tolerate upstream non-200
-    r2 = _call(client, kind, name, ver, meta)
+    r2 = _call(uclient, kind, name, ver, meta)
     assert r2.status_code not in (401, 403), r2.text
 
 
 @pytest.mark.parametrize('i', [0, 1, 2, 3])
-def test_restricted_unsubscribe_blocks(client, restricted_apis, i):
+def test_restricted_unsubscribe_blocks(client, restricted_apis, restricted_user, i):
     kind, name, ver, meta = restricted_apis[i]
+    uclient = restricted_user['client']
+    uname = restricted_user['username']
     # Ensure subscribed first
-    client.post(
+    uclient.post(
         '/platform/subscription/subscribe',
-        json={'api_name': name, 'api_version': ver, 'username': 'admin'},
+        json={'api_name': name, 'api_version': ver, 'username': uname},
     )
     # Unsubscribe
-    u = client.post(
+    u = uclient.post(
         '/platform/subscription/unsubscribe',
-        json={'api_name': name, 'api_version': ver, 'username': 'admin'},
+        json={'api_name': name, 'api_version': ver, 'username': uname},
     )
     assert u.status_code in (200, 201) or (
         u.json().get('error_code') == 'SUB006'
     ), u.text
 
     # Now the call should be blocked again
-    r = _call(client, kind, name, ver, meta)
+    r = _call(uclient, kind, name, ver, meta)
     assert r.status_code in (401, 403), r.text

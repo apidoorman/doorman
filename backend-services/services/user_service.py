@@ -220,19 +220,16 @@ class UserService:
         Verify password and return user if valid.
         """
         try:
-            try:
-                user = await UserService.get_user_by_email_with_password_helper(email)
-            except Exception:
-                maybe_user = await db_find_one(user_collection, {'username': email})
-                if maybe_user:
-                    user = maybe_user
-                else:
-                    raise
-            if not password_util.verify_password(password, user.get('password')):
+            user = await UserService.get_user_by_email_with_password_helper(email)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            user = await db_find_one(user_collection, {'username': email})
+            if not user:
                 raise HTTPException(status_code=400, detail='Invalid email or password')
-            return user
-        except Exception:
+        if not password_util.verify_password(password, user.get('password')):
             raise HTTPException(status_code=400, detail='Invalid email or password')
+        return user
 
     @staticmethod
     async def update_user(username: str, update_data: dict, request_id: str) -> dict:
@@ -251,6 +248,13 @@ class UserService:
         else:
             doorman_cache.delete_cache('user_cache', username)
         non_null_update_data = {k: v for k, v in update_data.dict().items() if v is not None}
+        if 'password' in non_null_update_data:
+            logger.error(f'User update failed with code USR024')
+            return ResponseModel(
+                status_code=400,
+                error_code='USR024',
+                error_message='Password updates must use the update-password endpoint',
+            ).dict()
         if 'custom_attributes' in non_null_update_data:
             try:
                 if (

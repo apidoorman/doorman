@@ -1,6 +1,3 @@
-import asyncio
-import time
-
 import pytest
 from tests.test_gateway_routing_limits import _FakeAsyncClient
 
@@ -52,6 +49,17 @@ async def test_bandwidth_limit_blocks_when_exceeded(monkeypatch, authed_client):
 async def test_bandwidth_limit_resets_after_window(monkeypatch, authed_client):
     name, ver, uri = await _setup_basic_rest(authed_client, name='bw2', method='GET', uri='/g')
     from utils.database import user_collection
+    import utils.bandwidth_util as bu
+
+    fake_now = {'value': 1_700_000_000}
+
+    def _fake_bucket_key(username: str, window: str, now: int | None = None):
+        sec = bu._window_to_seconds(window)
+        current = int(fake_now['value'] if now is None else now)
+        bucket = (current // sec) * sec
+        return f'bandwidth_usage:{username}:{sec}:{bucket}', sec
+
+    monkeypatch.setattr(bu, '_bucket_key', _fake_bucket_key)
 
     user_collection.update_one(
         {'username': 'admin'},
@@ -80,7 +88,7 @@ async def test_bandwidth_limit_resets_after_window(monkeypatch, authed_client):
     assert r1.status_code == 200
     r2 = await authed_client.get(f'/api/rest/{name}/{ver}{uri}')
     assert r2.status_code == 429
-    await asyncio.sleep(1.1)
+    fake_now['value'] += 2
     r3 = await authed_client.get(f'/api/rest/{name}/{ver}{uri}')
     assert r3.status_code == 200
 

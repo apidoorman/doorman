@@ -77,6 +77,9 @@ class ApiService:
         doorman_cache.set_cache('api_cache', data.api_id, api_dict)
         doorman_cache.set_cache('api_cache', f'{data.api_name}/{data.api_version}', api_dict)
         doorman_cache.set_cache('api_id_cache', data.api_path, data.api_id)
+        # Hostname routing cache
+        if getattr(data, 'api_hostname', None):
+            doorman_cache.set_cache('api_hostname_cache', data.api_hostname, data.api_id)
         logger.info(request_id + ' | API creation successful')
         try:
             # Prepare a response payload that includes created API details for richer clients
@@ -130,6 +133,11 @@ class ApiService:
             )
             doorman_cache.delete_cache('api_id_cache', f'/{api_name}/{api_version}')
         not_null_data = {k: v for k, v in data.dict().items() if v is not None}
+        # An empty-string api_hostname should clear the field (same intent as None).
+        # Storing "" bypasses the sparse unique index (which only skips null/missing),
+        # and two APIs both with hostname="" would trigger a duplicate-key error.
+        if not_null_data.get('api_hostname') == '':
+            not_null_data['api_hostname'] = None
 
         try:
             desired_public = bool(not_null_data.get('api_public', api.get('api_public')))
@@ -155,6 +163,18 @@ class ApiService:
                     cache_key = f'{api_name}/{api_version}'
                     doorman_cache.delete_cache('api_cache', cache_key)
                     doorman_cache.delete_cache('api_id_cache', f'/{api_name}/{api_version}')
+                    # Also evict the api_id-keyed cache entry written by get_api_by_hostname
+                    _upd_api_id = (api or {}).get('api_id')
+                    if _upd_api_id:
+                        doorman_cache.delete_cache('api_cache', _upd_api_id)
+                    # Invalidate old hostname cache entry and set new one if changed
+                    old_hostname = (api or {}).get('api_hostname')
+                    new_hostname = not_null_data.get('api_hostname')
+                    if old_hostname:
+                        doorman_cache.delete_cache('api_hostname_cache', old_hostname)
+                    if new_hostname and new_hostname != old_hostname:
+                        if _upd_api_id:
+                            doorman_cache.set_cache('api_hostname_cache', new_hostname, _upd_api_id)
                 if not update_result.acknowledged or update_result.modified_count == 0:
                     logger.error(request_id + ' | API update failed with code API002')
                     return ResponseModel(
@@ -202,10 +222,20 @@ class ApiService:
             return ResponseModel(
                 status_code=400, error_code='API002', error_message='Unable to delete endpoint'
             ).dict()
-        doorman_cache.delete_cache(
-            'api_cache', doorman_cache.get_cache('api_id_cache', f'/{api_name}/{api_version}')
+        # Evict all api_cache entries: keyed by name/version AND by api_id
+        # (get_api_by_hostname caches by api_id, so both must be cleared)
+        _del_api_id = (
+            doorman_cache.get_cache('api_id_cache', f'/{api_name}/{api_version}')
+            or (api or {}).get('api_id')
         )
+        doorman_cache.delete_cache('api_cache', f'{api_name}/{api_version}')
+        if _del_api_id:
+            doorman_cache.delete_cache('api_cache', _del_api_id)
         doorman_cache.delete_cache('api_id_cache', f'/{api_name}/{api_version}')
+        # Invalidate hostname routing cache if applicable
+        api_hostname = (api or {}).get('api_hostname')
+        if api_hostname:
+            doorman_cache.delete_cache('api_hostname_cache', api_hostname)
         logger.info(request_id + ' | API deletion successful')
         return ResponseModel(
             status_code=200,

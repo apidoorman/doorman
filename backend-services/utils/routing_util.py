@@ -1,4 +1,8 @@
 import logging
+import os
+import platform
+import socket
+from urllib.parse import urlparse, urlunparse
 
 from utils import api_util
 from utils.async_db import db_find_one
@@ -6,6 +10,91 @@ from utils.database_async import routing_collection
 from utils.doorman_cache_util import doorman_cache
 
 logger = logging.getLogger('doorman.gateway')
+
+
+_LOCALHOSTS = {'localhost', '127.0.0.1', '::1'}
+
+
+def _strip_inline_comment(value: str) -> str:
+    """Strip inline comments like "value  # comment" without touching URLs."""
+    v = (value or '').strip()
+    if not v:
+        return v
+    for i, ch in enumerate(v):
+        if ch != '#':
+            continue
+        if i == 0 or v[i - 1].isspace():
+            return v[:i].rstrip()
+    return v
+
+
+def _can_resolve(hostname: str) -> bool:
+    try:
+        socket.gethostbyname(hostname)
+        return True
+    except Exception:
+        return False
+
+
+def _detect_docker() -> bool:
+    try:
+        if (os.getenv('DOORMAN_IN_DOCKER') or '').strip().lower() in ('1', 'true', 'yes'):
+            return True
+    except Exception:
+        pass
+    # Fallback: common Docker marker file
+    try:
+        return os.path.exists('/.dockerenv')
+    except Exception:
+        return False
+
+
+def _resolve_localhost_alias() -> str | None:
+    override = (os.getenv('DOORMAN_TEST_HOSTNAME') or os.getenv('DOORMAN_UPSTREAM_HOST') or '').strip()
+    if override:
+        return override
+    if not _detect_docker():
+        return None
+    # Prefer Docker Desktop DNS name if available
+    if _can_resolve('host.docker.internal'):
+        return 'host.docker.internal'
+    # Linux bridge default
+    return os.getenv('DOORMAN_DOCKER_HOST_GATEWAY', '172.17.0.1')
+
+
+def _normalize_server(server: str | None) -> str | None:
+    if server is None:
+        return None
+    if not isinstance(server, str):
+        return server
+    server = _strip_inline_comment(server)
+    if not server:
+        return server
+    try:
+        parsed = urlparse(server)
+    except Exception:
+        return server
+    host = parsed.hostname
+    if not host or host not in _LOCALHOSTS:
+        return server
+    alias = _resolve_localhost_alias()
+    if not alias or alias == host:
+        return server
+
+    # Rebuild netloc preserving userinfo and port
+    userinfo = ''
+    if parsed.username:
+        userinfo = parsed.username
+        if parsed.password:
+            userinfo += f':{parsed.password}'
+        userinfo += '@'
+    netloc = f'{userinfo}{alias}'
+    if parsed.port:
+        netloc += f':{parsed.port}'
+    try:
+        return urlunparse(parsed._replace(netloc=netloc))
+    except Exception:
+        return server
 
 
 async def get_client_routing(client_key: str) -> dict | None:
@@ -50,7 +139,7 @@ async def get_routing_info(client_key: str) -> str | None:
     server_index = (server_index + 1) % len(api_servers)
     routing['server_index'] = server_index
     doorman_cache.set_cache('client_routing_cache', client_key, routing)
-    return server
+    return _normalize_server(server)
 
 
 async def pick_upstream_server(
@@ -81,7 +170,7 @@ async def pick_upstream_server(
             doorman_cache.set_cache(
                 'endpoint_server_cache', idx_key, (server_index + 1) % len(ep_servers)
             )
-            return server
+            return _normalize_server(server)
 
     api_servers = api.get('api_servers') or []
     if isinstance(api_servers, list) and len(api_servers) > 0:
@@ -91,6 +180,6 @@ async def pick_upstream_server(
         doorman_cache.set_cache(
             'endpoint_server_cache', idx_key, (server_index + 1) % len(api_servers)
         )
-        return server
+        return _normalize_server(server)
 
     return None

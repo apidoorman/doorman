@@ -45,7 +45,7 @@ import datetime as _dt
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 try:
     from utils.database import database as _db
@@ -55,6 +55,52 @@ try:
     )
 except Exception:
     _INITIAL_DB_SNAPSHOT = None
+
+
+class DoormanTestClient(AsyncClient):
+    async def request(self, method, url, **kwargs):
+        response = await super().request(method, url, **kwargs)
+        path = str(url)
+        if path.startswith('http'):
+            try:
+                path = '/' + path.split('://', 1)[1].split('/', 1)[1]
+            except Exception:
+                path = ''
+
+        if method.upper() == 'POST' and path.startswith('/platform/authorization/invalidate'):
+            self.headers.pop('Authorization', None)
+            try:
+                self.cookies.delete('access_token_cookie')
+            except Exception:
+                pass
+            return response
+
+        if method.upper() == 'POST' and path in (
+            '/platform/authorization',
+            '/platform/authorization/refresh',
+        ):
+            try:
+                if response.status_code == 200:
+                    body = response.json()
+                    data = body.get('response') if isinstance(body, dict) else {}
+                    token = None
+                    if isinstance(data, dict):
+                        token = data.get('access_token') or data.get('refresh_token')
+                    if not token and isinstance(body, dict):
+                        token = body.get('access_token') or body.get('refresh_token')
+                    if token:
+                        self.headers['Authorization'] = f'Bearer {token}'
+                        self.cookies.set('access_token_cookie', token, path='/')
+            except Exception:
+                pass
+        return response
+
+
+def make_test_client(app):
+    try:
+        return DoormanTestClient(app=app, base_url='http://testserver')
+    except TypeError:
+        return DoormanTestClient(transport=ASGITransport(app=app), base_url='http://testserver')
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -128,7 +174,7 @@ async def authed_client():
         pass
     from doorman import doorman
 
-    client = AsyncClient(app=doorman, base_url='http://testserver')
+    client = make_test_client(doorman)
 
     r = await client.post(
         '/platform/authorization',
@@ -141,16 +187,14 @@ async def authed_client():
 
     try:
         has_cookie = any(c.name == 'access_token_cookie' for c in client.cookies.jar)
-        if not has_cookie:
-            body = (
-                r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
-            )
-            token = body.get('access_token')
-            if token:
+        body = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
+        token = body.get('access_token')
+        if token:
+            client.headers['Authorization'] = f'Bearer {token}'
+            if not has_cookie:
                 client.cookies.set(
                     'access_token_cookie',
                     token,
-                    domain=os.environ.get('COOKIE_DOMAIN') or 'testserver',
                     path='/',
                 )
     except Exception:
@@ -197,7 +241,7 @@ async def regular_client(authed_client):
     
     # Create a new client and login
     from doorman import doorman
-    client = AsyncClient(app=doorman, base_url='http://testserver')
+    client = make_test_client(doorman)
     r = await client.post(
         '/platform/authorization',
         json={'email': email, 'password': password}
@@ -207,10 +251,10 @@ async def regular_client(authed_client):
     body = r.json()
     token = body.get('access_token')
     if token:
+        client.headers['Authorization'] = f'Bearer {token}'
         client.cookies.set(
             'access_token_cookie',
             token,
-            domain=os.environ.get('COOKIE_DOMAIN') or 'testserver',
             path='/',
         )
     return client
@@ -220,7 +264,7 @@ async def regular_client(authed_client):
 def client():
     from doorman import doorman
 
-    return AsyncClient(app=doorman, base_url='http://testserver')
+    return make_test_client(doorman)
 
 
 @pytest.fixture

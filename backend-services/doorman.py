@@ -63,9 +63,13 @@ except Exception:
 
 from models.response_model import ResponseModel
 from routes.analytics_routes import analytics_router
+from routes.api_builder_routes import api_builder_router
 from middleware.analytics_middleware import setup_analytics_middleware
 from utils.analytics_scheduler import analytics_scheduler
 from routes.api_routes import api_router
+from routes.trigger_routes import trigger_router
+from routes.import_export_routes import import_export_router
+from routes.index_routes import index_router
 from routes.authorization_routes import authorization_router
 from routes.config_hot_reload_routes import config_hot_reload_router
 from routes.config_routes import config_router
@@ -73,7 +77,7 @@ from routes.credit_routes import credit_router
 from routes.dashboard_routes import dashboard_router
 from routes.demo_routes import demo_router
 from routes.endpoint_routes import endpoint_router
-from routes.gateway_routes import gateway_router
+from routes.gateway_routes import gateway_router, host_gateway_router
 from routes.group_routes import group_router
 from routes.logging_routes import logging_router
 from routes.memory_routes import memory_router
@@ -120,6 +124,7 @@ from utils.security_settings_util import (
     start_auto_save_task,
     stop_auto_save_task,
 )
+from services.realtime_service import realtime_service
 
 # Avoid loading developer .env while running under pytest so tests fully
 # control environment via monkeypatch without hidden defaults.
@@ -190,7 +195,7 @@ async def validate_database_connections():
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            from utils.database import user_collection
+            from utils.database_async import user_collection
 
             await user_collection.find_one({})
             gateway_logger.info('✓ MongoDB connection verified')
@@ -593,8 +598,17 @@ async def app_lifespan(app: FastAPI):
         gateway_logger.debug('SIGHUP not supported on this platform')
 
     try:
+        await realtime_service.start_listener()
+    except Exception as e:
+        gateway_logger.error(f"Failed to start realtime listener: {e}")
+
+    try:
         yield
     finally:
+        try:
+            await realtime_service.stop_listener()
+        except Exception as e:
+            gateway_logger.error(f"Failed to stop realtime listener: {e}")
         gateway_logger.info('Starting graceful shutdown...')
         app.state.shutting_down = True
         # Immediate memory dump on shutdown initiation (Ctrl+C/SIGTERM)
@@ -1497,6 +1511,26 @@ class PlatformCORSMiddleware:
 doorman.add_middleware(PlatformCORSMiddleware)
 doorman.add_middleware(GlobalLoggingMiddleware)
 
+# Pre-authentication IP rate limiting for all /api/* gateway traffic.
+# Runs before JWT auth — protects against unauthenticated floods.
+# Configure via GATEWAY_IP_RATE_LIMIT / GATEWAY_IP_RATE_WINDOW / GATEWAY_IP_RATE_DISABLED.
+try:
+    from middleware.gateway_ip_rate_limit_middleware import GatewayIPRateLimitMiddleware as _GatewayIPRL
+    import os as _os_grl
+
+    _gateway_ip_rl_disabled = _os_grl.getenv('GATEWAY_IP_RATE_DISABLED', 'false').lower() in (
+        '1', 'true', 'yes', 'on'
+    )
+    if not _gateway_ip_rl_disabled:
+        doorman.add_middleware(_GatewayIPRL)
+        logging.getLogger('doorman.gateway').info('Gateway IP rate limit middleware enabled')
+    else:
+        logging.getLogger('doorman.gateway').info('Gateway IP rate limit middleware disabled')
+except Exception as _e_grl:
+    logging.getLogger('doorman.gateway').warning(
+        f'Failed to enable gateway IP rate limit middleware: {_e_grl}'
+    )
+
 # Add tier-based rate limiting middleware (skip in live/test to avoid 429 floods)
 try:
     from middleware.tier_rate_limit_middleware import TierRateLimitMiddleware
@@ -2225,6 +2259,10 @@ doorman.include_router(metrics_router, tags=['Metrics'])
 doorman.include_router(authorization_router, prefix='/platform', tags=['Authorization'])
 doorman.include_router(user_router, prefix='/platform/user', tags=['User'])
 doorman.include_router(api_router, prefix='/platform/api', tags=['API'])
+doorman.include_router(api_builder_router, prefix='/platform/api-builder', tags=['API Builder'])
+doorman.include_router(trigger_router, prefix='/platform/api-builder', tags=['API Builder Triggers'])
+doorman.include_router(import_export_router, prefix='/platform/api-builder', tags=['API Builder Import Export'])
+doorman.include_router(index_router, prefix='/platform/api-builder', tags=['API Builder Indexes'])
 doorman.include_router(endpoint_router, prefix='/platform/endpoint', tags=['Endpoint'])
 doorman.include_router(group_router, prefix='/platform/group', tags=['Group'])
 doorman.include_router(role_router, prefix='/platform/role', tags=['Role'])
@@ -2250,6 +2288,8 @@ doorman.include_router(openapi_router, tags=['OpenAPI Discovery'])
 doorman.include_router(wsdl_router, tags=['WSDL Discovery'])
 doorman.include_router(graphql_routes_router, tags=['GraphQL'])
 doorman.include_router(grpc_router, tags=['gRPC Discovery'])
+# MUST be last: catch-all /{path:path} for transparent host-based routing
+doorman.include_router(host_gateway_router, tags=['Host Gateway'])
 
 
 def start() -> None:

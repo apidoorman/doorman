@@ -16,6 +16,14 @@ def _find_free_port() -> int:
     return port
 
 
+def _can_resolve(hostname: str) -> bool:
+    try:
+        socket.gethostbyname(hostname)
+        return True
+    except Exception:
+        return False
+
+
 def _get_host_from_container():
     """Hostname to use from container to reach host-run test servers.
 
@@ -35,6 +43,11 @@ def _get_host_from_container():
         if system in ('Darwin', 'Windows'):
             return 'host.docker.internal'
         return '172.17.0.1'
+    # Heuristic: if Docker Desktop hostname resolves on Mac/Windows, prefer it.
+    # This helps when tests are run directly (without DOORMAN_IN_DOCKER) against Dockerized Doorman.
+    system = platform.system()
+    if system in ('Darwin', 'Windows') and _can_resolve('host.docker.internal'):
+        return 'host.docker.internal'
     return '127.0.0.1'
 
 

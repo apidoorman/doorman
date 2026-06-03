@@ -60,7 +60,15 @@ def test_client_routing_overrides_api_servers(client):
         assert r.status_code == 200
         data = r.json().get('response', r.json())
         hdrs = {k.lower(): v for k, v in (data.get('headers') or {}).items()}
-        assert hdrs.get('host', '').endswith(srv_b.url.replace('http://', ''))
+        host_hdr = hdrs.get('host', '')
+        expected = srv_b.url.replace('http://', '').replace('https://', '')
+        # Allow gateway to rewrite localhost to Docker-reachable aliases; assert port matches.
+        try:
+            expected_port = expected.split(':')[-1]
+            got_port = host_hdr.split(':')[-1]
+            assert got_port == expected_port
+        except Exception:
+            assert host_hdr.endswith(expected)
     finally:
         try:
             client.delete(f'/platform/endpoint/GET/{api_name}/{api_version}/where')

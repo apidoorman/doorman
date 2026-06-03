@@ -23,7 +23,7 @@ def test_user_specific_credit_api_key_overrides_group_key(client):
     _reset_user_limits(client)
     srv = start_rest_echo_server()
     try:
-        ts = int(time.time())
+        ts = time.time_ns()
         api_name = f'cred-override-{ts}'
         api_version = 'v1'
         group = f'cg-ovr-{ts}'
@@ -91,13 +91,20 @@ def test_user_specific_credit_api_key_overrides_group_key(client):
             },
         )
         assert r.status_code in (200, 201), r.text
-        client.post(
+        r = client.post(
             '/platform/subscription/subscribe',
             json={'api_name': api_name, 'api_version': api_version, 'username': 'admin'},
         )
+        assert r.status_code in (200, 201), r.text
+
+        # Ensure route-matching caches observe the newly created API/endpoint pair.
+        try:
+            client.delete('/api/caches')
+        except Exception:
+            pass
 
         r = client.get(f'/api/rest/{api_name}/{api_version}/whoami')
-        assert r.status_code == 200
+        assert r.status_code == 200, r.text
         data = r.json().get('response', r.json())
         headers = {k.lower(): v for k, v in (data.get('headers') or {}).items()}
         assert headers.get('x-api-key') == user_key

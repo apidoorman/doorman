@@ -26,6 +26,7 @@ interface Role {
   manage_credits?: boolean
   manage_auth?: boolean
   view_analytics?: boolean
+  view_builder_tables?: boolean
   view_logs?: boolean
   export_logs?: boolean
 }
@@ -127,6 +128,7 @@ const RoleDetailPage = () => {
         manage_credits: Boolean(editData.manage_credits),
         manage_auth: Boolean(editData.manage_auth),
         view_analytics: Boolean(editData.view_analytics),
+        view_builder_tables: Boolean(editData.view_builder_tables),
         view_logs: Boolean(editData.view_logs),
         export_logs: Boolean(editData.export_logs)
       }
@@ -395,6 +397,7 @@ const RoleDetailPage = () => {
                   { key: 'manage_credits', label: 'Manage Credits', description: 'Manage API credits and user credit balances' },
                   { key: 'manage_auth', label: 'Manage Auth', description: 'Revoke tokens and enable/disable users' },
                   { key: 'view_analytics', label: 'View Analytics', description: 'View analytics dashboard and usage metrics' },
+                  { key: 'view_builder_tables', label: 'View Tables', description: 'Explore tables created by API Builder' },
                   { key: 'view_logs', label: 'View Logs', description: 'View system logs and API requests' },
                   { key: 'export_logs', label: 'Export Logs', description: 'Export logs in various formats' }
                   ].map(({ key, label, description }) => (

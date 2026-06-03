@@ -4,6 +4,8 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -20,6 +22,14 @@ class UserCreditInformationModel(BaseModel):
         None,
         description='User specific API key for the credit tier',
         example='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    )
+    user_api_key_expires_at: datetime | None = Field(
+        None,
+        description=(
+            'UTC datetime when user_api_key expires. '
+            'None means the key never expires (backward-compatible with pre-existing records). '
+        ),
+        example='2027-01-01T00:00:00Z',
     )
 
     class Config:

@@ -31,6 +31,30 @@ class CreateApiModel(BaseModel):
         description='Allowed user groups for the API',
         example=['admin', 'client-1-group'],
     )
+    api_required_scopes: list[str] | None = Field(
+        None,
+        description=(
+            'OAuth2 scopes required to call this API. Validated against the `scope` '
+            '(space-separated string) or `scp` (list) claim in the JWT. '
+            'An empty list or None means no scope enforcement.'
+        ),
+        example=['read:customers', 'write:orders'],
+    )
+    api_rate_limit: int | None = Field(
+        None,
+        description=(
+            'Maximum number of requests allowed per `api_rate_limit_window` seconds, '
+            'counted across ALL callers of this API (not per-user). '
+            'Useful for protecting expensive upstream services from aggregate overload. '
+            'None or 0 disables API-level rate limiting.'
+        ),
+        example=1000,
+    )
+    api_rate_limit_window: int | None = Field(
+        60,
+        description='Window size in seconds for `api_rate_limit`. Defaults to 60.',
+        example=60,
+    )
     api_servers: list[str] = Field(
         default_factory=list,
         description='List of backend servers for the API',
@@ -212,6 +236,36 @@ class CreateApiModel(BaseModel):
         description='Upstream URL for gRPC Server Reflection (if different from base URL)',
     )
 
+    # Anonymous access with credits
+    api_anonymous_allowed: bool | None = Field(
+        False,
+        description=(
+            'If true, unauthenticated requests are allowed and treated as an anonymous identity '
+            'keyed by the client IP address (e.g. anon:1.2.3.4). Requires api_auth_required=False. '
+            'Anonymous identities can have credits deducted and are subject to IP-based rate limiting.'
+        ),
+    )
+    api_anonymous_credit_group: str | None = Field(
+        None,
+        description=(
+            'Credit group to use for anonymous (unauthenticated) requests. '
+            'If not set and api_credits_enabled=True, api_credit_group is used instead.'
+        ),
+        example='anon-group',
+    )
+
+    # Host-based transparent routing
+    api_hostname: str | None = Field(
+        None,
+        description=(
+            'Optional hostname that routes directly to this API (e.g. "foo.mydomain.com"). '
+            'When set, requests arriving at the gateway with a matching Host header are '
+            'transparently forwarded to the configured upstream without any URL prefix. '
+            'Must be globally unique across all APIs.'
+        ),
+        example='foo.mydomain.com',
+    )
+
     api_is_crud: bool | None = Field(
         False,
         description='If true, this API is a CRUD builder API and stores data in Doorman database',
@@ -228,6 +282,18 @@ class CreateApiModel(BaseModel):
             "name": {"type": "string", "required": True, "min_length": 3},
             "age": {"type": "number", "min_value": 0}
         }
+    )
+    api_crud_bindings: Optional[list[dict]] = Field(
+        None,
+        description='Optional multi-table CRUD bindings with per-resource schema',
+        example=[
+            {
+                'resource_name': 'customers',
+                'collection_name': 'crud_data_customers',
+                'table_name': 'Customers',
+                'schema': {'name': {'type': 'string', 'required': True}},
+            }
+        ],
     )
 
     class Config:

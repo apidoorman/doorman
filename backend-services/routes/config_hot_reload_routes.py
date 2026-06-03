@@ -12,10 +12,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from models.response_model import ResponseModel
 from utils.auth_util import auth_required
 from utils.hot_reload_config import hot_config
+from utils.role_util import platform_role_required_bool
 
 logger = logging.getLogger('doorman.gateway')
 
 config_hot_reload_router = APIRouter(prefix='/config', tags=['Configuration Hot Reload'])
+
+
+async def _require_manage_gateway(payload: dict) -> str:
+    username = payload.get('sub')
+    if not username or not await platform_role_required_bool(username, 'manage_gateway'):
+        raise HTTPException(
+            status_code=403,
+            detail='Insufficient permissions: manage_gateway required',
+        )
+    return username
 
 
 @config_hot_reload_router.get(
@@ -27,17 +38,13 @@ config_hot_reload_router = APIRouter(prefix='/config', tags=['Configuration Hot 
 async def get_current_config(payload: dict = Depends(auth_required)):
     """Get current configuration (admin only)"""
     try:
-        accesses = payload.get('accesses', {})
-        if not accesses.get('manage_gateway'):
-            raise HTTPException(
-                status_code=403, detail='Insufficient permissions: manage_gateway required'
-            )
+        await _require_manage_gateway(payload)
 
         config = hot_config.dump()
 
         return ResponseModel(
             status_code=200,
-            data={
+            response={
                 'config': config,
                 'source': 'Environment variables override config file values',
                 'reload_command': 'kill -HUP $(cat doorman.pid)',
@@ -62,17 +69,13 @@ async def get_current_config(payload: dict = Depends(auth_required)):
 async def trigger_config_reload(payload: dict = Depends(auth_required)):
     """Trigger configuration reload (admin only)"""
     try:
-        accesses = payload.get('accesses', {})
-        if not accesses.get('manage_gateway'):
-            raise HTTPException(
-                status_code=403, detail='Insufficient permissions: manage_gateway required'
-            )
+        await _require_manage_gateway(payload)
 
         hot_config.reload()
 
         return ResponseModel(
             status_code=200,
-            data={'message': 'Configuration reloaded successfully', 'config': hot_config.dump()},
+            response={'message': 'Configuration reloaded successfully', 'config': hot_config.dump()},
             error_code=None,
             error_message=None,
         ).dict()
@@ -164,7 +167,7 @@ async def get_reloadable_keys(payload: dict = Depends(auth_required)):
 
         return ResponseModel(
             status_code=200,
-            data={
+            response={
                 'reloadable_keys': reloadable_keys,
                 'total': len(reloadable_keys),
                 'notes': [

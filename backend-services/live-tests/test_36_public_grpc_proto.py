@@ -4,6 +4,7 @@ import time
 import pytest
 import requests
 from config import ENABLE_GRPC
+from servers import _get_host_from_container
 
 
 def _find_port() -> int:
@@ -12,34 +13,6 @@ def _find_port() -> int:
     p = s.getsockname()[1]
     s.close()
     return p
-
-
-def _get_host_from_container() -> str:
-    """Get the hostname to use when referring to the host machine from a Docker container.
-
-    Returns the appropriate hostname for test servers to use in URLs that Doorman will connect to:
-    - If Doorman is running natively (local mode): returns 127.0.0.1
-    - If Doorman is running in Docker: returns host.docker.internal (Mac/Win) or 172.17.0.1 (Linux)
-
-    Set DOORMAN_IN_DOCKER=1 to explicitly indicate Doorman is running in Docker containers.
-    """
-    import os
-    import platform
-
-    # Check if Doorman is running in Docker (explicit override)
-    docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
-
-    if docker_env in ('1', 'true', 'yes'):
-        # Explicitly told Doorman IS in Docker
-        system = platform.system()
-        if system == 'Darwin' or system == 'Windows':
-            return 'host.docker.internal'
-        else:
-            return '172.17.0.1'
-
-    # Default: assume Doorman is running natively (not in Docker)
-    # This is the most common development setup
-    return '127.0.0.1'
 
 
 @pytest.mark.skipif(not ENABLE_GRPC, reason='gRPC disabled')
@@ -76,14 +49,16 @@ message DeleteReply { bool ok = 1; }
 """
 
     base = client.base_url.rstrip('/')
-    ts = int(time.time())
-    api_name = f'grpcdemo{ts}'
+    ts = time.time_ns()
+    api_name = f'grpcdemo_pub_{ts}'
     api_version = 'v1'
     pkg = f'{api_name}_{api_version}'
+    mod_base = f'svc_{api_name}_{api_version}'.replace('-', '_')
 
     with tempfile.TemporaryDirectory() as td:
         tmp = pathlib.Path(td)
-        (tmp / 'svc.proto').write_text(PROTO.replace('{pkg}', pkg))
+        proto_filename = f'{mod_base}.proto'
+        (tmp / proto_filename).write_text(PROTO.replace('{pkg}', pkg))
         out = tmp / 'gen'
         out.mkdir()
         code = protoc.main(
@@ -92,14 +67,14 @@ message DeleteReply { bool ok = 1; }
                 f'--proto_path={td}',
                 f'--python_out={out}',
                 f'--grpc_python_out={out}',
-                str(tmp / 'svc.proto'),
+                str(tmp / proto_filename),
             ]
         )
         assert code == 0
         (out / '__init__.py').write_text('')
         sys.path.insert(0, str(out))
-        pb2 = importlib.import_module('svc_pb2')
-        pb2_grpc = importlib.import_module('svc_pb2_grpc')
+        pb2 = importlib.import_module(f'{mod_base}_pb2')
+        pb2_grpc = importlib.import_module(f'{mod_base}_pb2_grpc')
 
         class Resource(pb2_grpc.ResourceServicer):
             def Create(self, request, context):
@@ -117,13 +92,15 @@ message DeleteReply { bool ok = 1; }
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
         pb2_grpc.add_ResourceServicer_to_server(Resource(), server)
         port = _find_port()
-        server.add_insecure_port(f'127.0.0.1:{port}')
+        server.add_insecure_port(f'0.0.0.0:{port}')
         server.start()
         time.sleep(0.2)
 
         try:
             host_ref = _get_host_from_container()
-            files = {'file': ('svc.proto', PROTO.replace('{pkg}', pkg), 'application/octet-stream')}
+            files = {
+                'file': (proto_filename, PROTO.replace('{pkg}', pkg), 'application/octet-stream')
+            }
             r_up = client.post(f'/platform/proto/{api_name}/{api_version}', files=files)
             assert r_up.status_code in (200, 201), r_up.text
 

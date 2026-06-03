@@ -53,6 +53,7 @@ logger = logging.getLogger('doorman.gateway')
 
 # Maximum safe recursion depth for protobuf message conversion to prevent CVE-2026-0994
 MAX_PROTOBUF_RECURSION_DEPTH = 64
+_HTTPX_TIMEOUT_EXCEPTION = getattr(httpx, 'TimeoutException', Exception)
 
 
 class GatewayService:
@@ -75,7 +76,7 @@ class GatewayService:
     }
 
     @staticmethod
-    def _build_limits() -> httpx.Limits:
+    def _build_limits() -> httpx.Limits | None:
         """Pool limits tuned for small/medium projects with env overrides.
 
         Defaults:
@@ -95,9 +96,16 @@ class GatewayService:
             expiry = float(os.getenv('HTTP_KEEPALIVE_EXPIRY', 30.0))
         except Exception:
             expiry = 30.0
-        return httpx.Limits(
-            max_connections=max_conns, max_keepalive_connections=max_keep, keepalive_expiry=expiry
-        )
+        try:
+            return httpx.Limits(
+                max_connections=max_conns,
+                max_keepalive_connections=max_keep,
+                keepalive_expiry=expiry,
+            )
+        except Exception:
+            # Some tests monkeypatch module-level httpx with minimal stubs that
+            # do not expose Limits. In that case, let AsyncClient use defaults.
+            return None
 
     @classmethod
     def get_http_client(cls) -> httpx.AsyncClient:
@@ -106,19 +114,6 @@ class GatewayService:
         Set ENABLE_HTTPX_CLIENT_CACHE=false to disable pooling and create a
         fresh client per request.
         """
-        # Disable pooling during live tests to allow monkeypatching of httpx.AsyncClient
-        if os.getenv('DOORMAN_RUN_LIVE', '').lower() in ('1', 'true', 'yes', 'on'):
-            try:
-                return httpx.AsyncClient(
-                    timeout=cls.timeout,
-                    limits=cls._build_limits(),
-                    http2=(os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
-                    trust_env=False,
-                )
-            except TypeError:
-                # Some monkeypatched test stubs may not accept arguments
-                return httpx.AsyncClient()
-
         if os.getenv('ENABLE_HTTPX_CLIENT_CACHE', 'true').lower() != 'false':
             # If a cached client exists but its class differs from the current
             # httpx.AsyncClient (e.g., monkeypatched during tests), drop cache.
@@ -134,21 +129,31 @@ class GatewayService:
 
             if cls._http_client is None:
                 try:
+                    kwargs = {
+                        'timeout': cls.timeout,
+                        'http2': (os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
+                        'trust_env': False,
+                    }
+                    limits = cls._build_limits()
+                    if limits is not None:
+                        kwargs['limits'] = limits
                     cls._http_client = httpx.AsyncClient(
-                        timeout=cls.timeout,
-                        limits=cls._build_limits(),
-                        http2=(os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
-                        trust_env=False,
+                        **kwargs,
                     )
                 except TypeError:
                     cls._http_client = httpx.AsyncClient()
             return cls._http_client
         try:
+            kwargs = {
+                'timeout': cls.timeout,
+                'http2': (os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
+                'trust_env': False,
+            }
+            limits = cls._build_limits()
+            if limits is not None:
+                kwargs['limits'] = limits
             return httpx.AsyncClient(
-                timeout=cls.timeout,
-                limits=cls._build_limits(),
-                http2=(os.getenv('HTTP_ENABLE_HTTP2', 'false').lower() == 'true'),
-                trust_env=False,
+                **kwargs,
             )
         except TypeError:
             return httpx.AsyncClient()
@@ -344,7 +349,24 @@ class GatewayService:
             return None
 
         if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-            if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+            _is_anon = isinstance(username, str) and username.startswith('anon:')
+            _credit_group = (
+                api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                if _is_anon
+                else api.get('api_credit_group')
+            )
+            if _is_anon and _credit_group:
+                _init_ok = await credit_util.ensure_anonymous_credits(_credit_group, username)
+                if not _init_ok:
+                    # Transient DB error during init — allow through without deducting
+                    # rather than returning a spurious 401.
+                    return None
+                if not await credit_util.deduct_credit(_credit_group, username):
+                    logger.warning(f'Credit deduction failed for user {username}')
+                    return GatewayService.error_response(
+                        request_id, 'GTW008', 'User does not have any credits', status=401
+                    )
+            elif _credit_group and not await credit_util.deduct_credit(_credit_group, username):
                 logger.warning(f'Credit deduction failed for user {username}')
                 return GatewayService.error_response(
                     request_id, 'GTW008', 'User does not have any credits', status=401
@@ -604,7 +626,23 @@ class GatewayService:
                 retry = api.get('api_allowed_retry_count') or 0
 
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                    # Determine effective credit group: anonymous users may have a separate group
+                    _is_anon = isinstance(username, str) and username.startswith('anon:')
+                    _credit_group = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon
+                        else api.get('api_credit_group')
+                    )
+                    if _is_anon and _credit_group:
+                        _init_ok = await credit_util.ensure_anonymous_credits(_credit_group, username)
+                        if not _init_ok:
+                            # Transient DB error — allow through without deducting
+                            pass
+                        elif not await credit_util.deduct_credit(_credit_group, username):
+                            return GatewayService.error_response(
+                                request_id, 'GTW008', 'User does not have any credits', status=401
+                            )
+                    elif _credit_group and not await credit_util.deduct_credit(_credit_group, username):
                         return GatewayService.error_response(
                             request_id, 'GTW008', 'User does not have any credits', status=401
                         )
@@ -653,8 +691,14 @@ class GatewayService:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
 
                 if username and not bool(api.get('api_public')):
+                    _is_anon_hdr = isinstance(username, str) and username.startswith('anon:')
+                    _eff_credit_group_hdr = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_hdr
+                        else api.get('api_credit_group')
+                    )
                     user_specific_api_key = await credit_util.get_user_api_key(
-                        api.get('api_credit_group'), username
+                        _eff_credit_group_hdr, username
                     )
                     if user_specific_api_key:
                         headers[ai_token_headers[0]] = user_specific_api_key
@@ -676,9 +720,13 @@ class GatewayService:
                     orig_auth = request.headers.get('Authorization') or request.headers.get(
                         'authorization'
                     )
+                    auth_allowed = any(
+                        str(h).lower() == 'authorization'
+                        for h in ((api.get('api_allowed_headers') or []) if api else [])
+                    )
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
-                    elif orig_auth is not None and str(orig_auth).strip() != '':
+                    elif auth_allowed and orig_auth is not None and str(orig_auth).strip() != '':
                         headers['Authorization'] = orig_auth
                 except Exception:
                     pass
@@ -881,7 +929,7 @@ class GatewayService:
                 error_code='GTW999',
                 error_message='Upstream circuit open',
             ).dict()
-        except httpx.TimeoutException:
+        except _HTTPX_TIMEOUT_EXCEPTION:
             try:
                 metrics_store.record_upstream_timeout(
                     'rest:' + (api.get('api_path') if api else (api_name_version or '/api/rest'))
@@ -988,7 +1036,21 @@ class GatewayService:
                 logger.info(f'{request_id} | SOAP gateway to: {url}')
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                    _is_anon_soap = isinstance(username, str) and username.startswith('anon:')
+                    _credit_group_soap = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_soap
+                        else api.get('api_credit_group')
+                    )
+                    if _is_anon_soap and _credit_group_soap:
+                        _init_ok_soap = await credit_util.ensure_anonymous_credits(_credit_group_soap, username)
+                        if not _init_ok_soap:
+                            pass  # transient error — allow through
+                        elif not await credit_util.deduct_credit(_credit_group_soap, username):
+                            return GatewayService.error_response(
+                                request_id, 'GTW008', 'User does not have any credits', status=401
+                            )
+                    elif _credit_group_soap and not await credit_util.deduct_credit(_credit_group_soap, username):
                         return GatewayService.error_response(
                             request_id, 'GTW008', 'User does not have any credits', status=401
                         )
@@ -1102,9 +1164,13 @@ class GatewayService:
                     orig_auth = request.headers.get('Authorization') or request.headers.get(
                         'authorization'
                     )
+                    auth_allowed = any(
+                        str(h).lower() == 'authorization'
+                        for h in ((api.get('api_allowed_headers') or []) if api else [])
+                    )
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
-                    elif orig_auth is not None and str(orig_auth).strip() != '':
+                    elif auth_allowed and orig_auth is not None and str(orig_auth).strip() != '':
                         headers['Authorization'] = orig_auth
                 except Exception:
                     pass
@@ -1183,7 +1249,7 @@ class GatewayService:
                 error_code='GTW999',
                 error_message='Upstream circuit open',
             ).dict()
-        except httpx.TimeoutException:
+        except _HTTPX_TIMEOUT_EXCEPTION:
             try:
                 metrics_store.record_upstream_timeout(
                     'soap:' + (api.get('api_path') if api else '/api/soap')
@@ -1231,7 +1297,21 @@ class GatewayService:
                 doorman_cache.set_cache('api_cache', api_path, api)
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                    _is_anon_gql = isinstance(username, str) and username.startswith('anon:')
+                    _credit_group_gql = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_gql
+                        else api.get('api_credit_group')
+                    )
+                    if _is_anon_gql and _credit_group_gql:
+                        _init_ok_gql = await credit_util.ensure_anonymous_credits(_credit_group_gql, username)
+                        if not _init_ok_gql:
+                            pass  # transient error — allow through
+                        elif not await credit_util.deduct_credit(_credit_group_gql, username):
+                            return GatewayService.error_response(
+                                request_id, 'GTW008', 'User does not have any credits', status=401
+                            )
+                    elif _credit_group_gql and not await credit_util.deduct_credit(_credit_group_gql, username):
                         return GatewayService.error_response(
                             request_id, 'GTW008', 'User does not have any credits', status=401
                         )
@@ -1248,8 +1328,14 @@ class GatewayService:
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
                 if username and not bool(api.get('api_public')):
+                    _is_anon_hdr2 = isinstance(username, str) and username.startswith('anon:')
+                    _eff_credit_group_hdr2 = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_hdr2
+                        else api.get('api_credit_group')
+                    )
                     user_specific_api_key = await credit_util.get_user_api_key(
-                        api.get('api_credit_group'), username
+                        _eff_credit_group_hdr2, username
                     )
                     if user_specific_api_key:
                         headers[ai_token_headers[0]] = user_specific_api_key
@@ -1269,9 +1355,13 @@ class GatewayService:
                     orig_auth = request.headers.get('Authorization') or request.headers.get(
                         'authorization'
                     )
+                    auth_allowed = any(
+                        str(h).lower() == 'authorization'
+                        for h in (api.get('api_allowed_headers') or [])
+                    )
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
-                    elif orig_auth is not None and str(orig_auth).strip() != '':
+                    elif auth_allowed and orig_auth is not None and str(orig_auth).strip() != '':
                         headers['Authorization'] = orig_auth
                 except Exception:
                     pass
@@ -1341,6 +1431,13 @@ class GatewayService:
             if result is None:
                 client = GatewayService.get_http_client()
                 try:
+                    graphql_retries = max(
+                        int(retry or 0),
+                        int(os.getenv('GRAPHQL_UPSTREAM_RETRY_COUNT', '4')),
+                    )
+                except Exception:
+                    graphql_retries = max(int(retry or 0), 4)
+                try:
                     http_resp = await request_with_resilience(
                         client,
                         'POST',
@@ -1348,7 +1445,7 @@ class GatewayService:
                         api_key=api_path,
                         headers=headers,
                         json={'query': query, 'variables': variables},
-                        retries=retry,
+                        retries=graphql_retries,
                         api_config=api,
                     )
                 except AttributeError:
@@ -1409,7 +1506,7 @@ class GatewayService:
                 error_code='GTW999',
                 error_message='Upstream circuit open',
             ).dict()
-        except httpx.TimeoutException:
+        except _HTTPX_TIMEOUT_EXCEPTION:
             try:
                 metrics_store.record_upstream_timeout(
                     'graphql:' + (api.get('api_path') if api else '/api/graphql')
@@ -1577,6 +1674,14 @@ class GatewayService:
                 project_root = GatewayService._PROJECT_ROOT
                 proto_dir = project_root / 'proto'
                 proto_path = (proto_dir / proto_rel.with_suffix('.proto')).resolve()
+                # Back-compat: some uploads used routes/proto/ when PROJECT_ROOT was mis-set.
+                if not proto_path.exists():
+                    legacy_proto_dir = project_root / 'routes' / 'proto'
+                    legacy_proto_path = (legacy_proto_dir / proto_rel.with_suffix('.proto')).resolve()
+                    if GatewayService._validate_under_base(project_root, legacy_proto_path):
+                        if legacy_proto_path.exists():
+                            proto_dir = legacy_proto_dir
+                            proto_path = legacy_proto_path
                 # Validate resolved path stays within project bounds
                 if not GatewayService._validate_under_base(project_root, proto_path):
                     return GatewayService.error_response(
@@ -1698,16 +1803,29 @@ class GatewayService:
                         generated_dir.mkdir(exist_ok=True)
                         try:
                             from grpc_tools import protoc as _protoc
+                            proto_args = [
+                                'protoc',
+                                f'--proto_path={str(proto_dir)}',
+                            ]
+                            # Ensure bundled Google protos are resolvable (e.g., google/protobuf/empty.proto).
+                            try:
+                                import grpc_tools as _grpc_tools
 
-                            code = _protoc.main(
+                                _grpc_include = (
+                                    Path(_grpc_tools.__file__).resolve().parent / '_proto'
+                                )
+                                if _grpc_include.exists():
+                                    proto_args.append(f'--proto_path={str(_grpc_include)}')
+                            except Exception:
+                                pass
+                            proto_args.extend(
                                 [
-                                    'protoc',
-                                    f'--proto_path={str(proto_dir)}',
                                     f'--python_out={str(generated_dir)}',
                                     f'--grpc_python_out={str(generated_dir)}',
                                     str(proto_path),
                                 ]
                             )
+                            code = _protoc.main(proto_args)
                             if code != 0:
                                 raise RuntimeError(f'protoc returned {code}')
                             init_path = generated_dir / '__init__.py'
@@ -1776,7 +1894,21 @@ class GatewayService:
                     grpc_target = url[len('grpc://') :]
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                    _is_anon_grpc = isinstance(username, str) and username.startswith('anon:')
+                    _credit_group_grpc = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_grpc
+                        else api.get('api_credit_group')
+                    )
+                    if _is_anon_grpc and _credit_group_grpc:
+                        _init_ok_grpc = await credit_util.ensure_anonymous_credits(_credit_group_grpc, username)
+                        if not _init_ok_grpc:
+                            pass  # transient error — allow through
+                        elif not await credit_util.deduct_credit(_credit_group_grpc, username):
+                            return GatewayService.error_response(
+                                request_id, 'GTW008', 'User does not have any credits', status=401
+                            )
+                    elif _credit_group_grpc and not await credit_util.deduct_credit(_credit_group_grpc, username):
                         return GatewayService.error_response(
                             request_id, 'GTW008', 'User does not have any credits', status=401
                         )
@@ -2878,7 +3010,7 @@ class GatewayService:
             return ResponseModel(
                 status_code=200, response_headers=response_headers, response=response_dict
             ).dict()
-        except httpx.TimeoutException:
+        except _HTTPX_TIMEOUT_EXCEPTION:
             return ResponseModel(
                 status_code=504,
                 response_headers={'request_id': request_id},

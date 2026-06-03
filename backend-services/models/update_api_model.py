@@ -27,6 +27,24 @@ class UpdateApiModel(BaseModel):
     api_allowed_groups: list[str] | None = Field(
         None, description='Allowed user groups for the API', example=['admin', 'client-1-group']
     )
+    api_required_scopes: list[str] | None = Field(
+        None,
+        description='OAuth2 scopes required to call this API.',
+        example=['read:customers'],
+    )
+    api_rate_limit: int | None = Field(
+        None,
+        description=(
+            'Maximum requests per api_rate_limit_window across all callers. '
+            'None or 0 disables API-level rate limiting.'
+        ),
+        example=1000,
+    )
+    api_rate_limit_window: int | None = Field(
+        None,
+        description='Window size in seconds for api_rate_limit. Defaults to 60.',
+        example=60,
+    )
     api_servers: list[str] | None = Field(
         None,
         description='List of backend servers for the API',
@@ -190,6 +208,30 @@ class UpdateApiModel(BaseModel):
     api_crud_schema: Optional[dict] = Field(
         None,
         description="Schema definition for CRUD validation. Dict of field_name -> rules.",
+    )
+    api_crud_bindings: Optional[list[dict]] = Field(
+        None,
+        description='Optional multi-table CRUD bindings with per-resource schema',
+    )
+
+    # Anonymous access with credits
+    api_anonymous_allowed: bool | None = Field(
+        None,
+        description='If true, unauthenticated requests are accepted as anonymous IP-keyed identities.',
+    )
+    api_anonymous_credit_group: str | None = Field(
+        None,
+        description='Credit group for anonymous requests (falls back to api_credit_group if unset).',
+    )
+
+    # Host-based transparent routing
+    api_hostname: str | None = Field(
+        None,
+        description=(
+            'Optional hostname that routes directly to this API (e.g. "foo.mydomain.com"). '
+            'Set to empty string to remove an existing hostname binding.'
+        ),
+        example='foo.mydomain.com',
     )
 
     class Config:

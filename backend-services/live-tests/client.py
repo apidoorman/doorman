@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from urllib.parse import urljoin
 
 import requests
@@ -8,12 +10,18 @@ import requests
 class LiveClient:
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip('/') + '/'
-        self.sess = requests.Session()
-        # Ignore proxy env to ensure localhost direct connection
-        try:
-            self.sess.trust_env = False
-        except Exception:
-            pass
+        self.sess = self._new_session()
+        self._timeout_s = float(os.getenv('DOORMAN_LIVE_HTTP_TIMEOUT', '30'))
+        self._retry_count = max(1, int(os.getenv('DOORMAN_LIVE_RETRY_COUNT', '8')))
+        self._retry_backoff_s = max(0.0, float(os.getenv('DOORMAN_LIVE_RETRY_BACKOFF', '0.25')))
+        self._retry_max_backoff_s = max(
+            self._retry_backoff_s,
+            float(os.getenv('DOORMAN_LIVE_RETRY_MAX_BACKOFF', '2')),
+        )
+        self._retry_total_timeout_s = max(
+            0.0,
+            float(os.getenv('DOORMAN_LIVE_RETRY_TOTAL_TIMEOUT', '20')),
+        )
         self._token: str | None = None
         self._csrf: str | None = None
         # Track resources created during tests for cleanup
@@ -31,6 +39,24 @@ class LiveClient:
         self._created_tiers: set[str] = set()
         self._created_tier_assignments: set[str] = set()
 
+    @staticmethod
+    def _new_session() -> requests.Session:
+        sess = requests.Session()
+        # Ignore proxy env to ensure localhost direct connection
+        try:
+            sess.trust_env = False
+        except Exception:
+            pass
+        return sess
+
+    def _reset_session(self):
+        old = self.sess
+        self.sess = self._new_session()
+        try:
+            old.close()
+        except Exception:
+            pass
+
     def _get_csrf(self) -> str | None:
         if self._csrf:
             return self._csrf
@@ -47,6 +73,9 @@ class LiveClient:
         out = {'Accept': 'application/json'}
         # Mark requests as test traffic so analytics can exclude them
         out['X-IS-TEST'] = 'true'
+        # Prefer closing client connection after each call for live-test
+        # stability against stale keep-alive sockets on frequently restarted gateways.
+        out['Connection'] = 'close'
         if headers:
             out.update(headers)
         # Prefer bearer auth when available to avoid cookie nuances across environments
@@ -57,10 +86,42 @@ class LiveClient:
             out['X-CSRF-Token'] = out.get('X-CSRF-Token', csrf)
         return out
 
+    def _request(self, method: str, url: str, **kwargs):
+        kwargs.setdefault('timeout', self._timeout_s)
+        last_err = None
+        started = time.monotonic()
+        attempt = 0
+        while True:
+            try:
+                return self.sess.request(method, url, **kwargs)
+            except requests.exceptions.RequestException as e:
+                last_err = e
+                attempt += 1
+                elapsed = time.monotonic() - started
+                retries_exhausted = attempt >= self._retry_count
+                timeout_exhausted = (
+                    self._retry_total_timeout_s <= 0
+                    or elapsed >= self._retry_total_timeout_s
+                )
+                if retries_exhausted and timeout_exhausted:
+                    raise
+                # Transport-level failures often leave pooled sockets stale.
+                if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+                    self._reset_session()
+                sleep_s = min(self._retry_backoff_s * attempt, self._retry_max_backoff_s)
+                if self._retry_total_timeout_s > 0:
+                    remaining = self._retry_total_timeout_s - elapsed
+                    sleep_s = min(sleep_s, max(0.0, remaining))
+                if sleep_s > 0:
+                    time.sleep(sleep_s)
+        if last_err:
+            raise last_err
+        raise requests.exceptions.RequestException('Unexpected live client request failure')
+
     def get(self, path: str, **kwargs):
         url = urljoin(self.base_url, path.lstrip('/'))
         headers = self._headers_with_csrf(kwargs.pop('headers', None))
-        return self.sess.get(url, headers=headers, allow_redirects=False, **kwargs)
+        return self._request('GET', url, headers=headers, allow_redirects=False, **kwargs)
 
     def post(self, path: str, json=None, data=None, files=None, headers=None, **kwargs):
         url = urljoin(self.base_url, path.lstrip('/'))
@@ -68,7 +129,8 @@ class LiveClient:
         # Map 'content' to 'data' for requests compat (used by SOAP tests)
         if 'content' in kwargs and data is None:
             data = kwargs.pop('content')
-        resp = self.sess.post(
+        resp = self._request(
+            'POST',
             url, json=json, data=data, files=files, headers=hdrs, allow_redirects=False, **kwargs
         )
         # Reflect auth state changes for invalidate to ensure tests read 401 afterwards
@@ -149,17 +211,21 @@ class LiveClient:
     def put(self, path: str, json=None, headers=None, **kwargs):
         url = urljoin(self.base_url, path.lstrip('/'))
         hdrs = self._headers_with_csrf(headers)
-        return self.sess.put(url, json=json, headers=hdrs, allow_redirects=False, **kwargs)
+        return self._request(
+            'PUT', url, json=json, headers=hdrs, allow_redirects=False, **kwargs
+        )
 
     def delete(self, path: str, json=None, headers=None, **kwargs):
         url = urljoin(self.base_url, path.lstrip('/'))
         hdrs = self._headers_with_csrf(headers)
-        return self.sess.delete(url, json=json, headers=hdrs, allow_redirects=False, **kwargs)
+        return self._request(
+            'DELETE', url, json=json, headers=hdrs, allow_redirects=False, **kwargs
+        )
 
     def options(self, path: str, headers=None, **kwargs):
         url = urljoin(self.base_url, path.lstrip('/'))
         hdrs = self._headers_with_csrf(headers)
-        return self.sess.options(url, headers=hdrs, allow_redirects=False, **kwargs)
+        return self._request('OPTIONS', url, headers=hdrs, allow_redirects=False, **kwargs)
 
     def login(self, email: str, password: str):
         r = self.post('/platform/authorization', json={'email': email, 'password': password})

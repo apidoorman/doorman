@@ -45,7 +45,7 @@ def test_grpc_gateway_basic_flow(client):
     except Exception as e:
         pytest.skip(f'Missing gRPC deps: {e}')
 
-    api_name = f'grpcdemo{int(time.time())}'
+    api_name = f'grpcdemo_gw_{time.time_ns()}'
     api_version = 'v1'
     pkg = f'{api_name}_{api_version}'
     proto = PROTO_TEMPLATE.replace('{pkg}', pkg)
@@ -60,10 +60,13 @@ def test_grpc_gateway_basic_flow(client):
         import tempfile
 
         from grpc_tools import protoc
+        from servers import _get_host_from_container
 
+        mod_base = f'svc_{api_name}_{api_version}'.replace('-', '_')
         with tempfile.TemporaryDirectory() as td:
             tmp = pathlib.Path(td)
-            (tmp / 'svc.proto').write_text(proto)
+            proto_filename = f'{mod_base}.proto'
+            (tmp / proto_filename).write_text(proto)
             out = tmp / 'gen'
             out.mkdir()
             code = protoc.main(
@@ -72,7 +75,7 @@ def test_grpc_gateway_basic_flow(client):
                     f'--proto_path={td}',
                     f'--python_out={out}',
                     f'--grpc_python_out={out}',
-                    str(tmp / 'svc.proto'),
+                    str(tmp / proto_filename),
                 ]
             )
             assert code == 0
@@ -80,8 +83,8 @@ def test_grpc_gateway_basic_flow(client):
             import sys
 
             sys.path.insert(0, str(out))
-            pb2 = importlib.import_module('svc_pb2')
-            pb2_grpc = importlib.import_module('svc_pb2_grpc')
+            pb2 = importlib.import_module(f'{mod_base}_pb2')
+            pb2_grpc = importlib.import_module(f'{mod_base}_pb2_grpc')
 
             from concurrent import futures
 
@@ -99,10 +102,11 @@ def test_grpc_gateway_basic_flow(client):
             s.bind(('127.0.0.1', 0))
             port = s.getsockname()[1]
             s.close()
-            server.add_insecure_port(f'127.0.0.1:{port}')
+            server.add_insecure_port(f'0.0.0.0:{port}')
             server.start()
 
             try:
+                host_ref = _get_host_from_container()
                 r = client.post(
                     '/platform/api',
                     json={
@@ -111,7 +115,7 @@ def test_grpc_gateway_basic_flow(client):
                         'api_description': 'gRPC demo',
                         'api_allowed_roles': ['admin'],
                         'api_allowed_groups': ['ALL'],
-                        'api_servers': [f'grpc://127.0.0.1:{port}'],
+                        'api_servers': [f'grpc://{host_ref}:{port}'],
                         'api_type': 'GRPC',
                         'api_allowed_retry_count': 0,
                         'active': True,

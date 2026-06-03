@@ -10,6 +10,7 @@ Provides support for:
 import json
 import logging
 import os
+import time as _time
 from datetime import datetime, timezone
 from typing import Any, NamedTuple
 
@@ -36,6 +37,10 @@ DEFAULT_DEV_KEY = KeyInfo(
 _cached_keys: list[KeyInfo] = []
 _last_load_time: float = 0
 _KEY_CACHE_TTL = 300  # Reload keys max every 5 mins
+
+# JWKS per-issuer cache: { issuer: {'keys': [<jwk dict>, ...], 'fetched_at': float} }
+_jwks_cache: dict[str, dict[str, Any]] = {}
+_JWKS_CACHE_TTL = 300  # Re-fetch JWKS max every 5 minutes
 
 
 def load_keys(force_reload: bool = False) -> list[KeyInfo]:
@@ -188,5 +193,76 @@ def get_verification_key(kid: str | None = None) -> KeyInfo | None:
         for k in keys:
             if k.kid == 'legacy-key':
                 return k
-                
+
+    return None
+
+
+async def fetch_jwks_key(kid: str | None, issuer: str, jwks_uri: str, algorithms: list[str]) -> dict | None:
+    """Fetch a signing key from a remote JWKS endpoint, matched by kid.
+
+    Uses an in-memory cache (TTL=300s) per issuer to avoid fetching JWKS on
+    every request.  On a cache miss or expired entry, performs a single HTTP
+    GET to ``jwks_uri``.
+
+    Args:
+        kid:        Key ID from the JWT ``kid`` header.  When ``None`` and the
+                    JWKS response contains exactly one key, that key is used.
+        issuer:     Issuer string (used as the cache key only).
+        jwks_uri:   Full URL of the JWKS endpoint.
+        algorithms: Accepted signing algorithms for this provider (used to
+                    filter keys by ``alg`` when present in the JWK entry).
+
+    Returns:
+        The matching JWK dict (e.g. ``{"kty": "RSA", "kid": "...", "n": "...",
+        "e": "..."}``), or ``None`` on any failure (network error, missing
+        key, JSON parse error).
+    """
+    global _jwks_cache
+
+    # --- Cache lookup ---
+    cached = _jwks_cache.get(issuer)
+    if cached and (_time.time() - cached['fetched_at']) < _JWKS_CACHE_TTL:
+        keys_list = cached['keys']
+    else:
+        # --- Fetch from remote ---
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as _client:
+                resp = await _client.get(jwks_uri)
+                resp.raise_for_status()
+                jwks = resp.json()
+        except Exception as exc:
+            logger.warning(f'fetch_jwks_key: failed to fetch {jwks_uri!r}: {exc}')
+            return None
+
+        keys_list = jwks.get('keys') if isinstance(jwks, dict) else None
+        if not isinstance(keys_list, list):
+            logger.warning(f'fetch_jwks_key: unexpected JWKS format from {jwks_uri!r}')
+            return None
+
+        _jwks_cache[issuer] = {'keys': keys_list, 'fetched_at': _time.time()}
+
+    if not keys_list:
+        return None
+
+    # --- Key selection ---
+    # Filter to signature keys (use == 'sig' or use absent)
+    sig_keys = [k for k in keys_list if isinstance(k, dict) and k.get('use', 'sig') == 'sig']
+
+    if kid:
+        match = next((k for k in sig_keys if k.get('kid') == kid), None)
+        if match is None:
+            # kid not found in cached keys — force a refresh and try once more
+            _jwks_cache.pop(issuer, None)
+            return await fetch_jwks_key(kid, issuer, jwks_uri, algorithms)
+        return match
+
+    # No kid: use the single key if unambiguous
+    if len(sig_keys) == 1:
+        return sig_keys[0]
+
+    # Multiple keys, no kid to disambiguate — can't safely select one
+    logger.warning(
+        f'fetch_jwks_key: JWKS at {jwks_uri!r} has {len(sig_keys)} keys but no kid provided'
+    )
     return None

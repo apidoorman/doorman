@@ -10,15 +10,48 @@ from fastapi import Request
 from models.response_model import ResponseModel
 from utils.async_db import db_delete_one, db_find_list, db_find_one, db_insert_one, db_update_one
 from utils.database_async import db as async_db
-from ariadne import make_executable_schema, graphql, ObjectType, QueryType, MutationType
+from utils.rules_engine import evaluate_rule
 import json
+
+try:
+    from ariadne import make_executable_schema, graphql, ObjectType, QueryType, MutationType
+except Exception:
+    make_executable_schema = None
+    graphql = None
+    ObjectType = None
+    QueryType = None
+    MutationType = None
+
+TABLE_REGISTRY_COLLECTION = 'api_builder_tables'
 
 logger = logging.getLogger('doorman.gateway')
 
 class CrudService:
     @staticmethod
-    def _get_collection(api: dict):
-        collection_name = api.get('api_crud_collection')
+    def _resource_from_endpoint_uri(endpoint_uri: str | None):
+        parts = [p for p in str(endpoint_uri or '').split('/') if p]
+        return parts[0] if parts else ''
+
+    @staticmethod
+    def _resolve_binding(api: dict, endpoint_uri: str | None):
+        resource = CrudService._resource_from_endpoint_uri(endpoint_uri)
+        bindings = api.get('api_crud_bindings')
+        if isinstance(bindings, list) and resource:
+            for binding in bindings:
+                if not isinstance(binding, dict):
+                    continue
+                if str(binding.get('resource_name') or '').strip() == resource:
+                    return binding
+        return None
+
+    @staticmethod
+    def _get_collection(api: dict, endpoint_uri: str | None = None):
+        binding = CrudService._resolve_binding(api, endpoint_uri)
+        collection_name = ''
+        if isinstance(binding, dict):
+            collection_name = str(binding.get('collection_name') or '').strip()
+        if not collection_name:
+            collection_name = api.get('api_crud_collection')
         if not collection_name:
             # Fallback to a default name if not specified
             api_id = api.get('api_id', 'default')
@@ -39,6 +72,138 @@ class CrudService:
                 return async_db.create_collection(collection_name)
             # Motor database access
             return async_db[collection_name]
+
+    @staticmethod
+    def _get_schema(api: dict, endpoint_uri: str | None = None):
+        binding = CrudService._resolve_binding(api, endpoint_uri)
+        if isinstance(binding, dict):
+            schema = binding.get('schema')
+            if isinstance(schema, dict):
+                return schema
+        return api.get('api_crud_schema')
+
+    @staticmethod
+    def _get_field_mappings(api: dict, endpoint_uri: str | None = None) -> list[dict]:
+        binding = CrudService._resolve_binding(api, endpoint_uri)
+        if not isinstance(binding, dict):
+            return []
+        raw = binding.get('field_mappings')
+        if not isinstance(raw, list):
+            return []
+        mappings: list[dict] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            field = str(entry.get('field') or '').strip()
+            if not field:
+                continue
+            request_path = str(
+                entry.get('request_path') or entry.get('json_path') or field
+            ).strip()
+            response_path = str(
+                entry.get('response_path') or entry.get('json_path') or request_path or field
+            ).strip()
+            mappings.append(
+                {
+                    'field': field,
+                    'request_path': request_path or field,
+                    'response_path': response_path or field,
+                }
+            )
+        return mappings
+
+    @staticmethod
+    def _read_path(payload: dict, path: str):
+        if not isinstance(payload, dict) or not path:
+            return False, None
+        if path in payload:
+            return True, payload.get(path)
+
+        current = payload
+        parts = [p for p in str(path).split('.') if p]
+        for part in parts:
+            if isinstance(current, dict):
+                if part not in current:
+                    return False, None
+                current = current.get(part)
+                continue
+            if isinstance(current, list):
+                try:
+                    idx = int(part)
+                except Exception:
+                    return False, None
+                if idx < 0 or idx >= len(current):
+                    return False, None
+                current = current[idx]
+                continue
+            return False, None
+        return True, current
+
+    @staticmethod
+    def _write_path(payload: dict, path: str, value):
+        if not path:
+            return
+        parts = [p for p in str(path).split('.') if p]
+        if not parts:
+            return
+        current = payload
+        for idx, part in enumerate(parts):
+            is_last = idx == len(parts) - 1
+            if is_last:
+                if isinstance(current, dict):
+                    current[part] = value
+                return
+            if isinstance(current, dict):
+                nxt = current.get(part)
+                if not isinstance(nxt, dict):
+                    nxt = {}
+                    current[part] = nxt
+                current = nxt
+                continue
+            return
+
+    @staticmethod
+    def _transform_incoming_payload(payload: dict, mappings: list[dict]) -> dict:
+        if not isinstance(payload, dict) or not mappings:
+            return payload if isinstance(payload, dict) else {}
+
+        transformed: dict = {}
+        for mapping in mappings:
+            field = mapping.get('field')
+            request_path = mapping.get('request_path')
+            if not field or not request_path:
+                continue
+            exists, value = CrudService._read_path(payload, request_path)
+            if exists:
+                transformed[field] = value
+
+        if '_id' in payload and '_id' not in transformed:
+            transformed['_id'] = payload['_id']
+        return transformed
+
+    @staticmethod
+    def _transform_outgoing_payload(payload: dict, mappings: list[dict]) -> dict:
+        if not isinstance(payload, dict) or not mappings:
+            return payload if isinstance(payload, dict) else {}
+
+        transformed: dict = {}
+        if payload.get('_id') is not None:
+            transformed['_id'] = payload.get('_id')
+        for mapping in mappings:
+            field = mapping.get('field')
+            response_path = mapping.get('response_path')
+            if not field or not response_path:
+                continue
+            if field not in payload:
+                continue
+            CrudService._write_path(transformed, response_path, payload.get(field))
+        return transformed
+
+    @staticmethod
+    def _transform_outgoing_list(payloads: list[dict], mappings: list[dict]) -> list[dict]:
+        if not mappings:
+            return payloads
+        return [CrudService._transform_outgoing_payload(p, mappings) for p in payloads]
 
     @staticmethod
     def _validate_schema(schema: dict, data: dict, partial: bool = False, path: str = ""):
@@ -123,12 +288,115 @@ class CrudService:
         return errors
 
     @staticmethod
+    async def _get_table_rules(collection_name: str) -> dict:
+        if not collection_name:
+            return {}
+        try:
+            # We need to access the registry. 
+            # Ideally this should be cached or stored in the API definition to avoid extra lookups.
+            # For now, we look it up.
+            registry = None
+            if hasattr(async_db, 'get_collection'):
+                registry = async_db.get_collection(TABLE_REGISTRY_COLLECTION)
+            else:
+                registry = getattr(async_db, TABLE_REGISTRY_COLLECTION)
+            
+            doc = await db_find_one(registry, {'collection_name': collection_name})
+            if doc and 'rules' in doc:
+                return doc['rules']
+        except Exception:
+            pass
+        return {}
+
+    @staticmethod
+    async def _check_security(api: dict, method: str, collection_name: str, payload: dict | None, request: Request, resource_id: str | None = None) -> bool:
+        # 1. Fetch Rules
+        rules = await CrudService._get_table_rules(collection_name)
+        if not rules:
+            return True # No rules = allow
+
+        # 2. Determine Rule Type
+        # read, write, create, update, delete, list
+        rule_type = 'read'
+        if method == 'GET':
+            rule_type = 'read' if resource_id else 'list'
+            if rule_type == 'list' and 'list' not in rules and 'read' in rules:
+                rule_type = 'read' # Fallback
+        elif method == 'POST':
+            rule_type = 'create'
+            if 'create' not in rules and 'write' in rules:
+                rule_type = 'write'
+        elif method in ('PUT', 'PATCH'):
+            rule_type = 'update'
+            if 'update' not in rules and 'write' in rules:
+                rule_type = 'write'
+        elif method == 'DELETE':
+            rule_type = 'delete'
+            if 'delete' not in rules and 'write' in rules:
+                rule_type = 'write'
+
+        if rule_type not in rules:
+             # If specific rule missing, check generic 'write' or 'read' again?
+             # Handled above. If still not found, allow? or deny?
+             # Let's assume allowed if not specified.
+             return True
+
+        expression = rules[rule_type]
+        if not expression:
+            return True
+
+        ctx = {}
+
+        token_payload = None
+        try:
+            from utils.auth_util import auth_required
+
+            token_payload = await auth_required(request)
+        except Exception:
+            token_payload = None
+
+        auth_context = {'uid': None, 'role': None, 'token': token_payload or {}}
+        if isinstance(token_payload, dict):
+            auth_context['uid'] = token_payload.get('sub')
+            auth_context['role'] = token_payload.get('role')
+
+        ctx['auth'] = auth_context
+        ctx['request'] = {
+            'method': method,
+            'path': request.url.path,
+            'ip': request.client.host if request.client else '',
+            'headers': dict(request.headers),
+            'query': dict(request.query_params),
+            'time': 0,
+        }
+
+        if 'resource' in expression and resource_id:
+             if hasattr(async_db, 'get_collection'):
+                 coll = async_db.get_collection(collection_name)
+             else:
+                 coll = getattr(async_db, collection_name)
+             
+             data = await db_find_one(coll, {'_id': resource_id})
+             ctx['resource'] = {'data': data} if data else None
+        else:
+             ctx['resource'] = None
+
+        if payload:
+            ctx['request']['resource'] = {'data': payload}
+            ctx['request']['data'] = payload
+
+        return evaluate_rule(expression, ctx)
+
+
+    @staticmethod
     async def handle_rest(api: dict, request: Request, request_id: str, endpoint_uri: str):
         """
         Handle REST CRUD operations.
         """
         method = request.method.upper()
-        collection = CrudService._get_collection(api)
+        collection = CrudService._get_collection(api, endpoint_uri)
+        schema = CrudService._get_schema(api, endpoint_uri)
+        field_mappings = CrudService._get_field_mappings(api, endpoint_uri)
         
         # Normalize endpoint_uri to see if it's a specific resource lookup
         # /items -> list all
@@ -139,8 +407,23 @@ class CrudService:
             # More than one part means the last part is the resource ID
             resource_id = parts[-1]
 
+        # Security Check (Pre-Action)
+        # Note: payload for POST/PUT is parsed inside specific blocks, 
+        # so for create/update validation involving request data, we might need to parse first.
+        # We'll do a preliminary check here, and if payload is needed, do it after parse.
+        
+        # However, to avoid parsing twice, we might restructure.
+        # For now, let's catch basic rules (auth-only) or fetch resource rules.
+        # If rule requires 'request.resource', we need the body.
+        
+        # Let's postpone security check to inside method blocks where we have body.
+
+
         try:
             if method == 'GET':
+                if not await CrudService._check_security(api, method, CrudService._get_collection(api, endpoint_uri).name, None, request, resource_id):
+                    return ResponseModel(status_code=403, error_code='CRUD403', error_message='Permission denied').dict()
+
                 if resource_id:
                     # Attempt to find by ID
                     doc = await db_find_one(collection, {'_id': resource_id})
@@ -152,6 +435,8 @@ class CrudService:
                         ).dict()
                     if '_id' in doc:
                         doc['_id'] = str(doc['_id'])
+                    if field_mappings:
+                        doc = CrudService._transform_outgoing_payload(doc, field_mappings)
                     return ResponseModel(status_code=200, response=doc).dict()
                 else:
                     # List all
@@ -159,6 +444,8 @@ class CrudService:
                     for doc in docs:
                         if '_id' in doc:
                             doc['_id'] = str(doc['_id'])
+                    if field_mappings:
+                        docs = CrudService._transform_outgoing_list(docs, field_mappings)
                     return ResponseModel(status_code=200, response={'items': docs}).dict()
 
             elif method == 'POST':
@@ -166,12 +453,17 @@ class CrudService:
                     body = await request.json()
                 except Exception:
                     body = {}
+
+                body = CrudService._transform_incoming_payload(body, field_mappings)
+                
+                collection_name = CrudService._get_collection(api, endpoint_uri).name
+                if not await CrudService._check_security(api, method, collection_name, body, request, None):
+                    return ResponseModel(status_code=403, error_code='CRUD403', error_message='Permission denied').dict()
                 
                 if '_id' not in body:
                     body['_id'] = str(uuid.uuid4())
                 
                 # Validation
-                schema = api.get('api_crud_schema')
                 if schema:
                     errors = CrudService._validate_schema(schema, body, partial=False)
                     if errors:
@@ -187,10 +479,15 @@ class CrudService:
                     # Motor returns inserted_id, use it if available, otherwise use the _id we set
                     if hasattr(result, 'inserted_id') and result.inserted_id:
                         body['_id'] = str(result.inserted_id)
+                    response_body = (
+                        CrudService._transform_outgoing_payload(body, field_mappings)
+                        if field_mappings
+                        else body
+                    )
                     return ResponseModel(
                         status_code=201, 
                         message='Resource created successfully',
-                        response=body
+                        response=response_body
                     ).dict()
                 return ResponseModel(
                     status_code=500,
@@ -210,9 +507,13 @@ class CrudService:
                     body = await request.json()
                 except Exception:
                     body = {}
+                body = CrudService._transform_incoming_payload(body, field_mappings)
+                
+                collection_name = CrudService._get_collection(api, endpoint_uri).name
+                if not await CrudService._check_security(api, method, collection_name, body, request, resource_id):
+                    return ResponseModel(status_code=403, error_code='CRUD403', error_message='Permission denied').dict()
                 
                 # Validation
-                schema = api.get('api_crud_schema')
                 if schema:
                     errors = CrudService._validate_schema(schema, body, partial=True)
                     if errors:
@@ -239,6 +540,8 @@ class CrudService:
                     if updated:
                         if '_id' in updated:
                             updated['_id'] = str(updated['_id'])
+                        if field_mappings:
+                            updated = CrudService._transform_outgoing_payload(updated, field_mappings)
                         return ResponseModel(
                             status_code=200,
                             message='Resource updated successfully',
@@ -251,6 +554,10 @@ class CrudService:
                 ).dict()
 
             elif method == 'DELETE':
+                collection_name = CrudService._get_collection(api, endpoint_uri).name
+                if not await CrudService._check_security(api, method, collection_name, None, request, resource_id):
+                     return ResponseModel(status_code=403, error_code='CRUD403', error_message='Permission denied').dict()
+
                 if not resource_id:
                     return ResponseModel(
                         status_code=400,
@@ -349,6 +656,13 @@ class CrudService:
         Handle GraphQL CRUD operations.
         """
         try:
+            if not make_executable_schema or not graphql or not QueryType or not MutationType:
+                return ResponseModel(
+                    status_code=501,
+                    error_code='CRUD999',
+                    error_message='GraphQL CRUD requires ariadne to be installed',
+                ).dict()
+
             query = body.get('query')
             variables = body.get('variables')
             
@@ -742,4 +1056,3 @@ message ListItemsResponse {{
                 error_code='CRUD999',
                 error_message=str(e)
             ).dict()
-

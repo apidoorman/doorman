@@ -69,6 +69,8 @@ DEFAULTS = {
     # satisfy live-tests that run the gateway and upstreams on the same host.
     # Can be disabled via env or platform security settings.
     'allow_localhost_bypass': (os.getenv('LOCAL_HOST_IP_BYPASS', 'true').lower() == 'true'),
+    # OIDC providers — empty by default; populated via platform security settings API
+    'oidc_providers': [],
 }
 
 SETTINGS_FILE = os.getenv('SECURITY_SETTINGS_FILE', str(_GEN_DIR / 'security_settings.json'))

@@ -31,6 +31,36 @@ async def get_api(api_key: str | None, api_name_version: str) -> dict | None:
     return api
 
 
+async def get_api_by_hostname(hostname: str) -> dict | None:
+    """Get API document by hostname for transparent host-based routing.
+
+    Args:
+        hostname: Bare hostname from the request Host header (port already stripped),
+                  e.g. "foo.mydomain.com"
+
+    Returns:
+        Optional[Dict]: API document with api_hostname matching the given hostname, or None.
+    """
+    if not hostname:
+        return None
+    # Check hostname → api_id cache first
+    api_id = doorman_cache.get_cache('api_hostname_cache', hostname)
+    if api_id:
+        api = doorman_cache.get_cache('api_cache', api_id)
+        if api:
+            return api
+    # Cache miss — query DB
+    api = await db_find_one(api_collection, {'api_hostname': hostname})
+    if not api:
+        return None
+    api.pop('_id', None)
+    cached_id = api.get('api_id')
+    if cached_id:
+        doorman_cache.set_cache('api_hostname_cache', hostname, cached_id)
+        doorman_cache.set_cache('api_cache', cached_id, api)
+    return api
+
+
 async def get_api_endpoints(api_id: str) -> list | None:
     """Get list of endpoints for an API.
 
