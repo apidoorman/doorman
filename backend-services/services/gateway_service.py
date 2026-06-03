@@ -1419,6 +1419,13 @@ class GatewayService:
             if result is None:
                 client = GatewayService.get_http_client()
                 try:
+                    graphql_retries = max(
+                        int(retry or 0),
+                        int(os.getenv('GRAPHQL_UPSTREAM_RETRY_COUNT', '4')),
+                    )
+                except Exception:
+                    graphql_retries = max(int(retry or 0), 4)
+                try:
                     http_resp = await request_with_resilience(
                         client,
                         'POST',
@@ -1426,7 +1433,7 @@ class GatewayService:
                         api_key=api_path,
                         headers=headers,
                         json={'query': query, 'variables': variables},
-                        retries=retry,
+                        retries=graphql_retries,
                         api_config=api,
                     )
                 except AttributeError:

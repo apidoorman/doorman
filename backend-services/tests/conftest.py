@@ -57,11 +57,50 @@ except Exception:
     _INITIAL_DB_SNAPSHOT = None
 
 
+class DoormanTestClient(AsyncClient):
+    async def request(self, method, url, **kwargs):
+        response = await super().request(method, url, **kwargs)
+        path = str(url)
+        if path.startswith('http'):
+            try:
+                path = '/' + path.split('://', 1)[1].split('/', 1)[1]
+            except Exception:
+                path = ''
+
+        if method.upper() == 'POST' and path.startswith('/platform/authorization/invalidate'):
+            self.headers.pop('Authorization', None)
+            try:
+                self.cookies.delete('access_token_cookie')
+            except Exception:
+                pass
+            return response
+
+        if method.upper() == 'POST' and path in (
+            '/platform/authorization',
+            '/platform/authorization/refresh',
+        ):
+            try:
+                if response.status_code == 200:
+                    body = response.json()
+                    data = body.get('response') if isinstance(body, dict) else {}
+                    token = None
+                    if isinstance(data, dict):
+                        token = data.get('access_token') or data.get('refresh_token')
+                    if not token and isinstance(body, dict):
+                        token = body.get('access_token') or body.get('refresh_token')
+                    if token:
+                        self.headers['Authorization'] = f'Bearer {token}'
+                        self.cookies.set('access_token_cookie', token, path='/')
+            except Exception:
+                pass
+        return response
+
+
 def make_test_client(app):
     try:
-        return AsyncClient(app=app, base_url='http://testserver')
+        return DoormanTestClient(app=app, base_url='http://testserver')
     except TypeError:
-        return AsyncClient(transport=ASGITransport(app=app), base_url='http://testserver')
+        return DoormanTestClient(transport=ASGITransport(app=app), base_url='http://testserver')
 
 
 @pytest_asyncio.fixture(autouse=True)
