@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { SERVER_URL } from '@/utils/config'
@@ -28,7 +28,7 @@ function getSafeNextPath(nextValue: string | null): string {
   return candidate
 }
 
-const LoginPage = () => {
+const LoginPageContent = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -196,5 +196,23 @@ const LoginPage = () => {
     </div>
   )
 }
+
+const LoginFallback = () => (
+  <div className="min-h-screen bg-gray-50 dark:bg-dark-bg text-gray-900 dark:text-white flex items-center justify-center p-6">
+    <div className="w-full max-w-md">
+      <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-white/[0.08] rounded-lg p-8 shadow-xl">
+        <div className="text-center">
+          <h1 className="text-[22px] font-medium text-gray-900 dark:text-white/90">Loading...</h1>
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
+const LoginPage = () => (
+  <Suspense fallback={<LoginFallback />}>
+    <LoginPageContent />
+  </Suspense>
+)
 
 export default LoginPage
