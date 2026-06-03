@@ -75,6 +75,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     }
   }, [pathname, isPublicLayoutRoute, authResolved, isAuthenticated, hasUIAccess, router])
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'light'
+    setTheme(savedTheme)
+    document.documentElement.classList.toggle('dark', savedTheme === 'dark')
+  }, [])
+
   if (!isPublicLayoutRoute && !authResolved) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-dark-bg flex items-center justify-center">
@@ -95,26 +101,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     return permissions?.[item.permission] || false
   })
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light'
-    setTheme(savedTheme)
-    document.documentElement.classList.toggle('dark', savedTheme === 'dark')
-  }, [])
-
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light'
     setTheme(newTheme)
     localStorage.setItem('theme', newTheme)
     document.documentElement.classList.toggle('dark', newTheme === 'dark')
-  }
-
-  const handleLogout = () => {
-    const theme = localStorage.getItem('theme')
-    localStorage.clear()
-    if (theme) localStorage.setItem('theme', theme)
-    sessionStorage.clear()
-    document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
-    window.location.href = '/login'
   }
 
   return (
