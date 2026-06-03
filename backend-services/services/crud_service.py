@@ -11,8 +11,16 @@ from models.response_model import ResponseModel
 from utils.async_db import db_delete_one, db_find_list, db_find_one, db_insert_one, db_update_one
 from utils.database_async import db as async_db
 from utils.rules_engine import evaluate_rule
-from ariadne import make_executable_schema, graphql, ObjectType, QueryType, MutationType
 import json
+
+try:
+    from ariadne import make_executable_schema, graphql, ObjectType, QueryType, MutationType
+except Exception:
+    make_executable_schema = None
+    graphql = None
+    ObjectType = None
+    QueryType = None
+    MutationType = None
 
 TABLE_REGISTRY_COLLECTION = 'api_builder_tables'
 
@@ -337,51 +345,32 @@ class CrudService:
         if not expression:
             return True
 
-        # 3. Build Context
-        # auth, request, resource
-        # auth: needs payload from auth middleware. 
-        # request: headers, etc.
-        # resource: current data (for update/delete/read) - requires fetch!
-        
         ctx = {}
-        
-        # Auth
-        user = getattr(request.state, 'user', None)
-        # If using auth_required utility elsewhere, it might set request.state.user or similar?
-        # api_routes usually protects the endpoint and passes user info?
-        # request.user is standard in some frameworks, but here we might rely on the token being parsed.
-        # Let's check how auth is handled in api_routes.
-        # If not available, we used 'sub' from payload in other routes.
-        # We will expose 'auth' -> {'uid': ..., 'token': ...}
-        
-        # Mocking auth for now if not present, needs integration with Auth middleware.
-        # But wait, request.state.user is populated by some middleware? 
-        # Looking at doorman.py, there is AuthorizationMiddleware? No, specific routes use auth_required.
-        # api_routes.py likely calls handle_rest. 
-        
-        # Let's try to get auth info from request.state or JWT.
-        auth_context = {'uid': None, 'role': None}
-        if hasattr(request, 'auth') and request.auth:
-             auth_context['uid'] = request.auth
-        elif hasattr(request.state, 'user'):
-             auth_context['uid'] = request.state.user
+
+        token_payload = None
+        try:
+            from utils.auth_util import auth_required
+
+            token_payload = await auth_required(request)
+        except Exception:
+            token_payload = None
+
+        auth_context = {'uid': None, 'role': None, 'token': token_payload or {}}
+        if isinstance(token_payload, dict):
+            auth_context['uid'] = token_payload.get('sub')
+            auth_context['role'] = token_payload.get('role')
 
         ctx['auth'] = auth_context
-        
-        # Request
         ctx['request'] = {
             'method': method,
             'path': request.url.path,
             'ip': request.client.host if request.client else '',
-            'time': 0 # TODO
+            'headers': dict(request.headers),
+            'query': dict(request.query_params),
+            'time': 0,
         }
-        
-        # Resource (Data)
-        # For update/delete/get, we might need the EXISTING data. 
-        # This is expensive (double query). Firebase does it.
-        # We will fetch it if rule uses 'resource'.
+
         if 'resource' in expression and resource_id:
-             # Fetch resource
              if hasattr(async_db, 'get_collection'):
                  coll = async_db.get_collection(collection_name)
              else:
@@ -392,9 +381,9 @@ class CrudService:
         else:
              ctx['resource'] = None
 
-        # Request Data (for create/update)
         if payload:
             ctx['request']['resource'] = {'data': payload}
+            ctx['request']['data'] = payload
 
         return evaluate_rule(expression, ctx)
 
@@ -667,6 +656,13 @@ class CrudService:
         Handle GraphQL CRUD operations.
         """
         try:
+            if not make_executable_schema or not graphql or not QueryType or not MutationType:
+                return ResponseModel(
+                    status_code=501,
+                    error_code='CRUD999',
+                    error_message='GraphQL CRUD requires ariadne to be installed',
+                ).dict()
+
             query = body.get('query')
             variables = body.get('variables')
             

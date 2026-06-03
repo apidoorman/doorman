@@ -7,11 +7,13 @@ See https://github.com/pypeople-dev/doorman for more information
 import copy
 import logging
 import os
+import re
 import threading
 import uuid
 
 from dotenv import load_dotenv, find_dotenv
 from pymongo import ASCENDING, IndexModel, MongoClient
+from pymongo.errors import DuplicateKeyError
 
 from utils import chaos_util, password_util
 
@@ -159,31 +161,31 @@ class Database:
                 _email, _pwd_hash = _admin_seed_creds()
                 users.insert_one(_build_admin_seed_doc(_email, _pwd_hash))
 
-        try:
-            adm = users.find_one({'username': 'admin'})
-            if adm and adm.get('ui_access') is not True:
-                users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
-        except Exception:
-            pass
+            try:
+                adm = users.find_one({'username': 'admin'})
+                if adm and adm.get('ui_access') is not True:
+                    users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
+            except Exception:
+                pass
 
-        # Align admin password with DOORMAN_ADMIN_PASSWORD if provided, even if
-        # the admin user already exists. This makes re-initialization idempotent
-        # for tests that adjust the env and call initialize_collections again.
-        try:
-            env_pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
-            env_email = os.getenv('DOORMAN_ADMIN_EMAIL')
-            if env_pwd:
-                users.update_one(
-                    {'username': 'admin'},
-                    {'$set': {'password': password_util.hash_password(env_pwd)}},
-                )
-            if env_email:
-                users.update_one(
-                    {'username': 'admin'},
-                    {'$set': {'email': env_email}},
-                )
-        except Exception:
-            pass
+            # Align admin password with DOORMAN_ADMIN_PASSWORD if provided, even if
+            # the admin user already exists. This makes re-initialization idempotent
+            # for tests that adjust the env and call initialize_collections again.
+            try:
+                env_pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
+                env_email = os.getenv('DOORMAN_ADMIN_EMAIL')
+                if env_pwd:
+                    users.update_one(
+                        {'username': 'admin'},
+                        {'$set': {'password': password_util.hash_password(env_pwd)}},
+                    )
+                if env_email:
+                    users.update_one(
+                        {'username': 'admin'},
+                        {'$set': {'email': env_email}},
+                    )
+            except Exception:
+                pass
 
             try:
                 from datetime import datetime
@@ -302,31 +304,31 @@ class Database:
             self.db.roles.update_one({'role_name': 'admin'}, {'$set': {'view_builder_tables': True}})
         except Exception:
             pass
-            if not self.db.groups.find_one({'group_name': 'admin'}):
-                self.db.groups.insert_one(
-                    {
-                        'group_name': 'admin',
-                        'group_description': 'Administrator group with full access',
-                        'api_access': [],
-                    }
-                )
-            if not self.db.groups.find_one({'group_name': 'ALL'}):
-                self.db.groups.insert_one(
-                    {
-                        'group_name': 'ALL',
-                        'group_description': 'Default group with access to all APIs',
-                        'api_access': [],
-                    }
-                )
+        if not self.db.groups.find_one({'group_name': 'admin'}):
+            self.db.groups.insert_one(
+                {
+                    'group_name': 'admin',
+                    'group_description': 'Administrator group with full access',
+                    'api_access': [],
+                }
+            )
+        if not self.db.groups.find_one({'group_name': 'ALL'}):
+            self.db.groups.insert_one(
+                {
+                    'group_name': 'ALL',
+                    'group_description': 'Default group with access to all APIs',
+                    'api_access': [],
+                }
+            )
 
     def create_indexes(self):
         if self.memory_only:
-            logger.debug('Memory-only mode: Skipping MongoDB index creation')
-            return
+            logger.debug('Memory-only mode: Applying in-memory index metadata')
         self.db.apis.create_indexes(
             [
                 IndexModel([('api_id', ASCENDING)], unique=True),
                 IndexModel([('api_name', ASCENDING), ('api_version', ASCENDING)]),
+                IndexModel([('api_hostname', ASCENDING)], unique=True, sparse=True),
             ]
         )
         self.db.endpoints.create_indexes(
@@ -398,6 +400,12 @@ class InMemoryInsertResult:
         self.inserted_id = inserted_id
 
 
+class InMemoryInsertManyResult:
+    def __init__(self, inserted_ids):
+        self.acknowledged = True
+        self.inserted_ids = inserted_ids
+
+
 class InMemoryUpdateResult:
     def __init__(self, modified_count):
         self.acknowledged = True
@@ -415,9 +423,30 @@ class InMemoryCursor:
         self._docs = [copy.deepcopy(d) for d in docs]
         self._index = 0
 
+    @staticmethod
+    def _get_value(doc, field):
+        current = doc
+        for part in str(field).split('.'):
+            if not isinstance(current, dict) or part not in current:
+                return None
+            current = current.get(part)
+        return current
+
+    @staticmethod
+    def _sort_key(value):
+        if value is None:
+            return (0, '')
+        if isinstance(value, bool):
+            return (1, int(value))
+        if isinstance(value, (int, float)):
+            return (2, value)
+        if isinstance(value, str):
+            return (3, value.lower())
+        return (4, str(value))
+
     def sort(self, field, direction=1):
         reverse = direction == -1
-        self._docs.sort(key=lambda d: d.get(field), reverse=reverse)
+        self._docs.sort(key=lambda d: self._sort_key(self._get_value(d, field)), reverse=reverse)
         return self
 
     def skip(self, n):
@@ -456,35 +485,110 @@ class InMemoryCursor:
 
 
 class InMemoryCollection:
+    _MISSING = object()
+
     def __init__(self, name):
         self.name = name
         self._docs = []
         self._lock = threading.RLock()
+        self._indexes = [{'name': '_id_', 'key': {'_id': 1}, 'unique': True}]
+        self._unique_indexes = []
+
+    @staticmethod
+    def _missing():
+        return InMemoryCollection._MISSING
+
+    def _get_value(self, doc, field):
+        current = doc
+        for part in str(field).split('.'):
+            if not isinstance(current, dict) or part not in current:
+                return self._missing()
+            current = current.get(part)
+        return current
+
+    def _check_unique_constraints(self, candidate, *, skip_doc_id=None):
+        for index in self._unique_indexes:
+            fields = index.get('fields', ())
+            values = tuple(self._get_value(candidate, field) for field in fields)
+            # MongoDB sparse indexes skip documents where the indexed field is absent
+            # OR null.  Mirror that behaviour: skip uniqueness check when any value
+            # is the _MISSING sentinel (field absent) or is None (null).
+            if index.get('sparse') and any(
+                value is self._missing() or value is None for value in values
+            ):
+                continue
+            for existing in self._docs:
+                if skip_doc_id is not None and existing.get('_id') == skip_doc_id:
+                    continue
+                if all(
+                    self._get_value(existing, field) == value
+                    for field, value in zip(fields, values)
+                ):
+                    joined = ', '.join(fields)
+                    raise DuplicateKeyError(
+                        f'E11000 duplicate key error collection: {self.name} index: {joined}'
+                    )
 
     def _match(self, doc, query):
         if not query:
             return True
         for k, v in query.items():
-            # Handle $or operator
             if k == '$or':
                 if not isinstance(v, list):
                     continue
-                or_match = False
-                for or_query in v:
-                    if self._match(doc, or_query):
-                        or_match = True
-                        break
-                if not or_match:
+                if not any(self._match(doc, or_query) for or_query in v):
+                    return False
+            elif k == '$and':
+                if not isinstance(v, list):
+                    continue
+                if not all(self._match(doc, and_query) for and_query in v):
                     return False
             elif isinstance(v, dict):
-                if '$in' in v:
-                    if doc.get(k) not in v['$in']:
-                        return False
-                else:
-                    if doc.get(k) != v:
+                actual = self._get_value(doc, k)
+                exists = actual is not self._missing()
+                for op, expected in v.items():
+                    if op == '$options':
+                        continue
+                    if op == '$in':
+                        if not exists or actual not in expected:
+                            return False
+                    elif op == '$nin':
+                        if exists and actual in expected:
+                            return False
+                    elif op == '$ne':
+                        if exists and actual == expected:
+                            return False
+                    elif op == '$exists':
+                        if exists != bool(expected):
+                            return False
+                    elif op == '$regex':
+                        if not exists:
+                            return False
+                        flags = re.IGNORECASE if 'i' in str(v.get('$options') or '') else 0
+                        try:
+                            if re.search(str(expected), str(actual), flags) is None:
+                                return False
+                        except re.error:
+                            return False
+                    elif op in ('$gt', '$gte', '$lt', '$lte'):
+                        if not exists:
+                            return False
+                        try:
+                            if op == '$gt' and not (actual > expected):
+                                return False
+                            if op == '$gte' and not (actual >= expected):
+                                return False
+                            if op == '$lt' and not (actual < expected):
+                                return False
+                            if op == '$lte' and not (actual <= expected):
+                                return False
+                        except Exception:
+                            return False
+                    elif actual != expected:
                         return False
             else:
-                if doc.get(k) != v:
+                actual = self._get_value(doc, k)
+                if actual is self._missing() or actual != v:
                     return False
         return True
 
@@ -521,11 +625,30 @@ class InMemoryCollection:
             new_doc = copy.deepcopy(doc)
             if '_id' not in new_doc:
                 new_doc['_id'] = str(uuid.uuid4())
+            self._check_unique_constraints(new_doc)
             self._docs.append(new_doc)
             return InMemoryInsertResult(new_doc['_id'])
 
     # Alias for backward compatibility
     insert_one_sync = insert_one
+
+    def insert_many(self, docs):
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        inserted_ids = []
+        with self._lock:
+            new_docs = []
+            for doc in docs:
+                new_doc = copy.deepcopy(doc)
+                if '_id' not in new_doc:
+                    new_doc['_id'] = str(uuid.uuid4())
+                self._check_unique_constraints(new_doc)
+                new_docs.append(new_doc)
+            for new_doc in new_docs:
+                self._docs.append(new_doc)
+                inserted_ids.append(new_doc['_id'])
+        return InMemoryInsertManyResult(inserted_ids)
 
     def update_one(self, query, update):
         """Update one document (synchronous)"""
@@ -561,6 +684,7 @@ class InMemoryCollection:
                                 updated[k] = [v]
                             else:
                                 updated[k].append(v)
+                    self._check_unique_constraints(updated, skip_doc_id=d.get('_id'))
                     self._docs[i] = updated
                     return InMemoryUpdateResult(1)
             return InMemoryUpdateResult(0)
@@ -578,6 +702,15 @@ class InMemoryCollection:
                     del self._docs[i]
                     return InMemoryDeleteResult(1)
             return InMemoryDeleteResult(0)
+
+    def delete_many(self, query):
+        if chaos_util.should_fail('mongo'):
+            chaos_util.burn_error_budget('mongo')
+            raise RuntimeError('chaos: simulated mongo outage')
+        with self._lock:
+            original = len(self._docs)
+            self._docs = [d for d in self._docs if not self._match(d, query or {})]
+            return InMemoryDeleteResult(original - len(self._docs))
 
     def count_documents(self, query=None):
         if chaos_util.should_fail('mongo'):
@@ -599,6 +732,7 @@ class InMemoryCollection:
                     # Preserve _id if not in replacement
                     if '_id' not in new_doc and '_id' in d:
                         new_doc['_id'] = d['_id']
+                    self._check_unique_constraints(new_doc, skip_doc_id=d.get('_id'))
                     self._docs[i] = new_doc
                     return InMemoryUpdateResult(1)
             return InMemoryUpdateResult(0)
@@ -627,12 +761,81 @@ class InMemoryCollection:
                                 cur[parts[-1]] = v
                             else:
                                 updated[k] = v
+                    self._check_unique_constraints(updated, skip_doc_id=d.get('_id'))
                     self._docs[i] = updated
                     return copy.deepcopy(updated) if return_document else None
             return None
 
     def create_indexes(self, *args, **kwargs):
+        models = []
+        if args:
+            first = args[0]
+            if isinstance(first, list):
+                models = first
+            else:
+                models = list(args)
+        for model in models:
+            document = getattr(model, 'document', None) or {}
+            if not document.get('unique'):
+                continue
+            key_spec = document.get('key', [])
+            if hasattr(key_spec, 'items'):
+                key_items = list(key_spec.items())
+            else:
+                key_items = list(key_spec)
+            keys = tuple(field for field, _direction in key_items)
+            if not keys:
+                continue
+            unique_index = {'fields': keys, 'sparse': bool(document.get('sparse', False))}
+            if unique_index not in self._unique_indexes:
+                self._unique_indexes.append(unique_index)
+            name = document.get('name') or '_'.join(f'{field}_{direction}' for field, direction in key_items)
+            if name and not any(index.get('name') == name for index in self._indexes):
+                self._indexes.append(
+                    {
+                        'name': name,
+                        'key': dict(key_items),
+                        'unique': bool(document.get('unique', False)),
+                        'sparse': bool(document.get('sparse', False)),
+                    }
+                )
         return []
+
+    def create_index(self, keys, **kwargs):
+        key_list = list(keys)
+        name = kwargs.get('name') or '_'.join(f'{field}_{direction}' for field, direction in key_list)
+        if not name:
+            raise ValueError('index name is required')
+        if any(index.get('name') == name for index in self._indexes):
+            return name
+        if kwargs.get('unique'):
+            unique_index = {
+                'fields': tuple(field for field, _direction in key_list),
+                'sparse': bool(kwargs.get('sparse', False)),
+            }
+            if unique_index not in self._unique_indexes:
+                self._unique_indexes.append(unique_index)
+        self._indexes.append(
+            {
+                'name': name,
+                'key': dict(key_list),
+                'unique': bool(kwargs.get('unique', False)),
+                'sparse': bool(kwargs.get('sparse', False)),
+            }
+        )
+        return name
+
+    def list_indexes(self):
+        return [copy.deepcopy(index) for index in self._indexes]
+
+    def drop_index(self, name):
+        if name == '_id_':
+            raise ValueError('cannot drop _id_ index')
+        before = len(self._indexes)
+        self._indexes = [index for index in self._indexes if index.get('name') != name]
+        if len(self._indexes) == before:
+            raise ValueError(f'index not found: {name}')
+        return None
 
 
 class AsyncInMemoryCollection:
@@ -654,6 +857,9 @@ class AsyncInMemoryCollection:
         """Async insert_one"""
         return self._sync.insert_one(doc)
 
+    async def insert_many(self, docs):
+        return self._sync.insert_many(docs)
+
     async def update_one(self, query, update):
         """Async update_one"""
         return self._sync.update_one(query, update)
@@ -661,6 +867,9 @@ class AsyncInMemoryCollection:
     async def delete_one(self, query):
         """Async delete_one"""
         return self._sync.delete_one(query)
+
+    async def delete_many(self, query):
+        return self._sync.delete_many(query)
 
     async def count_documents(self, query=None):
         """Async count_documents"""
@@ -676,6 +885,15 @@ class AsyncInMemoryCollection:
 
     def create_indexes(self, *args, **kwargs):
         return self._sync.create_indexes(*args, **kwargs)
+
+    async def create_index(self, keys, **kwargs):
+        return self._sync.create_index(keys, **kwargs)
+
+    async def list_indexes(self):
+        return self._sync.list_indexes()
+
+    async def drop_index(self, name):
+        return self._sync.drop_index(name)
 
 
 class InMemoryDB:

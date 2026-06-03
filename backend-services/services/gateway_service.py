@@ -349,7 +349,24 @@ class GatewayService:
             return None
 
         if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-            if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+            _is_anon = isinstance(username, str) and username.startswith('anon:')
+            _credit_group = (
+                api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                if _is_anon
+                else api.get('api_credit_group')
+            )
+            if _is_anon and _credit_group:
+                _init_ok = await credit_util.ensure_anonymous_credits(_credit_group, username)
+                if not _init_ok:
+                    # Transient DB error during init — allow through without deducting
+                    # rather than returning a spurious 401.
+                    return None
+                if not await credit_util.deduct_credit(_credit_group, username):
+                    logger.warning(f'Credit deduction failed for user {username}')
+                    return GatewayService.error_response(
+                        request_id, 'GTW008', 'User does not have any credits', status=401
+                    )
+            elif _credit_group and not await credit_util.deduct_credit(_credit_group, username):
                 logger.warning(f'Credit deduction failed for user {username}')
                 return GatewayService.error_response(
                     request_id, 'GTW008', 'User does not have any credits', status=401
@@ -609,7 +626,23 @@ class GatewayService:
                 retry = api.get('api_allowed_retry_count') or 0
 
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                    # Determine effective credit group: anonymous users may have a separate group
+                    _is_anon = isinstance(username, str) and username.startswith('anon:')
+                    _credit_group = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon
+                        else api.get('api_credit_group')
+                    )
+                    if _is_anon and _credit_group:
+                        _init_ok = await credit_util.ensure_anonymous_credits(_credit_group, username)
+                        if not _init_ok:
+                            # Transient DB error — allow through without deducting
+                            pass
+                        elif not await credit_util.deduct_credit(_credit_group, username):
+                            return GatewayService.error_response(
+                                request_id, 'GTW008', 'User does not have any credits', status=401
+                            )
+                    elif _credit_group and not await credit_util.deduct_credit(_credit_group, username):
                         return GatewayService.error_response(
                             request_id, 'GTW008', 'User does not have any credits', status=401
                         )
@@ -658,8 +691,14 @@ class GatewayService:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
 
                 if username and not bool(api.get('api_public')):
+                    _is_anon_hdr = isinstance(username, str) and username.startswith('anon:')
+                    _eff_credit_group_hdr = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_hdr
+                        else api.get('api_credit_group')
+                    )
                     user_specific_api_key = await credit_util.get_user_api_key(
-                        api.get('api_credit_group'), username
+                        _eff_credit_group_hdr, username
                     )
                     if user_specific_api_key:
                         headers[ai_token_headers[0]] = user_specific_api_key
@@ -993,7 +1032,21 @@ class GatewayService:
                 logger.info(f'{request_id} | SOAP gateway to: {url}')
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                    _is_anon_soap = isinstance(username, str) and username.startswith('anon:')
+                    _credit_group_soap = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_soap
+                        else api.get('api_credit_group')
+                    )
+                    if _is_anon_soap and _credit_group_soap:
+                        _init_ok_soap = await credit_util.ensure_anonymous_credits(_credit_group_soap, username)
+                        if not _init_ok_soap:
+                            pass  # transient error — allow through
+                        elif not await credit_util.deduct_credit(_credit_group_soap, username):
+                            return GatewayService.error_response(
+                                request_id, 'GTW008', 'User does not have any credits', status=401
+                            )
+                    elif _credit_group_soap and not await credit_util.deduct_credit(_credit_group_soap, username):
                         return GatewayService.error_response(
                             request_id, 'GTW008', 'User does not have any credits', status=401
                         )
@@ -1236,7 +1289,21 @@ class GatewayService:
                 doorman_cache.set_cache('api_cache', api_path, api)
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                    _is_anon_gql = isinstance(username, str) and username.startswith('anon:')
+                    _credit_group_gql = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_gql
+                        else api.get('api_credit_group')
+                    )
+                    if _is_anon_gql and _credit_group_gql:
+                        _init_ok_gql = await credit_util.ensure_anonymous_credits(_credit_group_gql, username)
+                        if not _init_ok_gql:
+                            pass  # transient error — allow through
+                        elif not await credit_util.deduct_credit(_credit_group_gql, username):
+                            return GatewayService.error_response(
+                                request_id, 'GTW008', 'User does not have any credits', status=401
+                            )
+                    elif _credit_group_gql and not await credit_util.deduct_credit(_credit_group_gql, username):
                         return GatewayService.error_response(
                             request_id, 'GTW008', 'User does not have any credits', status=401
                         )
@@ -1253,8 +1320,14 @@ class GatewayService:
                 if ai_token_headers:
                     headers[ai_token_headers[0]] = ai_token_headers[1]
                 if username and not bool(api.get('api_public')):
+                    _is_anon_hdr2 = isinstance(username, str) and username.startswith('anon:')
+                    _eff_credit_group_hdr2 = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_hdr2
+                        else api.get('api_credit_group')
+                    )
                     user_specific_api_key = await credit_util.get_user_api_key(
-                        api.get('api_credit_group'), username
+                        _eff_credit_group_hdr2, username
                     )
                     if user_specific_api_key:
                         headers[ai_token_headers[0]] = user_specific_api_key
@@ -1802,7 +1875,21 @@ class GatewayService:
                     grpc_target = url[len('grpc://') :]
                 retry = api.get('api_allowed_retry_count') or 0
                 if api.get('api_credits_enabled') and username and not bool(api.get('api_public')):
-                    if not await credit_util.deduct_credit(api.get('api_credit_group'), username):
+                    _is_anon_grpc = isinstance(username, str) and username.startswith('anon:')
+                    _credit_group_grpc = (
+                        api.get('api_anonymous_credit_group') or api.get('api_credit_group')
+                        if _is_anon_grpc
+                        else api.get('api_credit_group')
+                    )
+                    if _is_anon_grpc and _credit_group_grpc:
+                        _init_ok_grpc = await credit_util.ensure_anonymous_credits(_credit_group_grpc, username)
+                        if not _init_ok_grpc:
+                            pass  # transient error — allow through
+                        elif not await credit_util.deduct_credit(_credit_group_grpc, username):
+                            return GatewayService.error_response(
+                                request_id, 'GTW008', 'User does not have any credits', status=401
+                            )
+                    elif _credit_group_grpc and not await credit_util.deduct_credit(_credit_group_grpc, username):
                         return GatewayService.error_response(
                             request_id, 'GTW008', 'User does not have any credits', status=401
                         )

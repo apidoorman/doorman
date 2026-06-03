@@ -36,6 +36,9 @@ class SafeEvaluator(ast.NodeVisitor):
     def visit_Module(self, node):
         return self.visit(node.body[0])
 
+    def visit_Expression(self, node):
+        return self.visit(node.body)
+
     def visit_Expr(self, node):
         return self.visit(node.value)
 
@@ -87,6 +90,12 @@ class SafeEvaluator(ast.NodeVisitor):
     def visit_NameConstant(self, node):
         return node.value
 
+    def visit_List(self, node):
+        return [self.visit(elt) for elt in node.elts]
+
+    def visit_Tuple(self, node):
+        return tuple(self.visit(elt) for elt in node.elts)
+
     def visit_Name(self, node):
         if node.id in self.context:
             return self.context[node.id]
@@ -110,6 +119,9 @@ class SafeEvaluator(ast.NodeVisitor):
              return obj[idx]
         except Exception:
              return None
+
+    def visit_Index(self, node):
+        return self.visit(node.value)
 
     # Handle Slice/Index for Python < 3.9 if needed, but Subscript is usually enough
     # Python 3.9+ 'slice' is just a node in Subscript, usually Constant or something.

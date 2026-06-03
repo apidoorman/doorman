@@ -1,10 +1,32 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { SERVER_URL } from '@/utils/config'
 import { postJson, getJson } from '@/utils/api'
+
+const DEFAULT_AUTH_REDIRECT = '/dashboard'
+
+function getSafeNextPath(nextValue: string | null): string {
+  const candidate = nextValue
+    ? (() => {
+      try {
+        return decodeURIComponent(nextValue)
+      } catch {
+        return nextValue
+      }
+    })()
+    : ''
+
+  if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) {
+    return DEFAULT_AUTH_REDIRECT
+  }
+  if (candidate === '/login' || candidate.startsWith('/login?')) {
+    return DEFAULT_AUTH_REDIRECT
+  }
+  return candidate
+}
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -13,7 +35,9 @@ const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [theme, setTheme] = useState('light')
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { checkAuth, isAuthenticated, hasUIAccess } = useAuth()
+  const nextPath = getSafeNextPath(searchParams.get('next'))
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light'
@@ -23,7 +47,7 @@ const LoginPage = () => {
 
   useEffect(() => {
     if (isAuthenticated && hasUIAccess) {
-      router.push('/dashboard')
+      router.push(nextPath)
     } else if (isAuthenticated && !hasUIAccess) {
       // Authenticated but not allowed to use UI
       setErrorMessage('Your account does not have UI access. Contact an administrator.')
@@ -36,7 +60,7 @@ const LoginPage = () => {
         document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
       } catch { }
     }
-  }, [isAuthenticated, hasUIAccess, router])
+  }, [isAuthenticated, hasUIAccess, nextPath, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,7 +93,7 @@ const LoginPage = () => {
         return
       }
       await checkAuth()
-      router.push('/dashboard')
+      router.push(nextPath)
     } catch (error) {
       console.error('Login error:', error)
       setErrorMessage('Network error. Please try again.')

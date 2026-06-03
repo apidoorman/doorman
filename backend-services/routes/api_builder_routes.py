@@ -2,7 +2,6 @@
 Table explorer and table registry routes.
 """
 
-import json
 import logging
 import re
 import time
@@ -247,6 +246,98 @@ def _sort_key(value: Any) -> tuple[int, Any]:
     return (4, str(value))
 
 
+def _schema_search_fields(schema: Any, prefix: str = '') -> list[str]:
+    if not isinstance(schema, dict):
+        return []
+    fields: list[str] = []
+    for field_name, rules in schema.items():
+        field = str(field_name).strip()
+        if not field:
+            continue
+        path = f'{prefix}.{field}' if prefix else field
+        fields.append(path)
+        if isinstance(rules, dict) and rules.get('type') == 'object':
+            fields.extend(_schema_search_fields(rules.get('properties'), path))
+    return fields
+
+
+def _coerce_in_values(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return [_coerce_query_value(v) for v in value]
+    if isinstance(value, str):
+        return [_coerce_query_value(v.strip()) for v in value.split(',') if v.strip()]
+    return []
+
+
+def _query_filter_to_db(query_filter: dict[str, Any]) -> dict[str, Any]:
+    field = str(query_filter.get('field') or '').strip()
+    if not field:
+        return {}
+    op = str(query_filter.get('op') or 'eq').strip().lower()
+    value = _coerce_query_value(query_filter.get('value'))
+
+    if op in ('eq', '=='):
+        return {field: value}
+    if op in ('ne', '!='):
+        return {field: {'$ne': value}}
+    if op == 'contains':
+        return {field: {'$regex': re.escape(str(value or '')), '$options': 'i'}}
+    if op == 'starts_with':
+        return {field: {'$regex': f'^{re.escape(str(value or ""))}', '$options': 'i'}}
+    if op == 'ends_with':
+        return {field: {'$regex': f'{re.escape(str(value or ""))}$', '$options': 'i'}}
+    if op in ('gt', '>'):
+        return {field: {'$gt': value}}
+    if op in ('gte', '>='):
+        return {field: {'$gte': value}}
+    if op in ('lt', '<'):
+        return {field: {'$lt': value}}
+    if op in ('lte', '<='):
+        return {field: {'$lte': value}}
+    if op == 'in':
+        return {field: {'$in': _coerce_in_values(query_filter.get('value'))}}
+    if op == 'nin':
+        values = _coerce_in_values(query_filter.get('value'))
+        return {field: {'$nin': values}} if values else {}
+    if op == 'exists':
+        expect = bool(value) if value is not None else True
+        return {field: {'$exists': expect}}
+    return {}
+
+
+def _build_table_query(
+    search_text: str,
+    schema: Any,
+    normalized_filters: list[dict[str, Any]],
+    logic: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    clauses: list[dict[str, Any]] = []
+    if search_text:
+        search_fields = _schema_search_fields(schema)
+        if not search_fields:
+            return None, 'Search requires a table schema with at least one field'
+        clauses.append(
+            {
+                '$or': [
+                    {field: {'$regex': re.escape(search_text), '$options': 'i'}}
+                    for field in search_fields
+                ]
+            }
+        )
+
+    filter_clauses = [
+        query for query in (_query_filter_to_db(qf) for qf in normalized_filters) if query
+    ]
+    if filter_clauses:
+        clauses.append({'$or': filter_clauses} if logic == 'or' else {'$and': filter_clauses})
+
+    if not clauses:
+        return {}, None
+    if len(clauses) == 1:
+        return clauses[0], None
+    return {'$and': clauses}, None
+
+
 async def _legacy_table_map() -> dict[str, dict[str, Any]]:
     apis = await db_find_list(
         api_collection, {'api_is_crud': True}, sort=[('api_name', 1), ('api_version', 1)]
@@ -311,6 +402,16 @@ async def _table_map() -> dict[str, dict[str, Any]]:
             existing['schema'] = legacy.get('schema')
 
     return table_map
+
+
+async def get_builder_table_meta(collection_name: str) -> dict[str, Any] | None:
+    if not collection_name:
+        return None
+    return (await _table_map()).get(collection_name)
+
+
+def get_builder_collection(collection_name: str):
+    return _get_collection(collection_name)
 
 
 @api_builder_router.post('/tables', description='Create a table definition')
@@ -980,34 +1081,30 @@ async def query_table_rows(collection_name: str, request: Request) -> Response:
                 )
             normalized_filters.append({'field': field, 'op': op, 'value': raw_filter.get('value')})
 
+        query, query_error = _build_table_query(
+            search_text,
+            table_meta.get('schema') or {},
+            normalized_filters,
+            logic,
+        )
+        if query_error:
+            return respond_rest(
+                ResponseModel(
+                    status_code=400,
+                    response_headers={Headers.REQUEST_ID: request_id},
+                    error_code='ABT031',
+                    error_message=query_error,
+                )
+            )
+
         collection = _get_collection(collection_name)
-        docs = await db_find_list(collection, {}, sort=[('_id', 1)])
-
-        if search_text:
-            docs = [
-                d
-                for d in docs
-                if search_text in json.dumps(d, default=str, separators=(',', ':')).lower()
-            ]
-
-        if normalized_filters:
-            if logic == 'or':
-                docs = [
-                    d
-                    for d in docs
-                    if any(_query_filter_match(d, qf) for qf in normalized_filters)
-                ]
-            else:
-                docs = [
-                    d
-                    for d in docs
-                    if all(_query_filter_match(d, qf) for qf in normalized_filters)
-                ]
-
-        docs.sort(key=lambda d: _sort_key(_extract_field_value(d, sort_by)), reverse=reverse)
-        total = len(docs)
+        direction = -1 if reverse else 1
         skip = (page - 1) * page_size
-        items = docs[skip : skip + page_size]
+        query = query or {}
+        items = await db_find_paginated(
+            collection, query, skip=skip, limit=page_size, sort=[(sort_by, direction)]
+        )
+        total = await db_count(collection, query)
         has_next = (skip + len(items)) < total
         for item in items:
             if item.get('_id') is not None:
@@ -1059,15 +1156,33 @@ async def subscribe_collection(websocket: WebSocket, collection_name: str):
     """
     WebSocket endpoint for real-time collection updates.
     """
+    connected = False
     try:
+        try:
+            payload = await auth_required(websocket)
+            username = payload.get('sub')
+        except Exception:
+            await websocket.close(code=1008)
+            return
+
+        if not username or not await platform_role_required_bool(username, Roles.VIEW_BUILDER_TABLES):
+            await websocket.close(code=1008)
+            return
+
+        if not await get_builder_table_meta(collection_name):
+            await websocket.close(code=1008)
+            return
+
         await realtime_service.connect(websocket, collection_name)
+        connected = True
         while True:
             # Keep connection alive; we only send data, don't expect much input
             # But we must await something to detect disconnects
             await websocket.receive_text()
     except WebSocketDisconnect:
-        realtime_service.disconnect(websocket, collection_name)
+        if connected:
+            realtime_service.disconnect(websocket, collection_name)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        realtime_service.disconnect(websocket, collection_name)
-
+        if connected:
+            realtime_service.disconnect(websocket, collection_name)

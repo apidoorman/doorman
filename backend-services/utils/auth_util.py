@@ -152,9 +152,10 @@ async def auth_required(request: Request) -> dict:
     scheme = (request.url.scheme or '').lower()
     host = getattr(getattr(request, 'url', None), 'hostname', None) or ''
     conn_is_https = (xf_proto == 'https') or (scheme == 'https')
+    is_websocket_route = scheme in ('ws', 'wss')
     # Treat Starlette test client host as effectively HTTPS to honor unit tests
     testserver_https = str(host).lower() == 'testserver'
-    if https_only and not is_gateway_route and (conn_is_https or testserver_https):
+    if https_only and not is_gateway_route and not is_websocket_route and (conn_is_https or testserver_https):
         try:
             # Allow internal test setup call to adjust admin without CSRF header
             p = str(getattr(getattr(request, 'url', None), 'path', '') or '')
@@ -202,44 +203,126 @@ async def auth_required(request: Request) -> dict:
                     pass
                 raise HTTPException(status_code=401, detail='Invalid CSRF token')
     try:
-        # Unverified decode to get key ID (kid)
+        # Unverified decode to get key ID (kid) and issuer (iss)
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get('kid')
-        
-        # Get verification key
+
+        try:
+            _unverified_claims = jwt.get_unverified_claims(token)
+            _iss_claim = _unverified_claims.get('iss')
+        except Exception:
+            _iss_claim = None
+
+        # Try local key first
         key_info = key_util.get_verification_key(kid)
-        if not key_info:
-             logger.warning(f'No matching key found for kid={kid}')
-             raise HTTPException(status_code=401, detail='Invalid token signature')
-             
-        payload = jwt.decode(
-            token, 
-            key_info.verification_key, 
-            algorithms=[key_info.algorithm], 
-            options={'verify_signature': True}
-        )
-        username = payload.get('sub')
-        jti = payload.get('jti')
-        if not username or not jti:
-            raise HTTPException(status_code=401, detail='Invalid token')
-        if is_user_revoked(username) or is_jti_revoked(username, jti):
-            raise HTTPException(status_code=401, detail='Token has been revoked')
-        user = doorman_cache.get_cache('user_cache', username)
-        if not user:
-            user = await asyncio.to_thread(user_collection.find_one, {'username': username})
+
+        if key_info:
+            # --- Local key path (original behavior) ---
+            payload = jwt.decode(
+                token,
+                key_info.verification_key,
+                algorithms=[key_info.algorithm],
+                options={'verify_signature': True},
+            )
+            username = payload.get('sub')
+            jti = payload.get('jti')
+            if not username or not jti:
+                raise HTTPException(status_code=401, detail='Invalid token')
+            if is_user_revoked(username) or is_jti_revoked(username, jti):
+                raise HTTPException(status_code=401, detail='Token has been revoked')
+            user = doorman_cache.get_cache('user_cache', username)
+            if not user:
+                user = await asyncio.to_thread(user_collection.find_one, {'username': username})
+                if not user:
+                    raise HTTPException(status_code=404, detail='User not found')
+                if user.get('_id'):
+                    del user['_id']
+                if user.get('password'):
+                    del user['password']
+                doorman_cache.set_cache('user_cache', username, user)
             if not user:
                 raise HTTPException(status_code=404, detail='User not found')
-            if user.get('_id'):
-                del user['_id']
-            if user.get('password'):
-                del user['password']
-            doorman_cache.set_cache('user_cache', username, user)
-        if not user:
-            raise HTTPException(status_code=404, detail='User not found')
-        if user.get('active') is False:
-            logger.error(f'Unauthorized access: User {username} is inactive')
-            raise HTTPException(status_code=401, detail='User is inactive')
-        return payload
+            if user.get('active') is False:
+                logger.error(f'Unauthorized access: User {username} is inactive')
+                raise HTTPException(status_code=401, detail='User is inactive')
+            return payload
+
+        elif _iss_claim:
+            # --- OIDC path: validate against a configured external IdP ---
+            from utils.security_settings_util import get_cached_settings as _get_settings
+            _settings = _get_settings()
+            _oidc_providers = _settings.get('oidc_providers') or []
+            _provider = next(
+                (p for p in _oidc_providers if p.get('issuer') == _iss_claim), None
+            )
+            if _provider is None:
+                logger.warning(f'auth_required: unknown issuer {_iss_claim!r}')
+                raise HTTPException(status_code=401, detail='GTW016')
+
+            _jwk = await key_util.fetch_jwks_key(
+                kid=kid,
+                issuer=_iss_claim,
+                jwks_uri=_provider['jwks_uri'],
+                algorithms=_provider.get('algorithms', ['RS256']),
+            )
+            if _jwk is None:
+                logger.warning(f'auth_required: JWKS fetch failed for issuer {_iss_claim!r}')
+                raise HTTPException(status_code=503, detail='GTW015')
+
+            _algs = _provider.get('algorithms', ['RS256'])
+            _aud = _provider.get('audience')
+            try:
+                if _aud:
+                    payload = jwt.decode(
+                        token,
+                        _jwk,
+                        algorithms=_algs,
+                        audience=_aud,
+                        options={'verify_signature': True},
+                    )
+                else:
+                    payload = jwt.decode(
+                        token,
+                        _jwk,
+                        algorithms=_algs,
+                        options={'verify_signature': True, 'verify_aud': False},
+                    )
+            except JWTError as _jwe:
+                _jwe_msg = str(_jwe).lower()
+                if 'audience' in _jwe_msg:
+                    raise HTTPException(status_code=401, detail='GTW017')
+                raise HTTPException(status_code=401, detail='Unauthorized')
+
+            username = payload.get('sub')
+            if not username:
+                raise HTTPException(status_code=401, detail='Invalid token')
+
+            # Optionally require a matching local user record
+            if _provider.get('require_local_user'):
+                _user = doorman_cache.get_cache('user_cache', username)
+                if not _user:
+                    _user = await asyncio.to_thread(
+                        user_collection.find_one, {'username': username}
+                    )
+                    if not _user:
+                        raise HTTPException(status_code=404, detail='User not found')
+                    if _user.get('_id'):
+                        del _user['_id']
+                    if _user.get('password'):
+                        del _user['password']
+                    doorman_cache.set_cache('user_cache', username, _user)
+                if _user.get('active') is False:
+                    raise HTTPException(status_code=401, detail='User is inactive')
+
+            return payload
+
+        else:
+            logger.warning(f'No matching key found for kid={kid}')
+            raise HTTPException(status_code=401, detail='Invalid token signature')
+
+    except HTTPException:
+        # Propagate all HTTPExceptions (auth errors, GTW015/016/017, etc.) unchanged.
+        raise
     except JWTError:
         raise HTTPException(status_code=401, detail='Unauthorized')
     except Exception as e:
@@ -253,6 +336,26 @@ async def auth_required(request: Request) -> dict:
             # Treat cache/connectivity issues as service temporarily unavailable
             raise HTTPException(status_code=503, detail='Service temporarily unavailable')
         raise HTTPException(status_code=401, detail='Unauthorized')
+
+
+def extract_token_scopes(payload: dict) -> set[str]:
+    """Extract OAuth2 scopes from a JWT payload.
+
+    Handles two common claim formats:
+    - ``scope``: space-separated string (RFC 8693 / standard OAuth2)
+    - ``scp``:   list of strings (Azure AD / Okta style)
+
+    Returns a :class:`set` of scope strings.  Returns an empty set when
+    neither claim is present in the payload.
+    """
+    scopes: set[str] = set()
+    scope_claim = payload.get('scope')
+    scp_claim = payload.get('scp')
+    if isinstance(scope_claim, str) and scope_claim.strip():
+        scopes.update(scope_claim.split())
+    if isinstance(scp_claim, list):
+        scopes.update(s for s in scp_claim if isinstance(s, str))
+    return scopes
 
 
 def create_access_token(data: dict, refresh: bool = False) -> str:

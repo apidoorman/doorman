@@ -390,8 +390,50 @@ async def gateway(request: Request, path: str):
                 except Exception:
                     pass
                 await enforce_pre_request_limit(request, username)
+                # Enforce required OAuth2 scopes when configured
+                try:
+                    _req_scopes = resolved_api.get('api_required_scopes') or []
+                    if _req_scopes and payload:
+                        from utils.auth_util import extract_token_scopes as _ets
+                        if not set(_req_scopes).issubset(_ets(payload)):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW018',
+                                    error_message='Forbidden: insufficient token scopes',
+                                ).dict(),
+                                'rest',
+                            )
+                except Exception:
+                    pass
             else:
-                pass
+                # api_auth_required = False — auth is optional.
+                # Try to authenticate; if it fails and the API allows anonymous access,
+                # derive an anonymous identity from the client IP.
+                try:
+                    payload = await auth_required(request)
+                    username = payload.get('sub')
+                    # Authenticated user on an optional-auth API — apply user-level limits
+                    await limit_and_throttle(request)
+                except HTTPException:
+                    if bool(resolved_api.get('api_anonymous_allowed')):
+                        from utils.ip_policy_util import _get_client_ip
+                        from utils.security_settings_util import get_cached_settings as _gcs
+                        # Only trust X-Forwarded-For when the operator has explicitly
+                        # listed trusted proxies.  With an empty list the default
+                        # would trust *any* XFF header, allowing credit-bucket spoofing.
+                        _xff_trusted = bool(((_gcs() or {}).get('xff_trusted_proxies')))
+                        client_ip = _get_client_ip(request, trust_xff=_xff_trusted)
+                        if client_ip:
+                            username = f'anon:{client_ip}'
+                            logger.info(f'{request_id} | Anonymous identity: {username}')
+                        else:
+                            # IP unresolvable — proceed without anonymous identity so
+                            # unknown-IP clients don't share one credit bucket.
+                            logger.warning(f'{request_id} | Anonymous: client IP unknown, no identity assigned')
+                    # else: api_auth_required=False means no auth needed — proceed
+                    # without a username (original behaviour, no 401).
         logger.info(
             f'Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]}ms'
         )
@@ -399,18 +441,26 @@ async def gateway(request: Request, path: str):
             logger.info(
                 f'Username: {username} | From: {request.client.host}:{request.client.port}'
             )
+        # Per-API rate limit (applied after auth/scope checks, covers all callers)
+        if resolved_api and resolved_api.get('api_rate_limit'):
+            from utils.limit_throttle_util import enforce_api_rate_limit as _enforce_api_rl
+            await _enforce_api_rl(request, resolved_api)
         return process_response(
             await GatewayService.rest_gateway(username, request, request_id, start_time, path),
             'rest',
         )
     except HTTPException as e:
         logger.warning(f"Request failed (HTTP {e.status_code}): {e.detail}")
+        # Merge exception headers (e.g., Retry-After, X-RateLimit-*) into response
+        resp_headers: dict = {'request_id': request_id}
+        if e.headers:
+            resp_headers.update(e.headers)
         return process_response(
             ResponseModel(
                 status_code=e.status_code,
-                response_headers={'request_id': request_id},
-                error_code=e.detail,
-                error_message=e.detail,
+                response_headers=resp_headers,
+                error_code=str(e.detail),
+                error_message=str(e.detail),
             ).dict(),
             'rest',
         )
@@ -697,6 +747,23 @@ async def soap_gateway(request: Request, path: str):
                 except Exception:
                     pass
                 await enforce_pre_request_limit(request, username)
+                # Enforce required OAuth2 scopes when configured
+                try:
+                    _req_scopes_soap = api.get('api_required_scopes') or []
+                    if _req_scopes_soap and payload:
+                        from utils.auth_util import extract_token_scopes as _ets_soap
+                        if not set(_req_scopes_soap).issubset(_ets_soap(payload)):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW018',
+                                    error_message='Forbidden: insufficient token scopes',
+                                ).dict(),
+                                'soap',
+                            )
+                except Exception:
+                    pass
             else:
                 pass
         logger.info(
@@ -813,6 +880,23 @@ async def grpc_gateway(request: Request, path: str):
                             )
                     
                     await enforce_pre_request_limit(request, username)
+                    # Enforce required OAuth2 scopes when configured
+                    try:
+                        _req_scopes_grpc1 = api.get('api_required_scopes') or []
+                        if _req_scopes_grpc1 and payload:
+                            from utils.auth_util import extract_token_scopes as _ets_grpc1
+                            if not set(_req_scopes_grpc1).issubset(_ets_grpc1(payload)):
+                                return process_response(
+                                    ResponseModel(
+                                        status_code=403,
+                                        response_headers={'request_id': request_id},
+                                        error_code='GTW018',
+                                        error_message='Forbidden: insufficient token scopes',
+                                    ).dict(),
+                                    'grpc',
+                                )
+                    except Exception:
+                        pass
                 except HTTPException as e:
                     # Map HTTP exceptions (like 403 from sub check, 429 from limits) to gRPC response?
                     # process_response with 'grpc' will handle it.
@@ -1009,6 +1093,23 @@ async def graphql_gateway(request: Request, path: str):
                 except Exception:
                     pass
                 await enforce_pre_request_limit(request, username)
+                # Enforce required OAuth2 scopes when configured
+                try:
+                    _req_scopes_gql = api.get('api_required_scopes') or []
+                    if _req_scopes_gql and payload:
+                        from utils.auth_util import extract_token_scopes as _ets_gql
+                        if not set(_req_scopes_gql).issubset(_ets_gql(payload)):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW018',
+                                    error_message='Forbidden: insufficient token scopes',
+                                ).dict(),
+                                'graphql',
+                            )
+                except Exception:
+                    pass
             else:
                 pass
         logger.info(
@@ -1305,6 +1406,23 @@ async def grpc_gateway(request: Request, path: str):
                             )
                     
                     await enforce_pre_request_limit(request, username)
+                    # Enforce required OAuth2 scopes when configured
+                    try:
+                        _req_scopes_grpc2 = api.get('api_required_scopes') or []
+                        if _req_scopes_grpc2 and payload:
+                            from utils.auth_util import extract_token_scopes as _ets_grpc2
+                            if not set(_req_scopes_grpc2).issubset(_ets_grpc2(payload)):
+                                return process_response(
+                                    ResponseModel(
+                                        status_code=403,
+                                        response_headers={'request_id': request_id},
+                                        error_code='GTW018',
+                                        error_message='Forbidden: insufficient token scopes',
+                                    ).dict(),
+                                    'grpc',
+                                )
+                    except Exception:
+                        pass
                 except HTTPException as e:
                     # Map HTTP exceptions (like 403 from sub check, 429 from limits) to gRPC response?
                     # process_response with 'grpc' will handle it.
@@ -1340,3 +1458,261 @@ async def grpc_gateway(request: Request, path: str):
             ).dict(),
             'grpc',
         )
+
+
+# ---------------------------------------------------------------------------
+# Host-based transparent routing
+# ---------------------------------------------------------------------------
+# This router is registered LAST in doorman.py so the catch-all /{path:path}
+# only activates for requests that match no earlier route.  When the incoming
+# Host header matches an api_hostname configured on an API, the full request
+# path is forwarded verbatim to the upstream — making the gateway wire-
+# compatible with the real upstream service.
+# ---------------------------------------------------------------------------
+
+host_gateway_router = APIRouter()
+
+
+@host_gateway_router.api_route(
+    '/{path:path}',
+    methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'],
+    description='Transparent host-based gateway (catch-all)',
+    response_model=ResponseModel,
+    include_in_schema=False,
+)
+async def host_gateway(request: Request, path: str):
+    request_id = (
+        getattr(request.state, 'request_id', None)
+        or request.headers.get('X-Request-ID')
+        or str(uuid.uuid4())
+    )
+    start_time = time.time() * 1000
+    try:
+        # Guard: this catch-all must never intercept standard gateway or platform
+        # traffic.  Those paths are handled by earlier routers; reaching here for
+        # them means a route was unregistered or mistyped — return a clean 404
+        # rather than a confusing "hostname not configured" error.
+        if request.url.path.startswith(('/api/', '/platform/')):
+            return process_response(
+                ResponseModel(
+                    status_code=404,
+                    response_headers={'request_id': request_id},
+                    error_code='GTW000',
+                    error_message='Not found',
+                ).dict(),
+                'rest',
+            )
+
+        # --- 1. Resolve API by Host header ---
+        raw_host = request.headers.get('host', '')
+        # Normalise to bare hostname (no port, no brackets):
+        #   "foo.com:8080"  → "foo.com"
+        #   "[::1]:8080"    → "::1"   (strip brackets AND port)
+        #   "[::1]"         → "::1"   (strip brackets, no port)
+        if raw_host.startswith('['):
+            # IPv6 literal: "[addr]:port" or "[addr]"
+            hostname = raw_host.split(']')[0].lstrip('[')
+        elif ':' in raw_host:
+            hostname = raw_host.rsplit(':', 1)[0]
+        else:
+            hostname = raw_host
+
+        from utils.api_util import get_api_by_hostname
+        resolved_api = await get_api_by_hostname(hostname)
+        if not resolved_api:
+            # Not a known hostname — return 404 cleanly
+            return process_response(
+                ResponseModel(
+                    status_code=404,
+                    response_headers={'request_id': request_id},
+                    error_code='GTW001',
+                    error_message='No API configured for this hostname',
+                ).dict(),
+                'rest',
+            )
+
+        logger.info(f"{request_id} | HOST GATEWAY: {hostname} → {resolved_api.get('api_name')}")
+
+        # --- 2. Enforce API-level IP policy ---
+        try:
+            enforce_api_ip_policy(request, resolved_api)
+        except HTTPException as e:
+            return process_response(
+                ResponseModel(
+                    status_code=e.status_code,
+                    error_code=e.detail,
+                    error_message='IP restricted',
+                ).dict(),
+                'rest',
+            )
+
+        # --- 3. Auth / rate-limit block (mirrors gateway() logic) ---
+        username = None
+        api_public = bool(resolved_api.get('api_public'))
+        api_auth_required = (
+            bool(resolved_api.get('api_auth_required'))
+            if resolved_api.get('api_auth_required') is not None
+            else True
+        )
+
+        if not api_public:
+            if api_auth_required:
+                await subscription_required(request)
+                await group_required(request)
+                await limit_and_throttle(request)
+                payload = await auth_required(request)
+                username = payload.get('sub')
+                try:
+                    allowed_roles = resolved_api.get('api_allowed_roles') or []
+                    if allowed_roles:
+                        from services.user_service import UserService as _US
+                        u = await _US.get_user_by_username_helper(username)
+                        if (u.get('role') or '') not in set(allowed_roles):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW014',
+                                    error_message='Forbidden: role not allowed for this API',
+                                ).dict(),
+                                'rest',
+                            )
+                except Exception:
+                    pass
+                await enforce_pre_request_limit(request, username)
+                # Enforce required OAuth2 scopes when configured
+                try:
+                    _req_scopes_hg = resolved_api.get('api_required_scopes') or []
+                    if _req_scopes_hg and payload:
+                        from utils.auth_util import extract_token_scopes as _ets_hg
+                        if not set(_req_scopes_hg).issubset(_ets_hg(payload)):
+                            return process_response(
+                                ResponseModel(
+                                    status_code=403,
+                                    response_headers={'request_id': request_id},
+                                    error_code='GTW018',
+                                    error_message='Forbidden: insufficient token scopes',
+                                ).dict(),
+                                'rest',
+                            )
+                except Exception:
+                    pass
+            else:
+                # api_auth_required = False — same optional-auth / anonymous logic as gateway()
+                try:
+                    payload = await auth_required(request)
+                    username = payload.get('sub')
+                    await limit_and_throttle(request)
+                except HTTPException:
+                    if bool(resolved_api.get('api_anonymous_allowed')):
+                        from utils.ip_policy_util import _get_client_ip
+                        from utils.security_settings_util import get_cached_settings as _gcs_hg
+                        _xff_trusted_hg = bool(((_gcs_hg() or {}).get('xff_trusted_proxies')))
+                        client_ip = _get_client_ip(request, trust_xff=_xff_trusted_hg)
+                        if client_ip:
+                            username = f'anon:{client_ip}'
+                            logger.info(f'{request_id} | HOST GATEWAY anonymous identity: {username}')
+                        else:
+                            logger.warning(f'{request_id} | HOST GATEWAY: client IP unknown, no identity assigned')
+                    # else: api_auth_required=False means no auth needed — proceed
+                    # without a username (original behaviour, no 401).
+
+        # --- 4. Pick upstream server and construct transparent URL ---
+        from utils import routing_util as _routing_util
+        client_key = request.headers.get('client-key')
+        # endpoint_uri is the full request path — no prefix stripping (transparent proxy)
+        endpoint_uri = request.url.path or '/'
+        server = await _routing_util.pick_upstream_server(
+            resolved_api, request.method, endpoint_uri, client_key
+        )
+        if not server:
+            return process_response(
+                ResponseModel(
+                    status_code=503,
+                    response_headers={'request_id': request_id},
+                    error_code='GTW001',
+                    error_message='No upstream servers configured for this API',
+                ).dict(),
+                'rest',
+            )
+
+        upstream_url = server.rstrip('/') + '/' + endpoint_uri.lstrip('/')
+        method = request.method.upper()
+
+        # --- 5. Credit check (must happen here — rest_gateway skips it when url is pre-set) ---
+        if resolved_api.get('api_credits_enabled') and username and not bool(resolved_api.get('api_public')):
+            from utils import credit_util as _credit_util
+            _is_anon_hg = isinstance(username, str) and username.startswith('anon:')
+            _credit_group_hg = (
+                resolved_api.get('api_anonymous_credit_group') or resolved_api.get('api_credit_group')
+                if _is_anon_hg
+                else resolved_api.get('api_credit_group')
+            )
+            if _is_anon_hg and _credit_group_hg:
+                _init_ok_hg = await _credit_util.ensure_anonymous_credits(_credit_group_hg, username)
+                if not _init_ok_hg:
+                    pass  # transient DB error — allow through without deducting
+                elif not await _credit_util.deduct_credit(_credit_group_hg, username):
+                    return process_response(
+                        ResponseModel(
+                            status_code=401,
+                            response_headers={'request_id': request_id},
+                            error_code='GTW008',
+                            error_message='User does not have any credits',
+                        ).dict(),
+                        'rest',
+                    )
+            elif _credit_group_hg and not await _credit_util.deduct_credit(_credit_group_hg, username):
+                return process_response(
+                    ResponseModel(
+                        status_code=401,
+                        response_headers={'request_id': request_id},
+                        error_code='GTW008',
+                        error_message='User does not have any credits',
+                    ).dict(),
+                    'rest',
+                )
+
+        # Synthetic path for rest_gateway's api re-resolution in the retry/credit branch:
+        # pass just "api_name/api_version" so it resolves the API doc without needing
+        # endpoint parts in the path.
+        synthetic_path = f"{resolved_api.get('api_name')}/{resolved_api.get('api_version')}"
+
+        # --- 6. Delegate to GatewayService (reuses all header/transform/HTTP logic) ---
+        # NOTE: url and method are pre-set so rest_gateway takes the else-branch, which
+        # skips endpoint resolution and credit deduction (already done above).
+        return process_response(
+            await GatewayService.rest_gateway(
+                username, request, request_id, start_time,
+                path=synthetic_path,
+                url=upstream_url,
+                method=method,
+            ),
+            'rest',
+        )
+
+    except HTTPException as e:
+        logger.warning(f"{request_id} | HOST GATEWAY failed (HTTP {e.status_code}): {e.detail}")
+        return process_response(
+            ResponseModel(
+                status_code=e.status_code,
+                response_headers={'request_id': request_id},
+                error_code=e.detail,
+                error_message=e.detail,
+            ).dict(),
+            'rest',
+        )
+    except Exception as e:
+        logger.critical(f'{request_id} | HOST GATEWAY unexpected error: {str(e)}', exc_info=True)
+        return process_response(
+            ResponseModel(
+                status_code=500,
+                response_headers={'request_id': request_id},
+                error_code='GTW999',
+                error_message='An unexpected error occurred',
+            ).dict(),
+            'rest',
+        )
+    finally:
+        end_time = time.time() * 1000
+        logger.info(f'{request_id} | HOST GATEWAY total time: {str(end_time - start_time)}ms')

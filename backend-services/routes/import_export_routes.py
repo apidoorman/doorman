@@ -2,36 +2,19 @@ import csv
 import io
 import json
 import logging
-import uuid
-import time
-from typing import Any, List
 
-from fastapi import APIRouter, Request, Response, UploadFile, File, Form, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Request, Response, UploadFile, File, Query
 
 from models.response_model import ResponseModel
-from utils.async_db import (
-    db_delete_one,
-    db_find_list,
-    db_insert_one,
-    db_find_one,
-    db_insert_many
-)
+from routes.api_builder_routes import get_builder_collection, get_builder_table_meta
+from utils.async_db import db_find_list, db_insert_many
 from utils.auth_util import auth_required
-from utils.constants import Headers, Messages, Roles
-from utils.database_async import db as async_db
+from utils.constants import Roles
 from utils.role_util import platform_role_required_bool
 from utils.response_util import respond_rest
 
 import_export_router = APIRouter()
 logger = logging.getLogger('doorman.gateway')
-
-TABLE_REGISTRY_COLLECTION = 'api_builder_tables'
-
-def _get_collection(name: str):
-    if hasattr(async_db, 'get_collection'):
-        return async_db.get_collection(name)
-    return getattr(async_db, name)
 
 @import_export_router.get('/tables/{collection_name}/export', description='Export table data')
 async def export_table(collection_name: str, request: Request, format: str = Query('json', regex='^(json|csv)$')) -> Response:
@@ -42,9 +25,12 @@ async def export_table(collection_name: str, request: Request, format: str = Que
         # Check permissions (Builder access)
         if not await platform_role_required_bool(username, Roles.VIEW_BUILDER_TABLES):
              return respond_rest(ResponseModel(status_code=403, error_code='EXP403', error_message='Permission denied'))
+
+        if not await get_builder_table_meta(collection_name):
+             return respond_rest(ResponseModel(status_code=404, error_code='EXP404', error_message='Table not found'))
         
         # Get data
-        coll = _get_collection(collection_name)
+        coll = get_builder_collection(collection_name)
         items = await db_find_list(coll, {})
         
         # Safe JSON serialization
@@ -102,20 +88,24 @@ async def import_table(
         if not await platform_role_required_bool(username, Roles.MANAGE_APIS): # stricter for import
              return respond_rest(ResponseModel(status_code=403, error_code='IMP403', error_message='Permission denied'))
 
+        if not await get_builder_table_meta(collection_name):
+             return respond_rest(ResponseModel(status_code=404, error_code='IMP404', error_message='Table not found'))
+
         content = await file.read()
         items = []
 
-        if file.filename.endswith('.json'):
+        filename = str(file.filename or '').lower()
+        if filename.endswith('.json'):
             try:
                 data = json.loads(content)
                 if isinstance(data, list):
-                    items = data
+                    items = [item for item in data if isinstance(item, dict)]
                 elif isinstance(data, dict):
                      items = [data]
             except json.JSONDecodeError:
                 return respond_rest(ResponseModel(status_code=400, error_code='IMP400', error_message='Invalid JSON'))
 
-        elif file.filename.endswith('.csv'):
+        elif filename.endswith('.csv'):
             try:
                 # Decode bytes to string
                 text = content.decode('utf-8')
@@ -150,7 +140,7 @@ async def import_table(
              return respond_rest(ResponseModel(status_code=400, error_code='IMP400', error_message='No items found in file'))
 
         # Insert items
-        coll = _get_collection(collection_name)
+        coll = get_builder_collection(collection_name)
         # Remove _id if it exists to avoid collision? Or keep it?
         # If _id exists, db_insert might fail with DuplicateKey.
         # We'll use insert, and if _id is present, we try. If it fails, report error?

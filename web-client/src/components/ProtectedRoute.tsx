@@ -16,12 +16,12 @@ export function ProtectedRoute({
   fallback
 }: ProtectedRouteProps) {
   const DEBUG = process.env.NODE_ENV !== 'production'
-  const { isAuthenticated, hasUIAccess, canAccessPage } = useAuth()
+  const { isAuthenticated, authResolved, hasUIAccess, canAccessPage } = useAuth()
   const router = useRouter()
   const [redirecting, setRedirecting] = useState(false)
 
   useEffect(() => {
-    if (redirecting) return
+    if (!authResolved || redirecting) return
 
     if (!isAuthenticated) {
       setRedirecting(true)
@@ -35,9 +35,9 @@ export function ProtectedRoute({
       router.push('/403')
       return
     }
-  }, [isAuthenticated, hasUIAccess, router, redirecting])
+  }, [authResolved, isAuthenticated, hasUIAccess, router, redirecting])
 
-  if (redirecting) {
+  if (!authResolved || redirecting) {
     return fallback || (
       <div className="min-h-screen bg-gray-50 dark:bg-dark-bg flex items-center justify-center">
         <div className="max-w-md w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6">

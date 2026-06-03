@@ -56,12 +56,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [theme, setTheme] = useState('light')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
-  const { isAuthenticated, hasUIAccess, user, permissions, logout } = useAuth()
+  const { isAuthenticated, authResolved, hasUIAccess, user, permissions, logout } = useAuth()
   const router = useRouter()
+  const isPublicLayoutRoute = pathname === '/login' || pathname === '/403'
 
   useEffect(() => {
     // Only redirect when outside public routes
-    if (pathname === '/login' || pathname === '/403') return
+    if (isPublicLayoutRoute || !authResolved) return
     if (!isAuthenticated) {
       if (DEBUG) console.log('Layout - Redirecting to login:', { pathname })
       router.push('/login')
@@ -72,7 +73,22 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       router.push('/403')
       return
     }
-  }, [pathname, isAuthenticated, hasUIAccess, router])
+  }, [pathname, isPublicLayoutRoute, authResolved, isAuthenticated, hasUIAccess, router])
+
+  if (!isPublicLayoutRoute && !authResolved) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-dark-bg flex items-center justify-center">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              Loading...
+            </h2>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const filteredMenuItems = menuItems.filter(item => {
     if (!item.permission) return true

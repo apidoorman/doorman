@@ -145,7 +145,19 @@ async def limit_and_throttle(request: Request):
                         except Exception:
                             count = await _incr_window_counter(_fallback_counter, key, window_seconds)
                         if count > int(limit):
-                            raise HTTPException(status_code=429, detail='Rate limit exceeded')
+                            retry_after = window_seconds - (now % window_seconds)
+                            reset_time = (window_index + 1) * window_seconds
+                            raise HTTPException(
+                                status_code=429,
+                                detail='Rate limit exceeded',
+                                headers={
+                                    'Retry-After': str(retry_after),
+                                    'X-RateLimit-Limit': str(int(limit)),
+                                    'X-RateLimit-Remaining': '0',
+                                    'X-RateLimit-Reset': str(reset_time),
+                                    'X-RateLimit-Scope': 'user-tier',
+                                },
+                            )
                 try:
                     request.state.tier_limits_enforced = True
                     request.state.tier_limits_user_id = username
@@ -185,7 +197,22 @@ async def limit_and_throttle(request: Request):
         except Exception:
             pass
         if count > rate:
-            raise HTTPException(status_code=429, detail='Rate limit exceeded')
+            now_s = now_ms // 1000
+            retry_after = window - (now_s % window)
+            reset_time = (window_index + 1) * window  # window_index is in window units (ms-based)
+            # Recompute a second-resolution reset time to be safe
+            reset_time_s = (now_s // window + 1) * window
+            raise HTTPException(
+                status_code=429,
+                detail='Rate limit exceeded',
+                headers={
+                    'Retry-After': str(retry_after),
+                    'X-RateLimit-Limit': str(rate),
+                    'X-RateLimit-Remaining': '0',
+                    'X-RateLimit-Reset': str(reset_time_s),
+                    'X-RateLimit-Scope': 'user',
+                },
+            )
 
     # Throttle activates only when explicitly enabled or relevant fields are configured
     throttle_enabled = (
@@ -274,7 +301,7 @@ def reset_counters():
         pass
 
 
-async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
+async def limit_by_ip(request: Request, limit: int = 10, window: int = 60, *, bypass_login_disabled_flag: bool = False):
     """IP-based rate limiting for endpoints that don't require authentication.
 
     Prevents brute force attacks by limiting requests per IP address.
@@ -307,7 +334,7 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
         await limit_by_ip(request, limit=5, window=300)
     """
     try:
-        if os.getenv('LOGIN_IP_RATE_DISABLED', 'false').lower() == 'true':
+        if not bypass_login_disabled_flag and os.getenv('LOGIN_IP_RATE_DISABLED', 'false').lower() == 'true':
             now = int(time.time())
             return {'limit': limit, 'remaining': limit, 'reset': now + window, 'window': window}
         client_ip = _get_client_ip(request, trust_xff=True)
@@ -380,3 +407,90 @@ async def limit_by_ip(request: Request, limit: int = 10, window: int = 60):
             'reset': int(time.time()) + window,
             'window': window,
         }
+
+
+async def enforce_api_rate_limit(request: Request, api: dict) -> dict | None:
+    """Enforce a per-API rate limit when ``api_rate_limit`` is configured.
+
+    This limit is applied across *all* callers of the API regardless of
+    authentication status, making it useful for protecting expensive upstream
+    services from aggregate overload.
+
+    Counter keys are scoped to ``api_name/api_version`` so each API version
+    has an independent quota.
+
+    Args:
+        request: The incoming FastAPI request (used to reach ``app.state.redis``).
+        api:     The resolved API document from the database / cache.
+
+    Returns:
+        A dict ``{'limit', 'remaining', 'reset', 'window'}`` on success, or
+        ``None`` when no API-level limit is configured.
+
+    Raises:
+        HTTPException(429): With ``Retry-After`` and ``X-RateLimit-*`` headers
+            when the limit is exceeded.
+    """
+    api_limit_raw = api.get('api_rate_limit')
+    if not api_limit_raw:
+        return None
+
+    try:
+        api_limit = int(api_limit_raw)
+    except (TypeError, ValueError):
+        return None
+
+    if api_limit <= 0:
+        return None
+
+    api_window = 60
+    try:
+        api_window = max(1, int(api.get('api_rate_limit_window') or 60))
+    except (TypeError, ValueError):
+        pass
+
+    api_name = api.get('api_name', 'unknown')
+    api_version = api.get('api_version', 'v1')
+
+    now = int(time.time())
+    bucket = now // api_window
+    key = f'api_rate_limit:{api_name}:{api_version}:{bucket}'
+
+    redis_client = getattr(request.app.state, 'redis', None)
+    client = redis_client or _fallback_counter
+    try:
+        count = await client.incr(key)
+        if count == 1:
+            await client.expire(key, api_window)
+    except Exception as exc:
+        logger.warning(f'API rate limit Redis error, using fallback: {exc}')
+        count = await _fallback_counter.incr(key)
+        if count == 1:
+            await _fallback_counter.expire(key, api_window)
+
+    remaining = max(0, api_limit - count)
+    reset_time = (bucket + 1) * api_window
+    retry_after = api_window - (now % api_window)
+
+    if count > api_limit:
+        logger.warning(
+            f'API rate limit exceeded for {api_name}/{api_version}: {count}/{api_limit} in {api_window}s'
+        )
+        raise HTTPException(
+            status_code=429,
+            detail='API rate limit exceeded',
+            headers={
+                'Retry-After': str(retry_after),
+                'X-RateLimit-Limit': str(api_limit),
+                'X-RateLimit-Remaining': '0',
+                'X-RateLimit-Reset': str(reset_time),
+                'X-RateLimit-Scope': 'api',
+            },
+        )
+
+    return {
+        'limit': api_limit,
+        'remaining': remaining,
+        'reset': reset_time,
+        'window': api_window,
+    }

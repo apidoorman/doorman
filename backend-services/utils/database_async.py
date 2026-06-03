@@ -290,6 +290,7 @@ class AsyncDatabase:
             [
                 IndexModel([('api_id', ASCENDING)], unique=True),
                 IndexModel([('api_name', ASCENDING), ('api_version', ASCENDING)]),
+                IndexModel([('api_hostname', ASCENDING)], unique=True, sparse=True),
             ]
         )
 
