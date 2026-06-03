@@ -720,9 +720,13 @@ class GatewayService:
                     orig_auth = request.headers.get('Authorization') or request.headers.get(
                         'authorization'
                     )
+                    auth_allowed = any(
+                        str(h).lower() == 'authorization'
+                        for h in ((api.get('api_allowed_headers') or []) if api else [])
+                    )
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
-                    elif orig_auth is not None and str(orig_auth).strip() != '':
+                    elif auth_allowed and orig_auth is not None and str(orig_auth).strip() != '':
                         headers['Authorization'] = orig_auth
                 except Exception:
                     pass
@@ -1160,9 +1164,13 @@ class GatewayService:
                     orig_auth = request.headers.get('Authorization') or request.headers.get(
                         'authorization'
                     )
+                    auth_allowed = any(
+                        str(h).lower() == 'authorization'
+                        for h in ((api.get('api_allowed_headers') or []) if api else [])
+                    )
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
-                    elif orig_auth is not None and str(orig_auth).strip() != '':
+                    elif auth_allowed and orig_auth is not None and str(orig_auth).strip() != '':
                         headers['Authorization'] = orig_auth
                 except Exception:
                     pass
@@ -1347,9 +1355,13 @@ class GatewayService:
                     orig_auth = request.headers.get('Authorization') or request.headers.get(
                         'authorization'
                     )
+                    auth_allowed = any(
+                        str(h).lower() == 'authorization'
+                        for h in (api.get('api_allowed_headers') or [])
+                    )
                     if source_val is not None and str(source_val).strip() != '':
                         headers['Authorization'] = source_val
-                    elif orig_auth is not None and str(orig_auth).strip() != '':
+                    elif auth_allowed and orig_auth is not None and str(orig_auth).strip() != '':
                         headers['Authorization'] = orig_auth
                 except Exception:
                     pass
