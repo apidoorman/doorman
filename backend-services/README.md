@@ -87,3 +87,11 @@ We maintain high stability with over 480 integration tests.
 ---
 
 Built by **Doorman Dev, LLC**. Licensed under **Apache License 2.0**.
+
+## Rust Gateway Migration
+
+The Python service remains the owner of `/platform/*` and the executable parity
+reference for `/api/*`. In the combined container it listens on
+`127.0.0.1:${PYTHON_INTERNAL_PORT:-3002}` while `gateway-rs` owns public port
+`3001`. `GATEWAY_RUST_MODE=off` proxies all traffic to Python; Rust-owned gateway
+routes are enabled incrementally after parity testing.

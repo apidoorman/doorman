@@ -27,13 +27,24 @@ Run a local demo instance in seconds.
 
 ```bash
 # Clone and launch instantly
-cp .env.example .env
+cp .env.demo .env
 docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
 ```
 
 - **Web UI**: [http://localhost:3000](http://localhost:3000)
+- **API**: [http://localhost:3001](http://localhost:3001)
 - **Admin**: `demo@doorman.dev` / `DemoPassword123!`
 - **Mode**: Memory mode (no external DB)
+
+### Running Live Tests
+
+With the demo running, run the full live test suite:
+
+```bash
+cd backend-services/live-tests && pytest
+```
+
+The tests auto-detect the backend port and credentials from `.env` — no extra env vars needed.
 
 ---
 
@@ -72,6 +83,8 @@ docker compose --profile production up -d
 | `DOORMAN_ADMIN_PASSWORD` | Yes | Admin password (min 12 chars) |
 | `JWT_SECRET_KEY` | Yes | Secret for signing access tokens |
 | `NEXT_PUBLIC_GATEWAY_URL` | No | Frontend API target (Defaults to same origin) |
+| `GATEWAY_RUST_MODE` | No | `off`, `shadow`, `canary`, or `on`; defaults to `off` |
+| `PYTHON_INTERNAL_PORT` | No | Internal Python `/platform/*` listener; defaults to `3002` |
 
 ### Persistence & Performance
 - Redis: set `MEM_OR_EXTERNAL=REDIS` to enable caching/rate limiting.
@@ -84,7 +97,8 @@ docker compose --profile production up -d
 
 ```text
 doorman/
-├── backend-services/    # Python Gateway Engine (FastAPI)
+├── gateway-rs/          # Rust public gateway and Python platform proxy
+├── backend-services/    # Python platform APIs and gateway parity reference
 ├── web-client/         # Next.js Dashboard
 ├── user-docs/          # Technical Guides & Runbooks
 ├── scripts/            # Build & Maintenance tools

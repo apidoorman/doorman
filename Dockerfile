@@ -1,4 +1,10 @@
-# Multi-service image: Python backend (Doorman) + Next.js web client
+FROM rust:1.88-slim-bookworm AS rust-builder
+WORKDIR /build/gateway-rs
+COPY gateway-rs/Cargo.toml gateway-rs/Cargo.lock gateway-rs/rust-toolchain.toml ./
+COPY gateway-rs/src ./src
+RUN cargo build --locked --release
+
+# Multi-service image: Rust gateway + Python platform service + Next.js web client
 # Supports env files via entrypoint; override envs at runtime as needed.
 
 FROM python:3.11-slim AS base
@@ -47,6 +53,8 @@ RUN echo "export NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS}" > /
     . /tmp/build-env.sh && \
     npm run build && \
     npm prune --omit=dev
+
+COPY --from=rust-builder /build/gateway-rs/target/release/doorman-gateway /usr/local/bin/doorman-gateway
 
 # Runtime configuration
 WORKDIR /app

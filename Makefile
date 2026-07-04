@@ -2,13 +2,13 @@ SHELL := /bin/bash
 
 # Read configuration from .env files
 PORT ?= $(shell grep '^PORT=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^PORT=' .env 2>/dev/null | cut -d'=' -f2 || echo 3001)
-HTTPS_ONLY ?= $(shell grep '^HTTPS_ONLY=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^HTTPS_ONLY=' .env 2>/dev/null | cut -d'=' -f2 || echo false)
 ADMIN_EMAIL ?= $(shell grep '^DOORMAN_ADMIN_EMAIL=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^DOORMAN_ADMIN_EMAIL=' .env 2>/dev/null | cut -d'=' -f2)
 ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^DOORMAN_ADMIN_PASSWORD=' .env 2>/dev/null | cut -d'=' -f2)
 
-# Construct BASE_URL from PORT and HTTPS_ONLY (can still override on CLI)
-PROTOCOL := $(shell [ "$(HTTPS_ONLY)" = "true" ] && echo "https" || echo "http")
-BASE_URL ?= $(PROTOCOL)://localhost:$(PORT)
+# Construct BASE_URL from PORT (can still override on CLI).
+# Always http:// — HTTPS_ONLY is a server-side cookie/CSRF setting;
+# the server itself listens on plain HTTP (TLS terminated at reverse proxy).
+BASE_URL ?= http://localhost:$(PORT)
 
 # Set to 1 when running tests against Doorman in Docker (affects test server host references)
 DOORMAN_IN_DOCKER ?= 0
@@ -100,6 +100,7 @@ clean:
 	@find . -type f -name ".DS_Store" -delete || true
 	@rm -rf backend-services/platform-logs/*.log backend-services/doorman.pid doorman.pid uvicorn.pid || true
 	@rm -rf web-client/.next || true
+	@rm -rf gateway-rs/target || true
 	@rm -f pytest_backend_verbose.log || true
 	@echo "Done."
 
@@ -108,3 +109,24 @@ clean-deep: clean
 	@echo "Removing generated dev artifacts..."
 	@rm -rf generated backend-services/generated || true
 	@echo "Done."
+
+.PHONY: rust-test rust-clippy rust-fmt-check parity gateway-load
+
+rust-test:
+	cargo test --manifest-path gateway-rs/Cargo.toml --locked
+
+rust-clippy:
+	cargo clippy --manifest-path gateway-rs/Cargo.toml --locked --all-targets --all-features -- -D warnings
+
+rust-fmt-check:
+	cargo fmt --manifest-path gateway-rs/Cargo.toml --all -- --check
+
+parity: rust-test
+	cd backend-services && pytest -q \
+	  tests/test_gateway_flows.py \
+	  tests/test_gateway_routing_limits.py \
+	  tests/test_request_id_propagation.py \
+	  tests/test_response_envelope_and_headers.py
+
+gateway-load:
+	bash scripts/run_perf_check.sh

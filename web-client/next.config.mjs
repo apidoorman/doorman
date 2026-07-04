@@ -1,4 +1,3 @@
-import type { NextConfig } from 'next'
 
 const isDemo = process.env.DEMO_MODE === 'true'
 const gatewayTarget = process.env.GATEWAY_INTERNAL_URL || 'http://localhost:3001'
@@ -25,10 +24,10 @@ const securityHeaders = [
 function buildRemotePatterns() {
   const env = process.env.NEXT_IMAGE_DOMAINS || ''
   const hosts = env.split(',').map(s => s.trim()).filter(Boolean)
-  return hosts.map(hostname => ({ protocol: 'https' as const, hostname }))
+  return hosts.map(hostname => ({ protocol: 'https', hostname }))
 }
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   // Harden Next/Image to mitigate known issues around the optimization route

@@ -2320,6 +2320,7 @@ def restart() -> None:
 
 def run() -> None:
     server_port = int(os.getenv('PORT', 5001))
+    server_host = os.getenv('HOST', '0.0.0.0')
     max_threads = multiprocessing.cpu_count()
     env_threads = int(os.getenv('THREADS', max_threads))
     num_threads = min(env_threads, max_threads)
@@ -2338,7 +2339,7 @@ def run() -> None:
     )
     uvicorn.run(
         'doorman:doorman',
-        host='0.0.0.0',
+        host=server_host,
         port=server_port,
         reload=os.getenv('DEV_RELOAD', 'false').lower() == 'true',
         reload_excludes=['venv/*', 'logs/*'],

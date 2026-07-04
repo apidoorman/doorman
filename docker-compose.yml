@@ -25,6 +25,9 @@ services:
       - .env
     environment:
       # Memory-mode dump settings (work for localhost and Docker on AWS)
+      GATEWAY_RUST_ENABLED: ${GATEWAY_RUST_ENABLED:-false}
+      GATEWAY_RUST_MODE: ${GATEWAY_RUST_MODE:-off}
+      PYTHON_INTERNAL_PORT: ${PYTHON_INTERNAL_PORT:-3002}
       MEM_DUMP_PATH: ${MEM_DUMP_PATH:-/app/backend-services/generated/memory_dump.bin}
       MEM_AUTO_SAVE_ENABLED: ${MEM_AUTO_SAVE_ENABLED:-true}
       MEM_AUTO_SAVE_FREQ: ${MEM_AUTO_SAVE_FREQ:-300}

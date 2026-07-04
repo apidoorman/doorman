@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doorman.dev/schemas/gateway-decision-trace-v1.json",
+  "title": "Doorman Gateway Decision Trace",
+  "type": "object",
+  "required": ["schema_version", "request_id", "protocol", "decisions", "mutations"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "request_id": { "type": "string", "minLength": 1 },
+    "protocol": { "enum": ["rest", "soap", "graphql", "grpc", "operations"] },
+    "decisions": { "type": "array", "items": { "type": "object" } },
+    "mutations": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": false
+}
