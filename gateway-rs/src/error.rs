@@ -12,6 +12,8 @@ pub enum GatewayError {
     Proxy(#[from] reqwest::Error),
     #[error("failed to build proxy response: {0}")]
     Response(#[from] http::Error),
+    #[error("failed to read gateway request body: {0}")]
+    Body(#[from] axum::Error),
 }
 
 #[derive(Serialize)]

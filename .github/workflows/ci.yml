@@ -62,3 +62,25 @@ jobs:
         env:
           NEXT_PUBLIC_SERVER_URL: http://localhost:3001
         run: npm run build
+
+  rust-gateway:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt, clippy
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gateway-rs
+      - name: Check formatting
+        run: cargo fmt --manifest-path gateway-rs/Cargo.toml --all -- --check
+      - name: Run Clippy
+        run: cargo clippy --manifest-path gateway-rs/Cargo.toml --locked --all-targets --all-features -- -D warnings
+      - name: Run Rust tests
+        run: cargo test --manifest-path gateway-rs/Cargo.toml --locked

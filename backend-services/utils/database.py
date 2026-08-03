@@ -68,6 +68,7 @@ class Database:
         replica_set_name = os.getenv('MONGO_REPLICA_SET_NAME')
         mongo_user = os.getenv('MONGO_DB_USER')
         mongo_pass = os.getenv('MONGO_DB_PASSWORD')
+        mongo_auth_source = os.getenv('MONGO_DB_AUTH_SOURCE')
 
         if not mongo_user or not mongo_pass:
             raise RuntimeError(
@@ -78,10 +79,15 @@ class Database:
         host_list = [host.strip() for host in mongo_hosts.split(',') if host.strip()]
         self.db_existed = True
 
+        options = []
         if len(host_list) > 1 and replica_set_name:
-            connection_uri = f'mongodb://{mongo_user}:{mongo_pass}@{",".join(host_list)}/doorman?replicaSet={replica_set_name}'
-        else:
-            connection_uri = f'mongodb://{mongo_user}:{mongo_pass}@{",".join(host_list)}/doorman'
+            options.append(f'replicaSet={replica_set_name}')
+        if mongo_auth_source:
+            options.append(f'authSource={mongo_auth_source}')
+        query = f'?{"&".join(options)}' if options else ''
+        connection_uri = (
+            f'mongodb://{mongo_user}:{mongo_pass}@{",".join(host_list)}/doorman{query}'
+        )
 
         self.client = MongoClient(
             connection_uri, serverSelectionTimeoutMS=5000, maxPoolSize=100, minPoolSize=5

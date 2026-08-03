@@ -1,0 +1,90 @@
+{
+  "description": "Repeated REST calls advance endpoint upstream selection deterministically.",
+  "expected": {
+    "decisions": {
+      "retry_count": 0,
+      "route_source": "endpoint"
+    },
+    "response": {
+      "body": {
+        "body": null,
+        "headers": {
+          "x-request-id": "<request-id>"
+        },
+        "method": "GET",
+        "ok": true,
+        "params": {},
+        "url": "http://rr-b/rr"
+      },
+      "content_type": "application/json",
+      "headers": {
+        "content-type": "application/json",
+        "request_id": "<request-id>",
+        "x-request-id": "<request-id>"
+      },
+      "status": 200
+    },
+    "state_changes": {
+      "response_statuses": [
+        200,
+        200
+      ],
+      "selected_urls": [
+        "http://rr-a/rr",
+        "http://rr-b/rr"
+      ]
+    },
+    "upstream_requests": [
+      {
+        "body": null,
+        "headers": {
+          "x-request-id": "<request-id>"
+        },
+        "method": "GET",
+        "params": {},
+        "url": "http://rr-a/rr"
+      },
+      {
+        "body": null,
+        "headers": {
+          "x-request-id": "<request-id>"
+        },
+        "method": "GET",
+        "params": {},
+        "url": "http://rr-b/rr"
+      }
+    ]
+  },
+  "name": "rest_round_robin_state",
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/api/rest/parityrr/v1/rr",
+    "query": {},
+    "repeat": 2
+  },
+  "schema_version": 1,
+  "setup": {
+    "api": {
+      "name": "parityrr",
+      "version": "v1"
+    },
+    "endpoint": {
+      "method": "GET",
+      "servers": [
+        "http://rr-a",
+        "http://rr-b"
+      ],
+      "uri": "/rr"
+    },
+    "subscription": {
+      "username": "admin"
+    }
+  },
+  "tags": [
+    "rest",
+    "routing",
+    "state"
+  ]
+}

@@ -8,7 +8,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Config::from_env()?;
     let bind_addr = config.bind_addr();
-    let state = AppState::new(config)?;
+    let state = AppState::from_config(config).await?;
     let app = build_router(state);
     let listener = TcpListener::bind(&bind_addr).await?;
 

@@ -9,6 +9,7 @@ ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' backend-services/.env 
 # Always http:// — HTTPS_ONLY is a server-side cookie/CSRF setting;
 # the server itself listens on plain HTTP (TLS terminated at reverse proxy).
 BASE_URL ?= http://localhost:$(PORT)
+GATEWAY_LOAD_BASE_URL ?= http://localhost:3001
 
 # Set to 1 when running tests against Doorman in Docker (affects test server host references)
 DOORMAN_IN_DOCKER ?= 0
@@ -110,7 +111,7 @@ clean-deep: clean
 	@rm -rf generated backend-services/generated || true
 	@echo "Done."
 
-.PHONY: rust-test rust-clippy rust-fmt-check parity gateway-load
+.PHONY: rust-test rust-clippy rust-fmt-check parity parity-rust parity-python-reference parity-contracts parity-contracts-update gateway-load
 
 rust-test:
 	cargo test --manifest-path gateway-rs/Cargo.toml --locked
@@ -121,12 +122,23 @@ rust-clippy:
 rust-fmt-check:
 	cargo fmt --manifest-path gateway-rs/Cargo.toml --all -- --check
 
-parity: rust-test
+parity: rust-test parity-rust parity-python-reference parity-contracts
+
+parity-rust:
+	cargo test --manifest-path gateway-rs/Cargo.toml --locked --test runtime
+
+parity-python-reference:
 	cd backend-services && pytest -q \
 	  tests/test_gateway_flows.py \
 	  tests/test_gateway_routing_limits.py \
 	  tests/test_request_id_propagation.py \
 	  tests/test_response_envelope_and_headers.py
 
+parity-contracts:
+	cd backend-services && pytest -q tests/test_parity_contract_fixtures.py
+
+parity-contracts-update:
+	cd backend-services && UPDATE_PARITY_CONTRACTS=1 pytest -q tests/test_parity_contract_fixtures.py
+
 gateway-load:
-	bash scripts/run_perf_check.sh
+	BASE_URL=$(GATEWAY_LOAD_BASE_URL) bash scripts/run_perf_check.sh

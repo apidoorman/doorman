@@ -81,3 +81,11 @@ backend-services/routes/proto/*
 .coverage
 coverage_html/
 doorman.code-workspace
+
+# Rust build artifacts
+target/
+**/target/
+
+# Codex workspace metadata
+.codex/
+**/.codex/

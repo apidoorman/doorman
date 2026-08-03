@@ -1,0 +1,42 @@
+{
+  "description": "Cache-clear preflight is accepted without authentication.",
+  "expected": {
+    "decisions": {
+      "auth": "not_required",
+      "route": "gateway.caches.options",
+      "upstream": "none"
+    },
+    "response": {
+      "body": "",
+      "content_type": "",
+      "headers": {
+        "request_id": "<request-id>",
+        "x-request-id": "<request-id>"
+      },
+      "status": 204
+    },
+    "state_changes": {},
+    "upstream_requests": []
+  },
+  "name": "gateway_caches_preflight",
+  "request": {
+    "body": null,
+    "headers": {
+      "Access-Control-Request-Method": "DELETE",
+      "Origin": "http://localhost:3000"
+    },
+    "method": "OPTIONS",
+    "path": "/api/caches",
+    "query": {}
+  },
+  "schema_version": 1,
+  "setup": {
+    "auth": "none",
+    "state": "default memory test app"
+  },
+  "tags": [
+    "operations",
+    "cors",
+    "preflight"
+  ]
+}

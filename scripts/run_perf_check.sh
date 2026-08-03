@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs k6 load-tests/k6/load.test.js, captures CPU/loop-lag stats while running,
 # and compares results against a baseline summary via scripts/compare_perf.py.
 
-BASE_URL=${BASE_URL:-http://localhost:8000}
+BASE_URL=${BASE_URL:-http://localhost:3001}
 BASELINE_JSON=${BASELINE_JSON:-load-tests/baseline/k6-summary.json}
 CURRENT_JSON=${CURRENT_JSON:-load-tests/k6-summary.json}
 PERF_JSON=${PERF_JSON:-load-tests/perf-stats.json}

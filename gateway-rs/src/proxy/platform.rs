@@ -59,37 +59,46 @@ fn target_url(base_url: &str, uri: &Uri) -> String {
 }
 
 fn forwarded_headers(mut headers: HeaderMap, peer: Option<SocketAddr>) -> HeaderMap {
-    if let Some(host) = headers.get(header::HOST).cloned() {
-        headers.entry("x-forwarded-host").or_insert(host);
-    }
+    let original_host = headers.get(header::HOST).cloned();
     headers.remove(header::HOST);
-    for name in [
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailer",
-        "transfer-encoding",
-        "upgrade",
-    ] {
-        headers.remove(name);
+
+    for name in HOP_BY_HOP_HEADERS {
+        headers.remove(*name);
+    }
+    for name in SPOOFABLE_FORWARDING_HEADERS {
+        headers.remove(*name);
+    }
+
+    if let Some(host) = original_host {
+        headers.insert("x-forwarded-host", host);
     }
     if let Some(peer) = peer {
-        append_forwarded_for(&mut headers, peer.ip().to_string());
+        set_forwarded_for(&mut headers, peer.ip().to_string());
     }
     headers
 }
 
-fn append_forwarded_for(headers: &mut HeaderMap, peer_ip: String) {
-    let value = match headers
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-    {
-        Some(existing) if !existing.trim().is_empty() => format!("{existing}, {peer_ip}"),
-        _ => peer_ip,
-    };
-    if let Ok(value) = HeaderValue::from_str(&value) {
+const HOP_BY_HOP_HEADERS: &[&str] = &[
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+];
+
+const SPOOFABLE_FORWARDING_HEADERS: &[&str] = &[
+    "x-forwarded-for",
+    "x-real-ip",
+    "cf-connecting-ip",
+    "forwarded",
+    "x-forwarded-host",
+];
+
+fn set_forwarded_for(headers: &mut HeaderMap, peer_ip: String) {
+    if let Ok(value) = HeaderValue::from_str(&peer_ip) {
         headers.insert("x-forwarded-for", value);
     }
 }
@@ -122,13 +131,28 @@ mod tests {
     }
 
     #[test]
-    fn appends_peer_to_forwarded_for_chain() {
+    fn replaces_spoofable_forwarding_headers() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.10"));
-        append_forwarded_for(&mut headers, "198.51.100.20".to_owned());
-        assert_eq!(
-            headers.get("x-forwarded-for").unwrap(),
-            "203.0.113.10, 198.51.100.20"
+        headers.insert(header::HOST, HeaderValue::from_static("public.example"));
+        headers.insert(
+            "x-forwarded-host",
+            HeaderValue::from_static("spoofed.example"),
         );
+        headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.10"));
+        headers.insert("x-real-ip", HeaderValue::from_static("203.0.113.11"));
+        headers.insert("cf-connecting-ip", HeaderValue::from_static("203.0.113.12"));
+        headers.insert("forwarded", HeaderValue::from_static("for=203.0.113.13"));
+
+        let forwarded = forwarded_headers(
+            headers,
+            Some("198.51.100.20:12345".parse::<SocketAddr>().unwrap()),
+        );
+
+        assert!(!forwarded.contains_key(header::HOST));
+        assert_eq!(forwarded.get("x-forwarded-host").unwrap(), "public.example");
+        assert_eq!(forwarded.get("x-forwarded-for").unwrap(), "198.51.100.20");
+        assert!(!forwarded.contains_key("x-real-ip"));
+        assert!(!forwarded.contains_key("cf-connecting-ip"));
+        assert!(!forwarded.contains_key("forwarded"));
     }
 }

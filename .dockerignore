@@ -60,3 +60,7 @@ web-client/.env.local
 .env
 .env.*
 !.env.example
+
+# Rust build artifacts
+target
+gateway-rs/target
