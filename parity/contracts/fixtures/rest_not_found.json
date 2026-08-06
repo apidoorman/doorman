@@ -13,8 +13,10 @@
       },
       "content_type": "application/json",
       "headers": {
+        "content-encoding": "gzip",
         "content-type": "application/json",
         "request_id": "<request-id>",
+        "vary": "accept-encoding",
         "x-request-id": "<request-id>"
       },
       "status": 404
@@ -25,7 +27,9 @@
   "name": "rest_not_found",
   "request": {
     "body": null,
-    "headers": {},
+    "headers": {
+      "accept-encoding": "gzip"
+    },
     "method": "GET",
     "path": "/api/rest/paritymissing/v1/missing",
     "query": {}

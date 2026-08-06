@@ -24,8 +24,12 @@ services:
       ALLOW_HEADERS: "*"
       ALLOW_CREDENTIALS: "true"
       PORT: 3001
-      GATEWAY_RUST_ENABLED: "false"
-      GATEWAY_RUST_MODE: "off"
+      MEM_OR_EXTERNAL: REDIS
+      MONGO_DB_HOSTS: mongo:27017
+      MONGO_DB_USER: doorman_admin
+      MONGO_DB_PASSWORD: demo-mongo-password
+      MONGO_DB_AUTH_SOURCE: admin
+      REDIS_HOST: redis
       PYTHON_INTERNAL_PORT: 3002
       WEB_PORT: 3000
 
@@ -38,6 +42,32 @@ services:
     restart: "no"
     volumes: []
     container_name: doorman-demo
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: doorman_admin
+      MONGO_INITDB_ROOT_PASSWORD: demo-mongo-password
+    command: --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   demo-cleanup:
     image: docker:27.3.1-cli

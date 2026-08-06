@@ -14,6 +14,7 @@ pub struct ApiDocument {
 pub struct PolicyDocuments {
     pub apis: Vec<Value>,
     pub endpoints: Vec<Value>,
+    pub endpoint_validations: Vec<Value>,
     pub users: Vec<Value>,
     pub roles: Vec<Value>,
     pub subscriptions: Vec<Value>,
@@ -22,6 +23,8 @@ pub struct PolicyDocuments {
     pub user_credits: Vec<Value>,
     pub settings: Vec<Value>,
     pub revocations: Vec<Value>,
+    pub tiers: Vec<Value>,
+    pub tier_assignments: Vec<Value>,
 }
 
 pub fn api_name_version(name: &str, version: &str, leading_slash: bool) -> String {

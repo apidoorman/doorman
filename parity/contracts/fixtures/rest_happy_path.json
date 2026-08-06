@@ -21,8 +21,10 @@
       },
       "content_type": "application/json",
       "headers": {
+        "content-encoding": "gzip",
         "content-type": "application/json",
         "request_id": "<request-id>",
+        "vary": "accept-encoding",
         "x-request-id": "<request-id>"
       },
       "status": 200
@@ -43,7 +45,9 @@
   "name": "rest_happy_path",
   "request": {
     "body": null,
-    "headers": {},
+    "headers": {
+      "accept-encoding": "gzip"
+    },
     "method": "GET",
     "path": "/api/rest/parityhappy/v1/hello",
     "query": {}

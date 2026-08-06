@@ -190,7 +190,7 @@ async def validate_database_connections():
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            from utils.database import user_collection
+            from utils.database_async import user_collection
 
             await user_collection.find_one({})
             gateway_logger.info('✓ MongoDB connection verified')
@@ -593,6 +593,23 @@ async def app_lifespan(app: FastAPI):
         gateway_logger.debug('SIGHUP not supported on this platform')
 
     try:
+        if os.getenv('MEM_OR_EXTERNAL', 'MEM').upper() != 'MEM':
+            try:
+                from routes.proto_routes import backfill_descriptor_sets
+
+                app.state.grpc_descriptor_backfill = await backfill_descriptor_sets()
+                gateway_logger.info(
+                    f'gRPC descriptor backfill: {app.state.grpc_descriptor_backfill}'
+                )
+            except Exception as error:
+                app.state.grpc_descriptor_backfill = {
+                    'scanned': 0,
+                    'updated': 0,
+                    'skipped': 0,
+                    'missing': 1,
+                    'errors': [{'api': 'startup', 'error': str(error)[:500]}],
+                }
+                gateway_logger.error(f'gRPC descriptor backfill failed: {error}', exc_info=True)
         yield
     finally:
         gateway_logger.info('Starting graceful shutdown...')
@@ -1524,6 +1541,24 @@ except Exception as e:
 
 
 @doorman.middleware('http')
+async def policy_revision_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if (
+        str(request.url.path).startswith('/platform/')
+        and request.method.upper() in {'POST', 'PUT', 'PATCH', 'DELETE'}
+        and response.status_code < 400
+        and os.getenv('MEM_OR_EXTERNAL', os.getenv('MEM_OR_REDIS', 'MEM')).upper() != 'MEM'
+    ):
+        try:
+            await request.app.state.redis.incr('gateway:policy_revision')
+        except Exception as error:
+            gateway_logger.error(
+                f'Failed to publish gateway policy revision: {error}', exc_info=True
+            )
+    return response
+
+
+@doorman.middleware('http')
 async def request_id_middleware(request: Request, call_next):
     try:
         from utils.correlation_util import get_correlation_id, set_correlation_id
@@ -2250,6 +2285,15 @@ doorman.include_router(openapi_router, tags=['OpenAPI Discovery'])
 doorman.include_router(wsdl_router, tags=['WSDL Discovery'])
 doorman.include_router(graphql_routes_router, tags=['GraphQL'])
 doorman.include_router(grpc_router, tags=['gRPC Discovery'])
+
+# The deployed Python process is an internal platform control plane. Keep legacy
+# gateway routes importable for local compatibility tests, but do not mount them
+# in the production process behind the Rust gateway.
+if str(os.getenv('DOORMAN_PLATFORM_ONLY', '')).lower() in ('1', 'true', 'yes', 'on'):
+    doorman.router.routes[:] = [
+        route for route in doorman.router.routes
+        if str(getattr(route, 'path', '')).startswith('/platform')
+    ]
 
 
 def start() -> None:

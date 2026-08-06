@@ -63,9 +63,9 @@ trap graceful_stop SIGTERM SIGINT
 
 PYTHON_INTERNAL_PORT="${PYTHON_INTERNAL_PORT:-3002}"
 PYTHON_INTERNAL_URL="${PYTHON_INTERNAL_URL:-http://127.0.0.1:${PYTHON_INTERNAL_PORT}}"
-export PYTHON_INTERNAL_PORT PYTHON_INTERNAL_URL
+export PYTHON_INTERNAL_PORT PYTHON_INTERNAL_URL DOORMAN_PLATFORM_ONLY=true
 
-# Python remains the owner of /platform/* and is not published outside this container.
+# Python mounts only /platform/* and is not published outside this container.
 echo "[entrypoint] Starting Python platform service on 127.0.0.1:${PYTHON_INTERNAL_PORT}..."
 (
   cd /app/backend-services
@@ -74,7 +74,7 @@ echo "[entrypoint] Starting Python platform service on 127.0.0.1:${PYTHON_INTERN
 ) &
 BACK_PID=$!
 
-# Rust owns the public backend port. In off mode it transparently proxies all traffic.
+# Rust owns every public gateway route and proxies only /platform/* to Python.
 echo "[entrypoint] Starting Rust gateway on 0.0.0.0:${PORT:-3001}..."
 (
   exec env PORT="${PORT:-3001}" PYTHON_INTERNAL_URL="${PYTHON_INTERNAL_URL}" /usr/local/bin/doorman-gateway

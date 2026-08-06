@@ -38,12 +38,18 @@ async def check_redis():
         if not getattr(doorman_cache, 'is_redis', False):
             return True
         redis = Redis.from_url(
-            f'redis://{os.getenv("REDIS_HOST")}:{os.getenv("REDIS_PORT")}/{os.getenv("REDIS_DB")}',
+            (
+                f'redis://{os.getenv("REDIS_HOST", "localhost")}:'
+                f'{os.getenv("REDIS_PORT", "6379")}/{os.getenv("REDIS_DB", "0")}'
+            ),
+            password=os.getenv('REDIS_PASSWORD') or None,
             decode_responses=True,
         )
-
-        await redis.ping()
-        return True
+        try:
+            await redis.ping()
+            return True
+        finally:
+            await redis.aclose()
     except Exception as e:
         logger.error(f'Redis health check failed: {str(e)}')
         return False

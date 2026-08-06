@@ -13,6 +13,7 @@ pub mod rate_limit;
 pub mod roles;
 pub mod subscription;
 pub mod throttle;
+pub mod tier;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PolicyStage {
@@ -34,6 +35,7 @@ pub struct PolicyFailure {
     pub status: StatusCode,
     pub error_code: String,
     pub error_message: String,
+    pub tier_limit: Option<Box<(tier::TierLimitBody, tier::TierLimitStatus)>>,
 }
 
 impl PolicyFailure {
@@ -48,6 +50,17 @@ impl PolicyFailure {
             status,
             error_code: error_code.into(),
             error_message: error_message.into(),
+            tier_limit: None,
+        }
+    }
+
+    pub fn tier_limit(body: tier::TierLimitBody, status: tier::TierLimitStatus) -> Self {
+        Self {
+            stage: PolicyStage::RateLimit,
+            status: StatusCode::TOO_MANY_REQUESTS,
+            error_code: body.error_code.to_owned(),
+            error_message: body.message.clone(),
+            tier_limit: Some(Box::new((body, status))),
         }
     }
 }
@@ -56,7 +69,12 @@ impl PolicyFailure {
 pub struct PolicyDecision {
     pub route: Option<String>,
     pub api_id: Option<String>,
+    pub api_name: Option<String>,
+    pub endpoint_id: Option<String>,
     pub username: Option<String>,
+    pub tier_username: Option<String>,
+    pub tier_rate_limit_enabled: bool,
+    pub tier_limit_status: Option<tier::TierLimitStatus>,
     pub upstream: Option<String>,
     pub upstream_path: Option<String>,
     pub allowed_headers: Vec<String>,
@@ -78,6 +96,22 @@ pub struct PolicyDecision {
     pub is_crud: bool,
     pub crud_collection: Option<String>,
     pub crud_schema: Option<Value>,
+    pub endpoint_validation: Option<Value>,
+    pub cors_allow_origins: Option<Vec<String>>,
+    pub cors_allow_methods: Option<Vec<String>>,
+    pub cors_allow_headers: Option<Vec<String>>,
+    pub cors_allow_credentials: bool,
+    pub cors_expose_headers: Vec<String>,
+    pub request_transform: Option<Value>,
+    pub response_transform: Option<Value>,
+    pub soap_version: Option<String>,
+    pub ws_security: Option<Value>,
+    pub grpc_web_enabled: bool,
+    pub grpc_descriptor_set: Option<String>,
+    pub grpc_package: Option<String>,
+    pub grpc_allowed_packages: Vec<String>,
+    pub grpc_allowed_services: Vec<String>,
+    pub grpc_allowed_methods: Vec<String>,
 }
 
 #[derive(Serialize)]

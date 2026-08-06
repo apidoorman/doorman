@@ -1,12 +1,21 @@
+use std::{fs, sync::atomic::Ordering, time::Duration};
+
 use axum::{
     Json,
     extract::{Request, State},
-    http::{HeaderMap, Method, StatusCode, header},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use serde_json::json;
 
-use crate::{error::GatewayError, proxy::platform::proxy_to_python, state::AppState};
+use crate::{
+    error::GatewayError,
+    gateway::circuit_breaker::reset as reset_circuits,
+    policy::{PolicyErrorBody, auth::verify_request_token, evaluator::is_revoked},
+    state::AppState,
+    storage::models::{PolicyDocuments, bool_field_default, string_field},
+};
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -14,38 +23,57 @@ pub struct HealthResponse {
 }
 
 #[derive(Serialize)]
-struct ErrorResponse {
-    error_code: &'static str,
-    error_message: &'static str,
+struct StatusResponse {
+    status: &'static str,
+    mongodb: bool,
+    redis: bool,
+    memory_usage: String,
+    active_connections: u64,
+    uptime: String,
+}
+
+#[derive(Clone, Copy)]
+enum GatewayOperation {
+    Status,
+    ClearCaches,
 }
 
 pub async fn health(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     request: Request,
 ) -> Result<Response, GatewayError> {
-    if request.method() == Method::GET {
-        return Ok(Json(HealthResponse { status: "online" }).into_response());
+    if request.method() != Method::GET {
+        return Ok(StatusCode::METHOD_NOT_ALLOWED.into_response());
     }
-
-    proxy_to_python(State(state), request).await
+    Ok(Json(HealthResponse { status: "online" }).into_response())
 }
 
 pub async fn status(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Response, GatewayError> {
-    if request.method() == Method::GET && !has_platform_auth(request.headers()) {
-        return Ok((
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error_code: "GTW401",
-                error_message: "Unauthorized",
-            }),
-        )
-            .into_response());
+    if request.method() != Method::GET {
+        return Ok(StatusCode::METHOD_NOT_ALLOWED.into_response());
+    }
+    if let Err(response) =
+        require_manage_gateway(&state, request.headers(), GatewayOperation::Status).await
+    {
+        return Ok(response);
     }
 
-    proxy_to_python(State(state), request).await
+    let (mongodb, redis) = match &state.storage {
+        Some(storage) => tokio::join!(storage.mongo_healthy(), storage.redis_healthy()),
+        None => (false, false),
+    };
+    Ok(Json(StatusResponse {
+        status: "online",
+        mongodb,
+        redis,
+        memory_usage: memory_usage(),
+        active_connections: state.runtime.active_requests.load(Ordering::Relaxed),
+        uptime: format_uptime(state.runtime.started_at.elapsed()),
+    })
+    .into_response())
 }
 
 pub async fn caches(
@@ -55,67 +83,194 @@ pub async fn caches(
     if request.method() == Method::OPTIONS {
         return Ok(StatusCode::NO_CONTENT.into_response());
     }
-
-    if matches!(
-        request.method(),
-        &Method::POST | &Method::PUT | &Method::PATCH | &Method::DELETE
-    ) {
-        if let Some(storage) = &state.storage {
-            storage.invalidate_policy_cache().await;
-        }
+    if request.method() != Method::DELETE {
+        return Ok(StatusCode::METHOD_NOT_ALLOWED.into_response());
     }
 
-    proxy_to_python(State(state), request).await
+    let origin = request.headers().get(header::ORIGIN).cloned();
+    let username = match require_manage_gateway(
+        &state,
+        request.headers(),
+        GatewayOperation::ClearCaches,
+    )
+    .await
+    {
+        Ok(username) => username,
+        Err(response) => return Ok(with_cache_cors(response, origin)),
+    };
+
+    let response = match &state.storage {
+        Some(storage) => match storage.clear_gateway_state().await {
+            Ok(()) => {
+                reset_circuits(&state.runtime.circuits);
+                tracing::info!(
+                    actor = %username,
+                    action = "gateway.clear_caches",
+                    target = "all",
+                    status = "success",
+                    "gateway audit event"
+                );
+                Json(json!({ "message": "All caches cleared" })).into_response()
+            }
+            Err(error) => {
+                tracing::error!(error = %error, "failed to clear shared gateway state");
+                policy_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "GTW999",
+                    "An unexpected error occurred",
+                )
+            }
+        },
+        None => {
+            tracing::error!("cannot clear gateway state without shared storage");
+            policy_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "GTW999",
+                "An unexpected error occurred",
+            )
+        }
+    };
+    Ok(with_cache_cors(response, origin))
 }
 
-fn has_platform_auth(headers: &HeaderMap) -> bool {
-    headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| !value.trim().is_empty())
-        || headers
-            .get_all(header::COOKIE)
-            .iter()
-            .filter_map(|value| value.to_str().ok())
-            .any(has_access_token_cookie)
+async fn require_manage_gateway(
+    state: &AppState,
+    headers: &HeaderMap,
+    operation: GatewayOperation,
+) -> Result<String, Response> {
+    let claims = verify_request_token(headers, &state.config.shared_storage)
+        .map_err(|_| policy_error(StatusCode::UNAUTHORIZED, "GTW401", "Unauthorized"))?;
+    let username = claims.sub.as_deref().unwrap_or_default();
+    let documents = load_documents(state).await?;
+    if is_revoked(&documents.revocations, username, claims.jti.as_deref()) {
+        return Err(policy_error(
+            StatusCode::UNAUTHORIZED,
+            "GTW401",
+            "Unauthorized",
+        ));
+    }
+    let user = documents
+        .users
+        .iter()
+        .find(|user| string_field(user, "username") == Some(username))
+        .filter(|user| bool_field_default(user, "active", true))
+        .ok_or_else(|| policy_error(StatusCode::UNAUTHORIZED, "GTW401", "Unauthorized"))?;
+    let role_name = string_field(user, "role").unwrap_or_default();
+    let allowed = documents.roles.iter().any(|role| {
+        string_field(role, "role_name") == Some(role_name)
+            && bool_field_default(role, "manage_gateway", false)
+    });
+    if !allowed {
+        let (code, message) = match operation {
+            GatewayOperation::Status => ("GTW013", "Forbidden"),
+            GatewayOperation::ClearCaches => {
+                ("GTW008", "You do not have permission to clear caches")
+            }
+        };
+        return Err(policy_error(StatusCode::FORBIDDEN, code, message));
+    }
+    Ok(username.to_owned())
 }
 
-fn has_access_token_cookie(cookies: &str) -> bool {
-    cookies
-        .split(';')
-        .map(str::trim)
-        .any(|cookie| cookie.starts_with("access_token_cookie="))
+async fn load_documents(state: &AppState) -> Result<PolicyDocuments, Response> {
+    if let Some(documents) = &state.policy_documents {
+        return documents.lock().map(|guard| guard.clone()).map_err(|_| {
+            policy_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "GTW006",
+                "Internal server error",
+            )
+        });
+    }
+    let storage = state.storage.as_ref().ok_or_else(|| {
+        policy_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "GTW006",
+            "Internal server error",
+        )
+    })?;
+    storage.load_policy_documents().await.map_err(|error| {
+        tracing::error!(error = %error, "failed to load policies for gateway operation");
+        policy_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "GTW006",
+            "Internal server error",
+        )
+    })
+}
+
+fn policy_error(status: StatusCode, code: &str, message: &str) -> Response {
+    (
+        status,
+        Json(PolicyErrorBody {
+            error_code: code.to_owned(),
+            error_message: message.to_owned(),
+        }),
+    )
+        .into_response()
+}
+
+fn with_cache_cors(mut response: Response, origin: Option<HeaderValue>) -> Response {
+    if let Some(origin) = origin {
+        response
+            .headers_mut()
+            .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+        response.headers_mut().insert(
+            header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+            HeaderValue::from_static("true"),
+        );
+        response
+            .headers_mut()
+            .insert(header::VARY, HeaderValue::from_static("Origin"));
+    }
+    response
+}
+
+fn memory_usage() -> String {
+    let rss_kib = proc_value_kib("/proc/self/status", "VmRSS:");
+    let total_kib = proc_value_kib("/proc/meminfo", "MemTotal:");
+    match (rss_kib, total_kib) {
+        (Some(rss), Some(total)) if total > 0 => {
+            format!("{:.1}%", (rss as f64 / total as f64) * 100.0)
+        }
+        _ => "unknown".to_owned(),
+    }
+}
+
+fn proc_value_kib(path: &str, key: &str) -> Option<u64> {
+    fs::read_to_string(path)
+        .ok()?
+        .lines()
+        .find(|line| line.starts_with(key))?
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
+
+fn format_uptime(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    let days = seconds / 86_400;
+    let hours = (seconds % 86_400) / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    let seconds = seconds % 60;
+    if days > 0 {
+        format!("{days}d {hours}h {minutes}m")
+    } else if hours > 0 {
+        format!("{hours}h {minutes}m")
+    } else {
+        format!("{minutes}m {seconds}s")
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::HeaderValue;
 
     #[test]
-    fn detects_platform_auth_header_or_cookie() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::AUTHORIZATION,
-            HeaderValue::from_static("Bearer token"),
-        );
-        assert!(has_platform_auth(&headers));
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::COOKIE,
-            HeaderValue::from_static("theme=dark; access_token_cookie=token"),
-        );
-        assert!(has_platform_auth(&headers));
-    }
-
-    #[test]
-    fn ignores_missing_or_blank_platform_auth() {
-        assert!(!has_platform_auth(&HeaderMap::new()));
-
-        let mut headers = HeaderMap::new();
-        headers.insert(header::AUTHORIZATION, HeaderValue::from_static("   "));
-        headers.insert(header::COOKIE, HeaderValue::from_static("theme=dark"));
-        assert!(!has_platform_auth(&headers));
+    fn formats_uptime_like_the_python_gateway() {
+        assert_eq!(format_uptime(Duration::from_secs(59)), "0m 59s");
+        assert_eq!(format_uptime(Duration::from_secs(3_661)), "1h 1m");
+        assert_eq!(format_uptime(Duration::from_secs(90_061)), "1d 1h 1m");
     }
 }

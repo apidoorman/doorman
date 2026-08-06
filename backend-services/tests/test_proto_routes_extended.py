@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 
@@ -9,6 +11,9 @@ async def test_proto_update_and_delete_flow(monkeypatch, authed_client):
         pass
 
     def _fake_run(*args, **kwargs):
+        for argument in args[0]:
+            if str(argument).startswith('--descriptor_set_out='):
+                Path(str(argument).split('=', 1)[1]).write_bytes(b'descriptor')
         return _FakeCompleted()
 
     monkeypatch.setattr(pr.subprocess, 'run', _fake_run)

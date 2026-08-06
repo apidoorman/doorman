@@ -4,9 +4,7 @@
 #   1. Copy .env.example to .env and configure secrets
 #   2. Run: docker compose up
 #
-# With Redis/MongoDB (production):
-#   1. Set MEM_OR_EXTERNAL=REDIS in .env
-#   2. Run: docker compose --profile production up
+# MongoDB and Redis are required and start automatically.
 
 services:
   doorman:
@@ -24,11 +22,15 @@ services:
     env_file:
       - .env
     environment:
-      # Memory-mode dump settings (work for localhost and Docker on AWS)
-      GATEWAY_RUST_ENABLED: ${GATEWAY_RUST_ENABLED:-false}
-      GATEWAY_RUST_MODE: ${GATEWAY_RUST_MODE:-off}
       PYTHON_INTERNAL_PORT: ${PYTHON_INTERNAL_PORT:-3002}
+      MEM_OR_EXTERNAL: REDIS
+      MONGO_DB_HOSTS: ${MONGO_DB_HOSTS:-mongo:27017}
+      MONGO_DB_USER: ${MONGO_DB_USER:-doorman_admin}
+      MONGO_DB_PASSWORD: ${MONGO_DB_PASSWORD:-changeme}
       MONGO_DB_AUTH_SOURCE: ${MONGO_DB_AUTH_SOURCE:-admin}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: 6379
+      REDIS_DB: ${REDIS_DB:-0}
       MEM_DUMP_PATH: ${MEM_DUMP_PATH:-/app/backend-services/generated/memory_dump.bin}
       MEM_AUTO_SAVE_ENABLED: ${MEM_AUTO_SAVE_ENABLED:-true}
       MEM_AUTO_SAVE_FREQ: ${MEM_AUTO_SAVE_FREQ:-300}
@@ -39,6 +41,11 @@ services:
     volumes:
       - doorman-generated:/app/backend-services/generated
       - doorman-logs:/app/backend-services/platform-logs
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       # Always use HTTP for the internal healthcheck. TLS should be terminated
@@ -50,11 +57,10 @@ services:
       retries: 3
       start_period: 40s
 
-  # Redis - Enable with: docker compose --profile production up
+  # Shared state is mandatory for the deployed Rust gateway.
   redis:
     image: redis:7-alpine
     container_name: doorman-redis
-    profiles: ["production"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -67,11 +73,9 @@ services:
       timeout: 3s
       retries: 3
 
-  # MongoDB - Enable with: docker compose --profile production up
   mongo:
     image: mongo:7
     container_name: doorman-mongo
-    profiles: ["production"]
     ports:
       - "${MONGO_PORT:-27017}:27017"
     environment:
@@ -80,7 +84,7 @@ services:
     volumes:
       - mongo-data:/data/db
     restart: unless-stopped
-    command: --replSet ${MONGO_REPLICA_SET_NAME:-rs0} --bind_ip_all
+    command: --bind_ip_all
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s

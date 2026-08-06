@@ -90,9 +90,25 @@ pub fn evaluate_rest_policy(
 
     let api_public = bool_field(&api, "api_public").unwrap_or(false);
     let api_auth_required = bool_field(&api, "api_auth_required").unwrap_or(true);
+    let endpoint_id = endpoint
+        .as_ref()
+        .and_then(|item| string_field(item, "endpoint_id"));
+    let endpoint_validation = endpoint_id.and_then(|endpoint_id| {
+        documents
+            .endpoint_validations
+            .iter()
+            .find(|validation| {
+                string_field(validation, "endpoint_id") == Some(endpoint_id)
+                    && bool_field_default(validation, "validation_enabled", false)
+            })
+            .and_then(|validation| validation.get("validation_schema"))
+            .cloned()
+    });
     let mut decision = PolicyDecision {
         route: Some("gateway.rest".to_owned()),
         api_id: string_field(&api, "api_id").map(str::to_owned),
+        api_name: string_field(&api, "api_name").map(str::to_owned),
+        endpoint_id: endpoint_id.map(str::to_owned),
         upstream_path: Some(
             endpoint
                 .as_ref()
@@ -112,6 +128,35 @@ pub fn evaluate_rest_policy(
         graphql_max_depth: u64_field(&api, "api_graphql_max_depth").unwrap_or(10),
         authorization_field_swap: string_field(&api, "api_authorization_field_swap")
             .map(str::to_owned),
+        endpoint_validation,
+        cors_allow_origins: optional_string_list(&api, "api_cors_allow_origins"),
+        cors_allow_methods: optional_string_list(&api, "api_cors_allow_methods"),
+        cors_allow_headers: optional_string_list(&api, "api_cors_allow_headers"),
+        cors_allow_credentials: bool_field_default(&api, "api_cors_allow_credentials", false),
+        cors_expose_headers: crate::storage::models::string_list_field(
+            &api,
+            "api_cors_expose_headers",
+        ),
+        request_transform: api.get("api_request_transform").cloned(),
+        response_transform: api.get("api_response_transform").cloned(),
+        soap_version: string_field(&api, "api_soap_version").map(str::to_owned),
+        ws_security: api.get("api_ws_security").cloned(),
+        grpc_web_enabled: bool_field_default(&api, "api_grpc_web_enabled", false),
+        grpc_descriptor_set: string_field(&api, "api_grpc_descriptor_set").map(str::to_owned),
+        grpc_package: string_field(&api, "api_grpc_package").map(str::to_owned),
+        grpc_allowed_packages: crate::storage::models::string_list_field(
+            &api,
+            "api_grpc_allowed_packages",
+        ),
+        grpc_allowed_services: crate::storage::models::string_list_field(
+            &api,
+            "api_grpc_allowed_services",
+        ),
+        grpc_allowed_methods: crate::storage::models::string_list_field(
+            &api,
+            "api_grpc_allowed_methods",
+        ),
+        tier_rate_limit_enabled: !storage_config.skip_tier_rate_limit,
         is_crud: bool_field_default(&api, "api_is_crud", false),
         crud_collection: string_field(&api, "api_crud_collection")
             .map(str::to_owned)
@@ -190,6 +235,12 @@ pub fn evaluate_rest_policy(
         decision.user_credit_header_value = credit.user_header_value;
     }
 
+    decision.tier_username = decision.username.clone().or_else(|| {
+        verify_request_token(&request.headers, storage_config)
+            .ok()
+            .and_then(|claims| claims.sub)
+    });
+
     let client_key = request
         .headers
         .get("client-key")
@@ -219,6 +270,19 @@ pub async fn evaluate_shared_effects(
     storage: &SharedStorage,
     mutate: bool,
 ) -> Result<(), PolicyFailure> {
+    if decision.tier_rate_limit_enabled
+        && let Some(username) = decision.tier_username.as_deref()
+    {
+        decision.tier_limit_status = super::tier::enforce(
+            documents,
+            storage,
+            username,
+            request.now_millis / 1_000,
+            mutate,
+        )
+        .await?;
+    }
+
     if let Some(username) = decision.username.as_deref() {
         let user = documents
             .users
@@ -406,7 +470,17 @@ fn endpoint_exists(endpoints: &[Value], api: &Value, method: &str, endpoint_uri:
     })
 }
 
-fn is_revoked(revocations: &[Value], username: &str, jti: Option<&str>) -> bool {
+fn optional_string_list(value: &Value, field: &str) -> Option<Vec<String>> {
+    value.get(field).and_then(Value::as_array).map(|items| {
+        items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect()
+    })
+}
+
+pub(crate) fn is_revoked(revocations: &[Value], username: &str, jti: Option<&str>) -> bool {
     revocations
         .iter()
         .any(|revocation| match string_field(revocation, "type") {

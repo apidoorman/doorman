@@ -4,11 +4,14 @@ Review the Apache License 2.0 for valid authorization of use
 See https://github.com/apidoorman/doorman for more information
 """
 
+import base64
+import hashlib
 import logging
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -17,8 +20,10 @@ from shutil import copy2
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from models.response_model import ResponseModel
+from utils.async_db import db_update_one
 from utils.auth_util import auth_required
 from utils.constants import Defaults, ErrorCodes, Headers, Messages, Roles
+from utils.database_async import api_collection
 from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
 
@@ -175,6 +180,44 @@ def get_safe_proto_path(api_name: str, api_version: str):
         raise HTTPException(status_code=500, detail=f'Failed to create safe paths: {str(e)}')
 
 
+def compile_descriptor_fields(
+    proto_root: Path, compile_input: Path, proto_content: str
+) -> dict[str, str]:
+    """Compile the Rust gateway descriptor fields for a validated proto source."""
+    with tempfile.TemporaryDirectory(prefix='doorman-descriptor-') as temporary:
+        descriptor_path = Path(temporary) / 'api.descriptor.pb'
+        subprocess.run(
+            [
+                sys.executable,
+                '-m',
+                'grpc_tools.protoc',
+                f'--proto_path={proto_root}',
+                f'--descriptor_set_out={descriptor_path}',
+                '--include_imports',
+                str(compile_input),
+            ],
+            check=True,
+        )
+        descriptor = descriptor_path.read_bytes()
+    return {
+        'api_grpc_descriptor_set': base64.b64encode(descriptor).decode('ascii'),
+        'api_grpc_descriptor_sha256': hashlib.sha256(descriptor).hexdigest(),
+        'api_grpc_proto_source': proto_content,
+    }
+
+
+async def persist_descriptor_set(
+    api_name: str, api_version: str, proto_root: Path, compile_input: Path, proto_content: str
+) -> None:
+    """Compile and persist a language-neutral FileDescriptorSet on the API document."""
+    descriptor_fields = compile_descriptor_fields(proto_root, compile_input, proto_content)
+    await db_update_one(
+        api_collection,
+        {'api_name': api_name, 'api_version': api_version},
+        {'$set': descriptor_fields},
+    )
+
+
 def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
     """Archive existing proto file with timestamp"""
     try:
@@ -221,6 +264,92 @@ def archive_existing_proto(proto_path: Path, api_name: str, api_version: str):
         logger.info(f"Archived proto to {dest}")
     except Exception as e:
         logger.error(f"Failed to archive proto: {e}")
+
+
+
+async def backfill_descriptor_sets() -> dict:
+    """Idempotently compile descriptors for active gRPC APIs created before Rust cutover."""
+    from utils.async_db import db_find_list
+
+    stats = {'scanned': 0, 'updated': 0, 'skipped': 0, 'missing': 0, 'errors': []}
+    for api in await db_find_list(api_collection, {}):
+        api_type = str(api.get('api_type') or api.get('type') or '').lower()
+        grpc_configured = (
+            api_type == 'grpc'
+            or bool(api.get('api_grpc_proto_source'))
+            or bool(api.get('api_grpc_package'))
+        )
+        if not grpc_configured or api.get('active') is False:
+            continue
+        stats['scanned'] += 1
+        if api.get('api_grpc_descriptor_set'):
+            stats['skipped'] += 1
+            continue
+        api_name = str(api.get('api_name') or '')
+        api_version = str(api.get('api_version') or '')
+        try:
+            if not api_name or not api_version:
+                raise ValueError('API name/version is missing')
+            proto_path, _ = get_safe_proto_path(api_name, api_version)
+            source = api.get('api_grpc_proto_source')
+            if source:
+                source = validate_proto_content(
+                    str(source).encode('utf-8'),
+                    max_size=int(os.getenv('MAX_PROTO_SIZE_BYTES', 1024 * 1024)),
+                )
+                proto_path.write_text(source)
+            elif proto_path.exists():
+                source = validate_proto_content(
+                    proto_path.read_bytes(),
+                    max_size=int(os.getenv('MAX_PROTO_SIZE_BYTES', 1024 * 1024)),
+                )
+            else:
+                stats['missing'] += 1
+                stats['errors'].append(
+                    {'api': f'{api_name}/{api_version}', 'error': 'Proto source not found'}
+                )
+                continue
+            await persist_descriptor_set(
+                api_name, api_version, proto_path.parent, proto_path, source
+            )
+            stats['updated'] += 1
+        except Exception as error:
+            stats['missing'] += 1
+            stats['errors'].append(
+                {'api': f'{api_name}/{api_version}', 'error': str(error)[:500]}
+            )
+    return stats
+
+
+@proto_router.post(
+    '/descriptors/backfill',
+    description='Backfill language-neutral descriptors for existing gRPC APIs',
+    response_model=ResponseModel,
+)
+async def backfill_descriptors(request: Request):
+    request_id = str(uuid.uuid4())
+    payload = await auth_required(request)
+    username = payload.get('sub')
+    if not await platform_role_required_bool(username, Roles.MANAGE_APIS):
+        return process_response(
+            ResponseModel(
+                status_code=403,
+                response_headers={Headers.REQUEST_ID: request_id},
+                error_code=ErrorCodes.AUTH_REQUIRED,
+                error_message=Messages.PERMISSION_MANAGE_APIS,
+            ).dict(),
+            'rest',
+        )
+    stats = await backfill_descriptor_sets()
+    request.app.state.grpc_descriptor_backfill = stats
+    return process_response(
+        ResponseModel(
+            status_code=200,
+            response_headers={Headers.REQUEST_ID: request_id},
+            response=stats,
+        ).dict(),
+        'rest',
+    )
 
 
 """
@@ -392,6 +521,9 @@ async def upload_proto_file(
                     str(compile_input),
                 ],
                 check=True,
+            )
+            await persist_descriptor_set(
+                api_name, api_version, compile_proto_root, compile_input, proto_content
             )
             logger.info(f'Proto compiled: src={compile_input} out={generated_dir}')
             init_path = (generated_dir / '__init__.py').resolve()
@@ -669,6 +801,9 @@ async def update_proto_file(
                 ],
                 check=True,
             )
+            await persist_descriptor_set(
+                api_name, api_version, proto_path.parent, proto_path, proto_content
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f'Failed to generate gRPC code: {str(e)}')
             return process_response(
@@ -783,6 +918,17 @@ async def delete_proto_file(api_name: str, api_version: str, request: Request):
             if file_path.exists():
                 file_path.unlink()
                 logger.info(f'Deleted generated file: {file_path}')
+        await db_update_one(
+            api_collection,
+            {'api_name': api_name, 'api_version': api_version},
+            {
+                '$set': {
+                    'api_grpc_descriptor_set': None,
+                    'api_grpc_descriptor_sha256': None,
+                    'api_grpc_proto_source': None,
+                }
+            },
+        )
         return process_response(
             ResponseModel(
                 status_code=200,

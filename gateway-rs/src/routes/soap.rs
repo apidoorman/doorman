@@ -1,5 +1,5 @@
-use axum::extract::{Request, State};
-use axum::response::Response;
+use axum::extract::{OriginalUri, Request, State};
+use axum::response::{IntoResponse, Response};
 
 use crate::{
     error::GatewayError,
@@ -11,9 +11,19 @@ pub async fn soap_policy_then_execute(
     State(state): State<AppState>,
     mut request: Request,
 ) -> Result<Response, GatewayError> {
-    let suffix = request
-        .uri()
-        .path()
+    if !matches!(
+        request.method(),
+        &http::Method::GET | &http::Method::POST | &http::Method::OPTIONS
+    ) {
+        return Ok(http::StatusCode::METHOD_NOT_ALLOWED.into_response());
+    }
+
+    let original_path = request
+        .extensions()
+        .get::<OriginalUri>()
+        .map(|uri| uri.0.path().to_owned())
+        .unwrap_or_else(|| request.uri().path().to_owned());
+    let suffix = original_path
         .trim_start_matches("/api/soap/")
         .trim_start_matches('/')
         .to_owned();

@@ -59,17 +59,13 @@ cp .env.example .env
 # Set: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
 ```
 
-### 2. Choose Storage
-- Memory (default): development and tests.
-- Redis + MongoDB: production.
+### 2. Storage
+MongoDB and Redis are required by the deployed gateway and start with Compose.
 
 ### 3. Launch
 ```bash
-# Standard launch
+# Rust gateway + Python platform + Redis + MongoDB
 docker compose up -d
-
-# Production launch (Redis + MongoDB)
-docker compose --profile production up -d
 ```
 
 ---
@@ -83,12 +79,14 @@ docker compose --profile production up -d
 | `DOORMAN_ADMIN_PASSWORD` | Yes | Admin password (min 12 chars) |
 | `JWT_SECRET_KEY` | Yes | Secret for signing access tokens |
 | `NEXT_PUBLIC_GATEWAY_URL` | No | Frontend API target (Defaults to same origin) |
-| `GATEWAY_RUST_MODE` | No | `off`, `shadow`, `canary`, or `on`; defaults to `off` |
 | `PYTHON_INTERNAL_PORT` | No | Internal Python `/platform/*` listener; defaults to `3002` |
 
 ### Persistence & Performance
-- Redis: set `MEM_OR_EXTERNAL=REDIS` to enable caching/rate limiting.
-- MongoDB: set `MONGO_DB_HOSTS=mongo:27017` (and credentials) to persist configurations and users.
+- Redis stores shared policy counters, caches, tier rate limits, and gateway analytics.
+- MongoDB stores gateway configuration, users, CRUD data, and compiled gRPC descriptors.
+- Public REST, SOAP, GraphQL, native gRPC, and gRPC-Web requests run entirely in Rust; clients do not need an API contract change.
+- Python is the internal `/platform/*` control plane only. There is no Python gateway fallback, shadow mode, or in-memory data-plane mode.
+- Successful mutating platform calls publish a Redis policy revision so Rust workers refresh without waiting for the cache TTL.
 - Volumes: Docker-managed volumes (`doorman-generated`, `doorman-logs`). Use `docker compose down -v` to reset.
 
 ---

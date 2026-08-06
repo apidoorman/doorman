@@ -81,7 +81,7 @@ def _get_collection():
 def _merge_settings(doc: dict[str, Any]) -> dict[str, Any]:
     merged = DEFAULTS.copy()
     if doc:
-        merged.update({k: v for k, v in doc.items() if v is not None})
+        merged.update({k: v for k, v in doc.items() if k != '_id' and v is not None})
     return merged
 
 
@@ -140,7 +140,8 @@ async def load_settings() -> dict[str, Any]:
     if not doc:
         settings = _merge_settings({})
         try:
-            coll.insert_one(settings)
+            # PyMongo mutates inserted dictionaries by adding an ObjectId.
+            coll.insert_one(dict(settings))
             logger.info('Initialized security settings from environment variables and defaults')
         except Exception as e:
             logger.warning(f'Failed to persist initial security settings: {e}')

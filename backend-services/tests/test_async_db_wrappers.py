@@ -1,6 +1,6 @@
 import pytest
 
-from utils.async_db import db_delete_one, db_find_one, db_insert_one, db_update_one
+from utils.async_db import db_delete_one, db_find_list, db_find_one, db_insert_one, db_update_one
 from utils.database_async import async_database
 
 
@@ -92,3 +92,40 @@ async def test_async_wrappers_fallback_to_thread_for_sync_collections():
     assert d2 and d2['v'] == 'b'
     await db_delete_one(coll, {'k': 1})
     assert await db_find_one(coll, {'k': 1}) is None
+
+
+class _MotorStyleCursor:
+    def to_list(self, *, length=None):
+        async def _result():
+            return [{'kind': 'motor', 'length': length}]
+
+        return _result()
+
+
+class _MotorStyleCollection:
+    def find(self, _query):
+        return _MotorStyleCursor()
+
+
+@pytest.mark.asyncio
+async def test_find_list_awaits_motor_style_future_return():
+    result = await db_find_list(_MotorStyleCollection(), {})
+
+    assert result == [{'kind': 'motor', 'length': None}]
+
+
+class _MotorStyleMethods:
+    __module__ = 'motor.motor_asyncio'
+
+    def find_one(self, query):
+        async def _result():
+            return {'kind': 'motor', **query}
+
+        return _result()
+
+
+@pytest.mark.asyncio
+async def test_find_one_awaits_motor_style_future_return():
+    result = await db_find_one(_MotorStyleMethods(), {'key': 'value'})
+
+    assert result == {'kind': 'motor', 'key': 'value'}

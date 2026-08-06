@@ -24,3 +24,14 @@ Regenerate fixtures intentionally after a reviewed Python contract change:
 ```bash
 make parity-contracts-update
 ```
+
+Run the complete Rust suite, Python reference scenarios, and checked-in contract
+comparisons before a gateway cutover:
+
+```bash
+make parity
+```
+
+Contract comparison normalizes only volatile fields such as request IDs and
+timestamps. Meaningful wire headersincluding compression, gRPC status/encoding,
+cookies, and rate-limit headersremain part of the contract.

@@ -19,6 +19,7 @@ from utils.database import database
 from utils.doorman_cache_util import doorman_cache
 from utils.health_check_util import check_mongodb, check_redis
 from utils.metrics_util import metrics_store
+from utils.shared_metrics_util import merge_rust_gateway_metrics
 from utils.response_util import process_response
 from utils.role_util import platform_role_required_bool
 
@@ -33,6 +34,8 @@ class ReadinessResponse(BaseModel):
     redis: bool | None = None
     mode: str | None = None
     cache_backend: str | None = None
+    missing_grpc_descriptors: int | None = None
+    grpc_descriptor_errors: list[dict] | None = None
 
 
 monitor_router = APIRouter()
@@ -80,6 +83,7 @@ async def get_metrics(
         if srt not in ('asc', 'desc'):
             srt = 'asc'
         snap = metrics_store.snapshot(range, group=grp, sort=srt)
+        snap = merge_rust_gateway_metrics(snap, range, group=grp, sort=srt)
         try:
             # Robustness: ensure top_apis contains at least one REST entry when
             # recent traffic exists but per-minute aggregation hasn't populated yet.
@@ -193,7 +197,9 @@ async def readiness(request: Request):
     try:
         mongo_ok = await check_mongodb()
         redis_ok = await check_redis()
-        ready = mongo_ok and redis_ok
+        descriptor_status = getattr(request.app.state, 'grpc_descriptor_backfill', {})
+        missing_descriptors = int(descriptor_status.get('missing') or 0)
+        ready = mongo_ok and redis_ok and missing_descriptors == 0
 
         if not authorized:
             return {'status': 'ready' if ready else 'degraded'}
@@ -204,6 +210,8 @@ async def readiness(request: Request):
             'redis': redis_ok,
             'mode': 'memory' if getattr(database, 'memory_only', False) else 'mongodb',
             'cache_backend': 'redis' if getattr(doorman_cache, 'is_redis', False) else 'memory',
+            'missing_grpc_descriptors': missing_descriptors,
+            'grpc_descriptor_errors': descriptor_status.get('errors') or [],
         }
     except Exception:
         return {'status': 'degraded'}

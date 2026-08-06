@@ -20,8 +20,10 @@
       },
       "content_type": "application/json",
       "headers": {
+        "content-encoding": "gzip",
         "content-type": "application/json",
         "request_id": "<request-id>",
+        "vary": "accept-encoding",
         "x-request-id": "<request-id>",
         "x-upstream-request-id": "<request-id>"
       },
@@ -44,7 +46,8 @@
   "request": {
     "body": null,
     "headers": {
-      "X-Request-ID": "client-contract-request"
+      "X-Request-ID": "client-contract-request",
+      "accept-encoding": "gzip"
     },
     "method": "GET",
     "path": "/api/rest/parityrid/v1/echo",

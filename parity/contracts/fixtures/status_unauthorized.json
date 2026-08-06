@@ -13,8 +13,10 @@
       },
       "content_type": "application/json",
       "headers": {
+        "content-encoding": "gzip",
         "content-type": "application/json",
         "request_id": "<request-id>",
+        "vary": "accept-encoding",
         "x-request-id": "<request-id>"
       },
       "status": 401
@@ -25,7 +27,9 @@
   "name": "status_unauthorized",
   "request": {
     "body": null,
-    "headers": {},
+    "headers": {
+      "accept-encoding": "gzip"
+    },
     "method": "GET",
     "path": "/api/status",
     "query": {}

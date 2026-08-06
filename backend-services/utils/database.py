@@ -100,122 +100,104 @@ class Database:
         return self.db[name]
 
     def initialize_collections(self):
-        if self.memory_only:
-            # Resolve admin seed credentials consistently across modes (no auto-generation)
-            def _admin_seed_creds():
-                email = os.getenv('DOORMAN_ADMIN_EMAIL') or 'admin@doorman.dev'
-                pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
-                if not pwd:
-                    raise RuntimeError(
-                        'DOORMAN_ADMIN_PASSWORD is required for admin initialization'
-                    )
-                return email, password_util.hash_password(pwd)
+        def admin_seed_credentials():
+            email = os.getenv('DOORMAN_ADMIN_EMAIL') or 'admin@doorman.dev'
+            password = os.getenv('DOORMAN_ADMIN_PASSWORD')
+            if not password:
+                raise RuntimeError(
+                    'DOORMAN_ADMIN_PASSWORD is required for admin initialization'
+                )
+            return email, password_util.hash_password(password)
 
+        admin_role = {
+            'role_name': 'admin',
+            'role_description': 'Administrator role',
+            'manage_users': True,
+            'manage_apis': True,
+            'manage_endpoints': True,
+            'manage_groups': True,
+            'manage_roles': True,
+            'manage_routings': True,
+            'manage_gateway': True,
+            'manage_subscriptions': True,
+            'manage_credits': True,
+            'manage_auth': True,
+            'manage_security': True,
+            'manage_tiers': True,
+            'manage_rate_limits': True,
+            'view_analytics': True,
+            'view_logs': True,
+            'export_logs': True,
+            'ui_access': True,
+        }
+        admin_group = {
+            'group_name': 'admin',
+            'group_description': 'Administrator group with full access',
+            'api_access': [],
+        }
+        all_group = {
+            'group_name': 'ALL',
+            'group_description': 'Default group with access to all APIs',
+            'api_access': [],
+        }
+
+        if self.memory_only:
             users = self.db.users
             roles = self.db.roles
             groups = self.db.groups
-
             if not roles.find_one({'role_name': 'admin'}):
-                roles.insert_one(
-                    {
-                        'role_name': 'admin',
-                        'role_description': 'Administrator role',
-                        'manage_users': True,
-                        'manage_apis': True,
-                        'manage_endpoints': True,
-                        'manage_groups': True,
-                        'manage_roles': True,
-                        'manage_routings': True,
-                        'manage_gateway': True,
-                        'manage_subscriptions': True,
-                        'manage_credits': True,
-                        'manage_auth': True,
-                        'manage_security': True,
-                        'view_analytics': True,
-                        'view_logs': True,
-                        'export_logs': True,
+                roles.insert_one(admin_role)
+            if not groups.find_one({'group_name': 'admin'}):
+                groups.insert_one(admin_group)
+            if not groups.find_one({'group_name': 'ALL'}):
+                groups.insert_one(all_group)
+            if not users.find_one({'username': 'admin'}):
+                email, password_hash = admin_seed_credentials()
+                users.insert_one(_build_admin_seed_doc(email, password_hash))
+
+            email, password_hash = admin_seed_credentials()
+            users.update_one(
+                {'username': 'admin'},
+                {
+                    '$set': {
+                        'email': email,
+                        'password': password_hash,
                         'ui_access': True,
                     }
-                )
-
-            if not groups.find_one({'group_name': 'admin'}):
-                groups.insert_one(
-                    {
-                        'group_name': 'admin',
-                        'group_description': 'Administrator group with full access',
-                        'api_access': [],
-                    }
-                )
-            if not groups.find_one({'group_name': 'ALL'}):
-                groups.insert_one(
-                    {
-                        'group_name': 'ALL',
-                        'group_description': 'Default group with access to all APIs',
-                        'api_access': [],
-                    }
-                )
-
-            if not users.find_one({'username': 'admin'}):
-                _email, _pwd_hash = _admin_seed_creds()
-                users.insert_one(_build_admin_seed_doc(_email, _pwd_hash))
-
-        try:
-            adm = users.find_one({'username': 'admin'})
-            if adm and adm.get('ui_access') is not True:
-                users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
-        except Exception:
-            pass
-
-        # Align admin password with DOORMAN_ADMIN_PASSWORD if provided, even if
-        # the admin user already exists. This makes re-initialization idempotent
-        # for tests that adjust the env and call initialize_collections again.
-        try:
-            env_pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
-            env_email = os.getenv('DOORMAN_ADMIN_EMAIL')
-            if env_pwd:
-                users.update_one(
-                    {'username': 'admin'},
-                    {'$set': {'password': password_util.hash_password(env_pwd)}},
-                )
-            if env_email:
-                users.update_one(
-                    {'username': 'admin'},
-                    {'$set': {'email': env_email}},
-                )
-        except Exception:
-            pass
-
+                },
+            )
             try:
                 from datetime import datetime
 
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-                env_logs = os.getenv('LOGS_DIR')
-                logs_dir = (
-                    os.path.abspath(env_logs)
-                    if env_logs
-                    else os.path.join(base_dir, 'platform-logs')
+                logs_dir = os.path.abspath(
+                    os.getenv('LOGS_DIR') or os.path.join(base_dir, 'platform-logs')
                 )
                 os.makedirs(logs_dir, exist_ok=True)
                 log_path = os.path.join(logs_dir, 'doorman.log')
                 now = datetime.now()
                 entries = []
-                samples = [
-                    ('customers', '/customers/v1/list'),
-                    ('orders', '/orders/v1/status'),
-                    ('weather', '/weather/v1/status'),
-                ]
-                for _api_name, ep in samples:
-                    ts = now.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
-                    rid = str(uuid.uuid4())
-                    msg = f'{rid} | Username: admin | From: 127.0.0.1:54321 | Endpoint: GET {ep} | Total time: 42ms'
-                    entries.append(f'{ts} - doorman.gateway - INFO - {msg}\n')
-                with open(log_path, 'a', encoding='utf-8') as lf:
-                    lf.writelines(entries)
+                for endpoint in (
+                    '/customers/v1/list',
+                    '/orders/v1/status',
+                    '/weather/v1/status',
+                ):
+                    timestamp = now.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
+                    request_id = str(uuid.uuid4())
+                    message = (
+                        f'{request_id} | Username: admin | From: 127.0.0.1:54321 | '
+                        f'Endpoint: GET {endpoint} | Total time: 42ms'
+                    )
+                    entries.append(
+                        f'{timestamp} - doorman.gateway - INFO - {message}\n'
+                    )
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.writelines(entries)
             except Exception:
                 pass
             logger.info('Memory-only mode: Core data initialized (admin user/role/groups)')
             return
+
         collections = [
             'users',
             'apis',
@@ -233,88 +215,35 @@ class Database:
             'tiers',
             'user_tier_assignments',
         ]
+        existing = set(self.db.list_collection_names())
         for collection in collections:
-            if collection not in self.db.list_collection_names():
-                self.db_existed = False
+            if collection not in existing:
                 self.db.create_collection(collection)
                 logger.debug(f'Created collection: {collection}')
-        if not self.db_existed:
-            if not self.db.users.find_one({'username': 'admin'}):
-                # Resolve admin seed credentials consistently across modes (no auto-generation)
-                def _admin_seed_creds_mongo():
-                    email = os.getenv('DOORMAN_ADMIN_EMAIL') or 'admin@doorman.dev'
-                    pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
-                    if not pwd:
-                        raise RuntimeError(
-                            'DOORMAN_ADMIN_PASSWORD is required for admin initialization'
-                        )
-                    return email, password_util.hash_password(pwd)
 
-                _email, _pwd_hash = _admin_seed_creds_mongo()
-                self.db.users.insert_one(_build_admin_seed_doc(_email, _pwd_hash))
-        try:
-            adm = self.db.users.find_one({'username': 'admin'})
-            if adm and adm.get('ui_access') is not True:
-                self.db.users.update_one({'username': 'admin'}, {'$set': {'ui_access': True}})
-        except Exception:
-            pass
-        try:
-            adm2 = self.db.users.find_one({'username': 'admin'})
-            if adm2 and not adm2.get('password'):
-                env_pwd = os.getenv('DOORMAN_ADMIN_PASSWORD')
-                if env_pwd:
-                    self.db.users.update_one(
-                        {'username': 'admin'},
-                        {'$set': {'password': password_util.hash_password(env_pwd)}},
-                    )
-                    logger.warning('Admin user lacked password; set from DOORMAN_ADMIN_PASSWORD')
-                else:
-                    raise RuntimeError(
-                        'Admin user missing password and DOORMAN_ADMIN_PASSWORD not set'
-                    )
-        except Exception:
-            pass
-        # Ensure admin role exists with full privileges when using Mongo
-        try:
-            if not self.db.roles.find_one({'role_name': 'admin'}):
-                self.db.roles.insert_one(
-                    {
-                        'role_name': 'admin',
-                        'role_description': 'Administrator role',
-                        'manage_users': True,
-                        'manage_apis': True,
-                        'manage_endpoints': True,
-                        'manage_groups': True,
-                        'manage_roles': True,
-                        'manage_routings': True,
-                        'manage_gateway': True,
-                        'manage_subscriptions': True,
-                        'manage_credits': True,
-                        'manage_auth': True,
-                        'view_analytics': True,
-                        'view_logs': True,
-                        'export_logs': True,
-                        'manage_security': True,
-                    }
-                )
-        except Exception:
-            pass
-            if not self.db.groups.find_one({'group_name': 'admin'}):
-                self.db.groups.insert_one(
-                    {
-                        'group_name': 'admin',
-                        'group_description': 'Administrator group with full access',
-                        'api_access': [],
-                    }
-                )
-            if not self.db.groups.find_one({'group_name': 'ALL'}):
-                self.db.groups.insert_one(
-                    {
-                        'group_name': 'ALL',
-                        'group_description': 'Default group with access to all APIs',
-                        'api_access': [],
-                    }
-                )
+        users = self.db.users
+        existing_admin = users.find_one({'username': 'admin'})
+        if not existing_admin:
+            email, password_hash = admin_seed_credentials()
+            users.insert_one(_build_admin_seed_doc(email, password_hash))
+        else:
+            repairs = {}
+            if existing_admin.get('ui_access') is not True:
+                repairs['ui_access'] = True
+            if not existing_admin.get('email'):
+                repairs['email'] = os.getenv('DOORMAN_ADMIN_EMAIL') or 'admin@doorman.dev'
+            if not existing_admin.get('password'):
+                _, repairs['password'] = admin_seed_credentials()
+            if repairs:
+                users.update_one({'username': 'admin'}, {'$set': repairs})
+
+        if not self.db.roles.find_one({'role_name': 'admin'}):
+            self.db.roles.insert_one(admin_role)
+        if not self.db.groups.find_one({'group_name': 'admin'}):
+            self.db.groups.insert_one(admin_group)
+        if not self.db.groups.find_one({'group_name': 'ALL'}):
+            self.db.groups.insert_one(all_group)
+        logger.info('MongoDB mode: Core data initialized (admin user/role/groups)')
 
     def create_indexes(self):
         if self.memory_only:

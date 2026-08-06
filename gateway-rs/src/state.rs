@@ -1,14 +1,20 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{Arc, Mutex, atomic::AtomicU64},
+    time::Instant,
+};
 
 use reqwest::{Client, redirect::Policy};
 use thiserror::Error;
 
 use crate::{
-    config::{Config, GatewayMode},
+    config::Config,
+    gateway::circuit_breaker::CircuitEntry,
     storage::{
         models::PolicyDocuments,
         runtime::{SharedStorage, StorageError},
     },
+    validation::json::ValidatorRegistry,
 };
 
 #[derive(Debug, Error)]
@@ -25,6 +31,36 @@ pub struct AppState {
     pub proxy_client: Client,
     pub policy_documents: Option<Arc<Mutex<PolicyDocuments>>>,
     pub storage: Option<Arc<SharedStorage>>,
+    pub runtime: Arc<GatewayRuntime>,
+    pub validators: Arc<ValidatorRegistry>,
+}
+
+pub struct GatewayRuntime {
+    pub started_at: Instant,
+    pub active_requests: AtomicU64,
+    pub request_total: AtomicU64,
+    pub request_duration_micros: AtomicU64,
+    pub request_duration_buckets: [AtomicU64; 11],
+    pub responses_by_status: Mutex<BTreeMap<u16, u64>>,
+    pub circuits: Mutex<HashMap<String, CircuitEntry>>,
+    pub retries_total: AtomicU64,
+    pub upstream_timeouts_total: AtomicU64,
+}
+
+impl Default for GatewayRuntime {
+    fn default() -> Self {
+        Self {
+            started_at: Instant::now(),
+            active_requests: AtomicU64::new(0),
+            request_total: AtomicU64::new(0),
+            request_duration_micros: AtomicU64::new(0),
+            request_duration_buckets: std::array::from_fn(|_| AtomicU64::new(0)),
+            responses_by_status: Mutex::new(BTreeMap::new()),
+            circuits: Mutex::new(HashMap::new()),
+            retries_total: AtomicU64::new(0),
+            upstream_timeouts_total: AtomicU64::new(0),
+        }
+    }
 }
 
 impl AppState {
@@ -40,27 +76,32 @@ impl AppState {
             proxy_client,
             policy_documents: None,
             storage: None,
+            runtime: Arc::new(GatewayRuntime::default()),
+            validators: Arc::new(ValidatorRegistry::default()),
         })
     }
 
     pub async fn from_config(config: Config) -> Result<Self, StateError> {
         let mut state = Self::new(config)?;
-        if state.config.mode != GatewayMode::Off {
-            match SharedStorage::connect(&state.config.shared_storage).await {
-                Ok(storage) => state.storage = Some(Arc::new(storage)),
-                Err(error) if state.config.mode.requires_shared_storage() => {
-                    return Err(StateError::Storage(error));
-                }
-                Err(error) => {
-                    tracing::warn!(error = %error, "shadow policy storage unavailable");
-                }
-            }
-        }
+        let storage = SharedStorage::connect(&state.config.shared_storage).await?;
+        state.storage = Some(Arc::new(storage));
         Ok(state)
     }
 
     pub fn with_policy_documents(mut self, documents: PolicyDocuments) -> Self {
         self.policy_documents = Some(Arc::new(Mutex::new(documents)));
+        self
+    }
+
+    pub fn with_validator(
+        mut self,
+        name: impl Into<String>,
+        validator: impl Fn(&serde_json::Value, &serde_json::Value) -> Result<(), String>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        Arc::make_mut(&mut self.validators).register(name, validator);
         self
     }
 }

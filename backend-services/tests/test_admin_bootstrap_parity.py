@@ -73,3 +73,32 @@ def test_admin_seed_helper_is_canonical():
     assert doc['throttle_wait_duration_type'] == 'second'
     assert doc['throttle_queue_limit'] == 1
     assert set(doc['groups']) == {'ALL', 'admin'}
+
+
+def test_mongo_bootstrap_seeds_once_without_rotating_existing_credentials(monkeypatch):
+    monkeypatch.setenv('DOORMAN_ADMIN_EMAIL', 'first@doorman.dev')
+    monkeypatch.setenv('DOORMAN_ADMIN_PASSWORD', 'first-password-12chars')
+
+    from utils import password_util
+    from utils.database import Database, InMemoryDB
+
+    database = Database.__new__(Database)
+    database.memory_only = False
+    database.client = None
+    database.db_existed = False
+    database.db = InMemoryDB()
+
+    database.initialize_collections()
+    original = database.db.users.find_one({'username': 'admin'})
+    assert original is not None
+    assert password_util.verify_password('first-password-12chars', original['password'])
+
+    monkeypatch.setenv('DOORMAN_ADMIN_EMAIL', 'second@doorman.dev')
+    monkeypatch.setenv('DOORMAN_ADMIN_PASSWORD', 'second-password-12chars')
+    database.initialize_collections()
+
+    preserved = database.db.users.find_one({'username': 'admin'})
+    assert preserved['email'] == 'first@doorman.dev'
+    assert password_util.verify_password('first-password-12chars', preserved['password'])
+    assert database.db.roles.find_one({'role_name': 'admin'}) is not None
+    assert database.db.groups.find_one({'group_name': 'ALL'}) is not None

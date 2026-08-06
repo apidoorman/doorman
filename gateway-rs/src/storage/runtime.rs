@@ -25,6 +25,7 @@ pub struct SharedStorage {
 #[derive(Clone)]
 struct CachedPolicyDocuments {
     loaded_at: Instant,
+    revision: u64,
     documents: PolicyDocuments,
 }
 
@@ -40,6 +41,18 @@ pub enum StorageError {
     Json(#[from] serde_json::Error),
     #[error("invalid stored document: {0}")]
     InvalidDocument(String),
+}
+
+pub struct GatewayMetric<'a> {
+    pub minute_start: u64,
+    pub status: u16,
+    pub duration_micros: u64,
+    pub bytes_in: u64,
+    pub bytes_out: u64,
+    pub api_key: Option<&'a str>,
+    pub username: Option<&'a str>,
+    pub endpoint: Option<&'a str>,
+    pub is_test: bool,
 }
 
 impl SharedStorage {
@@ -60,15 +73,18 @@ impl SharedStorage {
     }
 
     pub async fn load_policy_documents(&self) -> Result<PolicyDocuments, StorageError> {
-        if let Some(cached) = self.policy_cache.read().await.as_ref() {
-            if cached.loaded_at.elapsed() < self.policy_cache_ttl {
-                return Ok(cached.documents.clone());
-            }
+        let revision = self.policy_revision().await?;
+        if let Some(cached) = self.policy_cache.read().await.as_ref()
+            && cached.revision == revision
+            && cached.loaded_at.elapsed() < self.policy_cache_ttl
+        {
+            return Ok(cached.documents.clone());
         }
 
         let (
             apis,
             endpoints,
+            endpoint_validations,
             users,
             roles,
             subscriptions,
@@ -77,9 +93,12 @@ impl SharedStorage {
             user_credits,
             settings,
             revocations,
+            tiers,
+            tier_assignments,
         ) = tokio::try_join!(
             self.load_collection("apis"),
             self.load_collection("endpoints"),
+            self.load_collection("endpoint_validations"),
             self.load_collection("users"),
             self.load_collection("roles"),
             self.load_collection("subscriptions"),
@@ -88,10 +107,13 @@ impl SharedStorage {
             self.load_collection("user_credits"),
             self.load_collection("settings"),
             self.load_collection("revocations"),
+            self.load_collection("tiers"),
+            self.load_collection("user_tier_assignments"),
         )?;
         let documents = PolicyDocuments {
             apis,
             endpoints,
+            endpoint_validations,
             users,
             roles,
             subscriptions,
@@ -100,9 +122,12 @@ impl SharedStorage {
             user_credits,
             settings,
             revocations,
+            tiers,
+            tier_assignments,
         };
         *self.policy_cache.write().await = Some(CachedPolicyDocuments {
             loaded_at: Instant::now(),
+            revision,
             documents: documents.clone(),
         });
         Ok(documents)
@@ -110,6 +135,19 @@ impl SharedStorage {
 
     pub async fn invalidate_policy_cache(&self) {
         *self.policy_cache.write().await = None;
+    }
+
+    async fn policy_revision(&self) -> Result<u64, StorageError> {
+        let mut redis = self.redis.clone();
+        Ok(redis
+            .get::<_, Option<u64>>("gateway:policy_revision")
+            .await?
+            .unwrap_or(0))
+    }
+
+    pub async fn bump_policy_revision(&self) -> Result<u64, StorageError> {
+        let mut redis = self.redis.clone();
+        Ok(redis.incr("gateway:policy_revision", 1_u64).await?)
     }
 
     async fn load_collection(&self, name: &str) -> Result<Vec<Value>, StorageError> {
@@ -136,6 +174,31 @@ impl SharedStorage {
             "#,
         )
         .key(key)
+        .arg(ttl_seconds.max(1))
+        .invoke_async(&mut redis)
+        .await?)
+    }
+
+    pub async fn check_tier_window(
+        &self,
+        key: &str,
+        limit: u64,
+        ttl_seconds: u64,
+    ) -> Result<u64, StorageError> {
+        let mut redis = self.redis.clone();
+        Ok(redis::Script::new(
+            r#"
+            local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+            if current >= tonumber(ARGV[1]) then
+                return current + 1
+            end
+            local count = redis.call('INCR', KEYS[1])
+            if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[2]) end
+            return count
+            "#,
+        )
+        .key(key)
+        .arg(limit)
         .arg(ttl_seconds.max(1))
         .invoke_async(&mut redis)
         .await?)
@@ -328,14 +391,114 @@ impl SharedStorage {
         Ok(result.deleted_count > 0)
     }
 
-    pub async fn clear_gateway_counters(&self) -> Result<(), StorageError> {
+    pub async fn record_gateway_metric(
+        &self,
+        metric: GatewayMetric<'_>,
+    ) -> Result<(), StorageError> {
+        let key = format!("gateway_metrics:{}", metric.minute_start);
         let mut redis = self.redis.clone();
-        for pattern in ["rate_limit:*", "throttle_limit:*", "bandwidth_usage:*"] {
-            let keys: Vec<String> = redis.keys(pattern).await?;
-            if !keys.is_empty() {
-                let _: usize = redis.del(keys).await?;
+        let script = redis::Script::new(
+            r#"
+            redis.call('HINCRBY', KEYS[1], 'count', 1)
+            redis.call('HINCRBY', KEYS[1], 'test_count', ARGV[1])
+            redis.call('HINCRBY', KEYS[1], 'error_count', ARGV[2])
+            redis.call('HINCRBY', KEYS[1], 'total_micros', ARGV[3])
+            redis.call('HINCRBY', KEYS[1], 'bytes_in', ARGV[4])
+            redis.call('HINCRBY', KEYS[1], 'bytes_out', ARGV[5])
+            redis.call('HINCRBY', KEYS[1], 'status:' .. ARGV[6], 1)
+            if ARGV[7] ~= '' and ARGV[1] == '0' then
+                redis.call('HINCRBY', KEYS[1], 'api:' .. ARGV[7], 1)
+            end
+            if ARGV[8] ~= '' and ARGV[1] == '0' then
+                redis.call('HINCRBY', KEYS[1], 'user:' .. ARGV[8], 1)
+            end
+            if ARGV[9] ~= '' and ARGV[1] == '0' then
+                redis.call('HINCRBY', KEYS[1], 'endpoint:' .. ARGV[9], 1)
+            end
+            redis.call('EXPIRE', KEYS[1], 2678400)
+            return 1
+            "#,
+        );
+        let _: u64 = script
+            .key(key)
+            .arg(u8::from(metric.is_test))
+            .arg(u8::from(metric.status >= 400))
+            .arg(metric.duration_micros)
+            .arg(metric.bytes_in)
+            .arg(metric.bytes_out)
+            .arg(metric.status)
+            .arg(metric.api_key.unwrap_or_default())
+            .arg(metric.username.unwrap_or_default())
+            .arg(metric.endpoint.unwrap_or_default())
+            .invoke_async(&mut redis)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn mongo_healthy(&self) -> bool {
+        self.mongo.run_command(doc! { "ping": 1 }).await.is_ok()
+    }
+
+    pub async fn redis_healthy(&self) -> bool {
+        let mut redis = self.redis.clone();
+        redis::cmd("PING")
+            .query_async::<String>(&mut redis)
+            .await
+            .is_ok()
+    }
+
+    pub async fn clear_gateway_state(&self) -> Result<(), StorageError> {
+        const PATTERNS: &[&str] = &[
+            "api_cache:*",
+            "api_endpoint_cache:*",
+            "api_id_cache:*",
+            "endpoint_cache:*",
+            "endpoint_validation_cache:*",
+            "graphql_schema_cache:*",
+            "group_cache:*",
+            "openapi_cache:*",
+            "role_cache:*",
+            "user_subscription_cache:*",
+            "user_cache:*",
+            "user_group_cache:*",
+            "user_role_cache:*",
+            "endpoint_load_balancer:*",
+            "endpoint_server_cache:*",
+            "client_routing_cache:*",
+            "token_def_cache:*",
+            "credit_def_cache:*",
+            "csrf_token_map:*",
+            "wsdl_cache:*",
+            "rate_limit:*",
+            "throttle_limit:*",
+            "bandwidth_usage:*",
+            "ip_rate_limit:*",
+            "tier_rate_limit:*",
+            "gateway_metrics:*",
+        ];
+        let mut redis = self.redis.clone();
+        for pattern in PATTERNS {
+            let mut cursor = 0_u64;
+            loop {
+                let (next, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                    .arg(cursor)
+                    .arg("MATCH")
+                    .arg(pattern)
+                    .arg("COUNT")
+                    .arg(500_u64)
+                    .query_async(&mut redis)
+                    .await?;
+                if !keys.is_empty() {
+                    let _: usize = redis::cmd("DEL").arg(keys).query_async(&mut redis).await?;
+                }
+                cursor = next;
+                if cursor == 0 {
+                    break;
+                }
             }
         }
+        self.bump_policy_revision().await?;
+        self.invalidate_policy_cache().await;
         Ok(())
     }
 }

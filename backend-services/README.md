@@ -54,7 +54,7 @@ docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `MEM_OR_EXTERNAL` | `MEM` | `MEM` for in-memory, `REDIS` or `EXTERNAL` for production. |
+| `MEM_OR_EXTERNAL` | `REDIS` | Shared Redis cache plus MongoDB persistence; required by the Rust gateway. |
 | `REDIS_HOST` | `localhost` | Redis server hostname. |
 | `MONGO_DB_HOSTS` | `localhost:27017` | MongoDB connection string. |
 | `JWT_SECRET_KEY` | - | **Required**. Secret for signing tokens. |
@@ -90,8 +90,15 @@ Built by **Doorman Dev, LLC**. Licensed under **Apache License 2.0**.
 
 ## Rust Gateway Migration
 
-The Python service remains the owner of `/platform/*` and the executable parity
-reference for `/api/*`. In the combined container it listens on
-`127.0.0.1:${PYTHON_INTERNAL_PORT:-3002}` while `gateway-rs` owns public port
-`3001`. `GATEWAY_RUST_MODE=off` proxies all traffic to Python; Rust-owned gateway
-routes are enabled incrementally after parity testing.
+Rust owns all public gateway traffic (`/api/*`, `/grpc-web/*`, and `/metrics`)
+for REST, SOAP, GraphQL, native gRPC, and gRPC-Web. Python owns only
+`/platform/*`; in the combined container it mounts only those routes and listens
+on `127.0.0.1:${PYTHON_INTERNAL_PORT:-3002}`. There is no Python gateway fallback.
+
+MongoDB and Redis are required shared dependencies for the deployed data plane.
+Proto upload/update compiles a language-neutral descriptor set into the API
+document. Startup backfills descriptors for existing active gRPC APIs; operators
+can rerun this with `POST /platform/proto/descriptors/backfill`, and readiness
+reports any APIs still missing descriptors. Rust writes redacted structured
+activity records into the shared log directory so existing platform log queries
+continue to include gateway traffic.

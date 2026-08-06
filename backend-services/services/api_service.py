@@ -66,6 +66,32 @@ class ApiService:
         data.api_path = f'/{data.api_name}/{data.api_version}'
         data.api_id = str(uuid.uuid4())
         api_dict = data.dict()
+        if str(api_dict.get('api_type') or '').lower() == 'grpc':
+            try:
+                from routes.proto_routes import (
+                    compile_descriptor_fields,
+                    get_safe_proto_path,
+                    validate_proto_content,
+                )
+
+                proto_path, _ = get_safe_proto_path(data.api_name, data.api_version)
+                if proto_path.exists():
+                    proto_content = validate_proto_content(proto_path.read_bytes())
+                    api_dict.update(
+                        compile_descriptor_fields(
+                            proto_path.parent, proto_path, proto_content
+                        )
+                    )
+            except Exception as error:
+                logger.error(
+                    request_id + ' | Failed to attach pre-uploaded gRPC descriptor: ' + str(error),
+                    exc_info=True,
+                )
+                return ResponseModel(
+                    status_code=400,
+                    error_code=ErrorCodes.GRPC_GENERATION_FAILED,
+                    error_message='Unable to compile the pre-uploaded gRPC proto descriptor',
+                ).dict()
         insert_result = await db_insert_one(api_collection, api_dict)
         if not insert_result.acknowledged:
             logger.error(request_id + ' | API creation failed with code API002')

@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Request, State},
+    extract::{OriginalUri, Request, State},
     response::{IntoResponse, Response},
 };
 use http::StatusCode;
@@ -16,11 +16,10 @@ pub async fn graphql_policy_then_execute(
     State(state): State<AppState>,
     mut request: Request,
 ) -> Result<Response, GatewayError> {
-    let enforce = state.config.mode.enforces_policies();
-    if enforce && request.method() == http::Method::OPTIONS {
-        return Ok(StatusCode::NO_CONTENT.into_response());
-    }
-    if enforce && request.method() != http::Method::POST {
+    if !matches!(
+        request.method(),
+        &http::Method::POST | &http::Method::OPTIONS
+    ) {
         return Ok(StatusCode::METHOD_NOT_ALLOWED.into_response());
     }
     let version = request
@@ -28,7 +27,7 @@ pub async fn graphql_policy_then_execute(
         .get("x-api-version")
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned)
-        .or_else(|| (!enforce).then(|| "v1".to_owned()));
+        .or_else(|| (request.method() == http::Method::OPTIONS).then(|| "v1".to_owned()));
     let Some(version) = version else {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -39,9 +38,12 @@ pub async fn graphql_policy_then_execute(
         )
             .into_response());
     };
-    let api_name = request
-        .uri()
-        .path()
+    let original_path = request
+        .extensions()
+        .get::<OriginalUri>()
+        .map(|uri| uri.0.path().to_owned())
+        .unwrap_or_else(|| request.uri().path().to_owned());
+    let api_name = original_path
         .trim_start_matches("/api/graphql/")
         .trim_matches('/')
         .to_owned();

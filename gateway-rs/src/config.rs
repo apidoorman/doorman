@@ -1,65 +1,19 @@
-use std::{env, net::SocketAddr, str::FromStr, time::Duration};
+use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, time::Duration};
 
 use thiserror::Error;
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum GatewayMode {
-    #[default]
-    Off,
-    Shadow,
-    Canary,
-    On,
-}
-
-impl GatewayMode {
-    pub fn proxies_all_routes(self) -> bool {
-        matches!(self, Self::Off)
-    }
-
-    pub fn should_serve_rust_route(self, canary_safe: bool) -> bool {
-        match self {
-            Self::Off | Self::Shadow => false,
-            Self::Canary => canary_safe,
-            Self::On => true,
-        }
-    }
-
-    pub fn requires_shared_storage(self) -> bool {
-        matches!(self, Self::Canary | Self::On)
-    }
-
-    pub fn evaluates_policies(self) -> bool {
-        !matches!(self, Self::Off)
-    }
-
-    pub fn enforces_policies(self) -> bool {
-        matches!(self, Self::Canary | Self::On)
-    }
-}
-
-impl FromStr for GatewayMode {
-    type Err = ConfigError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "off" => Ok(Self::Off),
-            "shadow" => Ok(Self::Shadow),
-            "canary" => Ok(Self::Canary),
-            "on" => Ok(Self::On),
-            other => Err(ConfigError::InvalidMode(other.to_owned())),
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Config {
     pub host: String,
     pub port: u16,
     pub python_base_url: String,
-    pub mode: GatewayMode,
     pub connect_timeout: Duration,
     pub https_only: bool,
     pub content_security_policy: Option<String>,
+    pub compression_enabled: bool,
+    pub compression_level: i32,
+    pub compression_minimum_size: u16,
+    pub logs_dir: Option<PathBuf>,
     pub shared_storage: SharedStorageConfig,
 }
 
@@ -82,6 +36,7 @@ pub struct SharedStorageConfig {
     pub trust_x_forwarded_for: bool,
     pub local_host_ip_bypass: bool,
     pub policy_cache_ttl_seconds: u64,
+    pub skip_tier_rate_limit: bool,
 }
 
 impl SharedStorageConfig {
@@ -108,6 +63,7 @@ impl SharedStorageConfig {
             trust_x_forwarded_for: env_bool("TRUST_X_FORWARDED_FOR", false),
             local_host_ip_bypass: env_bool("LOCAL_HOST_IP_BYPASS", true),
             policy_cache_ttl_seconds: env_parse("GATEWAY_POLICY_CACHE_TTL_SECONDS", 1)?,
+            skip_tier_rate_limit: env_bool("SKIP_TIER_RATE_LIMIT", false),
         })
     }
 
@@ -194,36 +150,46 @@ impl Default for SharedStorageConfig {
             trust_x_forwarded_for: false,
             local_host_ip_bypass: true,
             policy_cache_ttl_seconds: 1,
+            skip_tier_rate_limit: false,
         }
     }
 }
 
 impl Config {
     pub fn from_env() -> Result<Self, ConfigError> {
-        let enabled = env_bool("GATEWAY_RUST_ENABLED", false);
-        let explicit_mode = env::var("GATEWAY_RUST_MODE").ok();
-        let mode = match explicit_mode {
-            Some(value) => value.parse()?,
-            None if enabled => GatewayMode::On,
-            None => GatewayMode::Off,
-        };
         let shared_storage = SharedStorageConfig::from_env()?;
+        shared_storage.validate_required()?;
 
-        if mode.requires_shared_storage() {
-            shared_storage.validate_required()?;
-        }
+        let configured_compression_level = env_parse("COMPRESSION_LEVEL", 1_i32)?;
+        let compression_level = if (1..=9).contains(&configured_compression_level) {
+            configured_compression_level
+        } else {
+            tracing::warn!(
+                value = configured_compression_level,
+                "invalid COMPRESSION_LEVEL; using 1"
+            );
+            1
+        };
+        let compression_minimum_size =
+            env_parse::<u64>("COMPRESSION_MINIMUM_SIZE", 500)?.min(u64::from(u16::MAX)) as u16;
 
         Ok(Self {
             host: env::var("GATEWAY_RUST_HOST").unwrap_or_else(|_| "0.0.0.0".to_owned()),
             port: env_parse("PORT", 3001)?,
             python_base_url: env::var("PYTHON_INTERNAL_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:3002".to_owned()),
-            mode,
             connect_timeout: Duration::from_secs(env_parse("GATEWAY_CONNECT_TIMEOUT_SECONDS", 10)?),
             https_only: env_bool("HTTPS_ONLY", false),
             content_security_policy: env::var("CONTENT_SECURITY_POLICY")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
+            compression_enabled: env_bool("COMPRESSION_ENABLED", true),
+            compression_level,
+            compression_minimum_size,
+            logs_dir: env_non_empty("LOGS_DIR").map(PathBuf::from).or_else(|| {
+                let path = PathBuf::from("/app/backend-services/platform-logs");
+                path.exists().then_some(path)
+            }),
             shared_storage,
         })
     }
@@ -238,15 +204,18 @@ impl Config {
             .map_err(|_| ConfigError::InvalidAddress(self.bind_addr()))
     }
 
-    pub fn for_test(mode: GatewayMode, python_base_url: String) -> Self {
+    pub fn for_test(python_base_url: String) -> Self {
         Self {
             host: "127.0.0.1".to_owned(),
             port: 0,
             python_base_url,
-            mode,
             connect_timeout: Duration::from_secs(1),
             https_only: false,
             content_security_policy: None,
+            compression_enabled: true,
+            compression_level: 1,
+            compression_minimum_size: 500,
+            logs_dir: None,
             shared_storage: SharedStorageConfig::default(),
         }
     }
@@ -282,61 +251,19 @@ where
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("invalid GATEWAY_RUST_MODE: {0}")]
-    InvalidMode(String),
     #[error("invalid value for {0}: {1}")]
     InvalidValue(String, String),
     #[error("invalid gateway bind address: {0}")]
     InvalidAddress(String),
-    #[error("Rust route mode requires shared storage; MEM_OR_EXTERNAL=MEM is unsupported")]
+    #[error("Rust gateway requires shared storage; MEM_OR_EXTERNAL=MEM is unsupported")]
     MemoryModeUnsupported,
-    #[error("missing required environment variable for Rust gateway mode: {0}")]
+    #[error("missing required environment variable for Rust gateway: {0}")]
     MissingEnv(&'static str),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_gateway_modes() {
-        assert_eq!("off".parse::<GatewayMode>().unwrap(), GatewayMode::Off);
-        assert_eq!(
-            "shadow".parse::<GatewayMode>().unwrap(),
-            GatewayMode::Shadow
-        );
-        assert_eq!(
-            "canary".parse::<GatewayMode>().unwrap(),
-            GatewayMode::Canary
-        );
-        assert_eq!("ON".parse::<GatewayMode>().unwrap(), GatewayMode::On);
-        assert!("invalid".parse::<GatewayMode>().is_err());
-    }
-
-    #[test]
-    fn mode_route_decisions_are_distinct() {
-        assert!(GatewayMode::Off.proxies_all_routes());
-        assert!(!GatewayMode::Shadow.proxies_all_routes());
-        assert!(!GatewayMode::Canary.proxies_all_routes());
-        assert!(!GatewayMode::On.proxies_all_routes());
-
-        assert!(!GatewayMode::Off.should_serve_rust_route(true));
-        assert!(!GatewayMode::Shadow.should_serve_rust_route(true));
-        assert!(GatewayMode::Canary.should_serve_rust_route(true));
-        assert!(!GatewayMode::Canary.should_serve_rust_route(false));
-        assert!(GatewayMode::On.should_serve_rust_route(true));
-        assert!(GatewayMode::On.should_serve_rust_route(false));
-
-        assert!(!GatewayMode::Off.evaluates_policies());
-        assert!(GatewayMode::Shadow.evaluates_policies());
-        assert!(!GatewayMode::Shadow.enforces_policies());
-        assert!(GatewayMode::Canary.enforces_policies());
-        assert!(GatewayMode::On.enforces_policies());
-
-        assert!(!GatewayMode::Shadow.requires_shared_storage());
-        assert!(GatewayMode::Canary.requires_shared_storage());
-        assert!(GatewayMode::On.requires_shared_storage());
-    }
 
     #[test]
     fn builds_python_compatible_storage_urls() {
@@ -358,6 +285,7 @@ mod tests {
             trust_x_forwarded_for: false,
             local_host_ip_bypass: true,
             policy_cache_ttl_seconds: 1,
+            skip_tier_rate_limit: false,
         };
 
         assert_eq!(

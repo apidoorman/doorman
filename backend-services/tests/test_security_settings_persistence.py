@@ -83,3 +83,16 @@ async def test_save_settings_writes_file_and_autosave_triggers_dump(tmp_path, mo
     assert int(result.get('auto_save_frequency_seconds')) == 90
 
     await ssu.stop_auto_save_task()
+
+
+def test_merge_settings_drops_mongo_object_id_before_file_serialization(tmp_path, monkeypatch):
+    from utils import security_settings_util as ssu
+
+    settings = ssu._merge_settings({'_id': object(), 'type': 'security_settings'})
+    output = tmp_path / 'security.json'
+    monkeypatch.setattr(ssu, 'SETTINGS_FILE', str(output), raising=False)
+
+    ssu._save_to_file(settings)
+
+    assert json.loads(output.read_text())['type'] == 'security_settings'
+    assert '_id' not in settings

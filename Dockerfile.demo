@@ -62,7 +62,11 @@ WORKDIR /app
 
 # Demo defaults (no external .env needed)
 ENV ENV=development \
-    MEM_OR_EXTERNAL=MEM \
+    MEM_OR_EXTERNAL=REDIS \
+    MONGO_DB_HOSTS=mongo:27017 \
+    MONGO_DB_USER=doorman_admin \
+    MONGO_DB_PASSWORD=demo-mongo-password \
+    REDIS_HOST=redis \
     THREADS=1 \
     HTTPS_ONLY=false \
     DOORMAN_ADMIN_EMAIL=demo@doorman.dev \

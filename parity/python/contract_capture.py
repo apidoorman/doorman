@@ -17,9 +17,20 @@ HEADER_ALLOWLIST = {
     "access-control-allow-headers",
     "access-control-allow-methods",
     "access-control-allow-origin",
+    "content-encoding",
     "content-type",
+    "grpc-accept-encoding",
+    "grpc-encoding",
+    "grpc-message",
+    "grpc-status",
     "request_id",
+    "retry-after",
+    "set-cookie",
     "vary",
+    "x-ratelimit-limit",
+    "x-ratelimit-remaining",
+    "x-ratelimit-reset",
+    "x-ratelimit-retry-after",
     "x-request-id",
     "x-upstream-request-id",
 }
@@ -154,13 +165,13 @@ def normalize_headers(headers: dict[str, Any] | None) -> dict[str, Any]:
         if name == "vary":
             tokens = [item.strip() for item in str(value).split(",")]
             stable_tokens = [
-                item for item in tokens
-                if item.lower() != "accept-encoding"
-                and (item.lower() != "origin" or has_cors_origin)
+                item
+                for item in tokens
+                if item.lower() != "origin" or has_cors_origin
             ]
             if not stable_tokens:
                 continue
-            value = ", ".join(stable_tokens)
+            value = ", ".join(item.lower() for item in stable_tokens)
         if name in {"x-request-id", "request_id", "x-upstream-request-id"} and value:
             normalized[name] = REQUEST_ID_TOKEN
         else:

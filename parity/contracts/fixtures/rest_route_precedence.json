@@ -19,8 +19,10 @@
       },
       "content_type": "application/json",
       "headers": {
+        "content-encoding": "gzip",
         "content-type": "application/json",
         "request_id": "<request-id>",
+        "vary": "accept-encoding",
         "x-request-id": "<request-id>"
       },
       "status": 200
@@ -46,6 +48,7 @@
   "request": {
     "body": null,
     "headers": {
+      "accept-encoding": "gzip",
       "client-key": "contract-client"
     },
     "method": "GET",

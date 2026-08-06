@@ -1,5 +1,6 @@
 use std::{
     net::SocketAddr,
+    sync::atomic::Ordering,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -14,12 +15,18 @@ use serde_json::Value;
 
 use crate::{
     error::GatewayError,
-    middleware::body_limit::BodyLimits,
+    gateway::{
+        circuit_breaker::{check as circuit_allows, record_failure, record_success},
+        transforms::{transform_request, transform_response},
+    },
+    middleware::{
+        body_limit::BodyLimits,
+        cors::{apply_actual_response, preflight_response},
+    },
     policy::{
         PolicyErrorBody,
         evaluator::{PolicyRequest, PolicyRuntime, evaluate_rest_policy, evaluate_shared_effects},
     },
-    proxy::platform::proxy_to_python,
     state::AppState,
 };
 
@@ -29,6 +36,7 @@ pub enum DataPlaneProtocol {
     Graphql,
     Soap,
     Grpc,
+    GrpcWeb,
 }
 
 #[derive(Clone, Debug)]
@@ -38,146 +46,184 @@ pub async fn rest_policy_then_proxy(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Response, GatewayError> {
-    if request.method() == http::Method::OPTIONS {
-        if state.config.mode.enforces_policies() {
-            return Ok(StatusCode::NO_CONTENT.into_response());
-        }
-        return proxy_to_python(State(state), request).await;
-    }
-
-    if state.config.mode.evaluates_policies() {
-        let protocol = request
-            .extensions()
-            .get::<DataPlaneProtocol>()
-            .copied()
-            .unwrap_or(DataPlaneProtocol::Rest);
-        let enforce = state.config.mode.enforces_policies();
-        let path = request
-            .extensions()
-            .get::<PolicyPath>()
-            .map(|value| value.0.clone())
-            .or_else(|| {
-                request
-                    .extensions()
-                    .get::<OriginalUri>()
-                    .map(|value| value.0.path().to_owned())
-            })
-            .unwrap_or_else(|| request.uri().path().to_owned());
-        let peer = request
-            .extensions()
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|value| value.0.ip());
-        let headers = request.headers().clone();
-        let content_length = headers
-            .get(header::CONTENT_LENGTH)
+    let protocol = request
+        .extensions()
+        .get::<DataPlaneProtocol>()
+        .copied()
+        .unwrap_or(DataPlaneProtocol::Rest);
+    let path = request
+        .extensions()
+        .get::<PolicyPath>()
+        .map(|value| value.0.clone())
+        .or_else(|| {
+            request
+                .extensions()
+                .get::<OriginalUri>()
+                .map(|value| value.0.path().to_owned())
+        })
+        .unwrap_or_else(|| request.uri().path().to_owned());
+    let peer = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|value| value.0.ip());
+    let headers = request.headers().clone();
+    let content_length = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
+    let policy_method = if request.method() == http::Method::OPTIONS {
+        headers
+            .get(header::ACCESS_CONTROL_REQUEST_METHOD)
             .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<u64>().ok())
-            .unwrap_or(0);
-        let policy_request = PolicyRequest {
-            method: request.method().clone(),
-            path,
-            headers,
-            direct_ip: peer,
-            now_millis: now_millis(),
-            content_length,
-        };
+            .and_then(|value| http::Method::from_bytes(value.as_bytes()).ok())
+            .unwrap_or(http::Method::OPTIONS)
+    } else {
+        request.method().clone()
+    };
+    let policy_request = PolicyRequest {
+        method: policy_method,
+        path,
+        headers,
+        direct_ip: peer,
+        now_millis: now_millis(),
+        content_length,
+    };
 
-        let documents = if let Some(injected) = &state.policy_documents {
-            injected
-                .lock()
-                .map(|documents| documents.clone())
-                .map_err(|error| error.to_string())
-        } else if let Some(storage) = &state.storage {
-            storage
-                .load_policy_documents()
-                .await
-                .map_err(|error| error.to_string())
-        } else {
-            Err("shared policy storage is unavailable".to_owned())
-        };
-        let result = match documents {
-            Ok(mut documents) => match evaluate_rest_policy(
-                &mut documents,
-                &policy_request,
-                &state.config.shared_storage,
-                &PolicyRuntime::default(),
-            ) {
-                Ok(Some(mut decision)) => {
-                    if let Some(storage) = &state.storage {
-                        evaluate_shared_effects(
-                            &documents,
-                            &policy_request,
-                            &mut decision,
-                            storage,
-                            enforce,
-                        )
-                        .await
-                        .map(|()| Some(decision))
-                    } else if enforce {
-                        Err(crate::policy::PolicyFailure::new(
-                            crate::policy::PolicyStage::Resolution,
-                            StatusCode::SERVICE_UNAVAILABLE,
-                            "GTW006",
-                            "Gateway state store unavailable",
-                        ))
-                    } else {
-                        Ok(Some(decision))
-                    }
-                }
-                other => other,
-            },
-            Err(error) => {
-                tracing::error!(error = %error, "rust policy storage unavailable");
-                if enforce {
+    let documents = if let Some(injected) = &state.policy_documents {
+        injected
+            .lock()
+            .map(|documents| documents.clone())
+            .map_err(|error| error.to_string())
+    } else if let Some(storage) = &state.storage {
+        storage
+            .load_policy_documents()
+            .await
+            .map_err(|error| error.to_string())
+    } else {
+        Err("shared policy storage is unavailable".to_owned())
+    };
+    let result = match documents {
+        Ok(mut documents) => match evaluate_rest_policy(
+            &mut documents,
+            &policy_request,
+            &state.config.shared_storage,
+            &PolicyRuntime::default(),
+        ) {
+            Ok(Some(mut decision)) => {
+                if let Some(storage) = &state.storage {
+                    evaluate_shared_effects(
+                        &documents,
+                        &policy_request,
+                        &mut decision,
+                        storage,
+                        true,
+                    )
+                    .await
+                    .map(|()| Some(decision))
+                } else if state.policy_documents.is_some() {
+                    Ok(Some(decision))
+                } else {
                     Err(crate::policy::PolicyFailure::new(
                         crate::policy::PolicyStage::Resolution,
                         StatusCode::SERVICE_UNAVAILABLE,
                         "GTW006",
                         "Gateway state store unavailable",
                     ))
-                } else {
-                    return proxy_to_python(State(state), request).await;
                 }
             }
-        };
-        match result {
-            Ok(Some(decision)) => {
-                tracing::debug!(?decision, "rust policy shadow decision");
-                if enforce {
-                    return execute_rest(&state, request, decision, protocol).await;
-                }
+            other => other,
+        },
+        Err(error) => {
+            tracing::error!(error = %error, "rust policy storage unavailable");
+            Err(crate::policy::PolicyFailure::new(
+                crate::policy::PolicyStage::Resolution,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "GTW006",
+                "Gateway state store unavailable",
+            ))
+        }
+    };
+    match result {
+        Ok(Some(decision)) => {
+            if request.method() == http::Method::OPTIONS {
+                return Ok(preflight_response(&decision, request.headers()));
             }
-            Ok(None) => {
-                tracing::debug!("rust policy could not resolve API");
-                if enforce {
-                    return Ok((
-                        StatusCode::NOT_FOUND,
-                        Json(PolicyErrorBody {
-                            error_code: "GTW001".to_owned(),
-                            error_message: "API does not exist for the requested name and version"
-                                .to_owned(),
-                        }),
-                    )
-                        .into_response());
-                }
+            let origin = request
+                .headers()
+                .get(header::ORIGIN)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned);
+            let mut response = execute_rest(&state, request, decision.clone(), protocol).await?;
+            apply_tier_headers(&mut response, decision.tier_limit_status.as_ref());
+            apply_actual_response(&mut response, &decision, origin.as_deref());
+            response
+                .extensions_mut()
+                .insert(crate::middleware::activity::ActivityContext {
+                    username: decision
+                        .username
+                        .clone()
+                        .or_else(|| decision.tier_username.clone()),
+                    api: decision
+                        .api_name
+                        .as_ref()
+                        .map(|name| format!("{}:{name}", protocol_name(protocol))),
+                    endpoint: decision.upstream_path.clone(),
+                    upstream: decision.upstream.clone(),
+                });
+            Ok(response)
+        }
+        Ok(None) => Ok((
+            StatusCode::NOT_FOUND,
+            Json(PolicyErrorBody {
+                error_code: "GTW001".to_owned(),
+                error_message: "API does not exist for the requested name and version".to_owned(),
+            }),
+        )
+            .into_response()),
+        Err(failure) => {
+            if let Some(tier_limit) = failure.tier_limit {
+                let (body, status) = *tier_limit;
+                let mut response = (failure.status, Json(body)).into_response();
+                apply_tier_headers(&mut response, Some(&status));
+                return Ok(response);
             }
-            Err(failure) => {
-                tracing::debug!(?failure, "rust policy shadow failure");
-                if enforce {
-                    return Ok((
-                        failure.status,
-                        Json(PolicyErrorBody {
-                            error_code: failure.error_code,
-                            error_message: failure.error_message,
-                        }),
-                    )
-                        .into_response());
-                }
-            }
+            Ok((
+                failure.status,
+                Json(PolicyErrorBody {
+                    error_code: failure.error_code,
+                    error_message: failure.error_message,
+                }),
+            )
+                .into_response())
         }
     }
+}
 
-    proxy_to_python(State(state), request).await
+fn protocol_name(protocol: DataPlaneProtocol) -> &'static str {
+    match protocol {
+        DataPlaneProtocol::Rest => "rest",
+        DataPlaneProtocol::Graphql => "graphql",
+        DataPlaneProtocol::Soap => "soap",
+        DataPlaneProtocol::Grpc | DataPlaneProtocol::GrpcWeb => "grpc",
+    }
+}
+
+fn apply_tier_headers(
+    response: &mut Response,
+    status: Option<&crate::policy::tier::TierLimitStatus>,
+) {
+    let Some(status) = status else {
+        return;
+    };
+    for (name, value) in status.headers() {
+        if let (Ok(name), Ok(value)) = (
+            http::HeaderName::try_from(name),
+            http::HeaderValue::from_str(&value),
+        ) {
+            response.headers_mut().insert(name, value);
+        }
+    }
 }
 
 async fn execute_rest(
@@ -189,11 +235,18 @@ async fn execute_rest(
     if let Some(delay_ms) = decision.throttle_delay_ms.filter(|delay| *delay > 0) {
         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
     }
-    if decision.is_crud && protocol == DataPlaneProtocol::Rest {
-        return execute_crud(state, request, &decision).await;
+    if decision.is_crud {
+        if protocol == DataPlaneProtocol::Rest {
+            return execute_crud(state, request, &decision).await;
+        }
+        return crate::protocol::crud::execute(state, request, &decision, protocol).await;
     }
+    let circuit_key = decision
+        .api_id
+        .clone()
+        .unwrap_or_else(|| "unknown".to_owned());
 
-    let Some(base_url) = decision.upstream else {
+    let Some(base_url) = decision.upstream.clone() else {
         return Ok((
             StatusCode::NOT_FOUND,
             Json(PolicyErrorBody {
@@ -203,30 +256,38 @@ async fn execute_rest(
         )
             .into_response());
     };
-    let upstream_path = decision.upstream_path.unwrap_or_else(|| "/".to_owned());
-    let query = request
-        .uri()
-        .query()
-        .map(|value| format!("?{value}"))
-        .unwrap_or_default();
-    let target = format!(
-        "{}/{}{}",
-        base_url.trim_end_matches('/'),
-        upstream_path.trim_start_matches('/'),
-        query
-    );
+    if !circuit_allows(&state.runtime.circuits, &circuit_key) {
+        return Ok((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(PolicyErrorBody {
+                error_code: "GTW006".to_owned(),
+                error_message: "Upstream circuit open".to_owned(),
+            }),
+        )
+            .into_response());
+    }
+    let upstream_path = decision
+        .upstream_path
+        .clone()
+        .unwrap_or_else(|| "/".to_owned());
+    let original_query = request.uri().query().map(str::to_owned);
     let (parts, body) = request.into_parts();
     let limits = BodyLimits::from_env();
     let body_limit = match protocol {
         DataPlaneProtocol::Rest => limits.rest,
         DataPlaneProtocol::Graphql => limits.graphql,
         DataPlaneProtocol::Soap => limits.soap,
-        DataPlaneProtocol::Grpc => limits.grpc,
+        DataPlaneProtocol::Grpc | DataPlaneProtocol::GrpcWeb => limits.grpc,
     };
     let body = to_bytes(body, body_limit).await?;
-    if let Err(failure) =
-        validate_protocol_request(protocol, &parts.method, &body, decision.graphql_max_depth)
-    {
+    if let Err(failure) = validate_protocol_request_with_registry(
+        protocol,
+        &parts.method,
+        &body,
+        decision.graphql_max_depth,
+        decision.endpoint_validation.as_ref(),
+        state.validators.as_ref(),
+    ) {
         return Ok((
             failure.status,
             Json(PolicyErrorBody {
@@ -235,6 +296,39 @@ async fn execute_rest(
             }),
         )
             .into_response());
+    }
+    if protocol == DataPlaneProtocol::Grpc {
+        let (headers, body, _) = transform_request(
+            parts.headers.clone(),
+            body.to_vec(),
+            None,
+            decision.request_transform.as_ref(),
+        );
+        return Ok(
+            crate::protocol::grpc::execute_json_gateway(state, &decision, &headers, &body).await,
+        );
+    }
+    if protocol == DataPlaneProtocol::GrpcWeb {
+        let Some(target) = parts
+            .extensions
+            .get::<crate::routes::grpc_web::GrpcWebTarget>()
+            .cloned()
+        else {
+            return Ok(policy_error_response(
+                StatusCode::BAD_REQUEST,
+                "GTW011",
+                "Invalid gRPC-Web target",
+            ));
+        };
+        return Ok(crate::protocol::grpc::execute_web_gateway(
+            state,
+            &decision,
+            &parts.headers,
+            &body,
+            &target.service,
+            &target.method,
+        )
+        .await);
     }
     let request_header_bytes = parts
         .headers
@@ -306,6 +400,33 @@ async fn execute_rest(
             headers.insert(name, value);
         }
     }
+    let mut headers = headers;
+    let mut outbound_body = body.to_vec();
+    if protocol == DataPlaneProtocol::Soap {
+        outbound_body = crate::protocol::soap::prepare_request(
+            &mut headers,
+            outbound_body,
+            decision.soap_version.as_deref(),
+            decision.ws_security.as_ref(),
+        );
+    }
+    let (headers, body, query) = transform_request(
+        headers,
+        outbound_body,
+        original_query.as_deref(),
+        decision.request_transform.as_ref(),
+    );
+    let query = if query.is_empty() {
+        String::new()
+    } else {
+        format!("?{query}")
+    };
+    let target = format!(
+        "{}/{}{}",
+        base_url.trim_end_matches('/'),
+        upstream_path.trim_start_matches('/'),
+        query
+    );
     let attempts = decision.retry_count.saturating_add(1);
     let mut attempt = 0_u32;
     let upstream = loop {
@@ -325,11 +446,22 @@ async fn execute_rest(
                 if matches!(response.status().as_u16(), 500 | 502 | 503 | 504)
                     && attempt < attempts =>
             {
+                record_failure(&state.runtime.circuits, &circuit_key);
+                state.runtime.retries_total.fetch_add(1, Ordering::Relaxed);
                 retry_backoff(attempt).await;
             }
             Ok(response) => break response,
-            Err(_) if attempt < attempts => retry_backoff(attempt).await,
+            Err(_) if attempt < attempts => {
+                record_failure(&state.runtime.circuits, &circuit_key);
+                state.runtime.retries_total.fetch_add(1, Ordering::Relaxed);
+                retry_backoff(attempt).await;
+            }
             Err(error) if error.is_timeout() => {
+                record_failure(&state.runtime.circuits, &circuit_key);
+                state
+                    .runtime
+                    .upstream_timeouts_total
+                    .fetch_add(1, Ordering::Relaxed);
                 return Ok((
                     StatusCode::GATEWAY_TIMEOUT,
                     Json(PolicyErrorBody {
@@ -339,10 +471,18 @@ async fn execute_rest(
                 )
                     .into_response());
             }
-            Err(error) => return Err(error.into()),
+            Err(error) => {
+                record_failure(&state.runtime.circuits, &circuit_key);
+                return Err(error.into());
+            }
         }
     };
     let status = upstream.status();
+    if matches!(status.as_u16(), 500 | 502 | 503 | 504) {
+        record_failure(&state.runtime.circuits, &circuit_key);
+    } else {
+        record_success(&state.runtime.circuits, &circuit_key);
+    }
     if status == StatusCode::NOT_FOUND {
         return Ok((
             StatusCode::NOT_FOUND,
@@ -354,19 +494,6 @@ async fn execute_rest(
             .into_response());
     }
     let upstream_headers = upstream.headers().clone();
-    let is_json = upstream_headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.to_ascii_lowercase().contains("application/json"));
-    let upstream_content_type = upstream_headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or(match protocol {
-            DataPlaneProtocol::Soap => "application/xml",
-            DataPlaneProtocol::Grpc => "application/grpc",
-            DataPlaneProtocol::Rest | DataPlaneProtocol::Graphql => "application/json",
-        })
-        .to_owned();
     let bytes = upstream.bytes().await?;
     if let (Some(storage), Some(key), Some(ttl)) = (
         state.storage.as_ref(),
@@ -393,10 +520,30 @@ async fn execute_rest(
                 .into_response());
         }
     }
+    let (upstream_headers, bytes, status) = transform_response(
+        upstream_headers,
+        bytes.to_vec(),
+        status,
+        decision.response_transform.as_ref(),
+    );
+    let is_json = upstream_headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.to_ascii_lowercase().contains("application/json"));
+    let upstream_content_type = upstream_headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or(match protocol {
+            DataPlaneProtocol::Soap => "application/xml",
+            DataPlaneProtocol::Grpc | DataPlaneProtocol::GrpcWeb => "application/grpc",
+            DataPlaneProtocol::Rest | DataPlaneProtocol::Graphql => "application/json",
+        })
+        .to_owned();
     let (body, content_type) = match protocol {
-        DataPlaneProtocol::Soap | DataPlaneProtocol::Graphql | DataPlaneProtocol::Grpc => {
-            (bytes.to_vec(), upstream_content_type)
-        }
+        DataPlaneProtocol::Soap
+        | DataPlaneProtocol::Graphql
+        | DataPlaneProtocol::Grpc
+        | DataPlaneProtocol::GrpcWeb => (bytes.to_vec(), upstream_content_type),
         DataPlaneProtocol::Rest if !is_json => (
             serde_json::to_vec(&String::from_utf8_lossy(&bytes))
                 .unwrap_or_else(|_| b"null".to_vec()),
@@ -567,7 +714,7 @@ async fn execute_crud(
     }
 }
 
-fn valid_collection_name(name: &str) -> bool {
+pub(crate) fn valid_collection_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 120
         && !name.starts_with("system.")
@@ -596,7 +743,7 @@ fn parse_crud_body(body: &[u8]) -> Result<Value, crate::storage::runtime::Storag
     Ok(value)
 }
 
-fn validate_crud_schema(
+pub(crate) fn validate_crud_schema(
     schema: Option<&Value>,
     value: &Value,
     partial: bool,
@@ -706,14 +853,42 @@ fn policy_error_response(status: StatusCode, code: &str, message: &str) -> Respo
         .into_response()
 }
 
+#[cfg(test)]
 fn validate_protocol_request(
     protocol: DataPlaneProtocol,
     method: &http::Method,
     body: &[u8],
     graphql_max_depth: u64,
+    endpoint_validation: Option<&Value>,
+) -> Result<(), crate::policy::PolicyFailure> {
+    validate_protocol_request_with_registry(
+        protocol,
+        method,
+        body,
+        graphql_max_depth,
+        endpoint_validation,
+        &crate::validation::json::ValidatorRegistry::default(),
+    )
+}
+
+fn validate_protocol_request_with_registry(
+    protocol: DataPlaneProtocol,
+    method: &http::Method,
+    body: &[u8],
+    graphql_max_depth: u64,
+    endpoint_validation: Option<&Value>,
+    validators: &crate::validation::json::ValidatorRegistry,
 ) -> Result<(), crate::policy::PolicyFailure> {
     match protocol {
-        DataPlaneProtocol::Rest => Ok(()),
+        DataPlaneProtocol::Rest => {
+            if let Some(schema) = endpoint_validation {
+                let document: Value = serde_json::from_slice(body)
+                    .map_err(|_| protocol_failure("GTW011", "Invalid JSON in request body"))?;
+                crate::validation::json::validate_json_with_registry(&document, schema, validators)
+                    .map_err(|error| protocol_failure("GTW011", error))?;
+            }
+            Ok(())
+        }
         DataPlaneProtocol::Graphql => {
             let document: serde_json::Value = serde_json::from_slice(body)
                 .map_err(|_| protocol_failure("GTW011", "Invalid GraphQL request body"))?;
@@ -732,6 +907,16 @@ fn validate_protocol_request(
                     ),
                 ));
             }
+            if let Some(schema) = endpoint_validation {
+                let variables = document.get("variables").unwrap_or(&Value::Null);
+                let scoped_schema = graphql_validation_schema(schema, query);
+                crate::validation::json::validate_json_with_registry(
+                    variables,
+                    &scoped_schema,
+                    validators,
+                )
+                .map_err(|error| protocol_failure("GTW011", error))?;
+            }
             Ok(())
         }
         DataPlaneProtocol::Soap if *method == http::Method::GET && body.is_empty() => Ok(()),
@@ -739,13 +924,17 @@ fn validate_protocol_request(
             let xml = std::str::from_utf8(body)
                 .map_err(|_| protocol_failure("GTW011", "Invalid SOAP envelope"))?;
             let lower = xml.to_ascii_lowercase();
-            let unsafe_declaration = lower.contains("<!doctype") || lower.contains("<!entity");
-            let envelope = lower.contains(":envelope") || lower.contains("<envelope");
-            let soap_namespace = lower.contains("http://schemas.xmlsoap.org/soap/envelope/")
-                || lower.contains("http://www.w3.org/2003/05/soap-envelope");
-            let soap_body = lower.contains(":body") || lower.contains("<body");
-            if unsafe_declaration || !envelope || !soap_namespace || !soap_body {
-                return Err(protocol_failure("GTW011", "Invalid SOAP envelope"));
+            if lower.contains("<!doctype") || lower.contains("<!entity") {
+                return Err(protocol_failure(
+                    "GTW011",
+                    "XML DTD/entities are not allowed",
+                ));
+            }
+            if let Some(schema) = endpoint_validation {
+                let document = crate::validation::xml::soap_body_object(xml)
+                    .map_err(|error| protocol_failure("GTW011", error))?;
+                crate::validation::json::validate_json_with_registry(&document, schema, validators)
+                    .map_err(|error| protocol_failure("GTW011", error))?;
             }
             Ok(())
         }
@@ -772,12 +961,46 @@ fn validate_protocol_request(
                     "Invalid gRPC method. Use Service.Method with alphanumerics/underscore.",
                 ));
             }
+            if let Some(schema) = endpoint_validation {
+                let message = document.get("message").unwrap_or(&Value::Null);
+                crate::validation::json::validate_json_with_registry(message, schema, validators)
+                    .map_err(|error| protocol_failure("GTW011", error))?;
+            }
             Ok(())
         }
+        DataPlaneProtocol::GrpcWeb => Ok(()),
     }
 }
 
-fn graphql_depth(query: &str) -> Option<u64> {
+fn graphql_validation_schema(schema: &Value, query: &str) -> Value {
+    let Some(operation) = regex::Regex::new(r"(?:query|mutation)\s+(\w+)")
+        .ok()
+        .and_then(|regex| regex.captures(query))
+        .and_then(|captures| captures.get(1))
+        .map(|value| value.as_str())
+    else {
+        return serde_json::json!({});
+    };
+    let mapping = schema
+        .get("validation_schema")
+        .unwrap_or(schema)
+        .as_object();
+    let Some(mapping) = mapping else {
+        return serde_json::json!({});
+    };
+    let prefix = format!("{operation}.");
+    Value::Object(
+        mapping
+            .iter()
+            .filter_map(|(path, rules)| {
+                path.strip_prefix(&prefix)
+                    .map(|path| (path.to_owned(), rules.clone()))
+            })
+            .collect(),
+    )
+}
+
+pub(crate) fn graphql_depth(query: &str) -> Option<u64> {
     let mut depth = 0_u64;
     let mut maximum = 0_u64;
     let mut quote = None;
@@ -889,11 +1112,8 @@ mod tests {
                 .await
                 .unwrap();
         });
-        let state = AppState::new(crate::Config::for_test(
-            crate::GatewayMode::On,
-            "http://127.0.0.1:9".to_owned(),
-        ))
-        .unwrap();
+        let state =
+            AppState::new(crate::Config::for_test("http://127.0.0.1:9".to_owned())).unwrap();
         let decision = crate::policy::PolicyDecision {
             upstream: Some(format!("http://{address}")),
             upstream_path: Some("/items".to_owned()),
@@ -902,6 +1122,7 @@ mod tests {
             credit_header_name: Some("x-api-key".to_owned()),
             credit_header_value: Some("system-key".to_owned()),
             user_credit_header_value: Some("user-key".to_owned()),
+            request_timeout_ms: 1_000,
             ..Default::default()
         };
         let request = Request::builder()
@@ -961,11 +1182,8 @@ mod tests {
             .await
             .unwrap();
         });
-        let state = AppState::new(crate::Config::for_test(
-            crate::GatewayMode::On,
-            "http://127.0.0.1:9".to_owned(),
-        ))
-        .unwrap();
+        let state =
+            AppState::new(crate::Config::for_test("http://127.0.0.1:9".to_owned())).unwrap();
         let decision = crate::policy::PolicyDecision {
             upstream: Some(format!("http://{address}")),
             upstream_path: Some("/retry".to_owned()),
@@ -990,26 +1208,46 @@ mod tests {
     fn enforces_graphql_depth_while_ignoring_strings_and_comments() {
         let accepted = br##"{"query":"{ viewer { label(text: \"{ignored}\") # {ignored}\n } }"}"##;
         assert!(
-            validate_protocol_request(DataPlaneProtocol::Graphql, &Method::POST, accepted, 2,)
+            validate_protocol_request(DataPlaneProtocol::Graphql, &Method::POST, accepted, 2, None)
                 .is_ok()
         );
 
         let rejected = br#"{"query":"{ viewer { team { name } } }"}"#;
         let failure =
-            validate_protocol_request(DataPlaneProtocol::Graphql, &Method::POST, rejected, 2)
+            validate_protocol_request(DataPlaneProtocol::Graphql, &Method::POST, rejected, 2, None)
                 .unwrap_err();
         assert_eq!(failure.error_code, "GTW013");
     }
 
     #[test]
-    fn rejects_unsafe_or_malformed_soap_envelopes() {
-        let valid = br#"<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body/></soap:Envelope>"#;
+    fn scopes_graphql_validation_to_the_named_operation() {
+        let schema = json!({"validation_schema": {
+            "Create.input.name": {"required": true, "type": "string"},
+            "Other.input.id": {"required": true}
+        }});
+        assert_eq!(
+            graphql_validation_schema(
+                &schema,
+                "mutation Create($input: Input!){ create(input: $input) }"
+            ),
+            json!({"input.name": {"required": true, "type": "string"}})
+        );
+        assert_eq!(
+            graphql_validation_schema(&schema, "{ viewer { id } }"),
+            json!({})
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_soap_but_preserves_legacy_passthrough_without_a_schema() {
+        let legacy = br#"<Envelope/>"#;
         assert!(
-            validate_protocol_request(DataPlaneProtocol::Soap, &Method::POST, valid, 0,).is_ok()
+            validate_protocol_request(DataPlaneProtocol::Soap, &Method::POST, legacy, 0, None)
+                .is_ok()
         );
         let unsafe_xml = br#"<!DOCTYPE x [<!ENTITY y SYSTEM "file:///etc/passwd">]><Envelope/>"#;
         assert!(
-            validate_protocol_request(DataPlaneProtocol::Soap, &Method::POST, unsafe_xml, 0,)
+            validate_protocol_request(DataPlaneProtocol::Soap, &Method::POST, unsafe_xml, 0, None)
                 .is_err()
         );
     }
@@ -1018,11 +1256,13 @@ mod tests {
     fn validates_http_to_grpc_method_shape() {
         let valid = br#"{"method":"Greeter.SayHello","message":{"name":"Ada"}}"#;
         assert!(
-            validate_protocol_request(DataPlaneProtocol::Grpc, &Method::POST, valid, 0,).is_ok()
+            validate_protocol_request(DataPlaneProtocol::Grpc, &Method::POST, valid, 0, None)
+                .is_ok()
         );
         let invalid = br#"{"method":"bad/method"}"#;
         assert!(
-            validate_protocol_request(DataPlaneProtocol::Grpc, &Method::POST, invalid, 0,).is_err()
+            validate_protocol_request(DataPlaneProtocol::Grpc, &Method::POST, invalid, 0, None)
+                .is_err()
         );
     }
 

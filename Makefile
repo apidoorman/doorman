@@ -125,14 +125,16 @@ rust-fmt-check:
 parity: rust-test parity-rust parity-python-reference parity-contracts
 
 parity-rust:
-	cargo test --manifest-path gateway-rs/Cargo.toml --locked --test runtime
+	cargo test --manifest-path gateway-rs/Cargo.toml --locked --tests
 
 parity-python-reference:
 	cd backend-services && pytest -q \
-	  tests/test_gateway_flows.py \
-	  tests/test_gateway_routing_limits.py \
+	  tests/test_rest_methods_and_405.py \
+	  tests/test_rest_header_and_response_parsing.py \
 	  tests/test_request_id_propagation.py \
-	  tests/test_response_envelope_and_headers.py
+	  tests/test_soap_gateway_content_types.py \
+	  tests/test_graphql_error_flow_and_status.py \
+	  tests/test_grpc_streaming_and_metadata.py
 
 parity-contracts:
 	cd backend-services && pytest -q tests/test_parity_contract_fixtures.py

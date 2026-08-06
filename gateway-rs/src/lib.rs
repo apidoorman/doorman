@@ -13,5 +13,5 @@ pub mod storage;
 pub mod validation;
 
 pub use app::build_router;
-pub use config::{Config, GatewayMode};
+pub use config::Config;
 pub use state::AppState;

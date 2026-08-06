@@ -12,32 +12,55 @@ import inspect
 from typing import Any
 
 
-async def db_find_one(collection: Any, query: dict[str, Any]) -> dict[str, Any] | None:
-    fn = collection.find_one
+async def _call_collection_method(fn: Any, *args: Any) -> Any:
+    """Call a Motor or synchronous collection method without blocking.
+
+    Motor collection methods are regular functions that return Futures, so
+    ``iscoroutinefunction`` alone cannot distinguish them from PyMongo calls.
+    """
     if inspect.iscoroutinefunction(fn):
-        return await fn(query)
-    return await asyncio.to_thread(fn, query)
+        return await fn(*args)
+
+    owner = getattr(fn, '__self__', None)
+    owner_module = type(owner).__module__ if owner is not None else ''
+    if owner_module.startswith('motor.'):
+        result = fn(*args)
+        if inspect.isawaitable(result):
+            return await result
+        return result
+
+    return await asyncio.to_thread(fn, *args)
+
+
+async def _cursor_to_list(cursor: Any, length: int | None) -> list[dict[str, Any]]:
+    # Motor exposes a regular method that returns an awaitable; in-memory
+    # facades may return a list directly.
+    to_list = getattr(cursor, 'to_list', None)
+    if not callable(to_list):
+        return await asyncio.to_thread(lambda: list(cursor))
+    try:
+        result = to_list(length=length)
+    except TypeError:
+        result = to_list(length)
+    if inspect.isawaitable(result):
+        result = await result
+    return list(result)
+
+
+async def db_find_one(collection: Any, query: dict[str, Any]) -> dict[str, Any] | None:
+    return await _call_collection_method(collection.find_one, query)
 
 
 async def db_insert_one(collection: Any, doc: dict[str, Any]) -> Any:
-    fn = collection.insert_one
-    if inspect.iscoroutinefunction(fn):
-        return await fn(doc)
-    return await asyncio.to_thread(fn, doc)
+    return await _call_collection_method(collection.insert_one, doc)
 
 
 async def db_update_one(collection: Any, query: dict[str, Any], update: dict[str, Any]) -> Any:
-    fn = collection.update_one
-    if inspect.iscoroutinefunction(fn):
-        return await fn(query, update)
-    return await asyncio.to_thread(fn, query, update)
+    return await _call_collection_method(collection.update_one, query, update)
 
 
 async def db_delete_one(collection: Any, query: dict[str, Any]) -> Any:
-    fn = collection.delete_one
-    if inspect.iscoroutinefunction(fn):
-        return await fn(query)
-    return await asyncio.to_thread(fn, query)
+    return await _call_collection_method(collection.delete_one, query)
 
 
 async def db_find_list(
@@ -53,12 +76,7 @@ async def db_find_list(
             for fld, direction in sort:
                 cursor = cursor.sort(fld, direction)
 
-    to_list = getattr(cursor, 'to_list', None)
-    if callable(to_list):
-        if inspect.iscoroutinefunction(to_list):
-            return await to_list(length=None)
-        return await asyncio.to_thread(to_list, None)
-    return await asyncio.to_thread(lambda: list(cursor))
+    return await _cursor_to_list(cursor, None)
 
 
 async def db_aggregate_list(collection: Any, pipeline: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -67,14 +85,7 @@ async def db_aggregate_list(collection: Any, pipeline: list[dict[str, Any]]) -> 
     Works with both Motor (async) and PyMongo (sync) drivers.
     """
     agg = collection.aggregate(pipeline)
-    to_list = getattr(agg, 'to_list', None)
-    if callable(to_list):
-        # Motor aggregation cursor
-        if inspect.iscoroutinefunction(to_list):
-            return await to_list(length=None)
-        return await asyncio.to_thread(to_list, None)
-    # Sync aggregate cursor
-    return await asyncio.to_thread(lambda: list(agg))
+    return await _cursor_to_list(agg, None)
 
 
 async def db_find_paginated(
@@ -114,14 +125,7 @@ async def db_find_paginated(
         return c
 
     cursor = _build_cursor()
-    to_list = getattr(cursor, 'to_list', None)
-    if callable(to_list):
-        # Motor cursor
-        if inspect.iscoroutinefunction(to_list):
-            return await to_list(length=limit)
-        return await asyncio.to_thread(to_list, limit)
-    # Sync cursor
-    return await asyncio.to_thread(lambda: list(cursor))
+    return await _cursor_to_list(cursor, limit)
 
 
 async def db_count(collection: Any, query: dict[str, Any]) -> int:
@@ -133,20 +137,12 @@ async def db_count(collection: Any, query: dict[str, Any]) -> int:
         # Last resort: iterate (should not happen on Mongo)
         docs = await db_find_list(collection, query)
         return len(docs)
-    if inspect.iscoroutinefunction(fn):
-        return await fn(query)
-    return await asyncio.to_thread(fn, query)
+    return await _call_collection_method(fn, query)
 
 
 async def db_delete_many(collection: Any, query: dict[str, Any]) -> Any:
-    fn = collection.delete_many
-    if inspect.iscoroutinefunction(fn):
-        return await fn(query)
-    return await asyncio.to_thread(fn, query)
+    return await _call_collection_method(collection.delete_many, query)
 
 
 async def db_insert_many(collection: Any, docs: list[dict[str, Any]]) -> Any:
-    fn = collection.insert_many
-    if inspect.iscoroutinefunction(fn):
-        return await fn(docs)
-    return await asyncio.to_thread(fn, docs)
+    return await _call_collection_method(collection.insert_many, docs)

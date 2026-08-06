@@ -23,7 +23,8 @@
     "body": null,
     "headers": {
       "Access-Control-Request-Method": "DELETE",
-      "Origin": "http://localhost:3000"
+      "Origin": "http://localhost:3000",
+      "accept-encoding": "gzip"
     },
     "method": "OPTIONS",
     "path": "/api/caches",

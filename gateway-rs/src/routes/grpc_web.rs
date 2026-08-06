@@ -1,5 +1,7 @@
-use axum::extract::{Request, State};
-use axum::response::{IntoResponse, Response};
+use axum::{
+    extract::{Path, Request, State},
+    response::Response,
+};
 
 use crate::{
     error::GatewayError,
@@ -7,32 +9,23 @@ use crate::{
     state::AppState,
 };
 
-pub async fn grpc_policy_then_execute(
+#[derive(Clone, Debug)]
+pub struct GrpcWebTarget {
+    pub service: String,
+    pub method: String,
+}
+
+pub async fn grpc_web_policy_then_execute(
     State(state): State<AppState>,
+    Path((api_name, service, method)): Path<(String, String, String)>,
     mut request: Request,
 ) -> Result<Response, GatewayError> {
-    let proto_discovery = request.method() == http::Method::GET
-        && request.uri().query().is_some_and(|query| {
-            query
-                .split('&')
-                .any(|part| part.eq_ignore_ascii_case("proto"))
-        });
     if !matches!(
         request.method(),
         &http::Method::POST | &http::Method::OPTIONS
-    ) && !proto_discovery
-    {
+    ) {
         return Ok(http::StatusCode::METHOD_NOT_ALLOWED.into_response());
     }
-    let api_name = request
-        .uri()
-        .path()
-        .trim_start_matches("/api/grpc/")
-        .trim_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or_default()
-        .to_owned();
     let version = request
         .headers()
         .get("x-api-version")
@@ -42,6 +35,11 @@ pub async fn grpc_policy_then_execute(
     request
         .extensions_mut()
         .insert(PolicyPath(format!("/api/rest/{api_name}/{version}/grpc")));
-    request.extensions_mut().insert(DataPlaneProtocol::Grpc);
+    request.extensions_mut().insert(DataPlaneProtocol::GrpcWeb);
+    request
+        .extensions_mut()
+        .insert(GrpcWebTarget { service, method });
     rest_policy_then_proxy(State(state), request).await
 }
+
+use axum::response::IntoResponse;

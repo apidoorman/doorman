@@ -93,11 +93,13 @@ async def _install_recording_client(monkeypatch) -> None:
 
 
 def _request(method: str, path: str, *, headers: dict[str, str] | None = None, body: Any = None) -> dict[str, Any]:
+    wire_headers = {"accept-encoding": "gzip"}
+    wire_headers.update(headers or {})
     return {
         "method": method,
         "path": path,
         "query": {},
-        "headers": headers or {},
+        "headers": wire_headers,
         "body": body,
     }
 

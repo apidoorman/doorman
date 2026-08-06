@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 
@@ -39,6 +41,9 @@ async def test_proto_upload_generates_stubs_success(monkeypatch, authed_client):
         (gen / f'{safe}_pb2_grpc.py').write_text(
             f'import {safe}_pb2 as {name}__{ver}__pb2\nclass S: pass\n'
         )
+        for argument in cmd:
+            if str(argument).startswith('--descriptor_set_out='):
+                Path(str(argument).split('=', 1)[1]).write_bytes(b'descriptor')
         return 0
 
     monkeypatch.setattr(pr.subprocess, 'run', _fake_run)
@@ -67,6 +72,9 @@ async def test_proto_upload_rewrite_pb2_imports_for_generated_namespace(monkeypa
         (gen / f'{safe}_pb2_grpc.py').write_text(
             f'import {safe}_pb2 as {name}__{ver}__pb2\nclass S: pass\n'
         )
+        for argument in cmd:
+            if str(argument).startswith('--descriptor_set_out='):
+                Path(str(argument).split('=', 1)[1]).write_bytes(b'descriptor')
         return 0
 
     monkeypatch.setattr(pr.subprocess, 'run', _fake_run)

@@ -327,8 +327,22 @@ class LoggingService:
                     name = rec.get('name', '')
                     level = rec.get('level', '')
                     structured = self._extract_structured_data(message)
-                    if rec.get('request_id'):
-                        structured['request_id'] = rec.get('request_id')
+                    for field in (
+                        'request_id',
+                        'user',
+                        'api',
+                        'endpoint',
+                        'method',
+                        'status_code',
+                        'response_time',
+                        'ip_address',
+                        'protocol',
+                        'group',
+                        'role',
+                        'type',
+                    ):
+                        if rec.get(field) is not None:
+                            structured[field] = rec.get(field)
                     return {
                         'timestamp': timestamp
                         if isinstance(timestamp, str)
