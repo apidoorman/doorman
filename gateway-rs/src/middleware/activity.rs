@@ -16,7 +16,9 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    middleware::request_id::RequestId, observability::metrics::observe_request, state::AppState,
+    middleware::request_id::RequestId,
+    observability::{analytics_aggregator::global_analytics, metrics::observe_request},
+    state::AppState,
     storage::runtime::GatewayMetric,
 };
 
@@ -105,28 +107,42 @@ pub async fn track_active_requests(
         .fetch_sub(1, Ordering::Relaxed);
     observe_request(&state.runtime, elapsed, status);
     let fallback_api = api_key(&path);
-    if record_analytics && let Some(storage) = &state.storage {
-        let minute_start = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-            / 60
-            * 60;
-        if let Err(error) = storage
-            .record_gateway_metric(GatewayMetric {
-                minute_start,
-                status,
-                duration_micros: elapsed.as_micros().min(u128::from(u64::MAX)) as u64,
-                bytes_in,
-                bytes_out,
-                api_key: context.api.as_deref().or(fallback_api.as_deref()),
-                username: context.username.as_deref(),
-                endpoint: context.endpoint.as_deref().or(Some(path.as_str())),
-                is_test,
-            })
-            .await
-        {
-            tracing::warn!(error = %error, "failed to persist gateway analytics bucket");
+    let effective_api = context.api.as_deref().or(fallback_api.as_deref());
+
+    if record_analytics {
+        global_analytics().record_request(
+            effective_api,
+            context.username.as_deref(),
+            context.endpoint.as_deref().or(Some(path.as_str())),
+            status,
+            elapsed.as_secs_f64() * 1000.0,
+            bytes_in,
+            bytes_out,
+        );
+
+        if let Some(storage) = &state.storage {
+            let minute_start = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+                / 60
+                * 60;
+            if let Err(error) = storage
+                .record_gateway_metric(GatewayMetric {
+                    minute_start,
+                    status,
+                    duration_micros: elapsed.as_micros().min(u128::from(u64::MAX)) as u64,
+                    bytes_in,
+                    bytes_out,
+                    api_key: effective_api,
+                    username: context.username.as_deref(),
+                    endpoint: context.endpoint.as_deref().or(Some(path.as_str())),
+                    is_test,
+                })
+                .await
+            {
+                tracing::warn!(error = %error, "failed to persist gateway analytics bucket");
+            }
         }
     }
 

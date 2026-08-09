@@ -23,7 +23,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 # Launch perf capture in background (optional; will fall back gracefully if pidfile is missing)
-python3 scripts/capture_perf_stats.py --output "${PERF_JSON}" --pidfile backend-services/doorman.pid --timeout 0 \
+python3 scripts/capture_perf_stats.py --output "${PERF_JSON}" --pidfile doorman.pid --timeout 0 \
   >/dev/null 2>&1 &
 MONITOR_PID=$!
 

@@ -1,84 +1,63 @@
-Doorman Test Runs
-=================
+# Testing
 
-This guide shows how to run the different test suites: unit/integration tests, live tests (against a running server), and load tests.
+The active gateway and control plane test suite is entirely Rust-based.
 
-Prerequisites
--------------
-- Python 3.11+ with `pip`.
-- From repo root: `pip install -r backend-services/requirements.txt`
-- Many tests run in memory mode by default (no external services). Live tests and load tests require a running server.
+## Prerequisites
 
-Unit/Integration Tests (in-process)
------------------------------------
-- Run all backend tests:
-  - pytest -q backend-services/tests
-- Run a single file or test:
-  - pytest -q backend-services/tests/test_security.py
-  - pytest -q backend-services/tests -k gateway_validation
-- With coverage:
-  - pytest -q backend-services/tests --cov=backend-services --cov-report=term-missing
+- Rust 1.88 with `rustfmt` and `clippy`
+- Node.js 20 for the dashboard build
+- Docker for image and Compose validation
 
-Notes
-- The test harness sets safe defaults (e.g., memory DB, relaxed rate limits).
-- If you need to force memory mode explicitly: `MEM_OR_EXTERNAL=MEM pytest -q backend-services/tests`
+## Local checks
 
-Live Tests (end-to-end against a running server)
------------------------------------------------
-These tests hit a real Doorman instance via HTTP. Start Doorman separately, then point tests at it.
+From the repository root:
 
-1) Start Doorman locally (example memory mode):
-   - PORT=8000 THREADS=1 MEM_OR_EXTERNAL=MEM \
-     DOORMAN_ADMIN_PASSWORD='test-only-password-12chars' \
-     JWT_SECRET_KEY='local-dev-jwt-secret-key-please-change' \
-     python backend-services/doorman.py start
+```bash
+make check
+make web-build
+```
 
-2) Run live tests with base URL and admin creds:
-   - DOORMAN_BASE_URL=http://localhost:8000 \
-     DOORMAN_ADMIN_EMAIL=admin@doorman.dev \
-     DOORMAN_ADMIN_PASSWORD='test-only-password-12chars' \
-     pytest -q backend-services/live-tests
+The equivalent direct commands are:
 
-3) Optional flags to focus areas:
-   - pytest -q backend-services/live-tests --grpc
-   - pytest -q backend-services/live-tests --graph
+```bash
+cargo fmt --manifest-path gateway-rs/Cargo.toml --all -- --check
+cargo clippy --manifest-path gateway-rs/Cargo.toml --locked --all-targets --all-features -- -D warnings
+cargo test --manifest-path gateway-rs/Cargo.toml --locked
+npm --prefix web-client ci
+npm --prefix web-client run build
+```
 
-Notes
-- Live tests expect `/api/health` to be healthy before starting.
-- Some tests spin up local echo servers internally (see `live-tests/servers.py`); no manual setup is needed.
-- Stop the server when done: `python backend-services/doorman.py stop`
+Rust integration tests use in-process upstream servers and do not require MongoDB or Redis. Storage and platform tests use the native in-memory backend. Checked-in parity fixtures preserve the pre-migration public wire contract.
 
-Load Tests (k6 preferred, Locust optional)
------------------------------------------
-Run against a running Doorman instance. k6 script writes a JSON summary; helper scripts compare against a baseline to detect regressions.
+## Live smoke test
 
-- k6 quick run (BASE_URL defaults to http://localhost:8000):
-  - k6 run load-tests/k6/load.test.js --env BASE_URL=http://localhost:8000
+Start Doorman:
 
-- End-to-end perf check with regression gating:
-  - BASE_URL=http://localhost:8000 bash scripts/run_perf_check.sh
-  - First time: create a baseline from a known-good run:
-    - mkdir -p load-tests/baseline
-    - cp load-tests/k6-summary.json load-tests/baseline/k6-summary.json
+```bash
+cp .env.demo .env
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
+```
 
-- Compare two summaries manually:
-  - python3 scripts/compare_perf.py load-tests/k6-summary.json load-tests/baseline/k6-summary.json
+In another terminal:
 
-- Locust (optional):
-  - locust -f load-tests/locust-load-test.py --host=http://localhost:8000 --headless \
-    --users 50 --spawn-rate 5 --run-time 5m
+```bash
+make smoke
+```
 
-Useful Scripts
---------------
-- Smoke/preflight:
-  - bash scripts/smoke.sh
-  - bash scripts/preflight.sh
-- Coverage helper:
-  - bash scripts/coverage_all.sh
+## Shared-storage verification
 
-Troubleshooting
----------------
-- Port/health: Ensure your server’s `PORT` matches `DOORMAN_BASE_URL`.
-- Auth: Admin password must match the one you started Doorman with.
-- k6 missing: Install from https://k6.io/docs/get-started/installation/
-- Baseline not found: Create one per the Load Tests section above.
+Use the external profile when testing MongoDB/Redis behavior:
+
+```bash
+MEM_OR_EXTERNAL=REDIS docker compose --profile external up --build
+make smoke
+```
+
+## Container checks
+
+```bash
+docker compose config
+docker build -t doorman:local .
+```
+
+The former Python suites are retained only as migration reference under `archive/python-backend/`; they are excluded from CI and runtime images.

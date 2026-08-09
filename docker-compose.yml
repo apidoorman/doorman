@@ -1,10 +1,7 @@
-# Doorman API Gateway - Docker Compose
+# Doorman API Gateway
 #
-# Quick Start:
-#   1. Copy .env.example to .env and configure secrets
-#   2. Run: docker compose up
-#
-# MongoDB and Redis are required and start automatically.
+# Memory mode (default): docker compose up --build
+# Shared mode: MEM_OR_EXTERNAL=REDIS docker compose --profile external up --build
 
 services:
   doorman:
@@ -17,48 +14,44 @@ services:
     image: doorman:latest
     container_name: doorman
     ports:
-      - "${PORT:-3001}:${PORT:-3001}"  # Backend API
-      - "${WEB_PORT:-3000}:${WEB_PORT:-3000}"  # Web UI
+      - "${PORT:-3001}:${PORT:-3001}"
+      - "${WEB_PORT:-3000}:${WEB_PORT:-3000}"
     env_file:
       - .env
     environment:
-      PYTHON_INTERNAL_PORT: ${PYTHON_INTERNAL_PORT:-3002}
-      MEM_OR_EXTERNAL: REDIS
+      MEM_OR_EXTERNAL: ${MEM_OR_EXTERNAL:-MEM}
       MONGO_DB_HOSTS: ${MONGO_DB_HOSTS:-mongo:27017}
       MONGO_DB_USER: ${MONGO_DB_USER:-doorman_admin}
       MONGO_DB_PASSWORD: ${MONGO_DB_PASSWORD:-changeme}
       MONGO_DB_AUTH_SOURCE: ${MONGO_DB_AUTH_SOURCE:-admin}
       REDIS_HOST: ${REDIS_HOST:-redis}
-      REDIS_PORT: 6379
+      REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_DB: ${REDIS_DB:-0}
-      MEM_DUMP_PATH: ${MEM_DUMP_PATH:-/app/backend-services/generated/memory_dump.bin}
+      MEM_DUMP_PATH: ${MEM_DUMP_PATH:-/app/data/memory_dump.bin}
       MEM_AUTO_SAVE_ENABLED: ${MEM_AUTO_SAVE_ENABLED:-true}
       MEM_AUTO_SAVE_FREQ: ${MEM_AUTO_SAVE_FREQ:-300}
-      # Encryption key for dumps (set a strong value in .env for real use)
       MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY:-change-me-in-prod}
-      # Ensure logs are written to a Docker-managed volume, not the image
-      LOGS_DIR: /app/backend-services/platform-logs
+      LOGS_DIR: /app/logs
     volumes:
-      - doorman-generated:/app/backend-services/generated
-      - doorman-logs:/app/backend-services/platform-logs
+      - doorman-generated:/app/data
+      - doorman-logs:/app/logs
     depends_on:
       mongo:
         condition: service_healthy
+        required: false
       redis:
         condition: service_healthy
+        required: false
     restart: unless-stopped
     healthcheck:
-      # Always use HTTP for the internal healthcheck. TLS should be terminated
-      # at the reverse proxy (Nginx/Traefik/ALB), and Uvicorn listens in plain HTTP.
-      # Using HTTPS here will cause Uvicorn to log 'Invalid HTTP request received.'
       test: ["CMD", "sh", "-c", "curl -fsS http://localhost:$${PORT:-3001}/platform/monitor/liveness"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 20s
 
-  # Shared state is mandatory for the deployed Rust gateway.
   redis:
+    profiles: ["external"]
     image: redis:7-alpine
     container_name: doorman-redis
     ports:
@@ -74,6 +67,7 @@ services:
       retries: 3
 
   mongo:
+    profiles: ["external"]
     image: mongo:7
     container_name: doorman-mongo
     ports:

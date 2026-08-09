@@ -1,3 +1,4 @@
+pub mod analytics_aggregator;
 pub mod audit;
 pub mod logging;
 pub mod metrics;

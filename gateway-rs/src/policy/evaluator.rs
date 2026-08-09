@@ -197,12 +197,20 @@ pub fn evaluate_rest_policy(
             return Err(super::auth::unauthorized("User is inactive"));
         }
 
+        let enforce_admin_sub = std::env::var("ENFORCE_ADMIN_SUBSCRIPTION")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or_else(|_| {
+                api.get("enforce_admin_subscription")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            });
+
         enforce_subscription(
             &format!("{}/{}", route.api_name, route.api_version),
             &user,
             &documents.roles,
             &documents.subscriptions,
-            false,
+            enforce_admin_sub,
         )?;
         enforce_group_access(&api, &user)?;
         enforce_rate_limit(username, &user, &runtime.rate_counter, request.now_millis)?;

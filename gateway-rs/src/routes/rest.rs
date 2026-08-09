@@ -279,7 +279,16 @@ async fn execute_rest(
         DataPlaneProtocol::Soap => limits.soap,
         DataPlaneProtocol::Grpc | DataPlaneProtocol::GrpcWeb => limits.grpc,
     };
-    let body = to_bytes(body, body_limit).await?;
+    let body = match to_bytes(body, body_limit).await {
+        Ok(body) => body,
+        Err(_) => {
+            return Ok(policy_error_response(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "GTW013",
+                "Request body too large",
+            ));
+        }
+    };
     if let Err(failure) = validate_protocol_request_with_registry(
         protocol,
         &parts.method,
@@ -344,7 +353,7 @@ async fn execute_rest(
     let mut headers = HeaderMap::new();
     for (name, value) in &parts.headers {
         let lower = name.as_str().to_ascii_lowercase();
-        let always_forward = matches!(lower.as_str(), "content-type" | "accept" | "x-request-id");
+        let always_forward = matches!(lower.as_str(), "content-type" | "accept" | "user-agent" | "x-request-id");
         let protocol_default = protocol == DataPlaneProtocol::Soap
             && matches!(
                 lower.as_str(),
@@ -603,7 +612,16 @@ async fn execute_crud(
     let method = request.method().clone();
     let resource_id = crud_resource_id(request.uri().path()).map(str::to_owned);
     let (_, body) = request.into_parts();
-    let body = to_bytes(body, BodyLimits::from_env().rest).await?;
+    let body = match to_bytes(body, BodyLimits::from_env().rest).await {
+        Ok(body) => body,
+        Err(_) => {
+            return Ok(policy_error_response(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "GTW013",
+                "Request body too large",
+            ));
+        }
+    };
     let operation = async {
         match method {
             http::Method::GET => {

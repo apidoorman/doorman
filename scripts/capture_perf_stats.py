@@ -28,7 +28,7 @@ except Exception:
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pid", type=int, help="PID of the target process")
-    ap.add_argument("--pidfile", type=str, default="backend-services/doorman.pid",
+    ap.add_argument("--pidfile", type=str, default="doorman.pid",
                     help="Path to PID file (used if --pid not provided)")
     ap.add_argument("--output", type=str, default="load-tests/perf-stats.json",
                     help="Output JSON path")

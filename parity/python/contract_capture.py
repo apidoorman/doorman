@@ -300,5 +300,5 @@ def assert_fixture_matches(path: Path, fixture: dict[str, Any]) -> None:
         )
         raise FixtureError(
             f"fixture drift for {fixture['name']}:\n{diff}\n"
-            "run UPDATE_PARITY_CONTRACTS=1 pytest backend-services/tests/test_parity_contract_fixtures.py only after reviewing this diff"
+            "run UPDATE_PARITY_CONTRACTS=1 pytest archive/python-backend/tests/test_parity_contract_fixtures.py only after reviewing this diff"
         )

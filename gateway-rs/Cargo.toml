@@ -42,6 +42,12 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 url = "2"
 uuid = { version = "1.18", features = ["v4"] }
+bcrypt = "0.19.3"
+aes-gcm = "0.11.0"
+hkdf = "0.12.4"
+fernet = { version = "0.2.2", default-features = false, features = ["rustcrypto"] }
+pbkdf2 = "0.12.2"
+protoc-bin-vendored = "3.2.0"
 
 [dev-dependencies]
 flate2 = "1.1"

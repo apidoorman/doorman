@@ -66,6 +66,7 @@ impl Default for GatewayRuntime {
 impl AppState {
     pub fn new(config: Config) -> Result<Self, reqwest::Error> {
         let proxy_client = Client::builder()
+            .user_agent("doorman-gateway/2.0.0 (compatible; httpx/0.27)")
             .connect_timeout(config.connect_timeout)
             .redirect(Policy::none())
             .pool_max_idle_per_host(32)
@@ -84,6 +85,7 @@ impl AppState {
     pub async fn from_config(config: Config) -> Result<Self, StateError> {
         let mut state = Self::new(config)?;
         let storage = SharedStorage::connect(&state.config.shared_storage).await?;
+        storage.initialize_core().await?;
         state.storage = Some(Arc::new(storage));
         Ok(state)
     }

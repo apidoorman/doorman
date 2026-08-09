@@ -24,12 +24,14 @@ pub async fn grpc_policy_then_execute(
     {
         return Ok(http::StatusCode::METHOD_NOT_ALLOWED.into_response());
     }
-    let api_name = request
-        .uri()
-        .path()
-        .trim_start_matches("/api/grpc/")
-        .trim_matches('/')
-        .rsplit('/')
+    let path = request.uri().path();
+    let subpath = path
+        .strip_prefix("/api/grpc/")
+        .or_else(|| path.strip_prefix("/grpc/"))
+        .unwrap_or(path)
+        .trim_matches('/');
+    let api_name = subpath
+        .split('/')
         .next()
         .unwrap_or_default()
         .to_owned();
@@ -39,6 +41,7 @@ pub async fn grpc_policy_then_execute(
         .and_then(|value| value.to_str().ok())
         .unwrap_or("v1")
         .to_owned();
+    tracing::info!(path = %path, subpath = %subpath, api_name = %api_name, version = %version, "grpc_policy_then_execute");
     request
         .extensions_mut()
         .insert(PolicyPath(format!("/api/rest/{api_name}/{version}/grpc")));

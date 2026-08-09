@@ -7,7 +7,7 @@ Overview
 What’s implemented
 
 - Auto-dump on graceful shutdown, plus signal handlers for SIGTERM/SIGINT/SIGUSR1.
-- Encrypted dumps written to `MEM_DUMP_PATH` (default: `backend-services/generated/memory_dump.bin`).
+- Encrypted dumps written to `MEM_DUMP_PATH` (default: `data/memory_dump.bin`).
 - Optional autosave with `MEM_AUTO_SAVE_ENABLED` and `MEM_AUTO_SAVE_FREQ` (seconds).
 - Startup auto-restore from the latest dump in the target directory.
 
@@ -19,7 +19,7 @@ Requirements
 
 Localhost (docker compose)
 
-- docker-compose.yml already mounts `./generated:/app/backend-services/generated` so dumps persist to your working tree.
+- docker-compose.yml already mounts `./generated:/app/data` so dumps persist to your working tree.
 - Configure environment in `.env` (recommended):
 
   - `MEM_ENCRYPTION_KEY=some-strong-secret`
@@ -32,12 +32,12 @@ AWS ECS (task definition outline)
 
 - Persist dumps to a mounted volume (EFS or EBS). Example container config:
 
-  - Mount EFS to `/app/backend-services/generated` (same path used in compose)
+  - Mount EFS to `/app/data` (same path used in compose)
   - Set env vars:
     - `MEM_OR_EXTERNAL=MEM`
     - `THREADS=1`
     - `MEM_ENCRYPTION_KEY=your-strong-key`
-    - `MEM_DUMP_PATH=/app/backend-services/generated/memory_dump.bin`
+    - `MEM_DUMP_PATH=/app/data/memory_dump.bin`
     - `MEM_AUTO_SAVE_ENABLED=true`
     - `MEM_AUTO_SAVE_FREQ=300`
 

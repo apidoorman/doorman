@@ -6,7 +6,6 @@ pub mod middleware;
 pub mod observability;
 pub mod policy;
 pub mod protocol;
-pub mod proxy;
 pub mod routes;
 pub mod state;
 pub mod storage;

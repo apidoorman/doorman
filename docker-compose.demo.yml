@@ -2,83 +2,34 @@ name: doorman-demo
 
 services:
   doorman:
-    # Build from demo Dockerfile with baked env
     build:
       context: .
-      dockerfile: Dockerfile.demo
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_PROTECTED_USERS: demo@doorman.dev
+        NEXT_PUBLIC_GATEWAY_URL: ""
     image: doorman-demo:latest
-    # Provide critical runtime env so it works even without a fresh build
+    container_name: doorman-demo
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DOORMAN_ADMIN_EMAIL: demo@doorman.dev
       DOORMAN_ADMIN_PASSWORD: DemoPassword123!
+      DOORMAN_IN_DOCKER: "1"
       JWT_SECRET_KEY: demo-secret-change-me-please-32-bytes-min
-      # Demo runs plain HTTP — override any HTTPS_ONLY=true from .env
+      MEM_ENCRYPTION_KEY: demo-memory-key-change-me
+      MEM_OR_EXTERNAL: MEM
+      MEM_AUTO_SAVE_ENABLED: "false"
+      MEM_DUMP_PATH: /tmp/demo_memory_dump.bin
       HTTPS_ONLY: "false"
       COOKIE_SAMESITE: Lax
-      # Keep demo memory isolated; avoid writing/reading host dumps
-      MEM_AUTO_SAVE_ENABLED: "false"
-      MEM_DUMP_PATH: "/tmp/demo_memory_dump.bin"
-      ENABLE_STARLETTE_CORS: "true"
+      DEMO_MODE: "true"
+      DEMO_SEED: "true"
       ALLOWED_ORIGINS: http://localhost:3000
       ALLOW_METHODS: GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD
       ALLOW_HEADERS: "*"
       ALLOW_CREDENTIALS: "true"
       PORT: 3001
-      MEM_OR_EXTERNAL: REDIS
-      MONGO_DB_HOSTS: mongo:27017
-      MONGO_DB_USER: doorman_admin
-      MONGO_DB_PASSWORD: demo-mongo-password
-      MONGO_DB_AUTH_SOURCE: admin
-      REDIS_HOST: redis
-      PYTHON_INTERNAL_PORT: 3002
       WEB_PORT: 3000
-
-    # Tip: use a different host port if you already run something on 3000/3001
-    ports:
-      - "3001:3001"
-      - "3000:3000"
-
-    # Ensure it doesn't restart and doesn't persist bind mounts from base compose
     restart: "no"
     volumes: []
-    container_name: doorman-demo
-    depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  mongo:
-    image: mongo:7
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: doorman_admin
-      MONGO_INITDB_ROOT_PASSWORD: demo-mongo-password
-    command: --bind_ip_all
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  demo-cleanup:
-    image: docker:27.3.1-cli
-    container_name: doorman-demo-cleanup
-    restart: "no"
-    # Wait idly; on SIGTERM/INT (when you Ctrl+C compose), run cleanup
-    command: ["/bin/sh", "-c", "trap '/bin/sh /cleanup.sh' TERM INT; tail -f /dev/null"]
-    environment:
-      - PROJECT=doorman-demo
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./docker/cleanup.sh:/cleanup.sh:ro
-    depends_on:
-      - doorman

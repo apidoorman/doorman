@@ -1,8 +1,11 @@
 pub mod activity;
 pub mod body_limit;
+pub mod chaos;
 pub mod client_ip;
 pub mod cors;
 pub mod logging;
 pub mod metrics;
+pub mod platform_cors;
 pub mod request_id;
+pub mod response_compat;
 pub mod security_headers;

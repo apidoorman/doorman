@@ -6,13 +6,13 @@ use thiserror::Error;
 pub struct Config {
     pub host: String,
     pub port: u16,
-    pub python_base_url: String,
     pub connect_timeout: Duration,
     pub https_only: bool,
     pub content_security_policy: Option<String>,
     pub compression_enabled: bool,
     pub compression_level: i32,
     pub compression_minimum_size: u16,
+    pub strict_response_envelope: bool,
     pub logs_dir: Option<PathBuf>,
     pub shared_storage: SharedStorageConfig,
 }
@@ -115,7 +115,10 @@ impl SharedStorageConfig {
 
     fn validate_required(&self) -> Result<(), ConfigError> {
         if self.storage_mode.eq_ignore_ascii_case("MEM") {
-            return Err(ConfigError::MemoryModeUnsupported);
+            if self.jwt_keys_json.is_none() && self.jwt_secret.is_none() {
+                return Err(ConfigError::MissingEnv("JWT_SECRET_KEY or JWT_KEYS"));
+            }
+            return Ok(());
         }
         if self.mongo_user.is_none() {
             return Err(ConfigError::MissingEnv("MONGO_DB_USER"));
@@ -159,6 +162,7 @@ impl Config {
     pub fn from_env() -> Result<Self, ConfigError> {
         let shared_storage = SharedStorageConfig::from_env()?;
         shared_storage.validate_required()?;
+        validate_runtime_environment(&shared_storage)?;
 
         let configured_compression_level = env_parse("COMPRESSION_LEVEL", 1_i32)?;
         let compression_level = if (1..=9).contains(&configured_compression_level) {
@@ -176,8 +180,6 @@ impl Config {
         Ok(Self {
             host: env::var("GATEWAY_RUST_HOST").unwrap_or_else(|_| "0.0.0.0".to_owned()),
             port: env_parse("PORT", 3001)?,
-            python_base_url: env::var("PYTHON_INTERNAL_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:3002".to_owned()),
             connect_timeout: Duration::from_secs(env_parse("GATEWAY_CONNECT_TIMEOUT_SECONDS", 10)?),
             https_only: env_bool("HTTPS_ONLY", false),
             content_security_policy: env::var("CONTENT_SECURITY_POLICY")
@@ -186,8 +188,9 @@ impl Config {
             compression_enabled: env_bool("COMPRESSION_ENABLED", true),
             compression_level,
             compression_minimum_size,
+            strict_response_envelope: env_bool("STRICT_RESPONSE_ENVELOPE", false),
             logs_dir: env_non_empty("LOGS_DIR").map(PathBuf::from).or_else(|| {
-                let path = PathBuf::from("/app/backend-services/platform-logs");
+                let path = PathBuf::from("/app/logs");
                 path.exists().then_some(path)
             }),
             shared_storage,
@@ -204,21 +207,65 @@ impl Config {
             .map_err(|_| ConfigError::InvalidAddress(self.bind_addr()))
     }
 
-    pub fn for_test(python_base_url: String) -> Self {
+    pub fn for_test(_removed_backend_url: String) -> Self {
         Self {
             host: "127.0.0.1".to_owned(),
             port: 0,
-            python_base_url,
             connect_timeout: Duration::from_secs(1),
             https_only: false,
             content_security_policy: None,
             compression_enabled: true,
             compression_level: 1,
             compression_minimum_size: 500,
+            strict_response_envelope: false,
             logs_dir: None,
             shared_storage: SharedStorageConfig::default(),
         }
     }
+}
+
+fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), ConfigError> {
+    let admin_password = env::var("DOORMAN_ADMIN_PASSWORD")
+        .map_err(|_| ConfigError::MissingEnv("DOORMAN_ADMIN_PASSWORD"))?;
+    if admin_password.len() < 12 {
+        return Err(ConfigError::InvalidConfiguration(
+            "DOORMAN_ADMIN_PASSWORD must be at least 12 characters".to_owned(),
+        ));
+    }
+    let workers = env_parse::<u64>("THREADS", 1)?;
+    if storage.storage_mode.eq_ignore_ascii_case("MEM") && workers > 1 {
+        return Err(ConfigError::InvalidConfiguration(
+            "MEM_OR_EXTERNAL=MEM requires THREADS=1; use shared storage for multiple workers"
+                .to_owned(),
+        ));
+    }
+    if matches!(
+        env::var("ENV")
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "production" | "prod"
+    ) {
+        if !env_bool("HTTPS_ONLY", false) {
+            return Err(ConfigError::InvalidConfiguration(
+                "production requires HTTPS_ONLY=true".to_owned(),
+            ));
+        }
+        if let Some(secret) = storage.jwt_secret.as_deref()
+            && [
+                "please-change-me",
+                "test-secret-key",
+                "test-secret-key-please-change",
+                "insecure-test-key",
+            ]
+            .contains(&secret)
+        {
+            return Err(ConfigError::InvalidConfiguration(
+                "production JWT_SECRET_KEY must not use a default value".to_owned(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn env_bool(name: &str, default: bool) -> bool {
@@ -255,10 +302,10 @@ pub enum ConfigError {
     InvalidValue(String, String),
     #[error("invalid gateway bind address: {0}")]
     InvalidAddress(String),
-    #[error("Rust gateway requires shared storage; MEM_OR_EXTERNAL=MEM is unsupported")]
-    MemoryModeUnsupported,
     #[error("missing required environment variable for Rust gateway: {0}")]
     MissingEnv(&'static str),
+    #[error("invalid runtime configuration: {0}")]
+    InvalidConfiguration(String),
 }
 
 #[cfg(test)]

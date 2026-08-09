@@ -1,0 +1,246 @@
+"""
+The contents of this file are property of Doorman Dev, LLC
+Review the Apache License 2.0 for valid authorization of use
+See https://github.com/apidoorman/doorman for more information
+"""
+
+import logging
+
+from pymongo.errors import DuplicateKeyError
+
+from models.create_role_model import CreateRoleModel
+from models.response_model import ResponseModel
+from models.update_role_model import UpdateRoleModel
+from utils.async_db import (
+    db_delete_one,
+    db_find_list,
+    db_find_one,
+    db_insert_one,
+    db_update_one,
+    db_find_paginated,
+)
+from utils.constants import ErrorCodes, Messages
+from utils.database_async import role_collection
+from utils.doorman_cache_util import doorman_cache
+from utils.paging_util import validate_page_params
+
+logger = logging.getLogger('doorman.gateway')
+
+
+class RoleService:
+    @staticmethod
+    async def create_role(data: CreateRoleModel, request_id):
+        """
+        Onboard a role to the platform.
+        """
+        logger.info(request_id + ' | Creating role: ' + data.role_name)
+        if doorman_cache.get_cache('role_cache', data.role_name):
+            logger.error(request_id + ' | Role creation failed with code ROLE001')
+            return ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='ROLE001',
+                error_message='Role already exists',
+            ).dict()
+        role_dict = data.dict()
+        try:
+            insert_result = await db_insert_one(role_collection, role_dict)
+            if not insert_result.acknowledged:
+                logger.error(request_id + ' | Role creation failed with code ROLE002')
+                return ResponseModel(
+                    status_code=400, error_code='ROLE002', error_message='Unable to insert role'
+                ).dict()
+            role_dict['_id'] = str(insert_result.inserted_id)
+            doorman_cache.set_cache('role_cache', data.role_name, role_dict)
+            logger.info(request_id + ' | Role creation successful')
+            return ResponseModel(status_code=201, message='Role created successfully').dict()
+        except DuplicateKeyError:
+            logger.error(request_id + ' | Role creation failed with code ROLE001')
+            return ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='ROLE001',
+                error_message='Role already exists',
+            ).dict()
+
+    @staticmethod
+    async def update_role(role_name, data: UpdateRoleModel, request_id):
+        """
+        Update a role.
+        """
+        logger.info(request_id + ' | Updating: ' + role_name)
+        if data.role_name and data.role_name != role_name:
+            logger.error(request_id + ' | Role update failed with code ROLE005')
+            return ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='ROLE005',
+                error_message='Role name cannot be changed',
+            ).dict()
+        role = doorman_cache.get_cache('role_cache', role_name)
+        if not role:
+            role = await db_find_one(role_collection, {'role_name': role_name})
+            if not role:
+                logger.error(request_id + ' | Role update failed with code ROLE004')
+                return ResponseModel(
+                    status_code=400, error_code='ROLE004', error_message='Role does not exist'
+                ).dict()
+        else:
+            doorman_cache.delete_cache('role_cache', role_name)
+        not_null_data = {k: v for k, v in data.dict().items() if v is not None}
+        if not_null_data:
+            try:
+                update_result = await db_update_one(
+                    role_collection, {'role_name': role_name}, {'$set': not_null_data}
+                )
+                if update_result.modified_count > 0:
+                    doorman_cache.delete_cache('role_cache', role_name)
+                if not update_result.acknowledged or update_result.modified_count == 0:
+                    current = await db_find_one(role_collection, {'role_name': role_name}) or {}
+                    is_applied = all(current.get(k) == v for k, v in not_null_data.items())
+                    if not is_applied:
+                        logger.error(request_id + ' | Role update failed with code ROLE006')
+                        return ResponseModel(
+                            status_code=400,
+                            error_code='ROLE006',
+                            error_message='Unable to update role',
+                        ).dict()
+            except Exception as e:
+                doorman_cache.delete_cache('role_cache', role_name)
+                logger.error(
+                    request_id + ' | Role update failed with exception: ' + str(e), exc_info=True
+                )
+                raise
+
+            updated_role = await db_find_one(role_collection, {'role_name': role_name}) or {}
+            if updated_role.get('_id'):
+                del updated_role['_id']
+            doorman_cache.set_cache('role_cache', role_name, updated_role)
+            logger.info(request_id + ' | Role update successful')
+            return ResponseModel(
+                status_code=200, response=updated_role, message='Role updated successfully'
+            ).dict()
+        else:
+            logger.error(request_id + ' | Role update failed with code ROLE007')
+            return ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='ROLE007',
+                error_message='No data to update',
+            ).dict()
+
+    @staticmethod
+    async def delete_role(role_name, request_id):
+        """
+        Delete a role.
+        """
+        logger.info(request_id + ' | Deleting role: ' + role_name)
+        role = doorman_cache.get_cache('role_cache', role_name)
+        if not role:
+            role = await db_find_one(role_collection, {'role_name': role_name})
+            if not role:
+                logger.error(request_id + ' | Role deletion failed with code ROLE004')
+                return ResponseModel(
+                    status_code=400, error_code='ROLE004', error_message='Role does not exist'
+                ).dict()
+        else:
+            doorman_cache.delete_cache('role_cache', role_name)
+        delete_result = await db_delete_one(role_collection, {'role_name': role_name})
+        if not delete_result.acknowledged:
+            logger.error(request_id + ' | Role deletion failed with code ROLE008')
+            return ResponseModel(
+                status_code=400,
+                response_headers={'request_id': request_id},
+                error_code='ROLE008',
+                error_message='Unable to delete role',
+            ).dict()
+        logger.info(request_id + ' | Role Deletion Successful')
+        return ResponseModel(
+            status_code=200,
+            response_headers={'request_id': request_id},
+            message='Role deleted successfully',
+        ).dict()
+
+    @staticmethod
+    async def role_exists(data):
+        """
+        Check if a role exists.
+        """
+        if doorman_cache.get_cache('role_cache', data.get('role_name')) or await db_find_one(
+            role_collection, {'role_name': data.get('role_name')}
+        ):
+            return True
+        return False
+
+    @staticmethod
+    async def get_roles(page=1, page_size=10, request_id=None):
+        """
+        Get all roles.
+        """
+        logger.info(
+            request_id + ' | Getting roles: Page=' + str(page) + ' Page Size=' + str(page_size)
+        )
+        try:
+            page, page_size = validate_page_params(page, page_size)
+        except Exception as e:
+            return ResponseModel(
+                status_code=400,
+                error_code=ErrorCodes.PAGE_SIZE,
+                error_message=(
+                    Messages.PAGE_TOO_LARGE if 'page_size' in str(e) else Messages.INVALID_PAGING
+                ),
+            ).dict()
+        skip = (page - 1) * page_size
+        docs = await db_find_paginated(
+            role_collection, {}, skip=skip, limit=page_size, sort=[('role_name', 1)]
+        )
+        has_next = False
+        try:
+            extra = await db_find_paginated(
+                role_collection, {}, skip=skip, limit=page_size + 1, sort=[('role_name', 1)]
+            )
+            has_next = len(extra) > page_size
+        except Exception:
+            pass
+        try:
+            from utils.async_db import db_count
+            total = await db_count(role_collection, {})
+        except Exception:
+            total = None
+        roles = docs
+        for role in roles:
+            if role.get('_id'):
+                del role['_id']
+        logger.info(request_id + ' | Roles retrieval successful')
+        return ResponseModel(
+            status_code=200,
+            response={
+                'roles': roles,
+                'page': page,
+                'page_size': page_size,
+                'has_next': has_next,
+                **({'total': total} if total is not None else {}),
+            },
+        ).dict()
+
+    @staticmethod
+    async def get_role(role_name, request_id):
+        """
+        Get a role by name.
+        """
+        logger.info(request_id + ' | Getting role: ' + role_name)
+        role = doorman_cache.get_cache('role_cache', role_name)
+        if not role:
+            role = await db_find_one(role_collection, {'role_name': role_name})
+            if not role:
+                logger.error(request_id + ' | Role retrieval failed with code ROLE004')
+                return ResponseModel(
+                    status_code=404, error_code='ROLE004', error_message='Role does not exist'
+                ).dict()
+            if role.get('_id'):
+                del role['_id']
+            doorman_cache.set_cache('role_cache', role_name, role)
+        if role.get('_id'):
+            del role['_id']
+        logger.info(request_id + ' | Role retrieval successful')
+        return ResponseModel(status_code=200, response=role).dict()

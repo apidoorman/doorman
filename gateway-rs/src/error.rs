@@ -8,7 +8,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum GatewayError {
-    #[error("platform proxy request failed: {0}")]
+    #[error("upstream request failed: {0}")]
     Proxy(#[from] reqwest::Error),
     #[error("failed to build proxy response: {0}")]
     Response(#[from] http::Error),
@@ -26,10 +26,10 @@ impl IntoResponse for GatewayError {
     fn into_response(self) -> Response {
         tracing::error!(error = %self, "gateway request failed");
         (
-            StatusCode::BAD_GATEWAY,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {
                 error_code: "GTW006",
-                error_message: "Platform service unavailable",
+                error_message: "Upstream service unavailable",
             }),
         )
             .into_response()

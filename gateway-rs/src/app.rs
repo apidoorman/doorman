@@ -12,16 +12,17 @@ use tower_http::{
 
 use crate::{
     middleware::{
-        activity::track_active_requests, request_id::request_id, security_headers::security_headers,
+        activity::track_active_requests, chaos::chaos_middleware, platform_cors::platform_cors,
+        request_id::request_id, response_compat::response_compat, security_headers::security_headers,
     },
     policy::PolicyErrorBody,
-    proxy::platform::proxy_to_python,
     routes::{
         graphql::graphql_policy_then_execute,
         grpc::grpc_policy_then_execute,
         grpc_web::grpc_web_policy_then_execute,
         metrics::metrics,
         operations::{caches, health, status},
+        platform::platform_dispatch,
         rest::rest_policy_then_proxy,
         soap::soap_policy_then_execute,
     },
@@ -48,6 +49,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/status", any(status))
         .route("/caches", any(caches))
         .fallback(gateway_route_not_found)
+        .layer(axum_middleware::from_fn(chaos_middleware))
+        .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            response_compat,
+        ))
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),
             security_headers,
@@ -55,16 +61,30 @@ pub fn build_router(state: AppState) -> Router {
         .layer(axum_middleware::from_fn(request_id))
         .layer(TraceLayer::new_for_http())
         .layer(CatchPanicLayer::new());
+    let platform = Router::new()
+        .route("/", any(platform_dispatch))
+        .route("/{*path}", any(platform_dispatch))
+        .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            response_compat,
+        ))
+        .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            security_headers,
+        ))
+        .layer(axum_middleware::from_fn(platform_cors))
+        .layer(axum_middleware::from_fn(request_id))
+        .layer(TraceLayer::new_for_http())
+        .layer(CatchPanicLayer::new());
 
     Router::new()
         .nest("/api", api)
+        .nest("/platform", platform)
         .route(
             "/grpc-web/{api_name}/{service}/{method}",
             any(grpc_web_policy_then_execute),
         )
         .route("/metrics", get(metrics))
-        .route("/platform", any(proxy_to_python))
-        .route("/platform/{*path}", any(proxy_to_python))
         .fallback(not_found)
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),

@@ -12,6 +12,7 @@ pub async fn security_headers(
     request: Request,
     next: Next,
 ) -> Response {
+    let docs = matches!(request.uri().path(), "/platform/docs" | "/platform/redoc");
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
 
@@ -23,9 +24,19 @@ pub async fn security_headers(
         "permissions-policy",
         "geolocation=(), microphone=(), camera=()",
     );
-    let csp = state.config.content_security_policy.as_deref().unwrap_or(
-        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; img-src 'self' data:; connect-src 'self';",
-    );
+    let default_csp = if docs {
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'; frame-ancestors *; base-uri 'self';"
+    } else {
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; img-src 'self' data:; connect-src 'self';"
+    };
+    if docs {
+        headers.remove("x-frame-options");
+    }
+    let csp = state
+        .config
+        .content_security_policy
+        .as_deref()
+        .unwrap_or(default_csp);
     insert_value_default(headers, "content-security-policy", csp);
     if state.config.https_only {
         insert_default(

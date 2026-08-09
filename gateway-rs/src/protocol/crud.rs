@@ -66,7 +66,16 @@ pub async fn execute(
         DataPlaneProtocol::Grpc | DataPlaneProtocol::GrpcWeb => BodyLimits::from_env().grpc,
         DataPlaneProtocol::Rest => BodyLimits::from_env().rest,
     };
-    let body = to_bytes(body, limit).await?;
+    let body = match to_bytes(body, limit).await {
+        Ok(body) => body,
+        Err(_) => {
+            return Ok(policy_error(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "GTW013",
+                "Request body too large",
+            ));
+        }
+    };
     let response = match protocol {
         DataPlaneProtocol::Graphql => execute_graphql(state, decision, &body).await,
         DataPlaneProtocol::Soap => execute_soap(state, decision, &query, &body).await,

@@ -1,15 +1,13 @@
 use axum::{
     Json, Router,
-    body::{Body, Bytes, to_bytes},
-    extract::ConnectInfo,
-    http::{HeaderMap, Method, Uri},
+    body::{Body, to_bytes},
+    http::{Method, Uri},
     routing::{any, get},
 };
 use doorman_gateway::storage::models::PolicyDocuments;
 use doorman_gateway::{AppState, Config, build_router};
 use http::{Request, StatusCode};
 use serde_json::{Value, json};
-use std::net::SocketAddr;
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -36,11 +34,10 @@ async fn rust_health_matches_public_contract() {
 }
 
 #[tokio::test]
-async fn platform_routes_proxy_to_python() {
-    let (python_url, server) =
-        spawn_python(Router::new().route("/platform/ping", get(|| async { "python" }))).await;
-    let config = Config::for_test(python_url);
-    let app = build_router(AppState::new(config).unwrap());
+async fn platform_routes_are_native_and_never_use_an_internal_backend() {
+    let (upstream_url, server) =
+        spawn_upstream(Router::new().route("/platform/ping", get(|| async { "upstream" }))).await;
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
     let response = app
         .oneshot(
             Request::builder()
@@ -51,22 +48,18 @@ async fn platform_routes_proxy_to_python() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        to_bytes(response.into_body(), 1024).await.unwrap(),
-        "python"
-    );
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     server.abort();
 }
 
 #[tokio::test]
-async fn public_health_never_proxies_to_python() {
-    let (python_url, server) = spawn_python(Router::new().route(
+async fn public_health_never_uses_an_internal_backend() {
+    let (upstream_url, server) = spawn_upstream(Router::new().route(
         "/api/health",
-        get(|| async { Json(json!({ "status": "python" })) }),
+        get(|| async { Json(json!({ "status": "upstream" })) }),
     ))
     .await;
-    let config = Config::for_test(python_url);
+    let config = Config::for_test(upstream_url);
     let app = build_router(AppState::new(config).unwrap());
     let response = app
         .oneshot(
@@ -87,13 +80,13 @@ async fn public_health_never_proxies_to_python() {
 }
 
 #[tokio::test]
-async fn public_health_never_proxies_to_alternate_python_backend() {
-    let (python_url, server) = spawn_python(Router::new().route(
+async fn public_health_never_uses_an_alternate_backend() {
+    let (upstream_url, server) = spawn_upstream(Router::new().route(
         "/api/health",
-        get(|| async { Json(json!({ "status": "python" })) }),
+        get(|| async { Json(json!({ "status": "upstream" })) }),
     ))
     .await;
-    let config = Config::for_test(python_url);
+    let config = Config::for_test(upstream_url);
     let app = build_router(AppState::new(config).unwrap());
     let response = app
         .oneshot(
@@ -135,97 +128,46 @@ async fn rust_serves_health_independent_of_removed_rollout_flags() {
 }
 
 #[tokio::test]
-async fn proxy_preserves_method_query_headers_body_and_response_headers() {
-    async fn echo(
-        method: Method,
-        uri: Uri,
-        headers: HeaderMap,
-        body: Bytes,
-    ) -> (StatusCode, [(String, String); 1], Json<Value>) {
-        (
-            StatusCode::CREATED,
-            [("x-python".to_owned(), "true".to_owned())],
-            Json(json!({
-                "method": method.as_str(),
-                "path_and_query": uri.path_and_query().unwrap().as_str(),
-                "x-test": headers.get("x-test").unwrap().to_str().unwrap(),
-                "body": String::from_utf8(body.to_vec()).unwrap(),
-            })),
-        )
-    }
-
-    let (python_url, server) = spawn_python(Router::new().route("/platform/echo", any(echo))).await;
-    let app = build_router(AppState::new(Config::for_test(python_url)).unwrap());
+async fn platform_requests_are_not_forwarded_to_an_internal_backend() {
+    let (upstream_url, server) = spawn_upstream(
+        Router::new().route("/platform/echo", any(|| async { StatusCode::IM_A_TEAPOT })),
+    )
+    .await;
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
     let response = app
         .oneshot(
             Request::builder()
                 .method(Method::POST)
                 .uri("/platform/echo?value=1")
-                .header("x-test", "forwarded")
                 .body(Body::from("payload"))
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::CREATED);
-    assert_eq!(response.headers().get("x-python").unwrap(), "true");
-    let body: Value =
-        serde_json::from_slice(&to_bytes(response.into_body(), 4096).await.unwrap()).unwrap();
-    assert_eq!(body["method"], "POST");
-    assert_eq!(body["path_and_query"], "/platform/echo?value=1");
-    assert_eq!(body["x-test"], "forwarded");
-    assert_eq!(body["body"], "payload");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     server.abort();
 }
 
 #[tokio::test]
-async fn proxy_rebuilds_forwarding_headers_from_direct_peer() {
-    async fn echo_headers(headers: HeaderMap) -> Json<Value> {
-        let header = |name: &str| {
-            headers
-                .get(name)
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_owned)
-        };
-
-        Json(json!({
-            "x_forwarded_for": header("x-forwarded-for"),
-            "x_forwarded_host": header("x-forwarded-host"),
-            "x_real_ip": header("x-real-ip"),
-            "cf_connecting_ip": header("cf-connecting-ip"),
-            "forwarded": header("forwarded"),
-        }))
-    }
-
-    let (python_url, server) =
-        spawn_python(Router::new().route("/platform/headers", any(echo_headers))).await;
-    let app = build_router(AppState::new(Config::for_test(python_url)).unwrap());
-    let mut request = Request::builder()
-        .method(Method::GET)
-        .uri("/platform/headers")
-        .header("host", "public.example")
-        .header("x-forwarded-host", "spoofed.example")
-        .header("x-forwarded-for", "203.0.113.10")
-        .header("x-real-ip", "203.0.113.11")
-        .header("cf-connecting-ip", "203.0.113.12")
-        .header("forwarded", "for=203.0.113.13")
-        .body(Body::empty())
+async fn spoofed_forwarding_headers_do_not_enable_platform_access() {
+    let (upstream_url, server) =
+        spawn_upstream(Router::new().route("/platform/headers", any(|| async { StatusCode::OK })))
+            .await;
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/platform/headers")
+                .header("x-forwarded-for", "203.0.113.10")
+                .header("x-real-ip", "203.0.113.11")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
         .unwrap();
-    request.extensions_mut().insert(ConnectInfo(
-        "198.51.100.20:12345".parse::<SocketAddr>().unwrap(),
-    ));
 
-    let response = app.oneshot(request).await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let body: Value =
-        serde_json::from_slice(&to_bytes(response.into_body(), 4096).await.unwrap()).unwrap();
-    assert_eq!(body["x_forwarded_for"], "198.51.100.20");
-    assert_eq!(body["x_forwarded_host"], "public.example");
-    assert!(body["x_real_ip"].is_null());
-    assert!(body["cf_connecting_ip"].is_null());
-    assert!(body["forwarded"].is_null());
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     server.abort();
 }
 
@@ -235,9 +177,9 @@ async fn rust_fails_closed_without_policy_storage() {
         uri.path_and_query().unwrap().as_str().to_owned()
     }
 
-    let (python_url, server) =
-        spawn_python(Router::new().route("/api/rest/demo/v1/items", any(echo_uri))).await;
-    let app = build_router(AppState::new(Config::for_test(python_url)).unwrap());
+    let (upstream_url, server) =
+        spawn_upstream(Router::new().route("/api/rest/demo/v1/items", any(echo_uri))).await;
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
     let response = app
         .oneshot(
             Request::builder()
@@ -280,13 +222,13 @@ async fn rust_serves_status_unauthorized_from_rust() {
 }
 
 #[tokio::test]
-async fn rust_does_not_proxy_invalid_status_auth_to_python() {
-    let (python_url, server) = spawn_python(Router::new().route(
+async fn rust_handles_invalid_status_auth_locally() {
+    let (upstream_url, server) = spawn_upstream(Router::new().route(
         "/api/status",
-        any(|| async { Json(json!({ "status": "python" })) }),
+        any(|| async { Json(json!({ "status": "upstream" })) }),
     ))
     .await;
-    let app = build_router(AppState::new(Config::for_test(python_url)).unwrap());
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
     let response = app
         .oneshot(
             Request::builder()
@@ -330,14 +272,14 @@ async fn rust_serves_caches_preflight_from_rust() {
 }
 
 #[tokio::test]
-async fn rust_does_not_proxy_cache_delete_to_python() {
+async fn rust_handles_cache_delete_locally() {
     async fn echo_method(method: Method) -> Json<Value> {
         Json(json!({ "method": method.as_str() }))
     }
 
-    let (python_url, server) =
-        spawn_python(Router::new().route("/api/caches", any(echo_method))).await;
-    let app = build_router(AppState::new(Config::for_test(python_url)).unwrap());
+    let (upstream_url, server) =
+        spawn_upstream(Router::new().route("/api/caches", any(echo_method))).await;
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
     let response = app
         .oneshot(
             Request::builder()
@@ -367,9 +309,9 @@ async fn rust_preflight_fails_closed_without_policy_storage() {
         )
     }
 
-    let (python_url, server) =
-        spawn_python(Router::new().route("/api/rest/demo/v1/items", any(echo_uri))).await;
-    let app = build_router(AppState::new(Config::for_test(python_url)).unwrap());
+    let (upstream_url, server) =
+        spawn_upstream(Router::new().route("/api/rest/demo/v1/items", any(echo_uri))).await;
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
     let response = app
         .oneshot(
             Request::builder()
@@ -391,10 +333,11 @@ async fn rust_preflight_fails_closed_without_policy_storage() {
 
 #[tokio::test]
 async fn rust_rejects_unported_health_methods_in_rust() {
-    let (python_url, server) =
-        spawn_python(Router::new().route("/api/health", any(|| async { "python health method" })))
-            .await;
-    let app = build_router(AppState::new(Config::for_test(python_url)).unwrap());
+    let (upstream_url, server) = spawn_upstream(
+        Router::new().route("/api/health", any(|| async { "upstream health method" })),
+    )
+    .await;
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
     let response = app
         .oneshot(
             Request::builder()
@@ -417,13 +360,13 @@ async fn rust_rejects_unported_health_methods_in_rust() {
 }
 
 #[tokio::test]
-async fn missing_endpoint_fails_closed_without_python_fallback() {
-    let (python_url, server) = spawn_python(Router::new().route(
+async fn missing_endpoint_fails_closed_without_a_fallback() {
+    let (upstream_url, server) = spawn_upstream(Router::new().route(
         "/api/rest/demo/v1/missing",
-        any(|| async { "python fallback" }),
+        any(|| async { "upstream fallback" }),
     ))
     .await;
-    let config = Config::for_test(python_url);
+    let config = Config::for_test(upstream_url);
     let state = AppState::new(config)
         .unwrap()
         .with_policy_documents(PolicyDocuments {
@@ -461,13 +404,13 @@ async fn missing_endpoint_fails_closed_without_python_fallback() {
 }
 
 #[tokio::test]
-async fn rust_policy_enforcement_rejects_rest_before_python() {
-    let (python_url, server) = spawn_python(Router::new().route(
+async fn rust_policy_enforcement_rejects_rest_before_upstream() {
+    let (upstream_url, server) = spawn_upstream(Router::new().route(
         "/api/rest/demo/v1/missing",
-        any(|| async { "python fallback" }),
+        any(|| async { "upstream fallback" }),
     ))
     .await;
-    let config = Config::for_test(python_url);
+    let config = Config::for_test(upstream_url);
     let state = AppState::new(config)
         .unwrap()
         .with_policy_documents(PolicyDocuments {
@@ -506,7 +449,7 @@ async fn rust_policy_enforcement_rejects_rest_before_python() {
 
 #[tokio::test]
 async fn graphql_nested_route_uses_the_original_public_uri() {
-    let (upstream_url, server) = spawn_python(Router::new().route(
+    let (upstream_url, server) = spawn_upstream(Router::new().route(
         "/graphql",
         any(|| async { Json(json!({"data": {"ok": true}})) }),
     ))
@@ -552,7 +495,7 @@ async fn graphql_nested_route_uses_the_original_public_uri() {
 
 #[tokio::test]
 async fn soap_nested_route_uses_the_original_public_uri() {
-    let (upstream_url, server) = spawn_python(Router::new().route(
+    let (upstream_url, server) = spawn_upstream(Router::new().route(
         "/soap",
         any(|| async {
             (
@@ -603,7 +546,7 @@ async fn soap_nested_route_uses_the_original_public_uri() {
 #[tokio::test]
 async fn rust_compresses_large_gateway_responses_when_requested() {
     let (upstream_url, server) =
-        spawn_python(Router::new().route("/large", get(|| async { "x".repeat(800) }))).await;
+        spawn_upstream(Router::new().route("/large", get(|| async { "x".repeat(800) }))).await;
     let config = Config::for_test("http://127.0.0.1:9".to_owned());
     let state = AppState::new(config)
         .unwrap()
@@ -648,7 +591,7 @@ async fn rust_compresses_large_gateway_responses_when_requested() {
     server.abort();
 }
 
-async fn spawn_python(app: Router) -> (String, tokio::task::JoinHandle<()>) {
+async fn spawn_upstream(app: Router) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -657,13 +600,13 @@ async fn spawn_python(app: Router) -> (String, tokio::task::JoinHandle<()>) {
 
 #[tokio::test]
 async fn preflight_fails_closed_without_storage() {
-    async fn python_options(method: Method) -> String {
-        format!("python {}", method.as_str())
+    async fn upstream_options(method: Method) -> String {
+        format!("upstream {}", method.as_str())
     }
 
-    let (python_url, server) =
-        spawn_python(Router::new().route("/api/rest/demo/v1/items", any(python_options))).await;
-    let app = build_router(AppState::new(Config::for_test(python_url)).unwrap());
+    let (upstream_url, server) =
+        spawn_upstream(Router::new().route("/api/rest/demo/v1/items", any(upstream_options))).await;
+    let app = build_router(AppState::new(Config::for_test(upstream_url)).unwrap());
     let response = app
         .oneshot(
             Request::builder()
@@ -680,5 +623,49 @@ async fn preflight_fails_closed_without_storage() {
         to_bytes(response.into_body(), 1024).await.unwrap(),
         r#"{"error_code":"GTW006","error_message":"Gateway state store unavailable"}"#
     );
+    server.abort();
+}
+
+#[tokio::test]
+async fn oversized_rest_body_returns_legacy_413_without_reaching_upstream() {
+    let (upstream_url, server) =
+        spawn_upstream(Router::new().route("/items", any(|| async { StatusCode::IM_A_TEAPOT })))
+            .await;
+    let state = AppState::new(Config::for_test("removed-internal-backend".to_owned()))
+        .unwrap()
+        .with_policy_documents(PolicyDocuments {
+            apis: vec![json!({
+                "api_id": "api-body-limit",
+                "api_name": "limited",
+                "api_version": "v1",
+                "api_public": true,
+                "api_servers": [upstream_url],
+            })],
+            endpoints: vec![json!({
+                "api_name": "limited",
+                "api_version": "v1",
+                "endpoint_method": "POST",
+                "client_uri": "/items",
+                "endpoint_uri": "/items",
+            })],
+            ..Default::default()
+        });
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/rest/limited/v1/items")
+                .header("content-type", "application/json")
+                .body(Body::from(vec![b'x'; 1024 * 1024 + 1]))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1024).await.unwrap()).unwrap();
+    assert_eq!(body["error_code"], "GTW013");
+    assert_eq!(body["error_message"], "Request body too large");
     server.abort();
 }
