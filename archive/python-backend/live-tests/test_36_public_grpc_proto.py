@@ -4,6 +4,7 @@ import time
 import pytest
 import requests
 from config import ENABLE_GRPC
+from servers import _get_host_from_container
 
 
 def _find_port() -> int:
@@ -12,34 +13,6 @@ def _find_port() -> int:
     p = s.getsockname()[1]
     s.close()
     return p
-
-
-def _get_host_from_container() -> str:
-    """Get the hostname to use when referring to the host machine from a Docker container.
-
-    Returns the appropriate hostname for test servers to use in URLs that Doorman will connect to:
-    - If Doorman is running natively (local mode): returns 127.0.0.1
-    - If Doorman is running in Docker: returns host.docker.internal (Mac/Win) or 172.17.0.1 (Linux)
-
-    Set DOORMAN_IN_DOCKER=1 to explicitly indicate Doorman is running in Docker containers.
-    """
-    import os
-    import platform
-
-    # Check if Doorman is running in Docker (explicit override)
-    docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
-
-    if docker_env in ('1', 'true', 'yes'):
-        # Explicitly told Doorman IS in Docker
-        system = platform.system()
-        if system == 'Darwin' or system == 'Windows':
-            return 'host.docker.internal'
-        else:
-            return '172.17.0.1'
-
-    # Default: assume Doorman is running natively (not in Docker)
-    # This is the most common development setup
-    return '127.0.0.1'
 
 
 @pytest.mark.skipif(not ENABLE_GRPC, reason='gRPC disabled')
@@ -117,7 +90,7 @@ message DeleteReply { bool ok = 1; }
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
         pb2_grpc.add_ResourceServicer_to_server(Resource(), server)
         port = _find_port()
-        server.add_insecure_port(f'127.0.0.1:{port}')
+        server.add_insecure_port(f'0.0.0.0:{port}')
         server.start()
         time.sleep(0.2)
 

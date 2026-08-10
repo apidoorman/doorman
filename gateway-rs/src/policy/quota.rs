@@ -28,7 +28,11 @@ pub fn current_window_index(period_seconds: u64) -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    if period_seconds == 0 { 0 } else { now / period_seconds }
+    if period_seconds == 0 {
+        0
+    } else {
+        now / period_seconds
+    }
 }
 
 pub fn quota_counter_key(user_id: &str, quota_id: &str, window_index: u64) -> String {

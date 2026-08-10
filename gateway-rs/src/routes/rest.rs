@@ -353,7 +353,10 @@ async fn execute_rest(
     let mut headers = HeaderMap::new();
     for (name, value) in &parts.headers {
         let lower = name.as_str().to_ascii_lowercase();
-        let always_forward = matches!(lower.as_str(), "content-type" | "accept" | "user-agent" | "x-request-id");
+        let always_forward = matches!(
+            lower.as_str(),
+            "content-type" | "accept" | "user-agent" | "x-request-id"
+        );
         let protocol_default = protocol == DataPlaneProtocol::Soap
             && matches!(
                 lower.as_str(),

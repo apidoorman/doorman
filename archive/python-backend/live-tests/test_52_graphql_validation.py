@@ -39,22 +39,12 @@ def test_graphql_validation_blocks_invalid_variables(client):
         s.close()
         return p
 
-    def _get_host_from_container():
-        import os
-
-        docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
-        if docker_env in ('1', 'true', 'yes'):
-            system = platform.system()
-            if system == 'Darwin' or system == 'Windows':
-                return 'host.docker.internal'
-            else:
-                return '172.17.0.1'
-        return '127.0.0.1'
+    from servers import _get_host_from_container
 
     port = _free_port()
     host = _get_host_from_container()
     server = uvicorn.Server(
-        uvicorn.Config(GraphQL(schema), host='127.0.0.1', port=port, log_level='warning')
+        uvicorn.Config(GraphQL(schema), host='0.0.0.0', port=port, log_level='warning')
     )
     t = threading.Thread(target=server.run, daemon=True)
     t.start()

@@ -427,7 +427,9 @@ async fn live_test_30_rest_gateway_basic_crud_and_subscription_parity() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(format!("/platform/endpoint/GET/{api_name}/{api_version}/status"))
+                .uri(format!(
+                    "/platform/endpoint/GET/{api_name}/{api_version}/status"
+                ))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -597,7 +599,11 @@ async fn live_test_33_rate_limiting_blocks_excess_requests_parity() {
         )
         .await
         .unwrap();
-    assert!(response1.status().is_client_error() || response1.status().is_server_error() || response1.status().is_success());
+    assert!(
+        response1.status().is_client_error()
+            || response1.status().is_server_error()
+            || response1.status().is_success()
+    );
     assert!(response2.status().is_client_error() || response2.status().is_server_error());
 }
 
@@ -669,7 +675,9 @@ async fn live_test_41_soap_and_85_endpoint_validation_parity() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/platform/endpoint/POST/{api_name}/{api_version}/add"))
+                .uri(format!(
+                    "/platform/endpoint/POST/{api_name}/{api_version}/add"
+                ))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -757,7 +765,9 @@ async fn live_test_90_security_tools_and_config_export_import_parity() {
                 .uri("/platform/tools/cors/check")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(json!({"origin": "http://localhost:3000"}).to_string()))
+                .body(Body::from(
+                    json!({"origin": "http://localhost:3000"}).to_string(),
+                ))
                 .unwrap(),
         )
         .await

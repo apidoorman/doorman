@@ -26,6 +26,10 @@ def _mk_api(
             'api_allowed_groups': ['ALL'],
             'api_allowed_retry_count': 0,
             'active': True,
+            # The live suite authenticates as the bootstrap admin, which normally
+            # bypasses subscription checks. Opt this API into the behavior this
+            # test is specifically exercising.
+            'enforce_admin_subscription': True,
             **(extra or {}),
         },
     )

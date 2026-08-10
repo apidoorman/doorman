@@ -19,7 +19,9 @@ pub fn enforce_api_ip_policy(
         .unwrap_or(configured_trust_xff);
     let client_ip = effective_client_ip(headers, direct_ip, trust_xff);
 
-    if local_host_ip_bypass && !has_forwarding_header(headers) && client_ip.is_some_and(is_loopback)
+    if local_host_ip_bypass
+        && !has_forwarding_header(headers)
+        && (client_ip.is_some_and(is_loopback) || has_local_host_header(headers))
     {
         return Ok(());
     }
@@ -88,6 +90,19 @@ fn has_forwarding_header(headers: &HeaderMap) -> bool {
     ]
     .iter()
     .any(|name| headers.contains_key(*name))
+}
+
+fn has_local_host_header(headers: &HeaderMap) -> bool {
+    let Some(host) = headers.get("host").and_then(|value| value.to_str().ok()) else {
+        return false;
+    };
+    let host = host.trim().to_ascii_lowercase();
+    let hostname = if let Some(ipv6) = host.strip_prefix('[') {
+        ipv6.split(']').next().unwrap_or(ipv6)
+    } else {
+        host.split(':').next().unwrap_or(&host)
+    };
+    matches!(hostname, "localhost" | "127.0.0.1" | "::1" | "testserver")
 }
 
 fn is_loopback(ip: IpAddr) -> bool {
@@ -188,6 +203,28 @@ mod tests {
                 false,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn localhost_host_header_preserves_bypass_behind_container_nat() {
+        let api = json!({
+            "api_ip_mode": "whitelist",
+            "api_ip_whitelist": [],
+        });
+        let mut headers = HeaderMap::new();
+        headers.insert("host", HeaderValue::from_static("localhost:3001"));
+
+        assert!(
+            enforce_api_ip_policy(
+                &api,
+                None,
+                &headers,
+                Some("172.18.0.1".parse().unwrap()),
+                false,
+                true,
+            )
+            .is_ok()
         );
     }
 }

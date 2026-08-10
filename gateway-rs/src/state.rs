@@ -10,6 +10,7 @@ use thiserror::Error;
 use crate::{
     config::Config,
     gateway::circuit_breaker::CircuitEntry,
+    hot_reload::HotReloadConfig,
     storage::{
         models::PolicyDocuments,
         runtime::{SharedStorage, StorageError},
@@ -32,6 +33,7 @@ pub struct AppState {
     pub policy_documents: Option<Arc<Mutex<PolicyDocuments>>>,
     pub storage: Option<Arc<SharedStorage>>,
     pub runtime: Arc<GatewayRuntime>,
+    pub hot_reload: Arc<HotReloadConfig>,
     pub validators: Arc<ValidatorRegistry>,
 }
 
@@ -78,6 +80,7 @@ impl AppState {
             policy_documents: None,
             storage: None,
             runtime: Arc::new(GatewayRuntime::default()),
+            hot_reload: Arc::new(HotReloadConfig::from_env()),
             validators: Arc::new(ValidatorRegistry::default()),
         })
     }

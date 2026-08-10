@@ -1,7 +1,8 @@
-use std::{env, sync::Arc, time::Duration};
+use std::{env, path::PathBuf, sync::Arc, time::Duration};
 
 use doorman_gateway::{
     AppState, Config, build_router,
+    observability::analytics_aggregator::global_analytics,
     storage::{runtime::SharedStorage, snapshot},
 };
 use tokio::net::TcpListener;
@@ -10,6 +11,8 @@ use tracing::{error, info, warn};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     doorman_gateway::observability::init();
+    restore_metrics();
+    spawn_metrics_autosave();
 
     let config = Config::from_env()?;
     let bind_addr = config.bind_addr();
@@ -121,6 +124,58 @@ async fn shutdown_signal(storage: Option<Arc<SharedStorage>>) {
             Err(error_value) => error!(error = %error_value, "shutdown memory dump failed"),
         }
     }
+    persist_metrics();
+}
+
+fn metrics_paths() -> [PathBuf; 2] {
+    let directory = env::var_os("LOGS_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("platform-logs"));
+    [
+        directory.join("enhanced_metrics.json"),
+        directory.join("metrics.json"),
+    ]
+}
+
+fn restore_metrics() {
+    for path in metrics_paths() {
+        if !path.exists() {
+            continue;
+        }
+        match global_analytics().load_from_file(&path) {
+            Ok(()) => {
+                info!(path = %path.display(), "restored gateway metrics");
+                return;
+            }
+            Err(error_value) => {
+                warn!(path = %path.display(), error = %error_value, "gateway metrics restore skipped");
+            }
+        }
+    }
+}
+
+fn persist_metrics() {
+    for path in metrics_paths() {
+        if let Err(error_value) = global_analytics().save_to_file(&path) {
+            warn!(path = %path.display(), error = %error_value, "gateway metrics persistence failed");
+        }
+    }
+}
+
+fn spawn_metrics_autosave() {
+    let seconds = env::var("METRICS_SAVE_INTERVAL")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(60)
+        .max(1);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(seconds));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            persist_metrics();
+        }
+    });
 }
 
 fn env_bool(name: &str, default: bool) -> bool {

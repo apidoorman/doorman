@@ -18,16 +18,7 @@ def _find_port():
     return p
 
 
-def _get_host_from_container():
-    """Get the hostname to use when referring to the host machine from a Docker container."""
-    docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
-    if docker_env in ('1', 'true', 'yes'):
-        system = platform.system()
-        if system == 'Darwin' or system == 'Windows':
-            return 'host.docker.internal'
-        else:
-            return '172.17.0.1'
-    return '127.0.0.1'
+from servers import _get_host_from_container
 
 
 def test_bulk_public_rest_crud(client):
@@ -186,7 +177,7 @@ def test_bulk_public_graphql_crud(client):
         schema = make_executable_schema(type_defs, [query, mutation])
         app = GraphQL(schema, debug=True)
         port = _find_port()
-        config = uvicorn.Config(app, host='127.0.0.1', port=port, log_level='warning')
+        config = uvicorn.Config(app, host='0.0.0.0', port=port, log_level='warning')
         server = uvicorn.Server(config)
         t = threading.Thread(target=server.run, daemon=True)
         t.start()

@@ -30,11 +30,7 @@ pub async fn grpc_policy_then_execute(
         .or_else(|| path.strip_prefix("/grpc/"))
         .unwrap_or(path)
         .trim_matches('/');
-    let api_name = subpath
-        .split('/')
-        .next()
-        .unwrap_or_default()
-        .to_owned();
+    let api_name = subpath.split('/').next().unwrap_or_default().to_owned();
     let version = request
         .headers()
         .get("x-api-version")

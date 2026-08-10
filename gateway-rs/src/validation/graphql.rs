@@ -82,11 +82,13 @@ pub fn calculate_graphql_cost(query: &str) -> usize {
     let mut cost = 0usize;
 
     for word in query.split_whitespace() {
-        let clean_word = word.trim_matches(|c| c == '{' || c == '}' || c == '(' || c == ')' || c == ':' || c == ',');
+        let clean_word = word
+            .trim_matches(|c| c == '{' || c == '}' || c == '(' || c == ')' || c == ':' || c == ',');
         if clean_word.starts_with('#') {
             continue;
         }
-        if !clean_word.is_empty() && !clean_word.starts_with('"') && !is_graphql_keyword(clean_word) {
+        if !clean_word.is_empty() && !clean_word.starts_with('"') && !is_graphql_keyword(clean_word)
+        {
             cost += 1;
         }
     }
@@ -95,7 +97,10 @@ pub fn calculate_graphql_cost(query: &str) -> usize {
 }
 
 fn is_graphql_keyword(word: &str) -> bool {
-    matches!(word, "query" | "mutation" | "subscription" | "fragment" | "on")
+    matches!(
+        word,
+        "query" | "mutation" | "subscription" | "fragment" | "on"
+    )
 }
 
 #[cfg(test)]

@@ -2,7 +2,10 @@ FROM rust:1.88-slim-bookworm AS rust-builder
 WORKDIR /build/gateway-rs
 COPY gateway-rs/Cargo.toml gateway-rs/Cargo.lock gateway-rs/rust-toolchain.toml ./
 COPY gateway-rs/src ./src
-RUN cargo build --locked --release
+RUN --mount=type=cache,id=doorman-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=doorman-cargo-target,target=/build/gateway-rs/target \
+    cargo build --locked --release \
+    && cp target/release/doorman-gateway /build/doorman-gateway
 
 FROM node:20-bookworm-slim AS web-builder
 WORKDIR /app/web-client
@@ -19,10 +22,10 @@ RUN NEXT_PUBLIC_PROTECTED_USERS="$NEXT_PUBLIC_PROTECTED_USERS" \
 
 FROM node:20-bookworm-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl libprotobuf-dev protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=rust-builder /build/gateway-rs/target/release/doorman-gateway /usr/local/bin/doorman-gateway
+COPY --from=rust-builder /build/doorman-gateway /usr/local/bin/doorman-gateway
 COPY --from=web-builder /app/web-client /app/web-client
 COPY docker/entrypoint.sh /app/docker/entrypoint.sh
 RUN chmod +x /app/docker/entrypoint.sh \

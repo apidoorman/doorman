@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     env, fs,
     net::SocketAddr,
-    process::Command,
+    process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -26,7 +26,8 @@ use crate::{
         },
         response_compat::MessageEnvelope,
     },
-    observability::analytics_aggregator::global_analytics,
+    observability::analytics_aggregator::{AggregatedPoint, EntityCounter, global_analytics},
+    platform_contract::{normalize_create_api, normalize_update_api},
     policy::{
         auth::{AuthClaims, verify_request_token},
         ip::enforce_api_ip_policy,
@@ -111,7 +112,14 @@ pub async fn platform_dispatch(
         return success(StatusCode::OK, json!({"status": "alive"}), &request_id);
     }
     if path == "/monitor/readiness" && method == Method::GET {
-        return readiness(&state, &request_id).await;
+        let privileged = match authorize(&state, &headers, path, &request_id).await {
+            Ok(claims) => {
+                let username = claims.sub.as_deref().unwrap_or_default();
+                has_permission(&state, username, "manage_gateway").await
+            }
+            Err(_) => false,
+        };
+        return readiness(&state, privileged, &request_id).await;
     }
 
     let claims = match authorize(&state, &headers, path, &request_id).await {
@@ -155,22 +163,60 @@ pub async fn platform_dispatch(
             memory_restore(&state, payload, &username, &request_id).await
         }
         (Method::GET, "/dashboard") => dashboard(&state, &request_id).await,
-        (Method::GET, "/monitor/metrics") => monitor_metrics(&state, &request_id).await,
-        (Method::GET, "/monitor/report") => monitor_report(&state, &request_id).await,
+        (Method::GET, "/monitor/metrics") => {
+            if !has_permission(&state, &username, "manage_gateway").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "MON001",
+                    "You do not have permission to view monitor metrics",
+                    &request_id,
+                )
+            } else {
+                monitor_metrics(&state, &request_id).await
+            }
+        }
+        (Method::GET, "/monitor/report") => {
+            if !has_permission(&state, &username, "manage_gateway").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "MON002",
+                    "You do not have permission to generate reports",
+                    &request_id,
+                )
+            } else {
+                monitor_report(&state, &request_id).await
+            }
+        }
         (Method::GET, "/analytics/overview") => {
-            analytics_overview(&state, &username, &request_id).await
+            analytics_overview(&state, &username, &query, &request_id).await
         }
         (Method::GET, "/analytics/timeseries") => {
-            success(StatusCode::OK, json!({"data": global_analytics().get_timeseries()}), &request_id)
+            if !has_permission(&state, &username, "view_analytics").await {
+                analytics_denied(&request_id)
+            } else {
+                analytics_timeseries(&query, &request_id)
+            }
         }
         (Method::GET, "/analytics/top-apis") => {
-            success(StatusCode::OK, json!(global_analytics().get_top_apis(10)), &request_id)
+            if !has_permission(&state, &username, "view_analytics").await {
+                analytics_denied(&request_id)
+            } else {
+                analytics_top("api", &query, &request_id)
+            }
         }
         (Method::GET, "/analytics/top-users") => {
-            success(StatusCode::OK, json!(global_analytics().get_top_users(10)), &request_id)
+            if !has_permission(&state, &username, "view_analytics").await {
+                analytics_denied(&request_id)
+            } else {
+                analytics_top("user", &query, &request_id)
+            }
         }
         (Method::GET, "/analytics/top-endpoints") => {
-            success(StatusCode::OK, json!(global_analytics().get_top_endpoints(10)), &request_id)
+            if !has_permission(&state, &username, "view_analytics").await {
+                analytics_denied(&request_id)
+            } else {
+                analytics_top("endpoint", &query, &request_id)
+            }
         }
         (Method::GET, detail) if detail.starts_with("/analytics/api/") => {
             analytics_detail(
@@ -178,6 +224,7 @@ pub async fn platform_dispatch(
                 &username,
                 "api",
                 detail.trim_start_matches("/analytics/api/"),
+                &query,
                 &request_id,
             )
             .await
@@ -188,11 +235,23 @@ pub async fn platform_dispatch(
                 &username,
                 "user",
                 detail.trim_start_matches("/analytics/user/"),
+                &query,
                 &request_id,
             )
             .await
         }
-        (Method::GET, "/security/settings") => get_security_settings(&state, &request_id).await,
+        (Method::GET, "/security/settings") => {
+            if !has_permission(&state, &username, "manage_security").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "SEC001",
+                    "You do not have permission to view security settings",
+                    &request_id,
+                )
+            } else {
+                get_security_settings(&state, &request_id).await
+            }
+        }
         (Method::PUT, "/security/settings") => {
             if !has_permission(&state, &username, "manage_security").await {
                 error(
@@ -210,20 +269,22 @@ pub async fn platform_dispatch(
                 error(
                     StatusCode::FORBIDDEN,
                     "SEC003",
-                    "You do not have permission to restart gateway",
+                    "You do not have permission to restart the gateway",
                     &request_id,
                 )
-            } else if let Some(storage) = &state.storage {
-                match storage.clear_gateway_state().await {
-                    Ok(()) => message(
-                        StatusCode::OK,
-                        "Gateway restarted successfully",
+            } else {
+                match schedule_restart() {
+                    Ok(()) => message(StatusCode::ACCEPTED, "Restart scheduled", &request_id),
+                    Err(("SEC004", message_text)) => {
+                        error(StatusCode::CONFLICT, "SEC004", message_text, &request_id)
+                    }
+                    Err((code, message_text)) => error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        code,
+                        message_text,
                         &request_id,
                     ),
-                    Err(_) => unexpected(&request_id),
                 }
-            } else {
-                unexpected(&request_id)
             }
         }
         (Method::GET, "/config/export/all") => {
@@ -248,44 +309,165 @@ pub async fn platform_dispatch(
             config_import(&state, &username, payload, &request_id).await
         }
         (Method::POST, "/config/rollback") => config_rollback(&state, &username, &request_id).await,
-        (Method::GET, "/config/current") => config_current(&request_id),
-        (Method::GET, "/config/reloadable-keys") => success(
-            StatusCode::OK,
-            json!({"reloadable_keys": reloadable_keys()}),
-            &request_id,
-        ),
-        (Method::POST, "/config/reload") => message(
-            StatusCode::OK,
-            "Configuration reloaded successfully",
-            &request_id,
-        ),
-        (Method::POST, "/demo/seed") => demo_seed(&state, &username, &request_id).await,
-        (Method::POST, "/tools/cors/check") => cors_check(payload, &request_id),
-        (Method::GET, "/tools/grpc/check") => success(
-            StatusCode::OK,
-            json!({
-                "grpc_enabled": true,
-                "reflection_enabled": env_bool("DOORMAN_ENABLE_GRPC_REFLECTION", false)
-            }),
-            &request_id,
-        ),
-        (Method::POST, "/tools/chaos/toggle") => {
-            if !has_permission(&state, &username, "manage_security").await {
-                error(
+        (Method::GET, "/config/current") => {
+            if !has_permission(&state, &username, "manage_gateway").await {
+                http_detail(
                     StatusCode::FORBIDDEN,
-                    "SEC003",
-                    "Insufficient permissions",
+                    "Insufficient permissions: manage_gateway required",
                     &request_id,
                 )
             } else {
-                let enabled = payload.get("enabled").and_then(Value::as_bool).unwrap_or(false);
-                let latency = payload.get("latency_ms").and_then(Value::as_u64).unwrap_or(0);
-                let error_status = payload.get("error_status").and_then(Value::as_u64).unwrap_or(0) as u32;
-
+                config_current(&state, &request_id)
+            }
+        }
+        (Method::GET, "/config/reloadable-keys") => success(
+            StatusCode::OK,
+            json!({
+                "reloadable_keys": reloadable_keys(),
+                "total": 22,
+                "notes": [
+                    "Environment variables always override config file values",
+                    "Changes take effect immediately after reload",
+                    "Reload via: kill -HUP $(cat doorman.pid)",
+                    "Or use: POST /config/reload"
+                ]
+            }),
+            &request_id,
+        ),
+        (Method::POST, "/config/reload") => {
+            if !has_permission(&state, &username, "manage_gateway").await {
+                http_detail(
+                    StatusCode::FORBIDDEN,
+                    "Insufficient permissions: manage_gateway required",
+                    &request_id,
+                )
+            } else {
+                state.hot_reload.reload();
+                success(
+                    StatusCode::OK,
+                    json!({
+                        "message": "Configuration reloaded successfully",
+                        "config": state.hot_reload.dump()
+                    }),
+                    &request_id,
+                )
+            }
+        }
+        (Method::POST, "/demo/seed") => demo_seed(&state, &username, &request_id).await,
+        (Method::POST, "/tools/cors/check") => {
+            if !has_permission(&state, &username, "manage_security").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "TLS001",
+                    "You do not have permission to use tools",
+                    &request_id,
+                )
+            } else {
+                cors_check(payload, &request_id)
+            }
+        }
+        (Method::GET, "/tools/grpc/check") => {
+            if !has_permission(&state, &username, "manage_security").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "TLS001",
+                    "You do not have permission to use tools",
+                    &request_id,
+                )
+            } else {
+                let reflection_enabled = env_bool("DOORMAN_ENABLE_GRPC_REFLECTION", false);
+                let notes = if reflection_enabled {
+                    Vec::<&str>::new()
+                } else {
+                    vec![
+                        "Reflection is disabled by default. Enable with DOORMAN_ENABLE_GRPC_REFLECTION=true",
+                    ]
+                };
+                success(
+                    StatusCode::OK,
+                    json!({
+                        "available": {
+                            "grpc": true,
+                            "grpc_tools_protoc": true
+                        },
+                        "reflection_enabled": reflection_enabled,
+                        "notes": notes,
+                        "details": {}
+                    }),
+                    &request_id,
+                )
+            }
+        }
+        (Method::POST, "/tools/chaos/toggle") => {
+            if !has_permission(&state, &username, "manage_gateway").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "TLS001",
+                    "You do not have permission to use tools",
+                    &request_id,
+                )
+            } else if let Some(backend) = payload.get("backend").and_then(Value::as_str) {
+                let backend = backend.trim().to_ascii_lowercase();
+                let target = match backend.as_str() {
+                    "redis" => &CHAOS_REDIS_OUTAGE,
+                    "mongo" => &CHAOS_MONGO_OUTAGE,
+                    _ => {
+                        return error(
+                            StatusCode::BAD_REQUEST,
+                            "TLS002",
+                            "backend must be redis or mongo",
+                            &request_id,
+                        );
+                    }
+                };
+                let Some(enabled) = payload.get("enabled").and_then(Value::as_bool) else {
+                    return validation_errors(
+                        vec![json!({
+                            "loc": ["body", "enabled"],
+                            "msg": "field required",
+                            "type": "value_error.missing"
+                        })],
+                        &request_id,
+                    );
+                };
+                let duration_ms = payload
+                    .get("duration_ms")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                if duration_ms > 0 {
+                    target.store(true, std::sync::atomic::Ordering::Relaxed);
+                    tokio::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(duration_ms)).await;
+                        target.store(false, std::sync::atomic::Ordering::Relaxed);
+                    });
+                } else {
+                    target.store(enabled, std::sync::atomic::Ordering::Relaxed);
+                }
+                success(
+                    StatusCode::OK,
+                    json!({
+                        "backend": backend,
+                        "enabled": target.load(std::sync::atomic::Ordering::Relaxed)
+                    }),
+                    &request_id,
+                )
+            } else {
+                // Retain the additive v2 latency/error injection extension.
+                let enabled = payload
+                    .get("enabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let latency = payload
+                    .get("latency_ms")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let error_status = payload
+                    .get("error_status")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as u32;
                 CHAOS_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
                 CHAOS_LATENCY_MS.store(latency, std::sync::atomic::Ordering::Relaxed);
                 CHAOS_ERROR_STATUS.store(error_status, std::sync::atomic::Ordering::Relaxed);
-
                 success(
                     StatusCode::OK,
                     json!({
@@ -297,23 +479,43 @@ pub async fn platform_dispatch(
                 )
             }
         }
-        (Method::GET, "/tools/chaos/stats") => success(
-            StatusCode::OK,
-            json!({
-                "enabled": CHAOS_ENABLED.load(std::sync::atomic::Ordering::Relaxed),
-                "latency_ms": CHAOS_LATENCY_MS.load(std::sync::atomic::Ordering::Relaxed),
-                "error_status": CHAOS_ERROR_STATUS.load(std::sync::atomic::Ordering::Relaxed),
-                "events": CHAOS_EVENTS_COUNT.load(std::sync::atomic::Ordering::Relaxed),
-                "error_budget_burn": CHAOS_ERROR_BUDGET_BURN.load(std::sync::atomic::Ordering::Relaxed),
-                "redis_outage": CHAOS_REDIS_OUTAGE.load(std::sync::atomic::Ordering::Relaxed),
-                "mongo_outage": CHAOS_MONGO_OUTAGE.load(std::sync::atomic::Ordering::Relaxed)
-            }),
-            &request_id,
-        ),
+        (Method::GET, "/tools/chaos/stats") => {
+            if !has_permission(&state, &username, "manage_gateway").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "TLS001",
+                    "You do not have permission to use tools",
+                    &request_id,
+                )
+            } else {
+                success(
+                    StatusCode::OK,
+                    json!({
+                        "redis_outage": CHAOS_REDIS_OUTAGE.load(std::sync::atomic::Ordering::Relaxed),
+                        "mongo_outage": CHAOS_MONGO_OUTAGE.load(std::sync::atomic::Ordering::Relaxed),
+                        "error_budget_burn": CHAOS_ERROR_BUDGET_BURN.load(std::sync::atomic::Ordering::Relaxed),
+                        "enabled": CHAOS_ENABLED.load(std::sync::atomic::Ordering::Relaxed),
+                        "latency_ms": CHAOS_LATENCY_MS.load(std::sync::atomic::Ordering::Relaxed),
+                        "error_status": CHAOS_ERROR_STATUS.load(std::sync::atomic::Ordering::Relaxed),
+                        "events": CHAOS_EVENTS_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+                    }),
+                    &request_id,
+                )
+            }
+        }
         (Method::POST, "/tools/rate-limit-simulator") => {
-            let max_requests = payload.get("max_requests").and_then(Value::as_u64).unwrap_or(100);
-            let duration_seconds = payload.get("duration_seconds").and_then(Value::as_u64).unwrap_or(60);
-            let simulated_requests = payload.get("simulated_requests").and_then(Value::as_u64).unwrap_or(120);
+            let max_requests = payload
+                .get("max_requests")
+                .and_then(Value::as_u64)
+                .unwrap_or(100);
+            let duration_seconds = payload
+                .get("duration_seconds")
+                .and_then(Value::as_u64)
+                .unwrap_or(60);
+            let simulated_requests = payload
+                .get("simulated_requests")
+                .and_then(Value::as_u64)
+                .unwrap_or(120);
 
             let allowed = simulated_requests.min(max_requests);
             let blocked = simulated_requests.saturating_sub(max_requests);
@@ -513,13 +715,33 @@ async fn dispatch_core_entities(
             );
         }
     }
-    if path == "/api" || path.starts_with("/api/") || path == "/apis" || path.starts_with("/apis/") {
-        return Some(api_routes(state, path.trim_start_matches('s'), method, payload, query, username, request_id).await);
+    if path == "/api" || path.starts_with("/api/") || path == "/apis" || path.starts_with("/apis/")
+    {
+        return Some(
+            api_routes(
+                state,
+                path.trim_start_matches('s'),
+                method,
+                payload,
+                query,
+                username,
+                request_id,
+            )
+            .await,
+        );
     }
-    if path == "/user" || path.starts_with("/user/") || path == "/users" || path.starts_with("/users/") {
+    if path == "/user"
+        || path.starts_with("/user/")
+        || path == "/users"
+        || path.starts_with("/users/")
+    {
         return Some(user_routes(state, path, method, payload, query, username, request_id).await);
     }
-    if path == "/endpoint" || path.starts_with("/endpoint/") || path == "/endpoints" || path.starts_with("/endpoints/") {
+    if path == "/endpoint"
+        || path.starts_with("/endpoint/")
+        || path == "/endpoints"
+        || path.starts_with("/endpoints/")
+    {
         return Some(
             endpoint_routes(state, path, method, payload, query, username, request_id).await,
         );
@@ -1106,6 +1328,23 @@ async fn entity_routes(
     )
 }
 
+fn merge_proto_metadata(target: &mut Value, source: &Value) {
+    for key in [
+        "api_grpc_proto_source",
+        "api_grpc_descriptor_set",
+        "api_grpc_descriptor_sha256",
+    ] {
+        if let Some(value) = source.get(key) {
+            target[key] = value.clone();
+        }
+    }
+    if target.get("api_grpc_package").is_none_or(Value::is_null) {
+        if let Some(value) = source.get("api_grpc_package") {
+            target["api_grpc_package"] = value.clone();
+        }
+    }
+}
+
 async fn api_routes(
     state: &AppState,
     path: &str,
@@ -1145,38 +1384,20 @@ async fn api_routes(
                 request_id,
             );
         }
-        let Some(name) = payload
-            .get("api_name")
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-        else {
-            return error(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "VAL001",
-                "api_name is required",
-                request_id,
-            );
+        payload = match normalize_create_api(&payload) {
+            Ok(payload) => payload,
+            Err(errors) => return validation_errors(errors, request_id),
         };
-        let Some(version) = payload
-            .get("api_version")
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-        else {
-            return error(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "VAL001",
-                "api_version is required",
-                request_id,
-            );
-        };
-        if payload
-            .get("api_public")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-            && payload
-                .get("api_credits_enabled")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
+        let name = payload["api_name"]
+            .as_str()
+            .expect("validated API name")
+            .to_owned();
+        let version = payload["api_version"]
+            .as_str()
+            .expect("validated API version")
+            .to_owned();
+        if payload["api_public"].as_bool().unwrap_or(false)
+            && payload["api_credits_enabled"].as_bool().unwrap_or(false)
         {
             return error(
                 StatusCode::BAD_REQUEST,
@@ -1186,31 +1407,39 @@ async fn api_routes(
             );
         }
         let filter = json!({"api_name": name, "api_version": version});
-        if let Ok(Some(existing)) = storage.find_one("apis", &filter).await {
-            let mut merged = existing.clone();
-            if let (Value::Object(base), Value::Object(new_vals)) = (&mut merged, payload.clone()) {
-                for (k, v) in new_vals {
-                    base.insert(k, v);
-                }
+        let existing = storage.find_one("apis", &filter).await.ok().flatten();
+        if let Some(existing) = existing {
+            let descriptor_only =
+                existing.get("api_id").is_none() && existing.get("api_grpc_proto_source").is_some();
+            if !descriptor_only {
+                return message(StatusCode::OK, "API already exists", request_id);
             }
-            let _ = storage.update_one("apis", &filter, &merged).await;
-            return message(StatusCode::OK, "API already exists", request_id);
+            merge_proto_metadata(&mut payload, &existing);
+            payload["api_id"] = json!(Uuid::new_v4().to_string());
+            payload["api_path"] = json!(format!("/{name}/{version}"));
+            return match storage.update_one("apis", &filter, &payload).await {
+                Ok(Some(api)) => success(
+                    StatusCode::CREATED,
+                    json!({"api": strip_internal(api)}),
+                    request_id,
+                ),
+                _ => unexpected(request_id),
+            };
+        }
+        if let Ok(Some(pending)) = storage.find_one("grpc_proto_uploads", &filter).await {
+            merge_proto_metadata(&mut payload, &pending);
         }
         payload["api_id"] = json!(Uuid::new_v4().to_string());
         payload["api_path"] = json!(format!("/{name}/{version}"));
-        set_default(&mut payload, "api_allowed_roles", json!([]));
-        set_default(&mut payload, "api_allowed_groups", json!([]));
-        set_default(&mut payload, "api_servers", json!([]));
-        set_default(&mut payload, "api_allowed_retry_count", json!(0));
-        set_default(&mut payload, "api_public", json!(false));
-        set_default(&mut payload, "api_auth_required", json!(true));
-        set_default(&mut payload, "active", json!(true));
         return match storage.insert_one("apis", payload).await {
-            Ok(api) => success(
-                StatusCode::CREATED,
-                json!({"api": strip_internal(api)}),
-                request_id,
-            ),
+            Ok(api) => {
+                let _ = storage.delete_one("grpc_proto_uploads", &filter).await;
+                success(
+                    StatusCode::CREATED,
+                    json!({"api": strip_internal(api)}),
+                    request_id,
+                )
+            }
             Err(_) => unexpected(request_id),
         };
     }
@@ -1244,6 +1473,21 @@ async fn api_routes(
         );
     }
     if method == Method::PUT {
+        payload = match normalize_update_api(&payload) {
+            Ok(payload) => payload,
+            Err(errors) => return validation_errors(errors, request_id),
+        };
+        let Some(updates) = payload.as_object() else {
+            return unexpected(request_id);
+        };
+        if updates.is_empty() {
+            return error(
+                StatusCode::BAD_REQUEST,
+                "API006",
+                "No data to update",
+                request_id,
+            );
+        }
         for key in ["api_name", "api_version", "api_path"] {
             if payload.get(key).is_some() {
                 let expected = if key == "api_name" {
@@ -1262,6 +1506,47 @@ async fn api_routes(
                     );
                 }
             }
+        }
+        let existing = match storage.find_one("apis", &filter).await {
+            Ok(Some(existing)) => existing,
+            Ok(None) => {
+                return error(
+                    StatusCode::BAD_REQUEST,
+                    "API003",
+                    "API does not exist for the requested name and version",
+                    request_id,
+                );
+            }
+            Err(_) => return unexpected(request_id),
+        };
+        let desired_public = payload
+            .get("api_public")
+            .and_then(Value::as_bool)
+            .or_else(|| existing.get("api_public").and_then(Value::as_bool))
+            .unwrap_or(false);
+        let desired_credits = payload
+            .get("api_credits_enabled")
+            .and_then(Value::as_bool)
+            .or_else(|| existing.get("api_credits_enabled").and_then(Value::as_bool))
+            .unwrap_or(false);
+        if desired_public && desired_credits {
+            return error(
+                StatusCode::BAD_REQUEST,
+                "API013",
+                "Public API cannot have credits enabled",
+                request_id,
+            );
+        }
+        let changed = updates
+            .iter()
+            .any(|(key, value)| existing.get(key) != Some(value));
+        if !changed {
+            return error(
+                StatusCode::BAD_REQUEST,
+                "API002",
+                "Unable to update api",
+                request_id,
+            );
         }
         return match storage.update_one("apis", &filter, &payload).await {
             Ok(Some(_)) => message(StatusCode::OK, "API updated successfully", request_id),
@@ -1306,7 +1591,11 @@ async fn user_routes(
     let Some(storage) = &state.storage else {
         return unexpected(request_id);
     };
-    let suffix = path.strip_prefix("/users").or_else(|| path.strip_prefix("/user")).unwrap_or("").trim_matches('/');
+    let suffix = path
+        .strip_prefix("/users")
+        .or_else(|| path.strip_prefix("/user"))
+        .unwrap_or("")
+        .trim_matches('/');
     if method == Method::GET && (suffix.is_empty() || suffix == "all") {
         if !has_permission(state, active_user, "manage_users").await {
             return error(
@@ -2379,30 +2668,34 @@ async fn memory_restore(
     }
 }
 
-async fn readiness(state: &AppState, request_id: &str) -> Response {
-    let Some(storage) = &state.storage else {
-        return error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "MON001",
-            "Storage unavailable",
-            request_id,
-        );
-    };
-    let ready = storage.mongo_healthy().await && storage.redis_healthy().await;
-    if ready {
-        success(
-            StatusCode::OK,
-            json!({"status": "ready", "mode": if storage.is_memory() {"memory_only"} else {"external"}}),
-            request_id,
+async fn readiness(state: &AppState, privileged: bool, request_id: &str) -> Response {
+    let (mongo_ok, redis_ok, memory_only) = if let Some(storage) = &state.storage {
+        (
+            storage.mongo_healthy().await,
+            storage.redis_healthy().await,
+            storage.is_memory(),
         )
     } else {
-        error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "MON001",
-            "Dependencies unavailable",
-            request_id,
-        )
+        (false, false, false)
+    };
+    let ready = mongo_ok && redis_ok;
+    let status = if ready { "ready" } else { "degraded" };
+    if !privileged {
+        return success(StatusCode::OK, json!({"status": status}), request_id);
     }
+    success(
+        StatusCode::OK,
+        json!({
+            "status": status,
+            "mongodb": mongo_ok,
+            "redis": redis_ok,
+            "mode": if memory_only { "memory" } else { "mongodb" },
+            "cache_backend": if memory_only { "memory" } else { "redis" },
+            "missing_grpc_descriptors": 0,
+            "grpc_descriptor_errors": []
+        }),
+        request_id,
+    )
 }
 
 async fn dashboard(state: &AppState, request_id: &str) -> Response {
@@ -2461,19 +2754,282 @@ async fn monitor_report(state: &AppState, request_id: &str) -> Response {
         request_id,
     )
 }
+fn analytics_denied(request_id: &str) -> Response {
+    error(
+        StatusCode::FORBIDDEN,
+        "ANALYTICS001",
+        "You do not have permission to view analytics",
+        request_id,
+    )
+}
 
-async fn analytics_overview(state: &AppState, username: &str, request_id: &str) -> Response {
-    if !has_permission(state, username, "view_analytics").await {
-        return error(
-            StatusCode::FORBIDDEN,
-            "ANA001",
-            "Insufficient permissions",
-            request_id,
-        );
+fn analytics_time_range(query: &HashMap<String, String>) -> (u64, u64) {
+    if let (Some(start), Some(end)) = (
+        query.get("start_ts").and_then(|value| value.parse().ok()),
+        query.get("end_ts").and_then(|value| value.parse().ok()),
+    ) {
+        return (start, end);
     }
+    let end = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let duration = match query.get("range").map(String::as_str).unwrap_or("24h") {
+        "1h" => 3_600,
+        "7d" => 604_800,
+        "30d" => 2_592_000,
+        _ => 86_400,
+    };
+    (end.saturating_sub(duration), end)
+}
+
+fn analytics_limit(query: &HashMap<String, String>) -> usize {
+    query
+        .get("limit")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(10)
+        .clamp(1, 100)
+}
+
+fn analytics_percentiles(points: &[AggregatedPoint]) -> Value {
+    let mut values = points
+        .iter()
+        .map(|point| point.latency_ms)
+        .collect::<Vec<_>>();
+    values.sort_by(|left, right| left.total_cmp(right));
+    let percentile = |fraction: f64| {
+        if values.is_empty() {
+            0.0
+        } else {
+            let index = ((values.len() - 1) as f64 * fraction).round() as usize;
+            values[index]
+        }
+    };
+    json!({
+        "p50": percentile(0.50),
+        "p75": percentile(0.75),
+        "p90": percentile(0.90),
+        "p95": percentile(0.95),
+        "p99": percentile(0.99)
+    })
+}
+
+fn analytics_entity(entity: &EntityCounter, key: &str) -> Value {
+    json!({key: entity.name, "count": entity.count})
+}
+
+fn analytics_endpoint(entity: &EntityCounter) -> Value {
+    let error_rate = if entity.count == 0 {
+        0.0
+    } else {
+        entity.error_count as f64 / entity.count as f64
+    };
+    json!({
+        "endpoint_uri": entity.name,
+        "count": entity.count,
+        "error_count": entity.error_count,
+        "error_rate": error_rate,
+        "avg_ms": 0.0,
+        "percentiles": {"p50": 0.0, "p75": 0.0, "p90": 0.0, "p95": 0.0, "p99": 0.0}
+    })
+}
+
+fn analytics_series_point(point: &AggregatedPoint, metric_type: Option<&str>) -> Value {
+    let error_rate = if point.requests == 0 {
+        0.0
+    } else {
+        point.errors as f64 / point.requests as f64
+    };
+    let mut value = Map::new();
+    value.insert("timestamp".to_owned(), json!(point.timestamp));
+    match metric_type {
+        Some("request_count") => {
+            value.insert("count".to_owned(), json!(point.requests));
+        }
+        Some("error_rate") => {
+            value.insert("error_rate".to_owned(), json!(error_rate));
+            value.insert("error_count".to_owned(), json!(point.errors));
+        }
+        Some("latency") => {
+            value.insert("avg_ms".to_owned(), json!(point.latency_ms));
+            value.insert(
+                "percentiles".to_owned(),
+                json!({
+                    "p50": point.latency_ms,
+                    "p75": point.latency_ms,
+                    "p90": point.latency_ms,
+                    "p95": point.latency_ms,
+                    "p99": point.latency_ms
+                }),
+            );
+        }
+        Some("bandwidth") => {
+            value.insert("bytes_in".to_owned(), json!(point.bytes_in));
+            value.insert("bytes_out".to_owned(), json!(point.bytes_out));
+        }
+        Some(_) => {}
+        None => {
+            value.insert("count".to_owned(), json!(point.requests));
+            value.insert("error_count".to_owned(), json!(point.errors));
+            value.insert("error_rate".to_owned(), json!(error_rate));
+            value.insert("avg_ms".to_owned(), json!(point.latency_ms));
+            value.insert(
+                "percentiles".to_owned(),
+                json!({
+                    "p50": point.latency_ms,
+                    "p75": point.latency_ms,
+                    "p90": point.latency_ms,
+                    "p95": point.latency_ms,
+                    "p99": point.latency_ms
+                }),
+            );
+            value.insert("bytes_in".to_owned(), json!(point.bytes_in));
+            value.insert("bytes_out".to_owned(), json!(point.bytes_out));
+            value.insert("unique_users".to_owned(), json!(0));
+        }
+    }
+    Value::Object(value)
+}
+
+fn analytics_timeseries(query: &HashMap<String, String>, request_id: &str) -> Response {
+    let (start_ts, end_ts) = analytics_time_range(query);
+    let points = global_analytics().get_timeseries_range(start_ts, end_ts);
+    let metric_type = query.get("metric_type").map(String::as_str);
+    let series = points
+        .iter()
+        .map(|point| analytics_series_point(point, metric_type))
+        .collect::<Vec<_>>();
     success(
         StatusCode::OK,
-        json!({"total_requests": state.runtime.request_total.load(std::sync::atomic::Ordering::Relaxed), "error_rate": 0.0}),
+        json!({
+            "time_range": {"start_ts": start_ts, "end_ts": end_ts},
+            "granularity": query.get("granularity").map(String::as_str).unwrap_or("auto"),
+            "series": series,
+            "data_points": series.len()
+        }),
+        request_id,
+    )
+}
+
+fn analytics_top(kind: &str, query: &HashMap<String, String>, request_id: &str) -> Response {
+    let (start_ts, end_ts) = analytics_time_range(query);
+    let limit = analytics_limit(query);
+    let analytics = global_analytics();
+    let response = match kind {
+        "api" => {
+            let entries = analytics
+                .get_top_apis(limit)
+                .iter()
+                .map(|entry| analytics_entity(entry, "api"))
+                .collect::<Vec<_>>();
+            json!({
+                "time_range": {"start_ts": start_ts, "end_ts": end_ts},
+                "top_apis": entries,
+                "total_apis": analytics.api_count()
+            })
+        }
+        "user" => {
+            let entries = analytics
+                .get_top_users(limit)
+                .iter()
+                .map(|entry| analytics_entity(entry, "user"))
+                .collect::<Vec<_>>();
+            json!({
+                "time_range": {"start_ts": start_ts, "end_ts": end_ts},
+                "top_users": entries,
+                "total_users": analytics.user_count()
+            })
+        }
+        _ => {
+            let mut entries = analytics
+                .get_top_endpoints(analytics.endpoint_count())
+                .iter()
+                .map(analytics_endpoint)
+                .collect::<Vec<_>>();
+            let sort_by = query.get("sort_by").map(String::as_str).unwrap_or("count");
+            if sort_by == "error_rate" {
+                entries.sort_by(|left, right| {
+                    right["error_rate"]
+                        .as_f64()
+                        .unwrap_or_default()
+                        .total_cmp(&left["error_rate"].as_f64().unwrap_or_default())
+                });
+            }
+            entries.truncate(limit);
+            json!({
+                "time_range": {"start_ts": start_ts, "end_ts": end_ts},
+                "sort_by": sort_by,
+                "top_endpoints": entries,
+                "total_endpoints": analytics.endpoint_count()
+            })
+        }
+    };
+    success(StatusCode::OK, response, request_id)
+}
+
+async fn analytics_overview(
+    state: &AppState,
+    username: &str,
+    query: &HashMap<String, String>,
+    request_id: &str,
+) -> Response {
+    if !has_permission(state, username, "view_analytics").await {
+        return analytics_denied(request_id);
+    }
+    let (start_ts, end_ts) = analytics_time_range(query);
+    let analytics = global_analytics();
+    let points = analytics.get_timeseries_range(start_ts, end_ts);
+    let total_requests = points.iter().map(|point| point.requests).sum::<u64>();
+    let total_errors = points.iter().map(|point| point.errors).sum::<u64>();
+    let total_ms = points
+        .iter()
+        .map(|point| point.latency_ms * point.requests as f64)
+        .sum::<f64>();
+    let total_bytes_in = points.iter().map(|point| point.bytes_in).sum::<u64>();
+    let total_bytes_out = points.iter().map(|point| point.bytes_out).sum::<u64>();
+    let error_rate = if total_requests == 0 {
+        0.0
+    } else {
+        total_errors as f64 / total_requests as f64
+    };
+    let avg_response_ms = if total_requests == 0 {
+        0.0
+    } else {
+        total_ms / total_requests as f64
+    };
+    let top_apis = analytics
+        .get_top_apis(10)
+        .iter()
+        .map(|entry| analytics_entity(entry, "api"))
+        .collect::<Vec<_>>();
+    let top_users = analytics
+        .get_top_users(10)
+        .iter()
+        .map(|entry| analytics_entity(entry, "user"))
+        .collect::<Vec<_>>();
+    success(
+        StatusCode::OK,
+        json!({
+            "time_range": {
+                "start_ts": start_ts,
+                "end_ts": end_ts,
+                "duration_seconds": end_ts.saturating_sub(start_ts)
+            },
+            "summary": {
+                "total_requests": total_requests,
+                "total_errors": total_errors,
+                "error_rate": error_rate,
+                "avg_response_ms": avg_response_ms,
+                "unique_users": analytics.user_count(),
+                "total_bandwidth": total_bytes_in + total_bytes_out,
+                "bandwidth_in": total_bytes_in,
+                "bandwidth_out": total_bytes_out
+            },
+            "percentiles": analytics_percentiles(&points),
+            "top_apis": top_apis,
+            "top_users": top_users,
+            "status_distribution": analytics.get_status_distribution()
+        }),
         request_id,
     )
 }
@@ -2524,10 +3080,15 @@ async fn upsert_singleton(
                 .await
                 .map(|_| ())
         } else {
-            storage.replace_collection(collection, vec![payload.clone()]).await
+            storage
+                .replace_collection(collection, vec![payload.clone()])
+                .await
         }
     } else {
-        storage.insert_one(collection, payload.clone()).await.map(|_| ())
+        storage
+            .insert_one(collection, payload.clone())
+            .await
+            .map(|_| ())
     };
     match result {
         Ok(()) => {
@@ -2561,7 +3122,10 @@ async fn config_export(
     };
     if let Some("apis") = only {
         if let Some(api_name) = query.get("api_name") {
-            let api_version = query.get("api_version").cloned().unwrap_or_else(|| "v1".to_owned());
+            let api_version = query
+                .get("api_version")
+                .cloned()
+                .unwrap_or_else(|| "v1".to_owned());
             let filter = json!({"api_name": api_name, "api_version": api_version});
             let api = storage.find_one("apis", &filter).await.ok().flatten();
             if let Some(api) = api {
@@ -2736,51 +3300,117 @@ async fn analytics_detail(
     username: &str,
     kind: &str,
     key: &str,
+    query: &HashMap<String, String>,
     request_id: &str,
 ) -> Response {
     if !has_permission(state, username, "view_analytics").await {
-        return error(
-            StatusCode::FORBIDDEN,
-            "ANA001",
-            "Insufficient permissions",
+        return analytics_denied(request_id);
+    }
+    let (start_ts, end_ts) = analytics_time_range(query);
+    let analytics = global_analytics();
+    if kind == "api" {
+        let (api_name, version) = key.split_once('/').unwrap_or((key, ""));
+        let api_key = format!("rest:{api_name}");
+        let entry = analytics
+            .get_top_apis(analytics.api_count())
+            .into_iter()
+            .find(|entry| entry.name == api_key);
+        let Some(entry) = entry else {
+            return error(
+                StatusCode::NOT_FOUND,
+                "ANALYTICS404",
+                &format!("No data found for API: {api_name}/{version}"),
+                request_id,
+            );
+        };
+        let endpoint_prefix = format!("/{api_name}/{version}");
+        let gateway_prefix = format!("/api/rest/{api_name}/{version}");
+        let endpoints = analytics
+            .get_top_endpoints(analytics.endpoint_count())
+            .iter()
+            .filter(|endpoint| {
+                endpoint.name.starts_with(&endpoint_prefix)
+                    || endpoint.name.starts_with(&gateway_prefix)
+            })
+            .map(analytics_endpoint)
+            .collect::<Vec<_>>();
+        return success(
+            StatusCode::OK,
+            json!({
+                "api_name": api_name,
+                "version": version,
+                "time_range": {"start_ts": start_ts, "end_ts": end_ts},
+                "summary": analytics_entity(&entry, "api"),
+                "endpoints": endpoints
+            }),
             request_id,
         );
     }
+
+    let entry = analytics
+        .get_top_users(analytics.user_count())
+        .into_iter()
+        .find(|entry| entry.name == key);
+    let Some(entry) = entry else {
+        return error(
+            StatusCode::NOT_FOUND,
+            "ANALYTICS404",
+            &format!("No data found for user: {key}"),
+            request_id,
+        );
+    };
     success(
         StatusCode::OK,
         json!({
-            "kind": kind,
-            "key": key,
-            "total_requests": state.runtime.request_total.load(std::sync::atomic::Ordering::Relaxed),
-            "error_rate": 0.0
+            "username": key,
+            "time_range": {"start_ts": start_ts, "end_ts": end_ts},
+            "summary": analytics_entity(&entry, "user")
         }),
         request_id,
     )
 }
 
-fn config_current(request_id: &str) -> Response {
-    let keys = reloadable_keys();
-    let values = keys
-        .iter()
-        .filter_map(|key| {
-            env::var(key)
-                .ok()
-                .map(|value| ((*key).to_owned(), Value::String(value)))
-        })
-        .collect::<Map<_, _>>();
-    success(StatusCode::OK, Value::Object(values), request_id)
+fn config_current(state: &AppState, request_id: &str) -> Response {
+    success(
+        StatusCode::OK,
+        json!({
+            "config": state.hot_reload.dump(),
+            "source": "Environment variables override config file values",
+            "reload_command": "kill -HUP $(cat doorman.pid)"
+        }),
+        request_id,
+    )
 }
 
-fn reloadable_keys() -> Vec<&'static str> {
-    vec![
-        "LOG_LEVEL",
-        "ALLOWED_ORIGINS",
-        "ALLOW_METHODS",
-        "ALLOW_HEADERS",
-        "COMPRESSION_ENABLED",
-        "COMPRESSION_LEVEL",
-        "CORS_STRICT",
-    ]
+fn reloadable_keys() -> Value {
+    json!([
+        {
+            "key": "LOG_LEVEL",
+            "description": "Log level (DEBUG, INFO, WARNING, ERROR)",
+            "example": "INFO"
+        },
+        {"key": "LOG_FORMAT", "description": "Log format (json, text)", "example": "json"},
+        {"key": "LOG_FILE", "description": "Log file path", "example": "logs/doorman.log"},
+        {"key": "GATEWAY_TIMEOUT", "description": "Gateway timeout in seconds", "example": "30"},
+        {"key": "UPSTREAM_TIMEOUT", "description": "Upstream timeout in seconds", "example": "30"},
+        {"key": "CONNECTION_TIMEOUT", "description": "Connection timeout in seconds", "example": "10"},
+        {"key": "RATE_LIMIT_ENABLED", "description": "Enable rate limiting", "example": "true"},
+        {"key": "RATE_LIMIT_REQUESTS", "description": "Requests per window", "example": "100"},
+        {"key": "RATE_LIMIT_WINDOW", "description": "Window size in seconds", "example": "60"},
+        {"key": "CACHE_TTL", "description": "Cache TTL in seconds", "example": "300"},
+        {"key": "CACHE_MAX_SIZE", "description": "Maximum cache entries", "example": "1000"},
+        {"key": "CIRCUIT_BREAKER_ENABLED", "description": "Enable circuit breaker", "example": "true"},
+        {"key": "CIRCUIT_BREAKER_THRESHOLD", "description": "Failures before opening", "example": "5"},
+        {"key": "CIRCUIT_BREAKER_TIMEOUT", "description": "Timeout before retry (seconds)", "example": "60"},
+        {"key": "RETRY_ENABLED", "description": "Enable retry logic", "example": "true"},
+        {"key": "RETRY_MAX_ATTEMPTS", "description": "Maximum retry attempts", "example": "3"},
+        {"key": "RETRY_BACKOFF", "description": "Backoff multiplier", "example": "1.0"},
+        {"key": "METRICS_ENABLED", "description": "Enable metrics collection", "example": "true"},
+        {"key": "METRICS_INTERVAL", "description": "Metrics interval (seconds)", "example": "60"},
+        {"key": "FEATURE_REQUEST_REPLAY", "description": "Enable request replay", "example": "false"},
+        {"key": "FEATURE_AB_TESTING", "description": "Enable A/B testing", "example": "false"},
+        {"key": "FEATURE_COST_ANALYTICS", "description": "Enable cost analytics", "example": "false"}
+    ])
 }
 
 async fn demo_seed(state: &AppState, username: &str, request_id: &str) -> Response {
@@ -2823,38 +3453,61 @@ async fn demo_seed(state: &AppState, username: &str, request_id: &str) -> Respon
 }
 
 fn cors_check(payload: Value, request_id: &str) -> Response {
-    let origin = payload.get("origin").and_then(Value::as_str).unwrap_or("").trim().to_owned();
-    let method = payload.get("method").and_then(Value::as_str).unwrap_or("").trim().to_uppercase();
-    let request_headers: Vec<String> = payload.get("request_headers")
+    let origin = payload
+        .get("origin")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+    let method = payload
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_uppercase();
+    let request_headers: Vec<String> = payload
+        .get("request_headers")
         .and_then(Value::as_array)
-        .map(|arr| arr.iter().filter_map(Value::as_str).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
     let cors_strict = env_bool("CORS_STRICT", false);
 
-    let allowed_origins_str = env::var("ALLOWED_ORIGINS")
-        .unwrap_or_else(|_| "http://localhost:3000".to_owned());
-    let origins: Vec<String> = allowed_origins_str.split(',').map(|s| s.trim().to_owned()).collect();
+    let allowed_origins_str =
+        env::var("ALLOWED_ORIGINS").unwrap_or_else(|_| "http://localhost:3000".to_owned());
+    let origins: Vec<String> = allowed_origins_str
+        .split(',')
+        .map(|s| s.trim().to_owned())
+        .collect();
     let allow_credentials = env_bool("ALLOW_CREDENTIALS", true);
     let methods: Vec<String> = env::var("ALLOW_METHODS")
         .unwrap_or_else(|_| "GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS".to_owned())
-        .split(',').map(|s| s.trim().to_owned()).collect();
+        .split(',')
+        .map(|s| s.trim().to_owned())
+        .collect();
     let headers: Vec<String> = env::var("ALLOW_HEADERS")
         .unwrap_or_else(|_| "Accept,Content-Type,X-CSRF-Token,Authorization".to_owned())
-        .split(',').map(|s| s.trim().to_owned()).collect();
-
-    let safe_origins: Vec<String> = origins.iter()
-        .filter(|o| *o != "*")
-        .cloned()
+        .split(',')
+        .map(|s| s.trim().to_owned())
         .collect();
-    let with_credentials = payload.get("with_credentials")
+
+    let safe_origins: Vec<String> = origins.iter().filter(|o| *o != "*").cloned().collect();
+    let with_credentials = payload
+        .get("with_credentials")
         .and_then(Value::as_bool)
         .unwrap_or(allow_credentials);
 
-    let origin_allowed = safe_origins.contains(&origin)
-        || (!cors_strict && origins.iter().any(|o| o == "*"));
+    let origin_allowed =
+        safe_origins.contains(&origin) || (!cors_strict && origins.iter().any(|o| o == "*"));
     let method_allowed = methods.iter().any(|m| m.eq_ignore_ascii_case(&method));
     let allowed_headers_lower: Vec<String> = headers.iter().map(|h| h.to_lowercase()).collect();
-    let not_allowed_headers: Vec<String> = request_headers.iter()
+    let not_allowed_headers: Vec<String> = request_headers
+        .iter()
         .filter(|h| !allowed_headers_lower.contains(&h.to_lowercase()))
         .cloned()
         .collect();
@@ -2872,7 +3525,10 @@ fn cors_check(payload: Value, request_id: &str) -> Response {
         notes.push("Requested method is not in ALLOW_METHODS.".into());
     }
     if !headers_allowed {
-        notes.push(format!("Some requested headers are not allowed: {}", not_allowed_headers.join(", ")));
+        notes.push(format!(
+            "Some requested headers are not allowed: {}",
+            not_allowed_headers.join(", ")
+        ));
     }
 
     let preflight_headers = json!({
@@ -2888,36 +3544,40 @@ fn cors_check(payload: Value, request_id: &str) -> Response {
         "Vary": "Origin",
     });
 
-    success(StatusCode::OK, json!({
-        "config": {
-            "allowed_origins": origins,
-            "effective_allowed_origins": safe_origins,
-            "allow_credentials": allow_credentials,
-            "allow_methods": methods,
-            "allow_headers": headers,
-            "cors_strict": cors_strict,
-        },
-        "input": {
-            "origin": origin,
-            "method": method,
-            "request_headers": request_headers,
-            "request_headers_normalized": request_headers.iter().map(|h| h.to_lowercase()).collect::<Vec<_>>(),
-            "with_credentials": with_credentials,
-        },
-        "preflight": {
-            "allowed": preflight_allowed,
-            "allow_origin": origin_allowed,
-            "method_allowed": method_allowed,
-            "headers_allowed": headers_allowed,
-            "not_allowed_headers": not_allowed_headers,
-            "response_headers": preflight_headers,
-        },
-        "actual": {
-            "allowed": origin_allowed,
-            "response_headers": actual_headers,
-        },
-        "notes": notes,
-    }), request_id)
+    success(
+        StatusCode::OK,
+        json!({
+            "config": {
+                "allowed_origins": origins,
+                "effective_allowed_origins": safe_origins,
+                "allow_credentials": allow_credentials,
+                "allow_methods": methods,
+                "allow_headers": headers,
+                "cors_strict": cors_strict,
+            },
+            "input": {
+                "origin": origin,
+                "method": method,
+                "request_headers": request_headers,
+                "request_headers_normalized": request_headers.iter().map(|h| h.to_lowercase()).collect::<Vec<_>>(),
+                "with_credentials": with_credentials,
+            },
+            "preflight": {
+                "allowed": preflight_allowed,
+                "allow_origin": origin_allowed,
+                "method_allowed": method_allowed,
+                "headers_allowed": headers_allowed,
+                "not_allowed_headers": not_allowed_headers,
+                "response_headers": preflight_headers,
+            },
+            "actual": {
+                "allowed": origin_allowed,
+                "response_headers": actual_headers,
+            },
+            "notes": notes,
+        }),
+        request_id,
+    )
 }
 
 async fn subscription_routes(
@@ -4029,11 +4689,23 @@ async fn proto_routes(
     }
     let filter = json!({"api_name": parts[0], "api_version": parts[1]});
     if method == Method::GET {
-        let api = storage.find_one("apis", &filter).await.ok().flatten();
-        let Some(api) = api else {
+        let proto_record = storage
+            .find_one("apis", &filter)
+            .await
+            .ok()
+            .flatten()
+            .or(storage
+                .find_one("grpc_proto_uploads", &filter)
+                .await
+                .ok()
+                .flatten());
+        let Some(proto_record) = proto_record else {
             return error(StatusCode::NOT_FOUND, "API003", "API not found", request_id);
         };
-        return match api.get("api_grpc_proto_source").and_then(Value::as_str) {
+        return match proto_record
+            .get("api_grpc_proto_source")
+            .and_then(Value::as_str)
+        {
             Some(source) => success(StatusCode::OK, json!({"content": source}), request_id),
             None => error(
                 StatusCode::NOT_FOUND,
@@ -4044,9 +4716,37 @@ async fn proto_routes(
         };
     }
     if method == Method::DELETE {
-        return match storage.update_one("apis", &filter, &json!({"api_grpc_proto_source": "", "api_grpc_descriptor_set": "", "api_grpc_descriptor_sha256": ""})).await {
-            Ok(Some(_)) => message(StatusCode::OK, "Proto file deleted successfully", request_id),
-            _ => unexpected(request_id),
+        let cleared_api = matches!(
+            storage
+                .update_one(
+                    "apis",
+                    &filter,
+                    &json!({
+                        "api_grpc_proto_source": "",
+                        "api_grpc_descriptor_set": "",
+                        "api_grpc_descriptor_sha256": ""
+                    }),
+                )
+                .await,
+            Ok(Some(_))
+        );
+        let cleared_pending = storage
+            .delete_one("grpc_proto_uploads", &filter)
+            .await
+            .unwrap_or(false);
+        return if cleared_api || cleared_pending {
+            message(
+                StatusCode::OK,
+                "Proto file deleted successfully",
+                request_id,
+            )
+        } else {
+            error(
+                StatusCode::NOT_FOUND,
+                "API003",
+                "Proto file not found",
+                request_id,
+            )
         };
     }
     if method == Method::POST || method == Method::PUT {
@@ -4102,17 +4802,47 @@ async fn proto_routes(
         let proto_fields = Value::Object(proto_map);
         let result = storage.update_one("apis", &filter, &proto_fields).await;
         return match result {
-            Ok(Some(_)) => message(StatusCode::OK, "Proto file uploaded and gRPC code generated successfully", request_id),
+            Ok(Some(_)) => message(
+                StatusCode::OK,
+                "Proto file uploaded and gRPC code generated successfully",
+                request_id,
+            ),
             Ok(None) => {
-                let mut new_api = filter.clone();
-                if let (Value::Object(base), Value::Object(proto)) = (&mut new_api, &proto_fields) {
-                    for (k, v) in proto {
-                        base.insert(k.clone(), v.clone());
+                let pending_exists = storage
+                    .find_one("grpc_proto_uploads", &filter)
+                    .await
+                    .ok()
+                    .flatten()
+                    .is_some();
+                let saved = if pending_exists {
+                    matches!(
+                        storage
+                            .update_one("grpc_proto_uploads", &filter, &proto_fields)
+                            .await,
+                        Ok(Some(_))
+                    )
+                } else {
+                    let mut pending = filter.clone();
+                    if let (Value::Object(base), Value::Object(proto)) =
+                        (&mut pending, &proto_fields)
+                    {
+                        for (key, value) in proto {
+                            base.insert(key.clone(), value.clone());
+                        }
                     }
-                }
-                match storage.insert_one("apis", new_api).await {
-                    Ok(_) => message(StatusCode::OK, "Proto file uploaded and gRPC code generated successfully", request_id),
-                    Err(_) => unexpected(request_id),
+                    storage
+                        .insert_one("grpc_proto_uploads", pending)
+                        .await
+                        .is_ok()
+                };
+                if saved {
+                    message(
+                        StatusCode::OK,
+                        "Proto file uploaded and gRPC code generated successfully",
+                        request_id,
+                    )
+                } else {
+                    unexpected(request_id)
                 }
             }
             Err(_) => unexpected(request_id),
@@ -4171,7 +4901,11 @@ fn extract_proto_package(source: &str) -> Option<String> {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("package") {
             let pkg = rest.trim().trim_matches(';').trim();
-            if !pkg.is_empty() && pkg.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+            if !pkg.is_empty()
+                && pkg
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+            {
                 return Some(pkg.to_owned());
             }
         }
@@ -4185,19 +4919,32 @@ fn compile_proto(source: &str) -> Result<(String, String), String> {
     let source_path = directory.join("api.proto");
     let descriptor_path = directory.join("api.descriptor.pb");
     fs::write(&source_path, source).map_err(|error_value| error_value.to_string())?;
-    let protoc =
-        protoc_bin_vendored::protoc_bin_path().map_err(|error_value| error_value.to_string())?;
-    let includes =
-        protoc_bin_vendored::include_path().map_err(|error_value| error_value.to_string())?;
-    let output = Command::new(protoc)
-        .arg(format!("--proto_path={}", directory.display()))
-        .arg(format!("--proto_path={}", includes.display()))
-        .arg(format!(
-            "--descriptor_set_out={}",
-            descriptor_path.display()
-        ))
-        .arg("--include_imports")
-        .arg(&source_path)
+    let protoc_res = std::panic::catch_unwind(protoc_bin_vendored::protoc_bin_path);
+    let protoc = match protoc_res {
+        Ok(Ok(path)) => path,
+        _ => std::path::PathBuf::from("protoc"),
+    };
+    let mut cmd = Command::new(&protoc);
+    cmd.arg(format!("--proto_path={}", directory.display()));
+    if let Ok(Ok(includes)) = std::panic::catch_unwind(protoc_bin_vendored::include_path) {
+        if includes.exists() {
+            cmd.arg(format!("--proto_path={}", includes.display()));
+        }
+    }
+    if std::path::Path::new("/usr/include").exists() {
+        cmd.arg("--proto_path=/usr/include");
+    }
+    if std::path::Path::new("/usr/local/include").exists() {
+        cmd.arg("--proto_path=/usr/local/include");
+    }
+    cmd.arg(format!(
+        "--descriptor_set_out={}",
+        descriptor_path.display()
+    ))
+    .arg("--include_imports")
+    .arg(&source_path);
+
+    let output = cmd
         .output()
         .map_err(|error_value| error_value.to_string())?;
     if !output.status.success() {
@@ -4229,13 +4976,15 @@ async fn logging_routes(
             request_id,
         );
     }
-    if !has_permission(state, username, "view_logs").await {
-        return error(
-            StatusCode::FORBIDDEN,
-            "LOG001",
-            "Insufficient permissions",
-            request_id,
-        );
+    let export = matches!(path, "/logging/logs/export" | "/logging/logs/download");
+    let permission = if export { "export_logs" } else { "view_logs" };
+    if !has_permission(state, username, permission).await {
+        let (code, message_text) = match path {
+            "/logging/logs/export" => ("LOG003", "You do not have permission to export logs"),
+            "/logging/logs/download" => ("LOG004", "You do not have permission to download logs"),
+            _ => ("LOG001", "You do not have permission to view logs"),
+        };
+        return error(StatusCode::FORBIDDEN, code, message_text, request_id);
     }
     let directory = state
         .config
@@ -4253,7 +5002,11 @@ async fn logging_routes(
     match path {
         "/logging/logs/files" => {
             let count = files.len();
-            success(StatusCode::OK, json!({"log_files": files, "count": count}), request_id)
+            success(
+                StatusCode::OK,
+                json!({"log_files": files, "count": count}),
+                request_id,
+            )
         }
         "/logging/logs/statistics" => {
             success(StatusCode::OK, json!({"files": files.len()}), request_id)
@@ -4591,6 +5344,57 @@ fn public_user(mut value: Value) -> Value {
     value
 }
 
+fn schedule_restart() -> Result<(), (&'static str, &'static str)> {
+    let mut candidates = Vec::new();
+    if let Some(path) = env::var_os("DOORMAN_PID_FILE") {
+        candidates.push(std::path::PathBuf::from(path));
+    }
+    if let Ok(current_dir) = env::current_dir() {
+        candidates.push(current_dir.join("doorman.pid"));
+    }
+    if let Ok(executable) = env::current_exe()
+        && let Some(parent) = executable.parent()
+    {
+        candidates.push(parent.join("doorman.pid"));
+    }
+    let Some(pid_file) = candidates.into_iter().find(|path| path.exists()) else {
+        return Err((
+            "SEC004",
+            "Restart not supported: no PID file found (run using 'doorman start' or contact your admin)",
+        ));
+    };
+    let pid = fs::read_to_string(&pid_file)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .filter(|pid| *pid > 0)
+        .ok_or(("SEC005", "Failed to schedule restart"))?;
+    let executable = env::current_exe().map_err(|_| ("SEC005", "Failed to schedule restart"))?;
+
+    #[cfg(unix)]
+    {
+        Command::new("sh")
+            .arg("-c")
+            .arg(
+                "sleep 1; kill -TERM \"$1\" || exit 1; while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; echo $$ > \"$3\"; exec \"$2\"",
+            )
+            .arg("doorman-restart")
+            .arg(pid.to_string())
+            .arg(executable)
+            .arg(pid_file)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| ("SEC005", "Failed to schedule restart"))?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (pid, executable, pid_file);
+        Err(("SEC005", "Failed to schedule restart"))
+    }
+}
+
 fn set_default(target: &mut Value, key: &str, value: Value) {
     if target.get(key).is_none() {
         target[key] = value;
@@ -4611,6 +5415,17 @@ fn error(status: StatusCode, code: &str, text: &str, request_id: &str) -> Respon
     json_response(
         status,
         json!({"error_code": code, "error_message": text}),
+        request_id,
+    )
+}
+fn http_detail(status: StatusCode, detail: &str, request_id: &str) -> Response {
+    json_response(status, json!({"detail": detail}), request_id)
+}
+
+fn validation_errors(errors: Vec<Value>, request_id: &str) -> Response {
+    json_response(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        json!({"detail": errors}),
         request_id,
     )
 }

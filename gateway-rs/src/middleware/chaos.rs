@@ -1,11 +1,11 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::time::Duration;
 use axum::{
     extract::Request,
     middleware::Next,
     response::{IntoResponse, Response},
 };
 use http::StatusCode;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::time::Duration;
 
 pub static CHAOS_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static CHAOS_LATENCY_MS: AtomicU64 = AtomicU64::new(0);
@@ -29,8 +29,8 @@ pub async fn chaos_middleware(req: Request, next: Next) -> Response {
 
     let error_status = CHAOS_ERROR_STATUS.load(Ordering::Relaxed);
     if error_status >= 400 {
-        let status = StatusCode::from_u16(error_status as u16)
-            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status =
+            StatusCode::from_u16(error_status as u16).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         return (status, "Chaos engineering fault injected").into_response();
     }
 

@@ -2,6 +2,7 @@ import time
 
 import pytest
 from config import ENABLE_GRPC
+from servers import _get_host_from_container
 
 pytestmark = pytest.mark.skipif(
     not ENABLE_GRPC, reason='gRPC test disabled (set DOORMAN_TEST_GRPC=1 to enable)'
@@ -104,10 +105,10 @@ def test_grpc_gateway_basic_flow(client):
             import socket
 
             s = socket.socket()
-            s.bind(('127.0.0.1', 0))
+            s.bind(('0.0.0.0', 0))
             port = s.getsockname()[1]
             s.close()
-            server.add_insecure_port(f'127.0.0.1:{port}')
+            server.add_insecure_port(f'0.0.0.0:{port}')
             server.start()
 
             try:
@@ -119,7 +120,7 @@ def test_grpc_gateway_basic_flow(client):
                         'api_description': 'gRPC demo',
                         'api_allowed_roles': ['admin'],
                         'api_allowed_groups': ['ALL'],
-                        'api_servers': [f'grpc://127.0.0.1:{port}'],
+                        'api_servers': [f'grpc://{_get_host_from_container()}:{port}'],
                         'api_type': 'GRPC',
                         'api_allowed_retry_count': 0,
                         'active': True,

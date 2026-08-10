@@ -6,9 +6,19 @@ from typing import Any, Dict, List, Tuple
 import pytest
 
 from client import LiveClient
+from servers import start_rest_echo_server
 from live_targets import GRAPHQL_TARGETS, GRPC_TARGETS, REST_TARGETS, SOAP_TARGETS
 
 pytestmark = [pytest.mark.public, pytest.mark.credits, pytest.mark.gateway]
+
+_LOCAL_REST_SERVERS = []
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_local_rest_servers():
+    yield
+    for server in _LOCAL_REST_SERVERS:
+        server.stop()
 
 
 def _rest_targets() -> List[Tuple[str, str]]:
@@ -312,7 +322,9 @@ def _setup_api(
     _mk_credit_def(client, credit_group, credits=5)
 
     if kind == "REST":
-        server, uri = _rest_targets()[idx]
+        local_server = start_rest_echo_server()
+        _LOCAL_REST_SERVERS.append(local_server)
+        server, uri = local_server.url, f"/credits/{idx}"
         r = client.post(
             "/platform/api",
             json={

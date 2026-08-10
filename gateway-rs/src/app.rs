@@ -13,7 +13,8 @@ use tower_http::{
 use crate::{
     middleware::{
         activity::track_active_requests, chaos::chaos_middleware, platform_cors::platform_cors,
-        request_id::request_id, response_compat::response_compat, security_headers::security_headers,
+        request_id::request_id, response_compat::response_compat,
+        security_headers::security_headers,
     },
     policy::PolicyErrorBody,
     routes::{

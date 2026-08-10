@@ -30,12 +30,9 @@ def _get_host_from_container():
     if override:
         return override
     docker_env = os.getenv('DOORMAN_IN_DOCKER', '').lower()
-    if docker_env in ('1', 'true', 'yes'):
-        system = platform.system()
-        if system in ('Darwin', 'Windows'):
-            return 'host.docker.internal'
-        return '172.17.0.1'
-    return '127.0.0.1'
+    if docker_env in ('0', 'false', 'no'):
+        return '127.0.0.1'
+    return 'host.docker.internal'
 
 
 class _ThreadedHTTPServer:
