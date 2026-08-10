@@ -815,6 +815,40 @@ async fn management_permissions_readiness_tools_and_restart_match_python() {
 }
 
 #[tokio::test]
+async fn dashboard_preserves_python_v2_response_contract() {
+    let app = build_router(memory_state(false).await);
+    let (cookie, _) = login(&app).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/platform/dashboard")
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap()).unwrap();
+
+    for key in [
+        "totalRequests",
+        "activeUsers",
+        "newApis",
+        "monthlyUsage",
+        "activeUsersList",
+        "popularApis",
+    ] {
+        assert!(body.get(key).is_some(), "missing dashboard field {key}");
+    }
+    assert!(body["totalRequests"].is_number());
+    assert!(body["monthlyUsage"].is_object());
+    assert!(body.get("users").is_none());
+}
+
+#[tokio::test]
 async fn analytics_routes_preserve_python_v2_response_contracts() {
     use doorman_gateway::observability::analytics_aggregator::global_analytics;
 

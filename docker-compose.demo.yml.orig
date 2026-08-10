@@ -10,9 +10,6 @@ services:
         NEXT_PUBLIC_GATEWAY_URL: ""
     image: doorman-demo:latest
     container_name: doorman-demo
-    ports:
-      - "${PORT:-3001}:${PORT:-3001}"
-      - "${WEB_PORT:-3000}:${WEB_PORT:-3000}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:

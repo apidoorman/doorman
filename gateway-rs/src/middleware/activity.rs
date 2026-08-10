@@ -110,15 +110,17 @@ pub async fn track_active_requests(
     let effective_api = context.api.as_deref().or(fallback_api.as_deref());
 
     if record_analytics {
-        global_analytics().record_request(
-            effective_api,
-            context.username.as_deref(),
-            context.endpoint.as_deref().or(Some(path.as_str())),
-            status,
-            elapsed.as_secs_f64() * 1000.0,
-            bytes_in,
-            bytes_out,
-        );
+        if !is_test {
+            global_analytics().record_request(
+                effective_api,
+                context.username.as_deref(),
+                context.endpoint.as_deref().or(Some(path.as_str())),
+                status,
+                elapsed.as_secs_f64() * 1000.0,
+                bytes_in,
+                bytes_out,
+            );
+        }
 
         if let Some(storage) = &state.storage {
             let minute_start = SystemTime::now()

@@ -2702,12 +2702,7 @@ async fn dashboard(state: &AppState, request_id: &str) -> Response {
     let Some(storage) = &state.storage else {
         return unexpected(request_id);
     };
-    let users = storage
-        .find_many("users", &json!({}))
-        .await
-        .unwrap_or_default()
-        .len();
-    let apis = storage
+    let new_apis = storage
         .find_many("apis", &json!({}))
         .await
         .unwrap_or_default()
@@ -2715,13 +2710,106 @@ async fn dashboard(state: &AppState, request_id: &str) -> Response {
     let subscriptions = storage
         .find_many("subscriptions", &json!({}))
         .await
-        .unwrap_or_default()
-        .len();
+        .unwrap_or_default();
+
+    let analytics = global_analytics();
+    let mut monthly_usage = Map::new();
+    for point in analytics.get_timeseries() {
+        let Ok(timestamp) = time::OffsetDateTime::from_unix_timestamp(point.timestamp as i64)
+        else {
+            continue;
+        };
+        let month = match u8::from(timestamp.month()) {
+            1 => "Jan",
+            2 => "Feb",
+            3 => "Mar",
+            4 => "Apr",
+            5 => "May",
+            6 => "Jun",
+            7 => "Jul",
+            8 => "Aug",
+            9 => "Sep",
+            10 => "Oct",
+            11 => "Nov",
+            _ => "Dec",
+        };
+        let count = monthly_usage
+            .get(month)
+            .and_then(Value::as_u64)
+            .unwrap_or_default()
+            .saturating_add(point.requests);
+        monthly_usage.insert(month.to_owned(), json!(count));
+    }
+    let total_requests = monthly_usage
+        .values()
+        .filter_map(Value::as_u64)
+        .sum::<u64>();
+
+    let active_users_list = analytics
+        .get_top_users(5)
+        .into_iter()
+        .map(|user| {
+            let subscriber_count = subscriptions
+                .iter()
+                .find(|subscription| subscription["username"].as_str() == Some(&user.name))
+                .and_then(|subscription| subscription["apis"].as_array())
+                .map(Vec::len)
+                .unwrap_or_default();
+            json!({
+                "username": user.name,
+                "requests": format_dashboard_count(user.count),
+                "subscribers": subscriber_count
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let popular_apis = analytics
+        .get_top_apis(10)
+        .into_iter()
+        .map(|api| {
+            let api_suffix = api.name.rsplit(':').next().unwrap_or(&api.name);
+            let subscriber_count = subscriptions
+                .iter()
+                .filter(|subscription| {
+                    subscription["apis"].as_array().is_some_and(|entries| {
+                        entries
+                            .iter()
+                            .any(|entry| entry.to_string().contains(api_suffix))
+                    })
+                })
+                .count();
+            json!({
+                "name": api.name,
+                "requests": format_dashboard_count(api.count),
+                "subscribers": subscriber_count
+            })
+        })
+        .collect::<Vec<_>>();
+
     success(
         StatusCode::OK,
-        json!({"users": users, "apis": apis, "subscriptions": subscriptions}),
+        json!({
+            "totalRequests": total_requests,
+            "activeUsers": analytics.user_count(),
+            "newApis": new_apis,
+            "monthlyUsage": monthly_usage,
+            "activeUsersList": active_users_list,
+            "popularApis": popular_apis
+        }),
         request_id,
     )
+}
+
+fn format_dashboard_count(value: u64) -> String {
+    let digits = value.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, character) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            formatted.push(',');
+        }
+        formatted.push(character);
+    }
+    formatted
 }
 
 async fn monitor_metrics(state: &AppState, request_id: &str) -> Response {

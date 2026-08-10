@@ -1,5 +1,4 @@
 
-const isDemo = process.env.DEMO_MODE === 'true'
 const gatewayTarget = process.env.GATEWAY_INTERNAL_URL || 'http://localhost:3001'
 
 const securityHeaders = [
@@ -50,7 +49,6 @@ const nextConfig = {
     ]
   },
   async rewrites() {
-    if (!isDemo) return []
     return [
       { source: '/platform/:path*', destination: `${gatewayTarget}/platform/:path*` },
       { source: '/api/:path*', destination: `${gatewayTarget}/api/:path*` },
