@@ -27,7 +27,7 @@ npm --prefix web-client ci
 npm --prefix web-client run build
 ```
 
-Rust integration tests use in-process upstream servers and do not require MongoDB or Redis. Storage and platform tests use the native in-memory backend. Checked-in parity fixtures preserve the pre-migration public wire contract.
+Rust integration tests use in-process upstream servers and do not require MongoDB or Redis. Storage and platform tests use the native in-memory backend. Checked-in parity fixtures preserve the pre-Rust public wire contract.
 
 ## Live smoke test
 
@@ -59,5 +59,3 @@ make smoke
 docker compose config
 docker build -t doorman:local .
 ```
-
-The former Python suites are retained only as migration reference under `archive/python-backend/`; they are excluded from CI and runtime images.

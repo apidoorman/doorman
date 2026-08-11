@@ -13,9 +13,11 @@ interface CreateRoutingData {
   routing_name: string
   routing_servers: string[]
   routing_description: string
-  client_key?: string
+  client_key: string
   server_index?: number
 }
+
+const clientKeyFromName = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
 const AddRoutingPage = () => {
   const router = useRouter()
@@ -23,14 +25,20 @@ const AddRoutingPage = () => {
     routing_name: '',
     routing_servers: [],
     routing_description: '',
+    client_key: '',
     server_index: 0
   })
   const [newServer, setNewServer] = useState('')
+  const [clientKeyCustomized, setClientKeyCustomized] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleInputChange = (field: keyof CreateRoutingData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleRoutingNameChange = (value: string) => {
+    setFormData(prev => ({ ...prev, routing_name: value, client_key: clientKeyCustomized ? prev.client_key : clientKeyFromName(value) }))
   }
 
   const addServer = () => {
@@ -47,8 +55,8 @@ const AddRoutingPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.routing_name || formData.routing_servers.length === 0) {
-      setError('Please fill in routing name and add at least one server')
+    if (!formData.routing_name || !formData.client_key || formData.routing_servers.length === 0) {
+      setError('Please provide a routing name, client key, and at least one server')
       return
     }
 
@@ -109,10 +117,30 @@ const AddRoutingPage = () => {
                 className="input"
                 placeholder="Enter routing name"
                 value={formData.routing_name}
-                onChange={(e) => handleInputChange('routing_name', e.target.value)}
+                onChange={(e) => handleRoutingNameChange(e.target.value)}
                 disabled={loading}
                 required
               />
+            </div>
+
+            <div>
+              <label htmlFor="client_key" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Client Key *
+              </label>
+              <input
+                type="text"
+                id="client_key"
+                name="client_key"
+                className="input font-mono"
+                placeholder="my-routing"
+                value={formData.client_key}
+                onChange={(e) => { setClientKeyCustomized(true); handleInputChange('client_key', e.target.value) }}
+                disabled={loading}
+                required
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Used to select this routing for a client. Generated from the routing name; you can change it.
+              </p>
             </div>
 
             <div>

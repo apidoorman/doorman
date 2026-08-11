@@ -271,6 +271,7 @@ async fn execute_rest(
         .clone()
         .unwrap_or_else(|| "/".to_owned());
     let original_query = request.uri().query().map(str::to_owned);
+    let request_path = request.uri().path().to_owned();
     let (parts, body) = request.into_parts();
     let limits = BodyLimits::from_env();
     let body_limit = match protocol {
@@ -279,7 +280,7 @@ async fn execute_rest(
         DataPlaneProtocol::Soap => limits.soap,
         DataPlaneProtocol::Grpc | DataPlaneProtocol::GrpcWeb => limits.grpc,
     };
-    let body = match to_bytes(body, body_limit).await {
+    let body = match to_bytes(body, BodyLimits::for_path(&request_path, body_limit)).await {
         Ok(body) => body,
         Err(_) => {
             return Ok(policy_error_response(
@@ -613,9 +614,15 @@ async fn execute_crud(
     };
 
     let method = request.method().clone();
-    let resource_id = crud_resource_id(request.uri().path()).map(str::to_owned);
+    let request_path = request.uri().path().to_owned();
+    let resource_id = crud_resource_id(&request_path).map(str::to_owned);
     let (_, body) = request.into_parts();
-    let body = match to_bytes(body, BodyLimits::from_env().rest).await {
+    let body = match to_bytes(
+        body,
+        BodyLimits::for_path(&request_path, BodyLimits::from_env().rest),
+    )
+    .await
+    {
         Ok(body) => body,
         Err(_) => {
             return Ok(policy_error_response(
@@ -1072,9 +1079,21 @@ fn protocol_failure(
 }
 
 async fn retry_backoff(attempt: u32) {
-    let delay_ms = 250_u64
-        .saturating_mul(1_u64 << attempt.saturating_sub(1).min(3))
-        .min(2_000);
+    let base_ms = std::env::var("HTTP_RETRY_BASE_DELAY")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .map(|seconds| (seconds * 1000.0) as u64)
+        .unwrap_or(250);
+    let maximum_ms = std::env::var("HTTP_RETRY_MAX_DELAY")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .map(|seconds| (seconds * 1000.0) as u64)
+        .unwrap_or(2_000);
+    let delay_ms = base_ms
+        .saturating_mul(1_u64 << attempt.saturating_sub(1).min(20))
+        .min(maximum_ms);
     tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
 }
 

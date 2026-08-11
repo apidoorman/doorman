@@ -12,8 +12,11 @@ use tower_http::{
 
 use crate::{
     middleware::{
-        activity::track_active_requests, chaos::chaos_middleware, platform_cors::platform_cors,
-        request_id::request_id, response_compat::response_compat,
+        activity::track_active_requests,
+        chaos::chaos_middleware,
+        platform_cors::{force_platform_vary, platform_cors},
+        request_id::request_id,
+        response_compat::response_compat,
         security_headers::security_headers,
     },
     policy::PolicyErrorBody,
@@ -92,6 +95,7 @@ pub fn build_router(state: AppState) -> Router {
             track_active_requests,
         ))
         .layer(compression)
+        .layer(axum_middleware::from_fn(force_platform_vary))
         .with_state(state)
 }
 
@@ -106,6 +110,22 @@ async fn gateway_route_not_found() -> Response {
         .into_response()
 }
 
-async fn not_found() -> Response {
-    StatusCode::NOT_FOUND.into_response()
+async fn not_found(request: axum::extract::Request) -> Response {
+    let request_id = request
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let mut response = (
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({"detail": "Not Found"})),
+    )
+        .into_response();
+    if let Ok(value) = http::HeaderValue::from_str(&request_id) {
+        response.headers_mut().insert("request_id", value.clone());
+        response.headers_mut().insert("x-request-id", value);
+    }
+    response
 }

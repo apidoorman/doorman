@@ -19,6 +19,26 @@ A Rust API gateway and control plane for REST, SOAP, GraphQL, gRPC, gRPC-Web, an
 - Encrypted in-memory snapshots compatible with the former DMP1 dump format
 - Next.js management UI served alongside the Rust service
 
+## Control plane
+
+The built-in control plane keeps gateway configuration, request operations, and security controls in one self-hosted interface.
+
+### API catalog
+
+![Doorman API catalog](docs/images/doorman-apis.png)
+
+### Visual API builder
+
+![Doorman API builder](docs/images/doorman-builder.png)
+
+### Request operations
+
+![Doorman request logs](docs/images/doorman-logs.png)
+
+### Security controls
+
+![Doorman security controls](docs/images/doorman-security.png)
+
 ## Quick demo
 
 ```bash
@@ -60,7 +80,7 @@ Shared mode uses MongoDB for durable configuration and Redis for caches, counter
 | `MEM_DUMP_PATH` | No | Snapshot path hint; defaults to `data/memory_dump.bin` |
 | `NEXT_PUBLIC_GATEWAY_URL` | No | Browser gateway target; same-origin by default |
 
-Public protocol URLs and `/platform/*` API contracts remain unchanged. There is no Python process, proxy, or fallback in the runtime image.
+Public protocol URLs and `/platform/*` API contracts remain unchanged. There is no legacy-process proxy or fallback in the runtime image.
 
 ## Development
 
@@ -78,8 +98,7 @@ For a running service, `make smoke` validates liveness, login, and the platform 
 doorman/
 ├── gateway-rs/             # Rust gateway and control plane
 ├── web-client/             # Next.js dashboard
-├── archive/python-backend/ # Read-only migration reference; excluded from images and CI
-├── parity/                 # Frozen public contract fixtures
+├── parity/                 # Frozen pre-Rust public contract fixtures
 ├── user-docs/              # Guides and runbooks
 ├── scripts/                # Build and operational helpers
 └── ops/                    # Infrastructure configuration

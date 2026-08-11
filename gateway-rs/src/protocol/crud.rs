@@ -49,6 +49,7 @@ pub async fn execute(
         ));
     }
     let query = request.uri().query().unwrap_or_default().to_owned();
+    let request_path = request.uri().path().to_owned();
     let grpc_web_target = request
         .extensions()
         .get::<crate::routes::grpc_web::GrpcWebTarget>()
@@ -66,7 +67,7 @@ pub async fn execute(
         DataPlaneProtocol::Grpc | DataPlaneProtocol::GrpcWeb => BodyLimits::from_env().grpc,
         DataPlaneProtocol::Rest => BodyLimits::from_env().rest,
     };
-    let body = match to_bytes(body, limit).await {
+    let body = match to_bytes(body, BodyLimits::for_path(&request_path, limit)).await {
         Ok(body) => body,
         Err(_) => {
             return Ok(policy_error(

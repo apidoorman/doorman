@@ -579,8 +579,7 @@ cargo clippy --manifest-path gateway-rs/Cargo.toml --locked --all-targets --all-
 2. Rotate JWT secret (requires restart):
    ```bash
    # Update JWT_SECRET_KEY in .env
-   python doorman.py stop
-   python doorman.py start
+   docker compose up -d --force-recreate doorman
    ```
 
 3. Audit logs for suspicious activity:

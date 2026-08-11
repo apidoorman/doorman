@@ -30,7 +30,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn requires_group_intersection_like_python() {
+    fn requires_group_intersection_for_legacy_contract() {
         let api = json!({ "api_allowed_groups": ["ops"] });
         let user = json!({ "groups": ["admin", "ops"] });
         assert!(enforce_group_access(&api, &user).is_ok());

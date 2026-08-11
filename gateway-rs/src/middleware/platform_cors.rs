@@ -1,7 +1,7 @@
 use std::env;
 
 use axum::{
-    extract::Request,
+    extract::{OriginalUri, Request},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -36,6 +36,21 @@ pub async fn platform_cors(request: Request, next: Next) -> Response {
 
     let mut response = next.run(request).await;
     apply_headers(response.headers_mut(), &config, origin.as_deref(), false);
+    response
+}
+
+pub async fn force_platform_vary(request: Request, next: Next) -> Response {
+    let is_platform = request
+        .extensions()
+        .get::<OriginalUri>()
+        .map(|uri| uri.0.path().starts_with("/platform"))
+        .unwrap_or_else(|| request.uri().path().starts_with("/platform"));
+    let mut response = next.run(request).await;
+    if is_platform {
+        response
+            .headers_mut()
+            .insert(header::VARY, HeaderValue::from_static("Origin"));
+    }
     response
 }
 

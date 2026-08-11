@@ -9,6 +9,7 @@ fn target_url() -> String {
 }
 
 #[tokio::test]
+#[ignore = "requires a separately running gateway; use make test-live-tcp"]
 async fn test_tcp_live_server_liveness_readiness_and_auth() {
     let base = target_url();
     let client = Client::new();

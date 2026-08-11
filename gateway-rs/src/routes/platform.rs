@@ -1,8 +1,10 @@
 use std::{
     collections::HashMap,
     env, fs,
+    io::Read,
     net::SocketAddr,
     process::{Command, Stdio},
+    sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,11 +13,16 @@ use axum::{
     extract::{ConnectInfo, OriginalUri, Request, State},
     response::{IntoResponse, Response},
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
+
+const PYTHON_OPENAPI_GZIP_BASE64: &str =
+    include_str!("../../../parity/openapi/python-openapi.json.gz.b64");
+static PYTHON_OPENAPI: OnceLock<Value> = OnceLock::new();
 
 use crate::{
     middleware::{
@@ -85,7 +92,8 @@ pub async fn platform_dispatch(
             return response;
         }
     }
-    let body = match to_bytes(request.into_body(), BodyLimits::from_env().default).await {
+    let body_limit = BodyLimits::for_path(uri.path(), BodyLimits::from_env().default);
+    let body = match to_bytes(request.into_body(), body_limit).await {
         Ok(bytes) => bytes,
         Err(_) => {
             return error(
@@ -103,9 +111,37 @@ pub async fn platform_dispatch(
     };
 
     if path == "/authorization" && method == Method::POST {
+        if let Some(response) = auth_ip_rate_limit(
+            &state,
+            &headers,
+            direct_addr,
+            "LOGIN_IP_RATE_LIMIT",
+            5,
+            "LOGIN_IP_RATE_WINDOW",
+            300,
+            &request_id,
+        )
+        .await
+        {
+            return response;
+        }
         return login(&state, &headers, payload, &request_id).await;
     }
     if path == "/authorization/register" && method == Method::POST {
+        if let Some(response) = auth_ip_rate_limit(
+            &state,
+            &headers,
+            direct_addr,
+            "REGISTER_IP_RATE_LIMIT",
+            5,
+            "REGISTER_IP_RATE_WINDOW",
+            3600,
+            &request_id,
+        )
+        .await
+        {
+            return response;
+        }
         return register(&state, payload, &request_id).await;
     }
     if path == "/monitor/liveness" && method == Method::GET {
@@ -2439,22 +2475,35 @@ async fn platform_ip_filter(
 }
 
 fn platform_openapi(request_id: &str) -> Response {
-    success(
-        StatusCode::OK,
-        json!({
-            "openapi": "3.1.0",
-            "info": {"title": "doorman", "version": "1.0.0"},
-            "paths": {
-                "/platform/authorization": {"post": {"summary": "Create authorization token"}},
-                "/platform/api": {"get": {"summary": "List APIs"}, "post": {"summary": "Create API"}},
-                "/platform/user": {"get": {"summary": "List users"}, "post": {"summary": "Create user"}},
-                "/platform/endpoint": {"post": {"summary": "Create endpoint"}},
-                "/platform/monitor/liveness": {"get": {"summary": "Liveness"}},
-                "/platform/monitor/readiness": {"get": {"summary": "Readiness"}}
-            }
-        }),
-        request_id,
-    )
+    match python_openapi_contract() {
+        Ok(contract) => success(StatusCode::OK, contract.clone(), request_id),
+        Err(message) => error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "GTW999",
+            message,
+            request_id,
+        ),
+    }
+}
+
+fn python_openapi_contract() -> Result<&'static Value, &'static str> {
+    if let Some(contract) = PYTHON_OPENAPI.get() {
+        return Ok(contract);
+    }
+    let compressed = BASE64_STANDARD
+        .decode(PYTHON_OPENAPI_GZIP_BASE64.trim())
+        .map_err(|_| "Failed to decode embedded OpenAPI contract")?;
+    let mut decoder = flate2::read::GzDecoder::new(compressed.as_slice());
+    let mut decoded = Vec::new();
+    decoder
+        .read_to_end(&mut decoded)
+        .map_err(|_| "Failed to decompress embedded OpenAPI contract")?;
+    let contract = serde_json::from_slice(&decoded)
+        .map_err(|_| "Failed to parse embedded OpenAPI contract")?;
+    let _ = PYTHON_OPENAPI.set(contract);
+    PYTHON_OPENAPI
+        .get()
+        .ok_or("Failed to initialize embedded OpenAPI contract")
 }
 
 fn platform_docs(path: &str, request_id: &str) -> Response {
@@ -5390,6 +5439,79 @@ fn request_id_from(headers: &HeaderMap) -> String {
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| Uuid::new_v4().to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn auth_ip_rate_limit(
+    state: &AppState,
+    headers: &HeaderMap,
+    direct_addr: Option<SocketAddr>,
+    limit_name: &str,
+    default_limit: u64,
+    window_name: &str,
+    default_window: u64,
+    request_id: &str,
+) -> Option<Response> {
+    if env_bool("LOGIN_IP_RATE_DISABLED", false) {
+        return None;
+    }
+    let storage = state.storage.as_ref()?;
+    let client_ip = ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]
+        .into_iter()
+        .find_map(|name| {
+            headers
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.split(',').next())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+        })
+        .or_else(|| direct_addr.map(|value| value.ip().to_string()))?;
+    let limit = env::var(limit_name)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(default_limit);
+    let window = env::var(window_name)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(default_window)
+        .max(1);
+    let now = unix_seconds();
+    let bucket = now / window;
+    let count = storage
+        .increment_window(&format!("ip_rate_limit:{client_ip}:{bucket}"), window)
+        .await
+        .ok()?;
+    if count <= limit {
+        return None;
+    }
+    let reset = (bucket + 1) * window;
+    let retry_after = window - (now % window);
+    let mut response = json_response(
+        StatusCode::TOO_MANY_REQUESTS,
+        json!({
+            "detail": {
+                "error_code": "IP_RATE_LIMIT",
+                "message": format!(
+                    "Too many requests from your IP address. Please wait {retry_after} seconds before trying again. Limit: {limit} requests per {window} seconds."
+                ),
+                "retry_after": retry_after
+            }
+        }),
+        request_id,
+    );
+    for (name, value) in [
+        ("retry-after", retry_after),
+        ("x-ratelimit-limit", limit),
+        ("x-ratelimit-remaining", 0),
+        ("x-ratelimit-reset", reset),
+    ] {
+        if let Ok(value) = HeaderValue::from_str(&value.to_string()) {
+            response.headers_mut().insert(name, value);
+        }
+    }
+    Some(response)
 }
 
 fn parse_query(query: Option<&str>) -> HashMap<String, String> {

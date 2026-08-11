@@ -10,19 +10,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Orcha Enterprise Blue Palette (primary)
+        signal: { ink: '#19201c', warm: '#f3f1e8', lime: '#e1e783', blue: '#a9ced8', terra: '#d87458', mist: '#65756c' },
+        // Kept as aliases so existing page behavior can be restyled without changing markup.
         primary: {
-          50: '#DEEBFF',
-          100: '#DEEBFF',
-          200: '#B3D4FF',
-          300: '#4C9AFF',
-          400: '#2684FF',
-          500: '#0065FF',
-          600: '#0052CC',
-          700: '#0747A6',
-          800: '#0747A6',
-          900: '#172B4D',
-          950: '#172B4D',
+          50: '#f7f8cf', 100: '#eef2a7', 200: '#e1e783', 300: '#d2dc68', 400: '#bfcc51',
+          500: '#a6b53f', 600: '#8a9930', 700: '#6e7a25', 800: '#53601d', 900: '#394315', 950: '#19201c',
         },
         blue: {
           50: '#DEEBFF',
@@ -91,7 +83,7 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['IBM Plex Sans', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       animation: {
@@ -120,16 +112,10 @@ export default {
         },
       },
       borderRadius: {
-        'xs': '4px',
-        'sm': '6px',
-        'md': '8px',
-        'lg': '10px',
-        'xl': '12px',
+        'xs': '0px', 'sm': '0px', 'md': '0px', 'lg': '0px', 'xl': '0px',
       },
       boxShadow: {
-        'soft': '0 1px 1px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31)',
-        'medium': '0 4px 8px -2px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31)',
-        'strong': '0 8px 16px -4px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31)',
+        'soft': '4px 4px 0 #d87458', 'medium': '6px 6px 0 #d87458', 'strong': '8px 8px 0 #19201c',
         'xl': '0 20px 60px rgba(0, 0, 0, 0.15)',
       },
       backdropBlur: {

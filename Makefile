@@ -6,9 +6,29 @@ ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' .env 2>/dev/null | cut
 BASE_URL ?= http://localhost:$(PORT)
 GATEWAY_LOAD_BASE_URL ?= http://localhost:3001
 
-.PHONY: check test unit unitq rust-test rust-clippy rust-fmt-check web-build smoke preflight live liveq gateway-load clean clean-deep
+.PHONY: check test unit unitq rust-test rust-clippy rust-fmt-check web-build parity parity-reference parity-contracts parity-differential parity-performance smoke preflight live liveq gateway-load clean clean-deep
 
 check: rust-fmt-check rust-clippy test
+
+parity: parity-reference parity-contracts
+
+parity-reference:
+	python3 scripts/check_parity_reference.py
+
+parity-contracts:
+	cargo test --manifest-path gateway-rs/Cargo.toml --locked --test parity_contracts --test openapi_parity --test auth_rate_parity
+
+parity-differential:
+	python3 scripts/differential_parity.py \
+		--python-url "$${PYTHON_PARITY_URL:-http://127.0.0.1:3102}" \
+		--rust-url "$${RUST_PARITY_URL:-http://127.0.0.1:3101}" \
+		--report "$${PARITY_REPORT:-parity-report.json}"
+
+parity-performance:
+	python3 scripts/benchmark_parity.py \
+		--python-pid "$${PYTHON_PARITY_PID:?set PYTHON_PARITY_PID}" \
+		--rust-pid "$${RUST_PARITY_PID:?set RUST_PARITY_PID}" \
+		--report "$${PARITY_PERF_REPORT:-parity-performance.json}"
 
 test unit unitq rust-test:
 	cargo test --manifest-path gateway-rs/Cargo.toml --locked
@@ -34,7 +54,7 @@ test-live-tcp:
 	LIVE_SERVER_URL=$(BASE_URL) \
 	DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
 	DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
-	cargo test --test live_tcp_port_3001 --manifest-path gateway-rs/Cargo.toml -- --nocapture
+	cargo test --test live_tcp_port_3001 --manifest-path gateway-rs/Cargo.toml -- --ignored --nocapture
 
 gateway-load:
 	BASE_URL=$(GATEWAY_LOAD_BASE_URL) bash scripts/run_perf_check.sh

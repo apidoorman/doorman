@@ -635,7 +635,7 @@ const ApiDetailPage = () => {
               Manage API configuration and settings
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="signal-detail-actions flex gap-2">
             {!isEditing ? (
               <>
                 <button onClick={handleEdit} className="btn btn-primary">

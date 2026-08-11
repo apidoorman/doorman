@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::{env, net::IpAddr};
 
 use http::{HeaderMap, Method, StatusCode};
 use serde_json::Value;
@@ -124,7 +124,7 @@ pub fn evaluate_rest_policy(
             .get("api_read_timeout")
             .and_then(Value::as_f64)
             .map(|seconds| (seconds.max(0.001) * 1000.0) as u64)
-            .unwrap_or(30_000),
+            .unwrap_or_else(default_http_read_timeout_ms),
         graphql_max_depth: u64_field(&api, "api_graphql_max_depth").unwrap_or(10),
         authorization_field_swap: string_field(&api, "api_authorization_field_swap")
             .map(str::to_owned),
@@ -271,6 +271,15 @@ pub fn evaluate_rest_policy(
     Ok(Some(decision))
 }
 
+fn default_http_read_timeout_ms() -> u64 {
+    env::var("HTTP_READ_TIMEOUT")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|seconds| (seconds * 1000.0) as u64)
+        .unwrap_or(30_000)
+}
+
 pub async fn evaluate_shared_effects(
     documents: &PolicyDocuments,
     request: &PolicyRequest,
@@ -403,7 +412,7 @@ pub async fn evaluate_shared_effects(
         }
     }
 
-    if let (Some(key), false) = (
+    if let (Some(key), true) = (
         decision.routing_key.as_deref(),
         decision.routing_servers.is_empty(),
     ) {

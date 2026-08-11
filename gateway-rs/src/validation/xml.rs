@@ -117,7 +117,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn converts_first_soap_body_operation_like_python() {
+    fn converts_first_soap_body_operation_for_legacy_contract() {
         let xml = r#"<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><Create><user><name>Ada</name></user></Create></soap:Body></soap:Envelope>"#;
         assert_eq!(
             soap_body_object(xml).unwrap(),

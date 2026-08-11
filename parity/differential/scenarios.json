@@ -1,0 +1,53 @@
+[
+  {
+    "name": "health_public",
+    "method": "GET",
+    "path": "/api/health"
+  },
+  {
+    "name": "status_unauthorized",
+    "method": "GET",
+    "path": "/api/status"
+  },
+  {
+    "name": "gateway_caches_preflight",
+    "method": "OPTIONS",
+    "path": "/api/caches",
+    "headers": {
+      "Access-Control-Request-Headers": "authorization,content-type",
+      "Access-Control-Request-Method": "DELETE",
+      "Origin": "https://console.example"
+    }
+  },
+  {
+    "name": "platform_liveness",
+    "method": "GET",
+    "path": "/platform/monitor/liveness"
+  },
+  {
+    "name": "login_missing_credentials",
+    "method": "POST",
+    "path": "/platform/authorization",
+    "json": {}
+  },
+  {
+    "name": "login_invalid_credentials",
+    "method": "POST",
+    "path": "/platform/authorization",
+    "json": {
+      "email": "missing@example.invalid",
+      "password": "invalid-password"
+    }
+  },
+  {
+    "name": "registration_missing_credentials",
+    "method": "POST",
+    "path": "/platform/authorization/register",
+    "json": {}
+  },
+  {
+    "name": "unknown_route",
+    "method": "GET",
+    "path": "/not-a-doorman-route"
+  }
+]

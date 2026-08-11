@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import { SERVER_URL } from '@/utils/config'
@@ -345,15 +346,18 @@ const ApiBuilderPage = () => {
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">API Builder</h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">Design your API schema and endpoints</p>
             </div>
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="btn btn-primary"
-            >
-              {loading ? (
-                <> <div className="spinner mr-2"></div> Building... </>
-              ) : 'Publish API'}
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="btn btn-primary"
+              >
+                {loading ? (
+                  <> <div className="spinner mr-2"></div> Publishing... </>
+                ) : 'Publish API'}
+              </button>
+              <p className="builder-existing-api-note">Adding an existing API? <Link href="/apis">Go to the APIs page</Link>.</p>
+            </div>
           </div>
 
           {error && (

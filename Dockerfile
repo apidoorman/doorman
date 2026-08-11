@@ -2,6 +2,7 @@ FROM rust:1.88-slim-bookworm AS rust-builder
 WORKDIR /build/gateway-rs
 COPY gateway-rs/Cargo.toml gateway-rs/Cargo.lock gateway-rs/rust-toolchain.toml ./
 COPY gateway-rs/src ./src
+COPY parity/openapi/python-openapi.json.gz.b64 /build/parity/openapi/python-openapi.json.gz.b64
 RUN --mount=type=cache,id=doorman-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=doorman-cargo-target,target=/build/gateway-rs/target \
     cargo build --locked --release \

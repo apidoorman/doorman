@@ -20,6 +20,7 @@ pub struct Config {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SharedStorageConfig {
     pub storage_mode: String,
+    pub mongo_uri_override: Option<String>,
     pub mongo_hosts: String,
     pub mongo_replica_set: Option<String>,
     pub mongo_user: Option<String>,
@@ -45,6 +46,7 @@ impl SharedStorageConfig {
             storage_mode: env::var("MEM_OR_EXTERNAL")
                 .or_else(|_| env::var("MEM_OR_REDIS"))
                 .unwrap_or_else(|_| "MEM".to_owned()),
+            mongo_uri_override: env_non_empty("MONGO_DB_URI"),
             mongo_hosts: env::var("MONGO_DB_HOSTS")
                 .unwrap_or_else(|_| "localhost:27017".to_owned()),
             mongo_replica_set: env_non_empty("MONGO_REPLICA_SET_NAME"),
@@ -68,6 +70,9 @@ impl SharedStorageConfig {
     }
 
     pub fn mongo_uri(&self) -> String {
+        if let Some(uri) = self.mongo_uri_override.as_ref() {
+            return uri.clone();
+        }
         let auth = match (&self.mongo_user, &self.mongo_password) {
             (Some(user), Some(password)) => format!("{user}:{password}@"),
             _ => String::new(),
@@ -137,6 +142,7 @@ impl Default for SharedStorageConfig {
     fn default() -> Self {
         Self {
             storage_mode: "MEM".to_owned(),
+            mongo_uri_override: None,
             mongo_hosts: "localhost:27017".to_owned(),
             mongo_replica_set: Some("rs0".to_owned()),
             mongo_user: Some("doorman_admin".to_owned()),
@@ -178,9 +184,11 @@ impl Config {
             env_parse::<u64>("COMPRESSION_MINIMUM_SIZE", 500)?.min(u64::from(u16::MAX)) as u16;
 
         Ok(Self {
-            host: env::var("GATEWAY_RUST_HOST").unwrap_or_else(|_| "0.0.0.0".to_owned()),
+            host: env::var("HOST")
+                .or_else(|_| env::var("GATEWAY_RUST_HOST"))
+                .unwrap_or_else(|_| "0.0.0.0".to_owned()),
             port: env_parse("PORT", 3001)?,
-            connect_timeout: Duration::from_secs(env_parse("GATEWAY_CONNECT_TIMEOUT_SECONDS", 10)?),
+            connect_timeout: python_http_connect_timeout()?,
             https_only: env_bool("HTTPS_ONLY", false),
             content_security_policy: env::var("CONTENT_SECURITY_POLICY")
                 .ok()
@@ -284,6 +292,22 @@ fn env_non_empty(name: &str) -> Option<String> {
     env::var(name).ok().filter(|value| !value.trim().is_empty())
 }
 
+fn python_http_connect_timeout() -> Result<Duration, ConfigError> {
+    let (name, value) = match env::var("HTTP_CONNECT_TIMEOUT") {
+        Ok(value) => ("HTTP_CONNECT_TIMEOUT", value),
+        Err(_) => match env::var("GATEWAY_CONNECT_TIMEOUT_SECONDS") {
+            Ok(value) => ("GATEWAY_CONNECT_TIMEOUT_SECONDS", value),
+            Err(_) => return Ok(Duration::from_secs_f64(5.0)),
+        },
+    };
+    let seconds = value
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .ok_or_else(|| ConfigError::InvalidValue(name.to_owned(), value.clone()))?;
+    Ok(Duration::from_secs_f64(seconds))
+}
+
 fn env_parse<T>(name: &str, default: T) -> Result<T, ConfigError>
 where
     T: FromStr + Copy,
@@ -316,6 +340,7 @@ mod tests {
     fn builds_python_compatible_storage_urls() {
         let storage = SharedStorageConfig {
             storage_mode: "REDIS".to_owned(),
+            mongo_uri_override: None,
             mongo_hosts: "mongo-a:27017,mongo-b:27017".to_owned(),
             mongo_replica_set: Some("rs0".to_owned()),
             mongo_user: Some("doorman".to_owned()),

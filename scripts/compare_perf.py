@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-REGRESSION_THRESHOLD = 0.10
+REGRESSION_THRESHOLD = 0.05
 
 def load_summary(path: Path):
     with path.open('r', encoding='utf-8') as f:
@@ -12,6 +12,7 @@ def extract_metrics(summary: dict):
     m = summary.get('metrics', {})
     http = m.get('http_req_duration', {}).get('values', {})
     http_reqs = m.get('http_reqs', {}).get('values', {})
+    http_failed = m.get('http_req_failed', {}).get('values', {})
     p50 = float(http.get('p(50)', 0.0))
     p95 = float(http.get('p(95)', 0.0))
     p99 = float(http.get('p(99)', 0.0))
@@ -21,6 +22,7 @@ def extract_metrics(summary: dict):
         'p95': p95,
         'p99': p99,
         'rps': rps,
+        'error_rate': float(http_failed.get('rate', 0.0)),
     }
 
 def main():
@@ -62,15 +64,28 @@ def main():
         if cur_rps < allowed_rps:
             failures.append(f'RPS regression: {cur_rps:.2f} < {allowed_rps:.2f} (baseline {base_rps:.2f})')
 
+    if curm['error_rate'] > basem['error_rate'] + 0.001:
+        failures.append(
+            f"error-rate regression: {curm['error_rate']:.4f} > {basem['error_rate']:.4f}"
+        )
+
     try:
         cur_stats = (current.parent / 'perf-stats.json')
         base_stats = (baseline.parent / 'perf-stats.json')
         if cur_stats.exists() and base_stats.exists():
             cstats = load_summary(cur_stats)
             bstats = load_summary(base_stats)
-            for key in ('cpu_percent', 'loop_lag_ms_p95'):
+            for key in ('cpu_percent_p95', 'loop_lag_ms_p95', 'peak_rss_bytes'):
                 if key in cstats and key in bstats:
                     print(f"{key}: baseline={bstats[key]} current={cstats[key]}")
+            baseline_rss = float(bstats.get('peak_rss_bytes', 0))
+            current_rss = float(cstats.get('peak_rss_bytes', 0))
+            if baseline_rss > 0 and current_rss > baseline_rss * (1.0 + REGRESSION_THRESHOLD):
+                failures.append(
+                    f"peak RSS regression: {current_rss:.0f} > "
+                    f"{baseline_rss * (1.0 + REGRESSION_THRESHOLD):.0f} "
+                    f"(baseline {baseline_rss:.0f})"
+                )
 
     except Exception:
         pass

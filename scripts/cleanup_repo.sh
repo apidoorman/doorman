@@ -8,7 +8,6 @@ find . -type f -name "*.py[co]" -delete || true
 find . -type f -name ".DS_Store" -delete || true
 rm -rf logs/*.log doorman.pid doorman.pid || true
 rm -rf web-client/.next || true
-rm -f pytest_backend_verbose.log || true
 
 if [[ "${1-}" == "--deep" ]]; then
   echo "[cleanup] Removing generated dev artifacts..."
@@ -16,4 +15,3 @@ if [[ "${1-}" == "--deep" ]]; then
 fi
 
 echo "[cleanup] Done."
-

@@ -405,7 +405,7 @@ async fn memory_mode_parses_and_imports_wsdl_without_an_external_service() {
 }
 
 #[tokio::test]
-async fn config_reload_routes_match_python_values_metadata_and_permissions() {
+async fn config_reload_routes_preserve_legacy_values_metadata_and_permissions() {
     let state = memory_state(false).await;
     let storage = state.storage.clone().unwrap();
     storage
@@ -638,7 +638,7 @@ async fn api_create_and_update_preserve_python_pydantic_and_duplicate_contracts(
 }
 
 #[tokio::test]
-async fn management_permissions_readiness_tools_and_restart_match_python() {
+async fn management_permissions_readiness_tools_and_restart_preserve_contract() {
     let state = memory_state(false).await;
     let storage = state.storage.clone().unwrap();
     storage

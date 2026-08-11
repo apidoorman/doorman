@@ -2,6 +2,7 @@ FROM rust:1.88-slim-bookworm AS rust-builder
 WORKDIR /build/gateway-rs
 COPY gateway-rs/Cargo.toml gateway-rs/Cargo.lock gateway-rs/rust-toolchain.toml ./
 COPY gateway-rs/src ./src
+COPY parity/openapi/python-openapi.json.gz.b64 /build/parity/openapi/python-openapi.json.gz.b64
 RUN cargo build --locked --release
 
 FROM node:20-bookworm-slim AS web-builder

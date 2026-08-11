@@ -10,13 +10,8 @@ ignore = [
     "B904"  # Exception chaining is a style preference, not a functional requirement
 ]
 
-[tool.ruff.lint.isort]
-known-first-party = ["models", "services", "routes", "utils", "doorman"]
-section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
-
 [tool.ruff.format]
 quote-style = "single"
 indent-style = "space"
 skip-magic-trailing-comma = true
 line-ending = "lf"
-

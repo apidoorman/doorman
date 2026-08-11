@@ -53,6 +53,9 @@ pub async fn execute_json_gateway(
         Err(GrpcGatewayError::Request(message)) => {
             policy_error(StatusCode::BAD_REQUEST, "GTW011", &message)
         }
+        Err(GrpcGatewayError::MissingMethod(message)) => {
+            policy_error(StatusCode::INTERNAL_SERVER_ERROR, "GTW006", &message)
+        }
         Err(GrpcGatewayError::Forbidden(message)) => {
             policy_error(StatusCode::FORBIDDEN, "GTW013", &message)
         }
@@ -409,7 +412,9 @@ async fn execute(
     }
     enforce_allowlists(decision, package, service_name, method_name)?;
     let method = find_method(&pool, package, service_name, method_name).ok_or_else(|| {
-        GrpcGatewayError::Request(format!("gRPC method not found: {}", request.method))
+        GrpcGatewayError::MissingMethod(format!(
+            "Message types {method_name}Request/{method_name}Reply not found in protobuf module"
+        ))
     })?;
     if let Some(stream_kind) = request.stream_kind.as_deref() {
         validate_stream_hint(stream_kind, &method)?;
@@ -424,7 +429,10 @@ async fn execute(
         .map_err(|error| GrpcGatewayError::Transport(error.to_string()))?
         .connect_timeout(Duration::from_millis(decision.request_timeout_ms.max(1)))
         .timeout(Duration::from_millis(decision.request_timeout_ms.max(1)));
-    let attempts = decision.retry_count.saturating_add(1);
+    let attempts = decision
+        .retry_count
+        .max(env_u32("GRPC_MAX_RETRIES", 0))
+        .saturating_add(1);
     for attempt in 0..attempts {
         let result = match endpoint.clone().connect().await {
             Ok(channel) => {
@@ -440,6 +448,7 @@ async fn execute(
                     max_attempts = attempts,
                     "retrying transient native gRPC failure"
                 );
+                grpc_retry_backoff(attempt).await;
             }
             Err(error) => return Err(error),
         }
@@ -452,10 +461,34 @@ fn retryable_grpc_error(error: &GrpcGatewayError) -> bool {
         GrpcGatewayError::Transport(_) => true,
         GrpcGatewayError::Status(status) => matches!(
             status.code(),
-            tonic::Code::Unavailable | tonic::Code::Unimplemented
+            tonic::Code::Unavailable
+                | tonic::Code::DeadlineExceeded
+                | tonic::Code::ResourceExhausted
+                | tonic::Code::Aborted
         ),
         _ => false,
     }
+}
+
+async fn grpc_retry_backoff(attempt: u32) {
+    let base = env_u64("GRPC_RETRY_BASE_MS", 100);
+    let maximum = env_u64("GRPC_RETRY_MAX_MS", 1_000);
+    let delay = base.saturating_mul(1_u64 << attempt.min(20)).min(maximum);
+    tokio::time::sleep(Duration::from_millis(delay.max(10))).await;
+}
+
+fn env_u32(name: &str, default: u32) -> u32 {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(default)
+}
+
+fn env_u64(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(default)
 }
 
 async fn invoke(
@@ -740,6 +773,7 @@ fn grpc_status_response(status: Status) -> Response {
 #[derive(Debug)]
 enum GrpcGatewayError {
     Request(String),
+    MissingMethod(String),
     Forbidden(String),
     MissingDescriptor,
     Status(Status),
@@ -929,6 +963,52 @@ mod tests {
         );
         assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst), 2);
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn missing_method_matches_python_message_resolution_error() {
+        use axum::body::to_bytes;
+        use prost_types::{FileDescriptorProto, FileDescriptorSet, ServiceDescriptorProto};
+
+        let descriptor = FileDescriptorSet {
+            file: vec![FileDescriptorProto {
+                name: Some("empty.proto".to_owned()),
+                package: Some("acme".to_owned()),
+                syntax: Some("proto3".to_owned()),
+                service: vec![ServiceDescriptorProto {
+                    name: Some("Greeter".to_owned()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        }
+        .encode_to_vec();
+        let decision = PolicyDecision {
+            upstream: Some("grpc://127.0.0.1:9".to_owned()),
+            grpc_descriptor_set: Some(base64::engine::general_purpose::STANDARD.encode(descriptor)),
+            grpc_package: Some("acme".to_owned()),
+            ..Default::default()
+        };
+        let state = AppState::new(crate::config::Config::for_test(
+            "http://127.0.0.1:9".to_owned(),
+        ))
+        .unwrap();
+        let response = execute_json_gateway(
+            &state,
+            &decision,
+            &HeaderMap::new(),
+            br#"{"method":"Nope.Do","message":{}}"#,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body(), 1024).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&body).unwrap(),
+            serde_json::json!({
+                "error_code": "GTW006",
+                "error_message": "Message types DoRequest/DoReply not found in protobuf module"
+            })
+        );
     }
 
     #[test]

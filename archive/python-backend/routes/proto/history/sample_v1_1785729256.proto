@@ -1,3 +1,0 @@
-syntax = "proto3";
-package sample_v1;
-message Ping { string msg = 1; }
