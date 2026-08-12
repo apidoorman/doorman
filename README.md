@@ -1,4 +1,4 @@
-![Doorman logo](web-client/public/doorman-mark.svg)
+<img src="web-client/public/doorman-mark.svg" alt="Doorman logo" width="32">
 
 ![api-gateway](https://img.shields.io/badge/API-Gateway-blue)
 ![Rust](https://img.shields.io/badge/Rust-1.88-orange)
@@ -9,6 +9,8 @@
 # Doorman API Gateway
 
 A Rust API gateway and control plane for REST, SOAP, GraphQL, gRPC, gRPC-Web, and AI APIs.
+
+Get started: [Quick Demo](#get-started-quick-demo) or [Self-Hosting](#get-started-self-hosting).
 
 ## Key features
 
@@ -21,21 +23,14 @@ A Rust API gateway and control plane for REST, SOAP, GraphQL, gRPC, gRPC-Web, an
 
 ## Control plane
 
-The built-in control plane keeps gateway configuration, request operations, and security controls in one self-hosted interface.
-
-### API catalog
+The built-in control plane centralizes gateway configuration, access management, traffic controls, and operations in one self-hosted interface.
 
 ![Doorman API catalog](docs/images/doorman-apis.png)
 
-Define and organize the APIs exposed through the gateway, including their versions, protocols, and endpoints.
-
-### User management
-
-Manage users, roles, groups, and access permissions from the control plane.
-
-### Analytics
-
-Monitor API usage, performance, errors, and traffic trends with built-in analytics.
+- **API lifecycle:** catalog and visual builder, protocol and endpoint configuration, schema validation, and API discovery.
+- **Access and consumption:** authentication, users, roles, groups, subscriptions, credits, tiers, and quotas.
+- **Traffic management:** routing, rate limits, throttling, bandwidth limits, retries, and circuit breaking.
+- **Operations and security:** analytics, request logs, monitoring, audit and security controls, and configuration import/export.
 
 ## Get Started: Quick Demo
 
