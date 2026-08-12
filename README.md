@@ -1,4 +1,4 @@
-<img src="web-client/public/doorman-mark.svg" alt="Doorman logo" width="32">
+<img src="web-client/public/doorman-mark.svg" alt="Doorman logo" width="42">
 
 ![api-gateway](https://img.shields.io/badge/API-Gateway-blue)
 ![Rust](https://img.shields.io/badge/Rust-1.88-orange)
