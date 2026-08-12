@@ -5,71 +5,18 @@ permissions:
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
-  backend-tests:
+  rust:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r backend-services/requirements.txt
-      - name: Run backend-services unit tests
-        env:
-          MEM_OR_EXTERNAL: MEM
-          HTTPS_ONLY: 'false'
-          STRICT_RESPONSE_ENVELOPE: 'false'
-          JWT_SECRET_KEY: test-secret-key-please-change
-          DOORMAN_ADMIN_EMAIL: admin@doorman.dev
-          DOORMAN_ADMIN_PASSWORD: test-only-password-12chars
-          MEM_ENCRYPTION_KEY: unit-test-key-32chars-abcdef123456!!
-          ALLOWED_HEADERS: '*'
-          ALLOW_HEADERS: '*'
-          ALLOW_METHODS: '*'
-          ALLOWED_ORIGINS: http://localhost:3000
-        working-directory: backend-services
-        run: pytest -q tests
-
-  frontend-build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web-client/package-lock.json
-      - name: Install dependencies
-        working-directory: web-client
-        run: npm ci
-      - name: Build web client
-        working-directory: web-client
-        env:
-          NEXT_PUBLIC_SERVER_URL: http://localhost:3001
-        run: npm run build
-
-  rust-gateway:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+          fetch-depth: 0
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@1.88.0
         with:
@@ -80,7 +27,40 @@ jobs:
           workspaces: gateway-rs
       - name: Check formatting
         run: cargo fmt --manifest-path gateway-rs/Cargo.toml --all -- --check
+      - name: Verify pinned Python parity reference
+        run: |
+          git branch --force python-parity-reference 10699820f50abe3940134536a98c955deab6959f
+          python3 scripts/check_parity_reference.py
       - name: Run Clippy
         run: cargo clippy --manifest-path gateway-rs/Cargo.toml --locked --all-targets --all-features -- -D warnings
-      - name: Run Rust tests
+      - name: Run tests
         run: cargo test --manifest-path gateway-rs/Cargo.toml --locked
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web-client/package-lock.json
+      - name: Install dependencies
+        working-directory: web-client
+        run: npm ci
+      - name: Build web client
+        working-directory: web-client
+        env:
+          NEXT_PUBLIC_GATEWAY_URL: http://localhost:3001
+        run: npm run build
+
+  container:
+    runs-on: ubuntu-latest
+    needs: [rust, frontend]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build Rust-only image
+        run: docker build --tag doorman:ci .

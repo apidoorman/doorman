@@ -18,14 +18,8 @@ node_modules
 
 # Logs
 *.log
-backend-services/*.log
-backend-services/platform-logs
 
 # Large/unnecessary backend dirs
-backend-services/generated
-backend-services/live-tests
-backend-services/tests
-backend-services/venv
 
 # macOS and editor junk
 **/.DS_Store
@@ -45,10 +39,7 @@ web-client/dist
 web-client/out
 
 # PIDs and generated artifacts
-uvicorn.pid
 doorman.pid
-backend-services/doorman.pid
-backend-services/logs
 
 # Docs and ops not needed in image
 user-docs

@@ -1,4 +1,4 @@
-![Logo](https://i.ibb.co/VpDyBMnk/doorman-gateway-logo.png)
+![Doorman logo](web-client/public/doorman-mark.svg)
 
 ![api-gateway](https://img.shields.io/badge/API-Gateway-blue)
 ![Rust](https://img.shields.io/badge/Rust-1.88-orange)
@@ -27,19 +27,17 @@ The built-in control plane keeps gateway configuration, request operations, and 
 
 ![Doorman API catalog](docs/images/doorman-apis.png)
 
-### Visual API builder
+Define and organize the APIs exposed through the gateway, including their versions, protocols, and endpoints.
 
-![Doorman API builder](docs/images/doorman-builder.png)
+### User management
 
-### Request operations
+Manage users, roles, groups, and access permissions from the control plane.
 
-![Doorman request logs](docs/images/doorman-logs.png)
+### Analytics
 
-### Security controls
+Monitor API usage, performance, errors, and traffic trends with built-in analytics.
 
-![Doorman security controls](docs/images/doorman-security.png)
-
-## Quick demo
+## Get Started: Quick Demo
 
 ```bash
 cp .env.demo .env
@@ -51,7 +49,7 @@ docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
 - Admin: `demo@doorman.dev` / `DemoPassword123!`
 - Storage: in memory; MongoDB and Redis are not required
 
-## Self-hosting
+## Get Started: Self-Hosting
 
 Copy the template, replace every development secret, and launch:
 
@@ -68,7 +66,7 @@ MEM_OR_EXTERNAL=REDIS docker compose --profile external up -d --build
 
 Shared mode uses MongoDB for durable configuration and Redis for caches, counters, revocations, routing state, and analytics.
 
-## Configuration
+### Configuration
 
 | Variable | Required | Description |
 | :--- | :--- | :--- |
@@ -81,16 +79,6 @@ Shared mode uses MongoDB for durable configuration and Redis for caches, counter
 | `NEXT_PUBLIC_GATEWAY_URL` | No | Browser gateway target; same-origin by default |
 
 Public protocol URLs and `/platform/*` API contracts remain unchanged. There is no legacy-process proxy or fallback in the runtime image.
-
-## Development
-
-```bash
-make check
-make test
-make web-build
-```
-
-For a running service, `make smoke` validates liveness, login, and the platform boundary.
 
 ## Repository structure
 
