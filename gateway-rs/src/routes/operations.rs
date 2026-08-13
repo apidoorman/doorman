@@ -1,4 +1,4 @@
-use std::{fs, sync::atomic::Ordering, time::Duration};
+use std::{env, fs, sync::atomic::Ordering, time::Duration};
 
 use axum::{
     Json,
@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::{
     error::GatewayError,
@@ -81,13 +81,16 @@ pub async fn caches(
     request: Request,
 ) -> Result<Response, GatewayError> {
     if request.method() == Method::OPTIONS {
-        return Ok(StatusCode::NO_CONTENT.into_response());
+        return Ok(cache_preflight(request.headers()));
     }
     if request.method() != Method::DELETE {
         return Ok(StatusCode::METHOD_NOT_ALLOWED.into_response());
     }
 
-    let origin = request.headers().get(header::ORIGIN).cloned();
+    let origin = allowed_cache_origin(request.headers());
+    if request.headers().contains_key(header::ORIGIN) && origin.is_none() {
+        return Ok(policy_error(StatusCode::FORBIDDEN, "GTW008", "Origin is not allowed"));
+    }
     let username = match require_manage_gateway(
         &state,
         request.headers(),
@@ -96,8 +99,17 @@ pub async fn caches(
     .await
     {
         Ok(username) => username,
-        Err(response) => return Ok(with_cache_cors(response, origin)),
+        Err(response) => return Ok(with_cache_cors(response, origin.as_ref())),
     };
+
+    if cookie_value(request.headers(), "access_token_cookie").is_some()
+        && !csrf_matches(request.headers(), &state, &username).await
+    {
+        return Ok(with_cache_cors(
+            policy_error(StatusCode::UNAUTHORIZED, "GTW401", "Invalid CSRF token"),
+            origin.as_ref(),
+        ));
+    }
 
     let response = match &state.storage {
         Some(storage) => match storage.clear_gateway_state().await {
@@ -130,7 +142,7 @@ pub async fn caches(
             )
         }
     };
-    Ok(with_cache_cors(response, origin))
+    Ok(with_cache_cors(response, origin.as_ref()))
 }
 
 async fn require_manage_gateway(
@@ -210,11 +222,11 @@ fn policy_error(status: StatusCode, code: &str, message: &str) -> Response {
         .into_response()
 }
 
-fn with_cache_cors(mut response: Response, origin: Option<HeaderValue>) -> Response {
+fn with_cache_cors(mut response: Response, origin: Option<&HeaderValue>) -> Response {
     if let Some(origin) = origin {
         response
             .headers_mut()
-            .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+            .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin.clone());
         response.headers_mut().insert(
             header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
             HeaderValue::from_static("true"),
@@ -224,6 +236,46 @@ fn with_cache_cors(mut response: Response, origin: Option<HeaderValue>) -> Respo
             .insert(header::VARY, HeaderValue::from_static("Origin"));
     }
     response
+}
+
+fn cache_preflight(headers: &HeaderMap) -> Response {
+    let Some(origin) = allowed_cache_origin(headers) else {
+        return policy_error(StatusCode::FORBIDDEN, "GTW008", "Origin is not allowed");
+    };
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    let response_headers = response.headers_mut();
+    response_headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+    response_headers.insert(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, HeaderValue::from_static("true"));
+    response_headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("DELETE"));
+    response_headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Authorization, Content-Type, X-CSRF-Token"));
+    response_headers.insert(header::VARY, HeaderValue::from_static("Origin"));
+    response
+}
+
+fn allowed_cache_origin(headers: &HeaderMap) -> Option<HeaderValue> {
+    let origin = headers.get(header::ORIGIN)?.to_str().ok()?;
+    let allowed = env::var("ALLOWED_ORIGINS").ok()?.split(',').map(str::trim).any(|value| value == origin);
+    allowed.then(|| HeaderValue::from_str(origin).ok()).flatten()
+}
+
+async fn csrf_matches(headers: &HeaderMap, state: &AppState, username: &str) -> bool {
+    let Some(token) = headers.get("x-csrf-token").and_then(|value| value.to_str().ok()) else {
+        return false;
+    };
+    if cookie_value(headers, "csrf_token").as_deref() == Some(token) {
+        return true;
+    }
+    let Some(storage) = &state.storage else {
+        return false;
+    };
+    matches!(
+        storage.get_ephemeral(&format!("csrf_token_map:{username}")).await,
+        Ok(Some(Value::String(value))) if value == token
+    )
+}
+
+fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers.get_all(header::COOKIE).iter().filter_map(|value| value.to_str().ok()).flat_map(|value| value.split(';')).filter_map(|cookie| cookie.trim().split_once('=')).find_map(|(key, value)| (key == name).then(|| value.to_owned()))
 }
 
 fn memory_usage() -> String {

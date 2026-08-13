@@ -29,7 +29,7 @@ WORKDIR /app
 COPY --from=rust-builder /build/doorman-gateway /usr/local/bin/doorman-gateway
 COPY --from=web-builder /app/web-client /app/web-client
 COPY docker/entrypoint.sh /app/docker/entrypoint.sh
-RUN chmod +x /app/docker/entrypoint.sh \
-    && mkdir -p /app/data /app/logs
+RUN chmod +x /app/docker/entrypoint.sh && mkdir -p /app/data /app/logs && groupadd --gid 10001 doorman && useradd --uid 10001 --gid doorman --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin doorman && chown -R doorman:doorman /app /usr/local/bin/doorman-gateway
+USER doorman
 EXPOSE 3001 3000
 CMD ["/app/docker/entrypoint.sh"]

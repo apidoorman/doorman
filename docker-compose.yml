@@ -22,15 +22,16 @@ services:
       MEM_OR_EXTERNAL: ${MEM_OR_EXTERNAL:-MEM}
       MONGO_DB_HOSTS: ${MONGO_DB_HOSTS:-mongo:27017}
       MONGO_DB_USER: ${MONGO_DB_USER:-doorman_admin}
-      MONGO_DB_PASSWORD: ${MONGO_DB_PASSWORD:-changeme}
+      MONGO_DB_PASSWORD: ${MONGO_DB_PASSWORD:-}
       MONGO_DB_AUTH_SOURCE: ${MONGO_DB_AUTH_SOURCE:-admin}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_DB: ${REDIS_DB:-0}
       MEM_DUMP_PATH: ${MEM_DUMP_PATH:-/app/data/memory_dump.bin}
       MEM_AUTO_SAVE_ENABLED: ${MEM_AUTO_SAVE_ENABLED:-true}
       MEM_AUTO_SAVE_FREQ: ${MEM_AUTO_SAVE_FREQ:-300}
-      MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY:-change-me-in-prod}
+      MEM_ENCRYPTION_KEY: ${MEM_ENCRYPTION_KEY:-}
       LOGS_DIR: /app/logs
     volumes:
       - doorman-generated:/app/data
@@ -42,6 +43,16 @@ services:
       redis:
         condition: service_healthy
         required: false
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:mode=1777
+    networks:
+      - default
+      - backend
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "sh", "-c", "curl -fsS http://localhost:$${PORT:-3001}/platform/monitor/liveness"]
@@ -54,14 +65,19 @@ services:
     profiles: ["external"]
     image: redis:7-alpine
     container_name: doorman-redis
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     volumes:
       - redis-data:/data
+    networks:
+      - backend
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command:
+      - sh
+      - -ec
+      - 'test -n "$$REDIS_PASSWORD"; exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG']
       interval: 10s
       timeout: 3s
       retries: 3
@@ -70,13 +86,13 @@ services:
     profiles: ["external"]
     image: mongo:7
     container_name: doorman-mongo
-    ports:
-      - "${MONGO_PORT:-27017}:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_DB_USER:-doorman_admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_DB_PASSWORD:-changeme}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_DB_PASSWORD:?MONGO_DB_PASSWORD must be set}
     volumes:
       - mongo-data:/data/db
+    networks:
+      - backend
     restart: unless-stopped
     command: --bind_ip_all
     healthcheck:
@@ -84,6 +100,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+networks:
+  backend:
+    internal: true
 
 volumes:
   redis-data:

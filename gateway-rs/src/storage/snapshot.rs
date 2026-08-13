@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     env, fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use aes_gcm::{
@@ -31,6 +31,8 @@ pub enum SnapshotError {
     InvalidDump,
     #[error("memory dump encryption failed")]
     Encryption,
+    #[error("memory dump path must stay within the configured dump directory")]
+    InvalidPath,
     #[error("memory dump I/O failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("memory dump JSON failed: {0}")]
@@ -88,7 +90,7 @@ pub async fn restore(
     path_hint: Option<&str>,
 ) -> Result<(u8, String), SnapshotError> {
     let key_material = encryption_key()?;
-    let path = resolve_restore_path(path_hint).ok_or_else(|| {
+    let path = resolve_restore_path(path_hint)?.ok_or_else(|| {
         SnapshotError::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "Dump file not found",
@@ -139,10 +141,38 @@ fn default_path() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("generated/memory_dump.bin"))
 }
 
-fn timestamped_path(path_hint: Option<&str>) -> Result<PathBuf, SnapshotError> {
-    let hint = path_hint.map(PathBuf::from).unwrap_or_else(default_path);
-    let (directory, stem) = if hint.is_dir() || path_hint.is_some_and(|value| value.ends_with('/'))
+fn snapshot_directory() -> PathBuf {
+    default_path()
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
+}
+
+fn request_path(path_hint: Option<&str>) -> Result<PathBuf, SnapshotError> {
+    let Some(value) = path_hint else {
+        return Ok(default_path());
+    };
+    let hint = Path::new(value);
+    let component_count = hint
+        .components()
+        .filter(|component| matches!(component, Component::Normal(_)))
+        .count();
+    if hint.is_absolute()
+        || component_count > 1
+        || hint.components().any(|component| {
+            matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+        })
     {
+        return Err(SnapshotError::InvalidPath);
+    }
+    Ok(snapshot_directory().join(hint))
+}
+
+fn timestamped_path(path_hint: Option<&str>) -> Result<PathBuf, SnapshotError> {
+    let hint = request_path(path_hint)?;
+    let directory_hint = path_hint.is_some_and(|value| value.ends_with("/"));
+    let (directory, stem) = if hint.is_dir() || directory_hint {
         (hint, "memory_dump".to_owned())
     } else {
         (
@@ -158,10 +188,16 @@ fn timestamped_path(path_hint: Option<&str>) -> Result<PathBuf, SnapshotError> {
     Ok(directory.join(format!("{stem}-{}.bin", timestamp_compact())))
 }
 
-fn resolve_restore_path(path_hint: Option<&str>) -> Option<PathBuf> {
-    let hint = path_hint.map(PathBuf::from).unwrap_or_else(default_path);
-    if hint.is_file() {
-        return Some(hint);
+fn is_regular_file(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_file())
+        .unwrap_or(false)
+}
+
+fn resolve_restore_path(path_hint: Option<&str>) -> Result<Option<PathBuf>, SnapshotError> {
+    let hint = request_path(path_hint)?;
+    if is_regular_file(&hint) {
+        return Ok(Some(hint));
     }
     let directory = if hint.is_dir() {
         hint.clone()
@@ -170,7 +206,7 @@ fn resolve_restore_path(path_hint: Option<&str>) -> Option<PathBuf> {
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf()
     };
-    let stem = if path_hint.is_some_and(|value| Path::new(value).is_dir()) {
+    let stem = if path_hint.is_some_and(|value| value.ends_with("/")) {
         None
     } else {
         hint.file_stem()
@@ -178,18 +214,21 @@ fn resolve_restore_path(path_hint: Option<&str>) -> Option<PathBuf> {
             .map(str::to_owned)
     };
     let mut files = fs::read_dir(directory)
-        .ok()?
+        .ok()
+        .into_iter()
+        .flatten()
         .filter_map(Result::ok)
         .filter(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
-            name.ends_with(".bin")
+            entry.file_type().map(|kind| kind.is_file()).unwrap_or(false)
+                && name.ends_with(".bin")
                 && stem
                     .as_ref()
                     .is_none_or(|stem| name.starts_with(&format!("{stem}-")))
         })
         .collect::<Vec<_>>();
     files.sort_by_key(|entry| entry.metadata().and_then(|meta| meta.modified()).ok());
-    files.pop().map(|entry| entry.path())
+    Ok(files.pop().map(|entry| entry.path()))
 }
 
 fn timestamp_iso() -> String {
@@ -220,6 +259,17 @@ mod tests {
         let key = derive_key("12345678", b"0123456789abcdef").unwrap();
         assert_eq!(key.len(), 32);
         assert_ne!(key, [0; 32]);
+    }
+
+    #[test]
+    fn rejects_snapshot_paths_outside_the_configured_directory() {
+        assert_eq!(
+            request_path(Some("backup.bin")).unwrap(),
+            PathBuf::from("generated/backup.bin")
+        );
+        for path in ["../backup.bin", "/tmp/backup.bin", "nested/backup.bin"] {
+            assert!(matches!(request_path(Some(path)), Err(SnapshotError::InvalidPath)));
+        }
     }
 
     #[test]

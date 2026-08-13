@@ -18,6 +18,8 @@ use http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
+use url::Url;
 use uuid::Uuid;
 
 const PYTHON_OPENAPI_GZIP_BASE64: &str =
@@ -50,6 +52,8 @@ struct AccessClaims {
     jti: String,
     iat: usize,
     exp: usize,
+    iss: String,
+    aud: String,
 }
 
 #[derive(Clone, Copy)]
@@ -65,6 +69,26 @@ struct EntitySpec {
     duplicate_code: &'static str,
     not_found_code: &'static str,
 }
+
+const RBAC_PERMISSIONS: &[&str] = &[
+    "manage_users",
+    "manage_apis",
+    "manage_endpoints",
+    "manage_groups",
+    "manage_roles",
+    "manage_routings",
+    "manage_gateway",
+    "manage_subscriptions",
+    "manage_credits",
+    "manage_auth",
+    "manage_security",
+    "manage_tiers",
+    "manage_rate_limits",
+    "view_analytics",
+    "view_logs",
+    "export_logs",
+    "ui_access",
+];
 
 pub async fn platform_dispatch(
     State(state): State<AppState>,
@@ -103,6 +127,9 @@ pub async fn platform_dispatch(
     };
 
     if path == "/authorization" && method == Method::POST {
+        if let Some(response) = auth_account_rate_limit(&state, &payload, "LOGIN_ACCOUNT_RATE_LIMIT", 10, "LOGIN_ACCOUNT_RATE_WINDOW", 900, &request_id).await {
+            return response;
+        }
         if let Some(response) = auth_ip_rate_limit(
             &state,
             &headers,
@@ -140,6 +167,9 @@ pub async fn platform_dispatch(
         )
         .await
         {
+            return response;
+        }
+        if let Some(response) = auth_account_rate_limit(&state, &payload, "REGISTER_ACCOUNT_RATE_LIMIT", 5, "REGISTER_ACCOUNT_RATE_WINDOW", 3600, &request_id).await {
             return response;
         }
         return register(&state, payload, &request_id).await;
@@ -1315,6 +1345,16 @@ async fn entity_routes(
                 request_id,
             );
         }
+        if spec.collection == "roles"
+            && !role_permissions_within_actor(state, username, &payload).await
+        {
+            return error(
+                StatusCode::FORBIDDEN,
+                "ROLE009",
+                "Roles cannot grant permissions you do not hold",
+                request_id,
+            );
+        }
         if let Some(id_field) = spec.id_field {
             if payload
                 .get(id_field)
@@ -1340,6 +1380,14 @@ async fn entity_routes(
     }
     let filter = json!({spec.key: key});
     if method == Method::GET {
+        if !has_permission(state, username, spec.permission).await {
+            return error(
+                StatusCode::FORBIDDEN,
+                spec.permission_code,
+                "Insufficient permissions",
+                request_id,
+            );
+        }
         return match storage.find_one(spec.collection, &filter).await {
             Ok(Some(item)) => success(StatusCode::OK, strip_internal(item), request_id),
             Ok(None) => error(
@@ -1358,6 +1406,26 @@ async fn entity_routes(
             "Insufficient permissions",
             request_id,
         );
+    }
+    if spec.collection == "roles" {
+        let existing = match storage.find_one(spec.collection, &filter).await {
+            Ok(Some(role)) => role,
+            Ok(None) => {
+                return error(StatusCode::NOT_FOUND, spec.not_found_code, "Resource not found", request_id);
+            }
+            Err(_) => return unexpected(request_id),
+        };
+        if (key == "admin" && !is_admin_user(state, username).await)
+            || !role_permissions_within_actor(state, username, &existing).await
+            || !role_permissions_within_actor(state, username, &payload).await
+        {
+            return error(
+                StatusCode::FORBIDDEN,
+                "ROLE009",
+                "Roles cannot grant or modify permissions you do not hold",
+                request_id,
+            );
+        }
     }
     if method == Method::PUT {
         if payload
@@ -1383,6 +1451,21 @@ async fn entity_routes(
         };
     }
     if method == Method::DELETE {
+        if spec.collection == "roles" {
+            let existing = match storage.find_one(spec.collection, &filter).await {
+                Ok(Some(role)) => role,
+                Ok(None) => return error(StatusCode::NOT_FOUND, spec.not_found_code, "Resource not found", request_id),
+                Err(_) => return unexpected(request_id),
+            };
+            if !role_permissions_within_actor(state, username, &existing).await {
+                return error(
+                    StatusCode::FORBIDDEN,
+                    "ROLE009",
+                    "Roles cannot be deleted when they include permissions you do not hold",
+                    request_id,
+                );
+            }
+        }
         if (spec.collection == "roles" || spec.collection == "groups")
             && (key == "admin" || key == "ALL")
         {
@@ -1443,6 +1526,14 @@ async fn api_routes(
     };
     let suffix = path.strip_prefix("/api").unwrap_or("").trim_matches('/');
     if method == Method::GET && (suffix.is_empty() || suffix == "all") {
+        if !has_permission(state, username, "manage_apis").await {
+            return error(
+                StatusCode::FORBIDDEN,
+                "API008",
+                "You do not have permission to view APIs",
+                request_id,
+            );
+        }
         return match storage.find_many("apis", &json!({})).await {
             Ok(items) => success(
                 StatusCode::OK,
@@ -1537,6 +1628,14 @@ async fn api_routes(
     }
     let filter = json!({"api_name": parts[0], "api_version": parts[1]});
     if method == Method::GET {
+        if !has_permission(state, username, "manage_apis").await {
+            return error(
+                StatusCode::FORBIDDEN,
+                "API008",
+                "You do not have permission to view APIs",
+                request_id,
+            );
+        }
         return match storage.find_one("apis", &filter).await {
             Ok(Some(api)) => success(StatusCode::OK, strip_internal(api), request_id),
             Ok(None) => error(
@@ -1720,7 +1819,7 @@ async fn user_routes(
                 request_id,
             );
         }
-        return create_user(state, &mut payload, request_id).await;
+        return create_user(state, &mut payload, Some(active_user), request_id).await;
     }
     let target = suffix.split('/').next().unwrap_or("");
     if target.is_empty() {
@@ -1743,6 +1842,52 @@ async fn user_routes(
         );
     }
     if method == Method::PUT {
+        if active_user == target && !self_update_fields_are_safe(&payload) {
+            return error(
+                StatusCode::FORBIDDEN,
+                "USR008",
+                "Users may only update their own email, password, or custom attributes",
+                request_id,
+            );
+        }
+        let existing = match storage.find_one("users", &json!({"username": target})).await {
+            Ok(Some(user)) => user,
+            Ok(None) => return error(StatusCode::NOT_FOUND, "USR002", "User not found", request_id),
+            Err(_) => return unexpected(request_id),
+        };
+        if existing.get("role").and_then(Value::as_str) == Some("admin")
+            && !is_admin_user(state, active_user).await
+        {
+            return error(
+                StatusCode::FORBIDDEN,
+                "USR008",
+                "Only an administrator can modify an administrator account",
+                request_id,
+            );
+        }
+        if let Some(email) = payload.get("email").and_then(Value::as_str)
+            && existing.get("email").and_then(Value::as_str) != Some(email)
+            && matches!(storage.find_one("users", &json!({"email": email})).await, Ok(Some(_)))
+        {
+            return error(
+                StatusCode::BAD_REQUEST,
+                "USR001",
+                "Username or email already exists",
+                request_id,
+            );
+        }
+        if let Some(role_name) = payload.get("role").and_then(Value::as_str) {
+            if !has_permission(state, active_user, "manage_users").await
+                || !can_assign_role(state, active_user, role_name).await
+            {
+                return error(
+                    StatusCode::FORBIDDEN,
+                    "USR008",
+                    "You cannot assign a role with permissions you do not hold",
+                    request_id,
+                );
+            }
+        }
         if suffix.ends_with("/update-password") {
             let Some(password) = payload.get("password").and_then(Value::as_str) else {
                 return error(
@@ -1788,6 +1933,21 @@ async fn user_routes(
         };
     }
     if method == Method::DELETE {
+        let existing = match storage.find_one("users", &json!({"username": target})).await {
+            Ok(Some(user)) => user,
+            Ok(None) => return error(StatusCode::NOT_FOUND, "USR002", "User not found", request_id),
+            Err(_) => return unexpected(request_id),
+        };
+        if existing.get("role").and_then(Value::as_str) == Some("admin")
+            && !is_admin_user(state, active_user).await
+        {
+            return error(
+                StatusCode::FORBIDDEN,
+                "USR008",
+                "Only an administrator can delete an administrator account",
+                request_id,
+            );
+        }
         if target == "admin" {
             return error(
                 StatusCode::BAD_REQUEST,
@@ -1918,6 +2078,14 @@ async fn endpoint_routes(
     }
     let parts = suffix.split('/').collect::<Vec<_>>();
     if method == Method::GET && parts.len() == 2 {
+        if !has_permission(state, username, "manage_endpoints").await {
+            return error(
+                StatusCode::FORBIDDEN,
+                "END010",
+                "You do not have permission to view endpoints",
+                request_id,
+            );
+        }
         return match storage
             .find_many(
                 "endpoints",
@@ -2109,6 +2277,8 @@ async fn login(
         jti: Uuid::new_v4().to_string(),
         iat: now,
         exp: now + expiry_seconds,
+        iss: state.config.shared_storage.jwt_issuer.clone(),
+        aud: state.config.shared_storage.jwt_audience.clone(),
     };
     let token = match sign_token(state, &claims) {
         Ok(token) => token,
@@ -2179,13 +2349,28 @@ async fn register(state: &AppState, mut payload: Value, request_id: &str) -> Res
     payload["username"] = json!(email.split('@').next().unwrap_or(""));
     payload["role"] = json!("user");
     payload["active"] = json!(true);
-    create_user(state, &mut payload, request_id).await
+    create_user(state, &mut payload, None, request_id).await
 }
 
-async fn create_user(state: &AppState, payload: &mut Value, request_id: &str) -> Response {
+async fn create_user(
+    state: &AppState,
+    payload: &mut Value,
+    actor: Option<&str>,
+    request_id: &str,
+) -> Response {
     let Some(storage) = &state.storage else {
         return unexpected(request_id);
     };
+    if let (Some(actor), Some(role_name)) = (actor, payload.get("role").and_then(Value::as_str)) {
+        if !can_assign_role(state, actor, role_name).await {
+            return error(
+                StatusCode::FORBIDDEN,
+                "USR006",
+                "You cannot assign a role with permissions you do not hold",
+                request_id,
+            );
+        }
+    }
     let username = payload
         .get("username")
         .and_then(Value::as_str)
@@ -2301,6 +2486,8 @@ async fn authorization_routes(
             jti: Uuid::new_v4().to_string(),
             iat: now,
             exp: now + expiry_seconds,
+            iss: state.config.shared_storage.jwt_issuer.clone(),
+            aud: state.config.shared_storage.jwt_audience.clone(),
         };
         let token = match sign_token(state, &token_claims) {
             Ok(token) => token,
@@ -2360,6 +2547,28 @@ async fn authorization_routes(
         .collect::<Vec<_>>();
     if parts.len() == 2 && has_permission(state, username, "manage_auth").await {
         let target = parts[1];
+        if matches!(parts[0], "disable" | "enable" | "revoke" | "unrevoke") {
+            let Some(storage) = &state.storage else {
+                return unexpected(request_id);
+            };
+            let Some(target_user) = storage
+                .find_one("users", &json!({"username": target}))
+                .await
+                .ok()
+                .flatten()
+            else {
+                return error(StatusCode::NOT_FOUND, "USR002", "User not found", request_id);
+            };
+            let target_is_admin = target_user.get("role").and_then(Value::as_str) == Some("admin");
+            if target_is_admin && !is_admin_user(state, username).await {
+                return error(
+                    StatusCode::FORBIDDEN,
+                    "AUTH006",
+                    "Only an administrator can manage an administrator account",
+                    request_id,
+                );
+            }
+        }
         if parts[0] == "status" {
             let Some(storage) = &state.storage else {
                 return unexpected(request_id);
@@ -2588,7 +2797,8 @@ async fn authorize(
     };
     if state.config.https_only
         && path != "/user/admin"
-        && !path.starts_with("/authorization")
+        && path != "/authorization"
+        && path != "/authorization/register"
         && !csrf_matches(headers, storage, username).await
     {
         return Err(error(
@@ -2662,13 +2872,45 @@ async fn has_permission(state: &AppState, username: &str, permission: &str) -> b
     else {
         return false;
     };
-    if user.get("role").and_then(Value::as_str) == Some("admin") {
-        return true;
-    }
     let Some(role_name) = user.get("role").and_then(Value::as_str) else {
         return false;
     };
     matches!(storage.find_one("roles", &json!({"role_name": role_name})).await, Ok(Some(role)) if role.get(permission).and_then(Value::as_bool).unwrap_or(false))
+}
+
+async fn is_admin_user(state: &AppState, username: &str) -> bool {
+    let Some(storage) = &state.storage else {
+        return false;
+    };
+    matches!(
+        storage.find_one("users", &json!({"username": username})).await,
+        Ok(Some(user)) if user.get("role").and_then(Value::as_str) == Some("admin")
+    )
+}
+
+async fn role_permissions_within_actor(state: &AppState, username: &str, role: &Value) -> bool {
+    for permission in RBAC_PERMISSIONS {
+        if role.get(*permission).and_then(Value::as_bool) == Some(true)
+            && !has_permission(state, username, permission).await
+        {
+            return false;
+        }
+    }
+    true
+}
+
+async fn can_assign_role(state: &AppState, username: &str, role_name: &str) -> bool {
+    if role_name == "admin" {
+        return is_admin_user(state, username).await;
+    }
+    let Some(storage) = &state.storage else {
+        return false;
+    };
+    match storage.find_one("roles", &json!({"role_name": role_name})).await {
+        Ok(Some(role)) => role_permissions_within_actor(state, username, &role).await,
+        Ok(None) => role_name == "user",
+        Err(_) => false,
+    }
 }
 
 async fn memory_dump(
@@ -2707,6 +2949,12 @@ async fn memory_dump(
             StatusCode::BAD_REQUEST,
             "MEM002",
             "MEM_ENCRYPTION_KEY is not configured",
+            request_id,
+        ),
+        Err(crate::storage::snapshot::SnapshotError::InvalidPath) => error(
+            StatusCode::BAD_REQUEST,
+            "MEM004",
+            "Snapshot path must be a filename in the configured dump directory",
             request_id,
         ),
         Err(_) => unexpected(request_id),
@@ -2749,6 +2997,12 @@ async fn memory_restore(
             StatusCode::BAD_REQUEST,
             "MEM002",
             "MEM_ENCRYPTION_KEY is not configured",
+            request_id,
+        ),
+        Err(crate::storage::snapshot::SnapshotError::InvalidPath) => error(
+            StatusCode::BAD_REQUEST,
+            "MEM004",
+            "Snapshot path must be a filename in the configured dump directory",
             request_id,
         ),
         Err(crate::storage::snapshot::SnapshotError::Io(error_value))
@@ -4483,6 +4737,28 @@ fn quota_status(name: &str, limit: u64) -> Value {
     })
 }
 
+fn discovery_target(server: &str, path: &str) -> Result<String, String> {
+    let base = Url::parse(server).map_err(|_| "API server must be an absolute HTTP(S) URL".to_owned())?;
+    if !matches!(base.scheme(), "http" | "https") || base.host_str().is_none() {
+        return Err("API server must be an absolute HTTP(S) URL".to_owned());
+    }
+    if Url::parse(path).is_ok() || path.starts_with("//") || path.contains("://") {
+        return Err("Discovery URL must be relative to the API server".to_owned());
+    }
+    if let Some(allowlist) = env::var("DISCOVERY_ALLOWED_HOSTS").ok() {
+        let host = base.host_str().unwrap_or_default();
+        let allowed = allowlist.split(",").map(str::trim).filter(|entry| !entry.is_empty()).any(|entry| {
+            entry == host || entry.strip_prefix("*.").is_some_and(|suffix| host.ends_with(&format!(".{suffix}")))
+        });
+        if !allowed {
+            return Err("API server host is not in DISCOVERY_ALLOWED_HOSTS".to_owned());
+        }
+    }
+    base.join(path)
+        .map(|url| url.to_string())
+        .map_err(|_| "Discovery URL must be relative to the API server".to_owned())
+}
+
 async fn api_discovery_routes(
     state: &AppState,
     parts: &[&str],
@@ -4551,15 +4827,10 @@ async fn api_discovery_routes(
                 .get("api_graphql_schema_url")
                 .and_then(Value::as_str)
                 .unwrap_or("/graphql");
-            let target = format!(
-                "{}{}",
-                server.trim_end_matches('/'),
-                if path.starts_with('/') {
-                    path.to_owned()
-                } else {
-                    format!("/{path}")
-                }
-            );
+            let target = match discovery_target(server, path) {
+                Ok(target) => target,
+                Err(message_text) => return error(StatusCode::BAD_REQUEST, "API003", &message_text, request_id),
+            };
             let query = json!({"query": "query IntrospectionQuery { __schema { types { name kind } queryType { name } mutationType { name } } }"});
             return match state.proxy_client.post(target).json(&query).send().await {
                 Ok(response) => match response.json::<Value>().await {
@@ -4638,18 +4909,9 @@ async fn api_discovery_routes(
                 request_id,
             );
         };
-        let target = if path.starts_with("http://") || path.starts_with("https://") {
-            path.to_owned()
-        } else {
-            format!(
-                "{}{}",
-                server.trim_end_matches('/'),
-                if path.starts_with('/') {
-                    path.to_owned()
-                } else {
-                    format!("/{path}")
-                }
-            )
+        let target = match discovery_target(server, path) {
+            Ok(target) => target,
+            Err(message_text) => return error(StatusCode::BAD_REQUEST, "API003", &message_text, request_id),
         };
         return match state.proxy_client.get(target).send().await {
             Ok(response) if response.status().is_success() => match response.text().await {
@@ -5363,6 +5625,15 @@ fn password_hash(user: &Value) -> Option<String> {
     }
 }
 
+fn self_update_fields_are_safe(payload: &Value) -> bool {
+    matches!(
+        payload.as_object(),
+        Some(fields) if fields.keys().all(|field| {
+            matches!(field.as_str(), "email" | "password" | "custom_attributes")
+        })
+    )
+}
+
 fn secure_password(password: &str) -> bool {
     password.len() >= 16
         && password.chars().any(|c| c.is_ascii_uppercase())
@@ -5515,7 +5786,7 @@ async fn auth_ip_rate_limit(
         return None;
     }
     let storage = state.storage.as_ref()?;
-    let client_ip = ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]
+    let client_ip = state.config.shared_storage.trust_x_forwarded_for.then(|| ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]
         .into_iter()
         .find_map(|name| {
             headers
@@ -5525,7 +5796,8 @@ async fn auth_ip_rate_limit(
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(str::to_owned)
-        })
+        }))
+        .flatten()
         .or_else(|| direct_addr.map(|value| value.ip().to_string()))?;
     let limit = env::var(limit_name)
         .ok()
@@ -5569,6 +5841,59 @@ async fn auth_ip_rate_limit(
         if let Ok(value) = HeaderValue::from_str(&value.to_string()) {
             response.headers_mut().insert(name, value);
         }
+    }
+    Some(response)
+}
+
+async fn auth_account_rate_limit(
+    state: &AppState,
+    payload: &Value,
+    limit_name: &str,
+    default_limit: u64,
+    window_name: &str,
+    default_window: u64,
+    request_id: &str,
+) -> Option<Response> {
+    let identifier = payload
+        .get("email")
+        .or_else(|| payload.get("username"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_ascii_lowercase();
+    let storage = state.storage.as_ref()?;
+    let limit = env::var(limit_name)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(default_limit);
+    let window = env::var(window_name)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(default_window)
+        .max(1);
+    let now = unix_seconds();
+    let bucket = now / window;
+    let account_hash = format!("{:x}", Sha256::digest(identifier.as_bytes()));
+    let key = format!("account_rate_limit:{limit_name}:{account_hash}:{bucket}");
+    let count = storage.increment_window(&key, window).await.ok()?;
+    if count <= limit {
+        return None;
+    }
+    let retry_after = window - (now % window);
+    let mut response = json_response(
+        StatusCode::TOO_MANY_REQUESTS,
+        json!({
+            "detail": {
+                "error_code": "ACCOUNT_RATE_LIMIT",
+                "message": "Too many attempts for this account. Please try again later.",
+                "retry_after": retry_after
+            }
+        }),
+        request_id,
+    );
+    let retry_after_value = retry_after.to_string();
+    if let Ok(value) = HeaderValue::from_str(retry_after_value.as_str()) {
+        response.headers_mut().insert("retry-after", value);
     }
     Some(response)
 }
@@ -5758,6 +6083,14 @@ fn unix_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn self_updates_cannot_change_authorization_fields() {
+        assert!(self_update_fields_are_safe(&json!({"email": "user@example.com", "custom_attributes": {}})));
+        assert!(!self_update_fields_are_safe(&json!({"groups": ["admin"]})));
+        assert!(!self_update_fields_are_safe(&json!({"role": "admin"})));
+        assert!(!self_update_fields_are_safe(&json!({"active": true})));
+    }
 
     #[test]
     fn enforces_the_python_password_policy() {

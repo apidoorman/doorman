@@ -1,5 +1,6 @@
 use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, time::Duration};
 
+use serde_json::Value;
 use thiserror::Error;
 
 #[derive(Clone, Debug)]
@@ -33,6 +34,8 @@ pub struct SharedStorageConfig {
     pub redis_password: Option<String>,
     pub jwt_keys_json: Option<String>,
     pub jwt_secret: Option<String>,
+    pub jwt_issuer: String,
+    pub jwt_audience: String,
     pub token_encryption_key: Option<String>,
     pub trust_x_forwarded_for: bool,
     pub local_host_ip_bypass: bool,
@@ -60,10 +63,12 @@ impl SharedStorageConfig {
             redis_password: env_non_empty("REDIS_PASSWORD"),
             jwt_keys_json: env_non_empty("JWT_KEYS"),
             jwt_secret: env_non_empty("JWT_SECRET_KEY"),
+            jwt_issuer: env_non_empty("JWT_ISSUER").unwrap_or_else(|| "doorman-gateway".to_owned()),
+            jwt_audience: env_non_empty("JWT_AUDIENCE").unwrap_or_else(|| "doorman-gateway".to_owned()),
             token_encryption_key: env_non_empty("TOKEN_ENCRYPTION_KEY")
                 .or_else(|| env_non_empty("MEM_ENCRYPTION_KEY")),
             trust_x_forwarded_for: env_bool("TRUST_X_FORWARDED_FOR", false),
-            local_host_ip_bypass: env_bool("LOCAL_HOST_IP_BYPASS", true),
+            local_host_ip_bypass: env_bool("LOCAL_HOST_IP_BYPASS", false),
             policy_cache_ttl_seconds: env_parse("GATEWAY_POLICY_CACHE_TTL_SECONDS", 1)?,
             skip_tier_rate_limit: env_bool("SKIP_TIER_RATE_LIMIT", false),
         })
@@ -155,9 +160,11 @@ impl Default for SharedStorageConfig {
             redis_password: None,
             jwt_keys_json: None,
             jwt_secret: Some("insecure-test-key".to_owned()),
+            jwt_issuer: "doorman-gateway".to_owned(),
+            jwt_audience: "doorman-gateway".to_owned(),
             token_encryption_key: None,
             trust_x_forwarded_for: false,
-            local_host_ip_bypass: true,
+            local_host_ip_bypass: false,
             policy_cache_ttl_seconds: 1,
             skip_tier_rate_limit: false,
         }
@@ -235,9 +242,29 @@ impl Config {
 fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), ConfigError> {
     let admin_password = env::var("DOORMAN_ADMIN_PASSWORD")
         .map_err(|_| ConfigError::MissingEnv("DOORMAN_ADMIN_PASSWORD"))?;
-    if admin_password.len() < 12 {
+    if admin_password.len() < 16 {
         return Err(ConfigError::InvalidConfiguration(
-            "DOORMAN_ADMIN_PASSWORD must be at least 12 characters".to_owned(),
+            "DOORMAN_ADMIN_PASSWORD must be at least 16 characters".to_owned(),
+        ));
+    }
+    if ["please-change-me", "changeme", "admin", "password"].contains(&admin_password.as_str()) {
+        return Err(ConfigError::InvalidConfiguration(
+            "DOORMAN_ADMIN_PASSWORD must not use a default value".to_owned(),
+        ));
+    }
+    if let Some(secret) = storage.jwt_secret.as_deref()
+        && secret.len() < 32
+    {
+        return Err(ConfigError::InvalidConfiguration(
+            "JWT_SECRET_KEY must be at least 32 characters".to_owned(),
+        ));
+    }
+    let environment = env_non_empty("ENV").ok_or_else(|| {
+        ConfigError::InvalidConfiguration("ENV must be explicitly set to development or production".to_owned())
+    })?;
+    if !matches!(environment.to_ascii_lowercase().as_str(), "development" | "dev" | "production" | "prod") {
+        return Err(ConfigError::InvalidConfiguration(
+            "ENV must be development or production".to_owned(),
         ));
     }
     let workers = env_parse::<u64>("THREADS", 1)?;
@@ -247,13 +274,15 @@ fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), Con
                 .to_owned(),
         ));
     }
-    if matches!(
-        env::var("ENV")
-            .unwrap_or_default()
-            .to_ascii_lowercase()
-            .as_str(),
-        "production" | "prod"
-    ) {
+    if let Some(keys) = storage.jwt_keys_json.as_deref() {
+        if !has_strong_jwt_key(keys) {
+            return Err(ConfigError::InvalidConfiguration(
+                "JWT_KEYS must contain an active HS256 key of at least 32 characters or a non-empty RS256 key".to_owned(),
+            ));
+        }
+    }
+    if matches!(environment.to_ascii_lowercase().as_str(), "production" | "prod") {
+        validate_production_secrets(storage)?;
         if !env_bool("HTTPS_ONLY", false) {
             return Err(ConfigError::InvalidConfiguration(
                 "production requires HTTPS_ONLY=true".to_owned(),
@@ -274,6 +303,16 @@ fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), Con
                 "production requires CORS_STRICT=true".to_owned(),
             ));
         }
+        if storage.local_host_ip_bypass {
+            return Err(ConfigError::InvalidConfiguration(
+                "production requires LOCAL_HOST_IP_BYPASS=false".to_owned(),
+            ));
+        }
+        if env_non_empty("DISCOVERY_ALLOWED_HOSTS").is_none() {
+            return Err(ConfigError::InvalidConfiguration(
+                "production requires DISCOVERY_ALLOWED_HOSTS".to_owned(),
+            ));
+        }
         if let Some(secret) = storage.jwt_secret.as_deref()
             && [
                 "please-change-me",
@@ -289,6 +328,58 @@ fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), Con
         }
     }
     Ok(())
+}
+
+fn validate_production_secrets(storage: &SharedStorageConfig) -> Result<(), ConfigError> {
+    for (name, value) in [("JWT_ISSUER", &storage.jwt_issuer), ("JWT_AUDIENCE", &storage.jwt_audience)] {
+        if value.trim().is_empty() || value == "doorman-gateway" {
+            return Err(ConfigError::InvalidConfiguration(format!("production requires an explicit, unique {name}")));
+        }
+    }
+    if storage.storage_mode.eq_ignore_ascii_case("MEM") {
+        let key = env_non_empty("MEM_ENCRYPTION_KEY").ok_or_else(|| {
+            ConfigError::InvalidConfiguration("production MEM mode requires MEM_ENCRYPTION_KEY".to_owned())
+        })?;
+        if key.len() < 32 || ["change-me-in-prod", "please-change-me", "changeme"].contains(&key.as_str()) {
+            return Err(ConfigError::InvalidConfiguration(
+                "MEM_ENCRYPTION_KEY must be a unique 32+ character secret in production".to_owned(),
+            ));
+        }
+    } else {
+        let mongo_password = storage.mongo_password.as_deref().unwrap_or_default();
+        if mongo_password.len() < 16 || ["changeme", "password", "please-change-me"].contains(&mongo_password) {
+            return Err(ConfigError::InvalidConfiguration(
+                "production external storage requires a unique MongoDB password of at least 16 characters".to_owned(),
+            ));
+        }
+        let redis_password = storage.redis_password.as_deref().unwrap_or_default();
+        if redis_password.len() < 16 || ["changeme", "password", "please-change-me"].contains(&redis_password) {
+            return Err(ConfigError::InvalidConfiguration(
+                "production external storage requires a unique Redis password of at least 16 characters".to_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn has_strong_jwt_key(raw: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<Value>(raw) else {
+        return false;
+    };
+    let entries = value
+        .get("keys")
+        .and_then(Value::as_array)
+        .cloned()
+        .or_else(|| value.as_array().cloned())
+        .unwrap_or_else(|| vec![value]);
+    entries.into_iter().filter(|entry| entry.get("active").and_then(Value::as_bool) != Some(false)).any(|entry| {
+        let algorithm = entry.get("algorithm").and_then(Value::as_str).unwrap_or("HS256");
+        if algorithm.eq_ignore_ascii_case("RS256") {
+            entry.get("private_key").or_else(|| entry.get("public_key")).or_else(|| entry.get("verification_key")).and_then(Value::as_str).is_some_and(|key| key.len() >= 128)
+        } else {
+            entry.get("secret").or_else(|| entry.get("key")).or_else(|| entry.get("verification_key")).and_then(Value::as_str).is_some_and(|key| key.len() >= 32)
+        }
+    })
 }
 
 fn env_bool(name: &str, default: bool) -> bool {
@@ -368,9 +459,11 @@ mod tests {
             redis_password: Some("redis-secret".to_owned()),
             jwt_keys_json: None,
             jwt_secret: Some("jwt".to_owned()),
+            jwt_issuer: "doorman-test".to_owned(),
+            jwt_audience: "doorman-test-api".to_owned(),
             token_encryption_key: None,
             trust_x_forwarded_for: false,
-            local_host_ip_bypass: true,
+            local_host_ip_bypass: false,
             policy_cache_ttl_seconds: 1,
             skip_tier_rate_limit: false,
         };

@@ -1,10 +1,27 @@
 use http::{HeaderMap, StatusCode, header};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 use super::{PolicyFailure, PolicyStage};
 use crate::config::SharedStorageConfig;
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+enum Audience {
+    One(String),
+    Many(Vec<String>),
+}
+
+fn deserialize_audience<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<Audience>::deserialize(deserializer)?.map(|audience| match audience {
+        Audience::One(value) => vec![value],
+        Audience::Many(values) => values,
+    }))
+}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct AuthClaims {
@@ -12,6 +29,9 @@ pub struct AuthClaims {
     pub jti: Option<String>,
     pub role: Option<String>,
     pub exp: Option<usize>,
+    pub iss: Option<String>,
+    #[serde(deserialize_with = "deserialize_audience")]
+    pub aud: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -40,6 +60,8 @@ pub fn verify_request_token(
     let algorithm = key.algorithm();
     let mut validation = Validation::new(algorithm);
     validation.validate_exp = true;
+    validation.set_issuer(&[config.jwt_issuer.as_str()]);
+    validation.set_audience(&[config.jwt_audience.as_str()]);
 
     let data = decode::<AuthClaims>(&token, &key.decoding_key()?, &validation)
         .map_err(|_| unauthorized("Unauthorized"))?;
@@ -166,6 +188,14 @@ pub fn unauthorized(message: &str) -> PolicyFailure {
 mod tests {
     use super::*;
     use http::HeaderValue;
+
+    #[test]
+    fn audience_deserializes_string_or_array() {
+        let one: AuthClaims = serde_json::from_value(serde_json::json!({"sub":"user","jti":"id","aud":"doorman"})).unwrap();
+        let many: AuthClaims = serde_json::from_value(serde_json::json!({"sub":"user","jti":"id","aud":["doorman"]})).unwrap();
+        assert_eq!(one.aud, Some(vec!["doorman".to_owned()]));
+        assert_eq!(many.aud, Some(vec!["doorman".to_owned()]));
+    }
 
     #[test]
     fn extracts_cookie_before_authorization() {

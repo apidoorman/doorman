@@ -19,10 +19,7 @@ pub fn enforce_api_ip_policy(
         .unwrap_or(configured_trust_xff);
     let client_ip = effective_client_ip(headers, direct_ip, trust_xff);
 
-    if local_host_ip_bypass
-        && !has_forwarding_header(headers)
-        && (client_ip.is_some_and(is_loopback) || has_local_host_header(headers))
-    {
+    if local_host_ip_bypass && client_ip.is_some_and(is_loopback) {
         return Ok(());
     }
 
@@ -79,30 +76,6 @@ pub fn effective_client_ip(
         }
     }
     direct_ip
-}
-
-fn has_forwarding_header(headers: &HeaderMap) -> bool {
-    [
-        "x-forwarded-for",
-        "x-real-ip",
-        "cf-connecting-ip",
-        "forwarded",
-    ]
-    .iter()
-    .any(|name| headers.contains_key(*name))
-}
-
-fn has_local_host_header(headers: &HeaderMap) -> bool {
-    let Some(host) = headers.get("host").and_then(|value| value.to_str().ok()) else {
-        return false;
-    };
-    let host = host.trim().to_ascii_lowercase();
-    let hostname = if let Some(ipv6) = host.strip_prefix('[') {
-        ipv6.split(']').next().unwrap_or(ipv6)
-    } else {
-        host.split(':').next().unwrap_or(&host)
-    };
-    matches!(hostname, "localhost" | "127.0.0.1" | "::1" | "testserver")
 }
 
 fn is_loopback(ip: IpAddr) -> bool {
@@ -163,6 +136,22 @@ mod tests {
     use std::net::Ipv4Addr;
 
     #[test]
+    fn localhost_host_header_cannot_bypass_an_ip_allowlist() {
+        let mut headers = HeaderMap::new();
+        headers.insert("host", HeaderValue::from_static("localhost"));
+        let api = json!({"api_ip_mode": "whitelist", "api_ip_whitelist": ["127.0.0.1"]});
+        assert!(enforce_api_ip_policy(
+            &api,
+            None,
+            &headers,
+            Some("203.0.113.5".parse().unwrap()),
+            false,
+            true,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn trusts_forwarding_headers_when_enabled() {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -207,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn localhost_host_header_preserves_bypass_behind_container_nat() {
+    fn localhost_host_header_does_not_bypass_behind_container_nat() {
         let api = json!({
             "api_ip_mode": "whitelist",
             "api_ip_whitelist": [],
@@ -224,7 +213,7 @@ mod tests {
                 false,
                 true,
             )
-            .is_ok()
+            .is_err()
         );
     }
 }

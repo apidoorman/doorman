@@ -83,7 +83,16 @@ fn apply(
         .allow_headers
         .clone()
         .unwrap_or_else(|| vec!["*".to_owned()]);
-    let origin_allowed = origin_allowed(origin, &allow_origins);
+    let credentials_permitted = config.allow_credentials
+        && config.allow_origins.as_ref().is_some_and(|origins| {
+            !origins.is_empty()
+                && origins.iter().all(|entry| {
+                    let entry = entry.trim();
+                    !entry.is_empty() && entry != "*"
+                })
+        });
+    let cors_permitted = !config.allow_credentials || credentials_permitted;
+    let origin_allowed = cors_permitted && origin_allowed(origin, &allow_origins);
     let method_allowed = requested_method.is_none_or(|method| {
         allow_methods
             .iter()
@@ -105,7 +114,7 @@ fn apply(
         insert(target, header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
         append_vary_origin(target);
     }
-    if config.allow_credentials {
+    if credentials_permitted {
         insert(target, header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
     }
     if requested_method.is_some() {
@@ -174,6 +183,19 @@ fn append_vary_origin(headers: &mut HeaderMap) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_credentialed_wildcard_origins() {
+        let config = ApiCorsConfig {
+            allow_origins: Some(vec!["*".to_owned()]),
+            allow_credentials: true,
+            ..Default::default()
+        };
+        let mut headers = HeaderMap::new();
+        apply(&mut headers, &config, Some("https://attacker.example"), None, None);
+        assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
+        assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
+    }
 
     #[test]
     fn supports_wildcard_subdomains_and_case_insensitive_headers() {

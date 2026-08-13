@@ -148,6 +148,63 @@ async fn platform_documentation_and_registration_are_private_by_default() {
 }
 
 #[tokio::test]
+async fn user_managers_cannot_assign_or_escalate_to_admin() {
+    let state = memory_state(false).await;
+    let storage = state.storage.clone().unwrap();
+    storage
+        .insert_one(
+            "roles",
+            json!({"role_name": "user-manager", "manage_users": true}),
+        )
+        .await
+        .unwrap();
+    storage
+        .insert_one(
+            "users",
+            json!({
+                "username": "manager",
+                "email": "manager@example.com",
+                "password": bcrypt::hash("ManagerPassword123!", bcrypt::DEFAULT_COST).unwrap(),
+                "role": "user-manager",
+                "active": true
+            }),
+        )
+        .await
+        .unwrap();
+    let app = build_router(state);
+    let (cookie, _) = login_as(&app, "manager@example.com", "ManagerPassword123!").await;
+
+    for (method, path, payload) in [
+        (
+            "POST",
+            "/platform/users",
+            json!({
+                "username": "new-admin",
+                "email": "new-admin@example.com",
+                "password": "NewAdminPassword123!",
+                "role": "admin"
+            }),
+        ),
+        ("PUT", "/platform/users/manager", json!({"role": "admin"})),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+    }
+}
+
+#[tokio::test]
 async fn platform_preflight_is_public_with_safe_defaults() {
     let app = build_router(memory_state(false).await);
     let response = app

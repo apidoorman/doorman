@@ -207,9 +207,33 @@ fn normalize_api_fields(payload: &Value, update: bool) -> Result<Value, Vec<Valu
     }
 
     if errors.is_empty() {
+        validate_credentialed_cors(&output, &mut errors);
+    }
+    if errors.is_empty() {
         Ok(Value::Object(output))
     } else {
         Err(errors)
+    }
+}
+
+fn validate_credentialed_cors(output: &Map<String, Value>, errors: &mut Vec<Value>) {
+    if output.get("api_cors_allow_credentials").and_then(Value::as_bool) != Some(true) {
+        return;
+    }
+    let Some(origins) = output.get("api_cors_allow_origins").and_then(Value::as_array) else {
+        errors.push(json!({
+            "loc": ["body", "api_cors_allow_origins"],
+            "msg": "credentialed CORS requires a non-empty explicit origin allowlist",
+            "type": "value_error.cors_origins"
+        }));
+        return;
+    };
+    if origins.is_empty() || origins.iter().any(|origin| origin.as_str().is_none_or(|origin| origin.trim().is_empty() || origin.trim() == "*")) {
+        errors.push(json!({
+            "loc": ["body", "api_cors_allow_origins"],
+            "msg": "credentialed CORS must not use wildcard or empty origins",
+            "type": "value_error.cors_origins"
+        }));
     }
 }
 
@@ -325,6 +349,18 @@ fn string_limit(field: &str, direction: &str, limit: usize) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_credentialed_wildcard_cors() {
+        let error = normalize_create_api(&json!({
+            "api_name": "orders",
+            "api_version": "v1",
+            "api_cors_allow_credentials": true,
+            "api_cors_allow_origins": ["*"]
+        }))
+        .unwrap_err();
+        assert_eq!(error[0]["type"], "value_error.cors_origins");
+    }
 
     #[test]
     fn create_materializes_python_defaults_and_ignores_unknown_fields() {
