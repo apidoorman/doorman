@@ -98,14 +98,64 @@ async fn login_as(app: &axum::Router, email: &str, password: &str) -> (String, S
 }
 
 #[tokio::test]
-async fn platform_preflight_is_public_and_uses_legacy_cors_defaults() {
+async fn platform_documentation_and_registration_are_private_by_default() {
+    let app = build_router(memory_state(false).await);
+
+    for path in ["/platform/openapi.json", "/platform/docs", "/platform/redoc"] {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
+    }
+
+    let registration = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/platform/authorization/register")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json!({
+                    "email": "public@example.com",
+                    "password": "PublicPassword123!"
+                }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(registration.status(), StatusCode::FORBIDDEN);
+    let registration: Value =
+        serde_json::from_slice(&to_bytes(registration.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(registration["error_code"], "AUTH006");
+
+    let (admin_cookie, _) = login(&app).await;
+    for path in ["/platform/openapi.json", "/platform/docs", "/platform/redoc"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(header::COOKIE, &admin_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+    }
+}
+
+#[tokio::test]
+async fn platform_preflight_is_public_with_safe_defaults() {
     let app = build_router(memory_state(false).await);
     let response = app
         .oneshot(
             Request::builder()
                 .method("OPTIONS")
                 .uri("/platform/api")
-                .header(header::ORIGIN, "https://client.example")
+                .header(header::ORIGIN, "http://localhost:3000")
                 .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
                 .body(Body::empty())
                 .unwrap(),
@@ -116,12 +166,9 @@ async fn platform_preflight_is_public_and_uses_legacy_cors_defaults() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
     assert_eq!(
         response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
-        "https://client.example"
+        "http://localhost:3000"
     );
-    assert_eq!(
-        response.headers()[header::ACCESS_CONTROL_ALLOW_CREDENTIALS],
-        "true"
-    );
+    assert!(!response.headers().contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
     assert!(response.headers().contains_key("request_id"));
     assert!(response.headers().contains_key("x-request-id"));
 }
@@ -444,6 +491,19 @@ async fn config_reload_routes_preserve_legacy_values_metadata_and_permissions() 
         )
         .await
         .unwrap();
+    assert_eq!(keys.status(), StatusCode::FORBIDDEN);
+
+    let keys = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/platform/config/reloadable-keys")
+                .header(header::COOKIE, &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(keys.status(), StatusCode::OK);
     let keys: Value =
         serde_json::from_slice(&to_bytes(keys.into_body(), 64 * 1024).await.unwrap()).unwrap();
@@ -454,6 +514,11 @@ async fn config_reload_routes_preserve_legacy_values_metadata_and_permissions() 
     for (method, path) in [
         ("GET", "/platform/config/current"),
         ("POST", "/platform/config/reload"),
+        ("GET", "/platform/config/export/apis"),
+        ("GET", "/platform/config/export/endpoints"),
+        ("GET", "/platform/config/export/roles"),
+        ("GET", "/platform/config/export/groups"),
+        ("GET", "/platform/config/export/routings"),
     ] {
         let denied = app
             .clone()
@@ -716,6 +781,11 @@ async fn management_permissions_readiness_tools_and_restart_preserve_contract() 
         ("GET", "/platform/monitor/report", "MON002"),
         ("GET", "/platform/analytics/timeseries", "ANALYTICS001"),
         ("GET", "/platform/analytics/top-apis", "ANALYTICS001"),
+        ("GET", "/platform/dashboard", "ANALYTICS001"),
+        ("POST", "/platform/tools/rate-limit-simulator", "RATE001"),
+        ("GET", "/platform/openapi.json", "API008"),
+        ("GET", "/platform/docs", "API008"),
+        ("GET", "/platform/redoc", "API008"),
         ("POST", "/platform/tools/cors/check", "TLS001"),
         ("GET", "/platform/tools/grpc/check", "TLS001"),
         ("GET", "/platform/tools/chaos/stats", "TLS001"),
@@ -729,7 +799,7 @@ async fn management_permissions_readiness_tools_and_restart_preserve_contract() 
                     .header(header::CONTENT_TYPE, "application/json")
                     .header(header::COOKIE, &limited_cookie)
                     .body(Body::from(
-                        json!({"origin": "https://client.example", "method": "GET"}).to_string(),
+                        json!({"origin": "http://localhost:3000", "method": "GET"}).to_string(),
                     ))
                     .unwrap(),
             )

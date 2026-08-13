@@ -56,7 +56,7 @@ pub async fn force_platform_vary(request: Request, next: Next) -> Response {
 
 impl PlatformCorsConfig {
     fn from_env() -> Self {
-        let origins = csv_env("ALLOWED_ORIGINS", &["*"]);
+        let origins = csv_env("ALLOWED_ORIGINS", &["http://localhost:3000"]);
         let methods = csv_env(
             "ALLOW_METHODS",
             &["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
@@ -78,9 +78,9 @@ impl PlatformCorsConfig {
             _ => default_headers.map(str::to_owned).to_vec(),
         };
         Self {
-            strict: env_bool("CORS_STRICT", false),
+            strict: env_bool("CORS_STRICT", true),
             origins,
-            credentials: env_bool("ALLOW_CREDENTIALS", true),
+            credentials: env_bool("ALLOW_CREDENTIALS", false),
             methods,
             headers,
         }

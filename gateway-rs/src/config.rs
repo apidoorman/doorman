@@ -259,6 +259,21 @@ fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), Con
                 "production requires HTTPS_ONLY=true".to_owned(),
             ));
         }
+        let origins = env_non_empty("ALLOWED_ORIGINS").ok_or_else(|| {
+            ConfigError::InvalidConfiguration(
+                "production requires explicit ALLOWED_ORIGINS".to_owned(),
+            )
+        })?;
+        if origins.split(',').map(str::trim).any(|origin| origin.is_empty() || origin == "*") {
+            return Err(ConfigError::InvalidConfiguration(
+                "production ALLOWED_ORIGINS must not contain wildcard or empty origins".to_owned(),
+            ));
+        }
+        if !env_bool("CORS_STRICT", false) {
+            return Err(ConfigError::InvalidConfiguration(
+                "production requires CORS_STRICT=true".to_owned(),
+            ));
+        }
         if let Some(secret) = storage.jwt_secret.as_deref()
             && [
                 "please-change-me",

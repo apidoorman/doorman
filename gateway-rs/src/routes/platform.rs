@@ -80,17 +80,9 @@ pub async fn platform_dispatch(
     let request_id = request_id_from(&headers);
     let query = parse_query(uri.query());
     let path = uri.path().strip_prefix("/platform").unwrap_or(uri.path());
-    if path == "/openapi.json" && method == Method::GET {
-        return platform_openapi(&request_id);
-    }
-    if (path == "/docs" || path == "/redoc") && method == Method::GET {
-        return platform_docs(path, &request_id);
-    }
-    if path != "/security/settings" {
-        if let Some(response) = platform_ip_filter(&state, &headers, direct_addr, &request_id).await
-        {
-            return response;
-        }
+    if let Some(response) = platform_ip_filter(&state, &headers, direct_addr, &request_id).await
+    {
+        return response;
     }
     let body_limit = BodyLimits::for_path(uri.path(), BodyLimits::from_env().default);
     let body = match to_bytes(request.into_body(), body_limit).await {
@@ -128,6 +120,14 @@ pub async fn platform_dispatch(
         return login(&state, &headers, payload, &request_id).await;
     }
     if path == "/authorization/register" && method == Method::POST {
+        if !env_bool("DOORMAN_ALLOW_PUBLIC_REGISTRATION", false) {
+            return error(
+                StatusCode::FORBIDDEN,
+                "AUTH006",
+                "Public registration is disabled",
+                &request_id,
+            );
+        }
         if let Some(response) = auth_ip_rate_limit(
             &state,
             &headers,
@@ -192,13 +192,43 @@ pub async fn platform_dispatch(
     }
 
     match (method.clone(), path) {
+        (Method::GET, "/openapi.json") => {
+            if !has_permission(&state, &username, "manage_apis").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "API008",
+                    "You do not have permission to view API documentation",
+                    &request_id,
+                )
+            } else {
+                platform_openapi(&request_id)
+            }
+        }
+        (Method::GET, "/docs") | (Method::GET, "/redoc") => {
+            if !has_permission(&state, &username, "manage_apis").await {
+                error(
+                    StatusCode::FORBIDDEN,
+                    "API008",
+                    "You do not have permission to view API documentation",
+                    &request_id,
+                )
+            } else {
+                platform_docs(path, &request_id)
+            }
+        }
         (Method::POST, "/memory/dump") => {
             memory_dump(&state, payload, &username, &request_id).await
         }
         (Method::POST, "/memory/restore") => {
             memory_restore(&state, payload, &username, &request_id).await
         }
-        (Method::GET, "/dashboard") => dashboard(&state, &request_id).await,
+        (Method::GET, "/dashboard") => {
+            if !has_permission(&state, &username, "view_analytics").await {
+                analytics_denied(&request_id)
+            } else {
+                dashboard(&state, &request_id).await
+            }
+        },
         (Method::GET, "/monitor/metrics") => {
             if !has_permission(&state, &username, "manage_gateway").await {
                 error(
@@ -356,20 +386,30 @@ pub async fn platform_dispatch(
                 config_current(&state, &request_id)
             }
         }
-        (Method::GET, "/config/reloadable-keys") => success(
-            StatusCode::OK,
-            json!({
-                "reloadable_keys": reloadable_keys(),
-                "total": 22,
-                "notes": [
-                    "Environment variables always override config file values",
-                    "Changes take effect immediately after reload",
-                    "Reload via: kill -HUP $(cat doorman.pid)",
-                    "Or use: POST /config/reload"
-                ]
-            }),
-            &request_id,
-        ),
+        (Method::GET, "/config/reloadable-keys") => {
+            if !has_permission(&state, &username, "manage_gateway").await {
+                http_detail(
+                    StatusCode::FORBIDDEN,
+                    "Insufficient permissions: manage_gateway required",
+                    &request_id,
+                )
+            } else {
+                success(
+                    StatusCode::OK,
+                    json!({
+                        "reloadable_keys": reloadable_keys(),
+                        "total": 22,
+                        "notes": [
+                            "Environment variables always override config file values",
+                            "Changes take effect immediately after reload",
+                            "Reload via: kill -HUP $(cat doorman.pid)",
+                            "Or use: POST /config/reload"
+                        ]
+                    }),
+                    &request_id,
+                )
+            }
+        },
         (Method::POST, "/config/reload") => {
             if !has_permission(&state, &username, "manage_gateway").await {
                 http_detail(
@@ -540,6 +580,14 @@ pub async fn platform_dispatch(
             }
         }
         (Method::POST, "/tools/rate-limit-simulator") => {
+            if !has_permission(&state, &username, "manage_rate_limits").await {
+                return error(
+                    StatusCode::FORBIDDEN,
+                    "RATE001",
+                    "You do not have permission to use the rate limit simulator",
+                    &request_id,
+                );
+            }
             let max_requests = payload
                 .get("max_requests")
                 .and_then(Value::as_u64)
@@ -2508,9 +2556,9 @@ fn python_openapi_contract() -> Result<&'static Value, &'static str> {
 
 fn platform_docs(path: &str, request_id: &str) -> Response {
     let html = if path == "/redoc" {
-        r#"<!doctype html><html><head><title>Doorman API</title><script src="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"></script></head><body><redoc spec-url="/platform/openapi.json"></redoc></body></html>"#
+        r#"<!doctype html><html><head><title>Doorman API</title><script src="https://cdn.jsdelivr.net/npm/redoc@2.5.2/bundles/redoc.standalone.js"></script></head><body><redoc spec-url="/platform/openapi.json"></redoc></body></html>"#
     } else {
-        r#"<!doctype html><html><head><title>Doorman API</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script><script>SwaggerUIBundle({url:'/platform/openapi.json',dom_id:'#swagger-ui'});</script></body></html>"#
+        r#"<!doctype html><html><head><title>Doorman API</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script><script>SwaggerUIBundle({url:'/platform/openapi.json',dom_id:'#swagger-ui'});</script></body></html>"#
     };
     let mut response = axum::response::Html(html).into_response();
     if let Ok(value) = HeaderValue::from_str(request_id) {
@@ -3246,7 +3294,18 @@ async fn config_export(
     query: &HashMap<String, String>,
     request_id: &str,
 ) -> Response {
-    if !has_permission(state, username, "manage_gateway").await && only.is_none() {
+    let permission = match only {
+        None => "manage_gateway",
+        Some("apis") => "manage_apis",
+        Some("endpoints") => "manage_endpoints",
+        Some("roles") => "manage_roles",
+        Some("groups") => "manage_groups",
+        Some("routings") => "manage_routings",
+        Some(_) => {
+            return error(StatusCode::NOT_FOUND, "CFG404", "Configuration export not found", request_id);
+        }
+    };
+    if !has_permission(state, username, permission).await {
         return error(
             StatusCode::FORBIDDEN,
             "CFG001",
@@ -3613,7 +3672,7 @@ fn cors_check(payload: Value, request_id: &str) -> Response {
                 .collect()
         })
         .unwrap_or_default();
-    let cors_strict = env_bool("CORS_STRICT", false);
+    let cors_strict = env_bool("CORS_STRICT", true);
 
     let allowed_origins_str =
         env::var("ALLOWED_ORIGINS").unwrap_or_else(|_| "http://localhost:3000".to_owned());
@@ -3621,7 +3680,7 @@ fn cors_check(payload: Value, request_id: &str) -> Response {
         .split(',')
         .map(|s| s.trim().to_owned())
         .collect();
-    let allow_credentials = env_bool("ALLOW_CREDENTIALS", true);
+    let allow_credentials = env_bool("ALLOW_CREDENTIALS", false);
     let methods: Vec<String> = env::var("ALLOW_METHODS")
         .unwrap_or_else(|_| "GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS".to_owned())
         .split(',')

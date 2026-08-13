@@ -25,7 +25,7 @@ Get started: [Quick Demo](#get-started-quick-demo) or [Self-Hosting](#get-starte
 
 The built-in control plane centralizes gateway configuration, access management, traffic controls, and operations in one self-hosted interface.
 
-![Doorman API catalog](docs/images/doorman-apis.png)
+![Doorman API catalog](docs/images/api-catalog.png)
 
 - **API lifecycle:** catalog and visual builder, protocol and endpoint configuration, schema validation, and API discovery.
 - **Access and consumption:** authentication, users, roles, groups, subscriptions, credits, tiers, and quotas.
@@ -72,8 +72,9 @@ Shared mode uses MongoDB for durable configuration and Redis for caches, counter
 | `MEM_ENCRYPTION_KEY` | In memory mode | Encrypts automatic and manual DMP1 snapshots |
 | `MEM_DUMP_PATH` | No | Snapshot path hint; defaults to `data/memory_dump.bin` |
 | `NEXT_PUBLIC_GATEWAY_URL` | No | Browser gateway target; same-origin by default |
+| `DOORMAN_ALLOW_PUBLIC_REGISTRATION` | No | Enables unauthenticated account registration; defaults to `false` |
 
-Public protocol URLs and `/platform/*` API contracts remain unchanged. There is no legacy-process proxy or fallback in the runtime image.
+Public protocol URLs and platform API request/response contracts remain unchanged. There is no legacy-process proxy or fallback in the runtime image.
 
 ## Repository structure
 

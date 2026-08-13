@@ -34,6 +34,7 @@ localStorage.setItem('API_URL', 'https://api.doorman.example.com')
 |----------|-------------|
 | `DOORMAN_ADMIN_EMAIL` | Admin email (auto-created in MEM mode) |
 | `DOORMAN_ADMIN_PASSWORD` | Admin password (min 12 chars) |
+| `DOORMAN_ALLOW_PUBLIC_REGISTRATION` | Enables unauthenticated account registration; disabled by default |
 
 ## Cache & Database
 
