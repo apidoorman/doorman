@@ -46,7 +46,10 @@ docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
 
 ## Get Started: Self-Hosting
 
-Copy the template, replace every development secret, and launch:
+Copy the template, then replace its deliberately invalid administrator credentials
+and JWT secret before launching. The development defaults are configured for the
+bundled HTTP dashboard at `http://localhost:3000`; set your TLS, CORS, issuer,
+audience, and discovery values before switching to `ENV=production`.
 
 ```bash
 cp .env.example .env
