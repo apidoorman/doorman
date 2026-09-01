@@ -21,6 +21,7 @@ const AddApiPage = () => {
     api_version: '',
     api_type: 'REST',
     api_description: '',
+    api_hostname: '',
     api_allowed_retry_count: 0,
     api_servers: [] as string[],
     api_allowed_roles: [] as string[],
@@ -29,6 +30,8 @@ const AddApiPage = () => {
     api_authorization_field_swap: '',
     api_credits_enabled: false,
     api_credit_group: '',
+    api_anonymous_allowed: false,
+    api_anonymous_credit_group: '',
     active: true,
     api_auth_required: true,
     api_ip_mode: 'allow_all' as 'allow_all' | 'whitelist',
@@ -100,7 +103,13 @@ const AddApiPage = () => {
       payload.api_ip_whitelist = ipWhitelistText.split(/\r?\n|,/).map((s:string) => s.trim()).filter(Boolean)
       payload.api_ip_blacklist = ipBlacklistText.split(/\r?\n|,/).map((s:string) => s.trim()).filter(Boolean)
       if (!payload.api_authorization_field_swap) delete payload.api_authorization_field_swap
+      if (!payload.api_hostname) delete payload.api_hostname
       if (!payload.api_credit_group) delete payload.api_credit_group
+      if (!payload.api_anonymous_credit_group) delete payload.api_anonymous_credit_group
+      if (payload.api_auth_required) {
+        payload.api_anonymous_allowed = false
+        delete payload.api_anonymous_credit_group
+      }
       if (!Array.isArray(payload.api_allowed_headers) || payload.api_allowed_headers.length === 0) delete payload.api_allowed_headers
       if (!Array.isArray(payload.api_allowed_roles) || payload.api_allowed_roles.length === 0) delete payload.api_allowed_roles
       if (!Array.isArray(payload.api_allowed_groups) || payload.api_allowed_groups.length === 0) {
@@ -152,6 +161,15 @@ const AddApiPage = () => {
     if (name === 'api_credits_enabled' && (e.target as HTMLInputElement).checked && ((formData as any).api_public || pendingPublicValue)) {
       setPendingPubCredsField({ field: 'api_credits_enabled', value: true })
       setPubCredsConfirmOpen(true)
+      return
+    }
+    if (name === 'api_auth_required' && type === 'checkbox' && (e.target as HTMLInputElement).checked) {
+      setFormData(prev => ({
+        ...prev,
+        api_auth_required: true,
+        api_anonymous_allowed: false,
+        api_anonymous_credit_group: ''
+      }))
       return
     }
     setFormData(prev => ({
@@ -371,6 +389,25 @@ const AddApiPage = () => {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional description of the API's purpose</p>
               </div>
             </div>
+              <div>
+                <label htmlFor="api_hostname" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Hostname Routing
+                  <InfoTooltip text="Optional client-facing hostname for transparent routing. Requests with this Host header are routed to this API while preserving the original path and query." />
+                </label>
+                <input
+                  id="api_hostname"
+                  name="api_hostname"
+                  type="text"
+                  className="input"
+                  placeholder="foo.mydomain.com"
+                  value={formData.api_hostname}
+                  onChange={handleChange}
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Leave blank for the normal Doorman path-based URL.
+                </p>
+              </div>
           </div>
           </div>
 
@@ -492,6 +529,29 @@ const AddApiPage = () => {
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable to accept unauthenticated requests. Not public — but subscription/group checks are skipped without auth.</p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Anonymous Access
+                  <InfoTooltip text="Allow unauthenticated requests to use an anonymous identity keyed by client IP, such as anon:203.0.113.42. Requires Auth Required to be disabled." />
+                </label>
+                <div className="flex items-center">
+                  <input
+                    id="api_anonymous_allowed"
+                    name="api_anonymous_allowed"
+                    type="checkbox"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    checked={formData.api_anonymous_allowed}
+                    onChange={handleChange}
+                    disabled={loading || formData.api_auth_required}
+                  />
+                  <label htmlFor="api_anonymous_allowed" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Track unauthenticated callers as anonymous users by IP
+                  </label>
+                </div>
+                {formData.api_auth_required && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable Auth Required to enable anonymous access.</p>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -528,6 +588,23 @@ const AddApiPage = () => {
                     className="input"
                     placeholder="ai-group-1"
                     value={formData.api_credit_group}
+                    onChange={handleChange}
+                    disabled={loading}
+                  />
+                </div>
+              )}
+              {formData.api_credits_enabled && formData.api_anonymous_allowed && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Anonymous Credit Group
+                    <InfoTooltip text="Optional credit group used for anonymous callers. If blank, anonymous callers use the API Credit Group." />
+                  </label>
+                  <input
+                    type="text"
+                    name="api_anonymous_credit_group"
+                    className="input"
+                    placeholder={formData.api_credit_group || 'foo-anon'}
+                    value={formData.api_anonymous_credit_group}
                     onChange={handleChange}
                     disabled={loading}
                   />

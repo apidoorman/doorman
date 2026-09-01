@@ -18,6 +18,7 @@ interface API {
   api_name: string
   api_version: string
   api_description: string
+  api_hostname?: string
   api_allowed_roles: string[]
   api_allowed_groups: string[]
   api_servers: string[]
@@ -31,6 +32,8 @@ interface API {
   api_trust_x_forwarded_for?: boolean
   api_credits_enabled: boolean
   api_credit_group?: string
+  api_anonymous_allowed?: boolean
+  api_anonymous_credit_group?: string
   api_path?: string
 }
 
@@ -48,6 +51,7 @@ interface UpdateApiData {
   api_name?: string
   api_version?: string
   api_description?: string
+  api_hostname?: string
   api_allowed_roles?: string[]
   api_allowed_groups?: string[]
   api_servers?: string[]
@@ -61,6 +65,8 @@ interface UpdateApiData {
   api_trust_x_forwarded_for?: boolean
   api_credits_enabled?: boolean
   api_credit_group?: string
+  api_anonymous_allowed?: boolean
+  api_anonymous_credit_group?: string
   api_public?: boolean
   api_auth_required?: boolean
   active?: boolean
@@ -195,6 +201,7 @@ const ApiDetailPage = () => {
           api_name: parsedApi.api_name,
           api_version: parsedApi.api_version,
           api_description: parsedApi.api_description,
+          api_hostname: (parsedApi as any).api_hostname || '',
           api_allowed_roles: [...(parsedApi.api_allowed_roles || [])],
           api_allowed_groups: [...(parsedApi.api_allowed_groups || [])],
           api_servers: [...(parsedApi.api_servers || [])],
@@ -208,6 +215,8 @@ const ApiDetailPage = () => {
           api_trust_x_forwarded_for: !!(parsedApi as any).api_trust_x_forwarded_for,
           api_credits_enabled: parsedApi.api_credits_enabled,
           api_credit_group: parsedApi.api_credit_group,
+          api_anonymous_allowed: !!(parsedApi as any).api_anonymous_allowed,
+          api_anonymous_credit_group: (parsedApi as any).api_anonymous_credit_group || '',
           api_public: (parsedApi as any).api_public,
           api_auth_required: (parsedApi as any).api_auth_required,
           active: (parsedApi as any).active
@@ -231,6 +240,7 @@ const ApiDetailPage = () => {
               api_name: found.api_name,
               api_version: found.api_version,
               api_description: found.api_description,
+              api_hostname: (found as any).api_hostname || '',
               api_allowed_roles: [...(found.api_allowed_roles || [])],
               api_allowed_groups: [...(found.api_allowed_groups || [])],
               api_servers: [...(found.api_servers || [])],
@@ -240,6 +250,8 @@ const ApiDetailPage = () => {
               api_allowed_headers: [...(found.api_allowed_headers || [])],
               api_credits_enabled: found.api_credits_enabled,
               api_credit_group: found.api_credit_group,
+              api_anonymous_allowed: !!(found as any).api_anonymous_allowed,
+              api_anonymous_credit_group: (found as any).api_anonymous_credit_group || '',
               api_public: (found as any).api_public,
               api_auth_required: (found as any).api_auth_required,
               active: (found as any).active
@@ -334,6 +346,7 @@ const ApiDetailPage = () => {
         api_name: api.api_name,
         api_version: api.api_version,
         api_description: api.api_description,
+        api_hostname: (api as any).api_hostname || '',
         api_allowed_roles: [...(api.api_allowed_roles || [])],
         api_allowed_groups: [...(api.api_allowed_groups || [])],
         api_servers: [...(api.api_servers || [])],
@@ -347,6 +360,8 @@ const ApiDetailPage = () => {
         api_trust_x_forwarded_for: !!(api as any).api_trust_x_forwarded_for,
         api_credits_enabled: api.api_credits_enabled,
         api_credit_group: api.api_credit_group,
+        api_anonymous_allowed: !!(api as any).api_anonymous_allowed,
+        api_anonymous_credit_group: (api as any).api_anonymous_credit_group || '',
         api_public: (api as any).api_public,
         api_auth_required: (api as any).api_auth_required,
         active: (api as any).active
@@ -372,8 +387,16 @@ const ApiDetailPage = () => {
       if ('api_auth_required' in payload) payload.api_auth_required = Boolean(payload.api_auth_required)
       if ('api_public' in payload) payload.api_public = Boolean(payload.api_public)
       if ('api_credits_enabled' in payload) payload.api_credits_enabled = Boolean(payload.api_credits_enabled)
+      if ('api_anonymous_allowed' in payload) payload.api_anonymous_allowed = Boolean(payload.api_anonymous_allowed)
       if ('active' in payload) payload.active = Boolean(payload.active)
       if ('api_trust_x_forwarded_for' in payload) payload.api_trust_x_forwarded_for = Boolean(payload.api_trust_x_forwarded_for)
+      if (!payload.api_hostname) delete payload.api_hostname
+      if (!payload.api_credit_group) delete payload.api_credit_group
+      if (!payload.api_anonymous_credit_group) delete payload.api_anonymous_credit_group
+      if (payload.api_auth_required) {
+        payload.api_anonymous_allowed = false
+        delete payload.api_anonymous_credit_group
+      }
       
       // Allow empty description
       if (payload.api_description === '') payload.api_description = ''
@@ -422,6 +445,15 @@ const ApiDetailPage = () => {
     if (field === 'api_credits_enabled' && value === true && currentPublic) {
       setPendingPubCredsField({ field: 'api_credits_enabled', value: true })
       setPubCredsConfirmOpen(true)
+      return
+    }
+    if (field === 'api_auth_required' && value === true) {
+      setEditData(prev => ({
+        ...prev,
+        api_auth_required: true,
+        api_anonymous_allowed: false,
+        api_anonymous_credit_group: ''
+      }))
       return
     }
     setEditData(prev => ({ ...prev, [field]: value }))
@@ -801,6 +833,29 @@ const ApiDetailPage = () => {
                     </div>
                   </div>
 
+                  <div className="md:col-span-2">
+                    <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
+                      Hostname Routing
+                      <InfoTooltip text="Optional client-facing hostname for transparent routing. Requests with this Host header are routed to this API while preserving the original path and query." />
+                    </label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editData.api_hostname || ''}
+                        onChange={(e) => handleInputChange('api_hostname', e.target.value)}
+                        className="input"
+                        placeholder="foo.mydomain.com"
+                      />
+                    ) : (
+                      <p className="text-[13px] text-gray-900 dark:text-white">{(api as any).api_hostname || 'None'}</p>
+                    )}
+                    {isEditing && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Leave blank for the normal Doorman path-based URL.
+                      </p>
+                    )}
+                  </div>
+
                   <div>
                     <label className="block text-[12px] font-medium text-gray-600 dark:text-white/60 mb-2">
                       Type
@@ -926,6 +981,34 @@ const ApiDetailPage = () => {
                   )}
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">If disabled (and not public), unauthenticated requests are accepted. Subscription/group checks don’t apply without an authenticated user.</p>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Anonymous Access
+                    <InfoTooltip text="Allow unauthenticated requests to use an anonymous identity keyed by client IP, such as anon:203.0.113.42. Requires Auth Required to be disabled." />
+                  </label>
+                  {isEditing ? (
+                    <>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={!!editData.api_anonymous_allowed}
+                          onChange={(e) => handleInputChange('api_anonymous_allowed', e.target.checked)}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                          disabled={!!editData.api_auth_required}
+                        />
+                        <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">Track unauthenticated callers as anonymous users by IP</label>
+                      </div>
+                      {!!editData.api_auth_required && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Disable Auth Required to enable anonymous access.</p>
+                      )}
+                    </>
+                  ) : (
+                    <span className={`badge ${((api as any).api_anonymous_allowed ?? false) ? 'badge-success' : 'badge-gray'}`}>
+                      {((api as any).api_anonymous_allowed ?? false) ? 'Enabled' : 'Disabled'}
+                    </span>
+                  )}
+                </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credits Enabled
@@ -950,7 +1033,7 @@ const ApiDetailPage = () => {
                   )}
                 </div>
 
-                {api.api_credits_enabled && (
+                {((isEditing ? editData.api_credits_enabled : api.api_credits_enabled) ?? false) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Credit Group
@@ -966,6 +1049,26 @@ const ApiDetailPage = () => {
                       />
                     ) : (
                       <p className="text-gray-900 dark:text-white">{api.api_credit_group || 'Default'}</p>
+                    )}
+                  </div>
+                )}
+
+                {((isEditing ? editData.api_credits_enabled : api.api_credits_enabled) ?? false) && ((isEditing ? editData.api_anonymous_allowed : (api as any).api_anonymous_allowed) ?? false) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Anonymous Credit Group
+                    <InfoTooltip text="Optional credit group used for anonymous callers. If blank, anonymous callers use the API Credit Group." />
+                  </label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editData.api_anonymous_credit_group || ''}
+                        onChange={(e) => handleInputChange('api_anonymous_credit_group', e.target.value)}
+                        className="input"
+                        placeholder={editData.api_credit_group || 'foo-anon'}
+                      />
+                    ) : (
+                      <p className="text-gray-900 dark:text-white">{(api as any).api_anonymous_credit_group || api.api_credit_group || 'Default'}</p>
                     )}
                   </div>
                 )}

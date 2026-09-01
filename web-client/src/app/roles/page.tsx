@@ -20,6 +20,7 @@ interface Role {
   manage_routings?: boolean
   manage_gateway?: boolean
   manage_subscriptions?: boolean
+  view_builder_tables?: boolean
 }
 
 const RolesPage = () => {

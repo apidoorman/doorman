@@ -6,15 +6,18 @@ import { useAuth } from '@/contexts/AuthContext'
 
 export default function Home() {
   const router = useRouter()
-  const { isAuthenticated, hasUIAccess } = useAuth()
+  const { isAuthenticated, authResolved, hasUIAccess } = useAuth()
 
   useEffect(() => {
+    if (!authResolved) {
+      return
+    }
     if (isAuthenticated && hasUIAccess) {
       router.push('/dashboard')
     } else {
       router.push('/login')
     }
-  }, [isAuthenticated, hasUIAccess, router])
+  }, [authResolved, isAuthenticated, hasUIAccess, router])
 
   return null
 }

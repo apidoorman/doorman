@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   isAuthenticated,
@@ -20,12 +20,13 @@ const DEBUG = process.env.NODE_ENV !== 'production'
 
 interface AuthContextType {
   isAuthenticated: boolean
+  authResolved: boolean
   hasUIAccess: boolean
   user: { username: string; role: string } | null
   permissions: any
   canAccessPage: (permission: string) => boolean
   logout: () => void
-  checkAuth: () => void
+  checkAuth: () => Promise<void>
   refreshAuth: () => Promise<void>
 }
 
@@ -34,10 +35,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState({
     isAuthenticated: false,
+    authResolved: false,
     hasUIAccess: false,
     user: null as { username: string; role: string } | null,
     permissions: null as any
   })
+  const isAuthenticatedRef = useRef(false)
   const router = useRouter()
 
   const checkAuth = async () => {
@@ -59,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setAuthState({
         isAuthenticated: true,
+        authResolved: true,
         hasUIAccess: !!(user && user.ui_access === true),
         user,
         permissions
@@ -67,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (DEBUG) console.warn('AuthContext - Not authenticated or status check failed:', error)
       setAuthState({
         isAuthenticated: false,
+        authResolved: true,
         hasUIAccess: false,
         user: null,
         permissions: null
@@ -99,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { }
     setAuthState({
       isAuthenticated: false,
+      authResolved: true,
       hasUIAccess: false,
       user: null,
       permissions: null
@@ -109,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canAccessPagePermission = (permission: string) => {
     return !!(authState.isAuthenticated && authState.permissions && authState.permissions[permission])
   }
+
+  useEffect(() => {
+    isAuthenticatedRef.current = authState.isAuthenticated
+  }, [authState.isAuthenticated])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -122,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 60000)
 
     const refreshInterval = setInterval(() => {
-      if (authState.isAuthenticated) {
+      if (isAuthenticatedRef.current) {
         if (DEBUG) console.log('AuthContext - Proactive token refresh')
         refreshAuth()
       }
@@ -137,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = {
     isAuthenticated: authState.isAuthenticated,
+    authResolved: authState.authResolved,
     hasUIAccess: authState.hasUIAccess,
     user: authState.user,
     permissions: authState.permissions,

@@ -91,7 +91,17 @@ const SettingsPage = () => {
       }
 
       if (settings.newPassword) {
-        await putJson(`${SERVER_URL}/platform/user/${encodeURIComponent(settings.originalUsername)}/update-password`, { new_password: settings.newPassword })
+        if (!settings.currentPassword) {
+          setError('Current password is required to change your password')
+          return
+        }
+        await putJson(
+          `${SERVER_URL}/platform/user/${encodeURIComponent(settings.originalUsername)}/update-password`,
+          {
+            current_password: settings.currentPassword,
+            new_password: settings.newPassword
+          }
+        )
         didChange = true
       }
 

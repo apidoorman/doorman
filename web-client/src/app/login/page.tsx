@@ -12,7 +12,9 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { checkAuth, isAuthenticated, hasUIAccess } = useAuth()
+  const nextPath = getSafeNextPath(searchParams.get('next'))
 
   useEffect(() => { document.documentElement.classList.remove('dark') }, [])
   useEffect(() => {
@@ -22,7 +24,7 @@ export default function LoginPage() {
       try { void postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch { }
       try { localStorage.clear(); sessionStorage.clear(); document.cookie = 'access_token_cookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/' } catch { }
     }
-  }, [isAuthenticated, hasUIAccess, router])
+  }, [isAuthenticated, hasUIAccess, nextPath, router])
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault(); setIsLoading(true); setErrorMessage('')
