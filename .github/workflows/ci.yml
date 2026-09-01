@@ -31,6 +31,8 @@ jobs:
         run: |
           git branch --force python-parity-reference 10699820f50abe3940134536a98c955deab6959f
           python3 scripts/check_parity_reference.py
+      - name: Verify Python-to-Rust test coverage ledger
+        run: python3 scripts/generate_test_coverage_ledger.py --check
       - name: Run Clippy
         run: cargo clippy --manifest-path gateway-rs/Cargo.toml --locked --all-targets --all-features -- -D warnings
       - name: Run tests

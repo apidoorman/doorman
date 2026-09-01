@@ -9,7 +9,9 @@ use tower::ServiceExt;
 async fn platform_app() -> axum::Router {
     let mut config = Config::for_test("removed-internal-backend".to_owned());
     config.https_only = false;
-    let storage = SharedStorage::connect(&config.shared_storage).await.unwrap();
+    let storage = SharedStorage::connect(&config.shared_storage)
+        .await
+        .unwrap();
     storage
         .insert_one(
             "roles",
@@ -60,10 +62,9 @@ async fn login(app: &axum::Router) -> String {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    serde_json::from_slice::<Value>(&body)["access_token"]
-        .as_str()
-        .unwrap()
-        .to_owned()
+    let body: Value =
+        serde_json::from_slice(&body).expect("login response must contain valid JSON");
+    body["access_token"].as_str().unwrap().to_owned()
 }
 
 #[tokio::test]

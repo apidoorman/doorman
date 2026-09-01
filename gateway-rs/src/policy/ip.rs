@@ -17,9 +17,15 @@ pub fn enforce_api_ip_policy(
     let trust_xff = bool_field(api, "api_trust_x_forwarded_for")
         .or_else(|| settings.and_then(|value| bool_field(value, "trust_x_forwarded_for")))
         .unwrap_or(configured_trust_xff);
-    let client_ip = effective_client_ip(headers, direct_ip, trust_xff);
+    let client_ip = effective_client_ip_for_settings(settings, headers, direct_ip, trust_xff);
 
-    if local_host_ip_bypass && client_ip.is_some_and(is_loopback) {
+    let allow_localhost_bypass = settings
+        .and_then(|value| bool_field(value, "allow_localhost_bypass"))
+        .unwrap_or(local_host_ip_bypass);
+    if allow_localhost_bypass
+        && !has_forwarding_headers(headers)
+        && direct_ip.is_some_and(is_loopback)
+    {
         return Ok(());
     }
 
@@ -55,6 +61,32 @@ pub fn enforce_api_ip_policy(
     }
 
     Ok(())
+}
+
+pub fn effective_client_ip_for_settings(
+    settings: Option<&Value>,
+    headers: &HeaderMap,
+    direct_ip: Option<IpAddr>,
+    trust_xff: bool,
+) -> Option<IpAddr> {
+    let trusted_proxies = settings
+        .map(|value| string_list_field(value, "xff_trusted_proxies"))
+        .unwrap_or_default();
+    let trust_forwarded_headers = trust_xff
+        && (trusted_proxies.is_empty()
+            || direct_ip.is_some_and(|ip| ip_in_list(ip, &trusted_proxies)));
+    effective_client_ip(headers, direct_ip, trust_forwarded_headers)
+}
+
+fn has_forwarding_headers(headers: &HeaderMap) -> bool {
+    [
+        "x-forwarded-for",
+        "x-real-ip",
+        "cf-connecting-ip",
+        "forwarded",
+    ]
+    .iter()
+    .any(|name| headers.contains_key(*name))
 }
 
 pub fn effective_client_ip(
@@ -140,15 +172,17 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("host", HeaderValue::from_static("localhost"));
         let api = json!({"api_ip_mode": "whitelist", "api_ip_whitelist": ["127.0.0.1"]});
-        assert!(enforce_api_ip_policy(
-            &api,
-            None,
-            &headers,
-            Some("203.0.113.5".parse().unwrap()),
-            false,
-            true,
-        )
-        .is_err());
+        assert!(
+            enforce_api_ip_policy(
+                &api,
+                None,
+                &headers,
+                Some("203.0.113.5".parse().unwrap()),
+                false,
+                true,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -193,6 +227,66 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    fn enforce_for(api: &Value, client_ip: &str) -> Result<(), PolicyFailure> {
+        enforce_api_ip_policy(
+            api,
+            None,
+            &HeaderMap::new(),
+            Some(client_ip.parse().unwrap()),
+            false,
+            false,
+        )
+    }
+
+    #[test]
+    fn python_ip_policy_allows_exact_ip() {
+        let api = json!({"api_ip_mode": "whitelist", "api_ip_whitelist": ["127.0.0.1"]});
+        assert!(enforce_for(&api, "127.0.0.1").is_ok());
+    }
+
+    #[test]
+    fn python_ip_policy_denies_exact_ip() {
+        let api = json!({"api_ip_mode": "allow_all", "api_ip_blacklist": ["127.0.0.1"]});
+        let failure = enforce_for(&api, "127.0.0.1").unwrap_err();
+        assert_eq!(failure.status, StatusCode::FORBIDDEN);
+        assert_eq!(failure.error_code, "API011");
+    }
+
+    #[test]
+    fn python_ip_policy_allows_cidr() {
+        let api = json!({"api_ip_mode": "whitelist", "api_ip_whitelist": ["127.0.0.0/24"]});
+        assert!(enforce_for(&api, "127.0.0.1").is_ok());
+    }
+
+    #[test]
+    fn python_ip_policy_denies_cidr() {
+        let api = json!({"api_ip_mode": "allow_all", "api_ip_blacklist": ["127.0.0.0/24"]});
+        let failure = enforce_for(&api, "127.0.0.1").unwrap_err();
+        assert_eq!(failure.status, StatusCode::FORBIDDEN);
+        assert_eq!(failure.error_code, "API011");
+    }
+
+    #[test]
+    fn python_ip_policy_denylist_precedes_allowlist() {
+        let api = json!({
+            "api_ip_mode": "whitelist",
+            "api_ip_whitelist": ["127.0.0.1"],
+            "api_ip_blacklist": ["127.0.0.1"],
+        });
+        let failure = enforce_for(&api, "127.0.0.1").unwrap_err();
+        assert_eq!(failure.status, StatusCode::FORBIDDEN);
+        assert_eq!(failure.error_code, "API011");
+    }
+
+    #[test]
+    fn python_ip_policy_returns_whitelist_error_before_upstream() {
+        let api = json!({"api_ip_mode": "whitelist", "api_ip_whitelist": ["203.0.113.5"]});
+        let failure = enforce_for(&api, "127.0.0.1").unwrap_err();
+        assert_eq!(failure.stage, PolicyStage::Ip);
+        assert_eq!(failure.status, StatusCode::FORBIDDEN);
+        assert_eq!(failure.error_code, "API010");
     }
 
     #[test]

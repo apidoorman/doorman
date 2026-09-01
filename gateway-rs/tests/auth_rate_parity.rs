@@ -8,7 +8,8 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn login_ip_window_matches_python_error_contract() {
-    let config = Config::for_test("removed-internal-backend".to_owned());
+    let mut config = Config::for_test("removed-internal-backend".to_owned());
+    config.shared_storage.trust_x_forwarded_for = true;
     let storage = SharedStorage::connect(&config.shared_storage)
         .await
         .unwrap();

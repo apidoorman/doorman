@@ -1,6 +1,8 @@
 use std::{
     collections::HashMap,
-    env, fs,
+    env,
+    fmt::Write as _,
+    fs,
     io::Read,
     net::SocketAddr,
     process::{Command, Stdio},
@@ -35,14 +37,18 @@ use crate::{
         },
         response_compat::MessageEnvelope,
     },
-    observability::analytics_aggregator::{AggregatedPoint, EntityCounter, global_analytics},
+    observability::{
+        analytics_aggregator::{AggregatedPoint, EntityCounter, global_analytics},
+        audit::global_ip_deny,
+    },
     platform_contract::{normalize_create_api, normalize_update_api},
     policy::{
         auth::{AuthClaims, verify_request_token},
-        ip::enforce_api_ip_policy,
+        ip::{effective_client_ip_for_settings, enforce_api_ip_policy},
+        rate_limit::duration_to_seconds,
     },
     state::AppState,
-    storage::models::strip_mongo_id,
+    storage::{models::strip_mongo_id, redis::bandwidth_key},
 };
 
 #[derive(Serialize)]
@@ -104,7 +110,8 @@ pub async fn platform_dispatch(
     let request_id = request_id_from(&headers);
     let query = parse_query(uri.query());
     let path = uri.path().strip_prefix("/platform").unwrap_or(uri.path());
-    if let Some(response) = platform_ip_filter(&state, &headers, direct_addr, &request_id).await
+    if path != "/security/settings"
+        && let Some(response) = platform_ip_filter(&state, &headers, direct_addr, &request_id).await
     {
         return response;
     }
@@ -127,7 +134,17 @@ pub async fn platform_dispatch(
     };
 
     if path == "/authorization" && method == Method::POST {
-        if let Some(response) = auth_account_rate_limit(&state, &payload, "LOGIN_ACCOUNT_RATE_LIMIT", 10, "LOGIN_ACCOUNT_RATE_WINDOW", 900, &request_id).await {
+        if let Some(response) = auth_account_rate_limit(
+            &state,
+            &payload,
+            "LOGIN_ACCOUNT_RATE_LIMIT",
+            10,
+            "LOGIN_ACCOUNT_RATE_WINDOW",
+            900,
+            &request_id,
+        )
+        .await
+        {
             return response;
         }
         if let Some(response) = auth_ip_rate_limit(
@@ -169,7 +186,17 @@ pub async fn platform_dispatch(
         {
             return response;
         }
-        if let Some(response) = auth_account_rate_limit(&state, &payload, "REGISTER_ACCOUNT_RATE_LIMIT", 5, "REGISTER_ACCOUNT_RATE_WINDOW", 3600, &request_id).await {
+        if let Some(response) = auth_account_rate_limit(
+            &state,
+            &payload,
+            "REGISTER_ACCOUNT_RATE_LIMIT",
+            5,
+            "REGISTER_ACCOUNT_RATE_WINDOW",
+            3600,
+            &request_id,
+        )
+        .await
+        {
             return response;
         }
         return register(&state, payload, &request_id).await;
@@ -258,7 +285,7 @@ pub async fn platform_dispatch(
             } else {
                 dashboard(&state, &request_id).await
             }
-        },
+        }
         (Method::GET, "/monitor/metrics") => {
             if !has_permission(&state, &username, "manage_gateway").await {
                 error(
@@ -280,7 +307,7 @@ pub async fn platform_dispatch(
                     &request_id,
                 )
             } else {
-                monitor_report(&state, &request_id).await
+                monitor_report(&state, &query, &request_id).await
             }
         }
         (Method::GET, "/analytics/overview") => {
@@ -439,7 +466,7 @@ pub async fn platform_dispatch(
                     &request_id,
                 )
             }
-        },
+        }
         (Method::POST, "/config/reload") => {
             if !has_permission(&state, &username, "manage_gateway").await {
                 http_detail(
@@ -1332,6 +1359,14 @@ async fn entity_routes(
                 request_id,
             );
         };
+        if spec.collection == "roles" && key == "admin" && !is_admin_user(state, username).await {
+            return error(
+                StatusCode::FORBIDDEN,
+                "ROLE009",
+                "Only an administrator can create the administrator role",
+                request_id,
+            );
+        }
         if matches!(
             storage
                 .find_one(spec.collection, &json!({spec.key: key}))
@@ -1411,13 +1446,26 @@ async fn entity_routes(
         let existing = match storage.find_one(spec.collection, &filter).await {
             Ok(Some(role)) => role,
             Ok(None) => {
-                return error(StatusCode::NOT_FOUND, spec.not_found_code, "Resource not found", request_id);
+                return error(
+                    StatusCode::NOT_FOUND,
+                    spec.not_found_code,
+                    "Resource not found",
+                    request_id,
+                );
             }
             Err(_) => return unexpected(request_id),
         };
-        if (key == "admin" && !is_admin_user(state, username).await)
-            || !role_permissions_within_actor(state, username, &existing).await
-            || !role_permissions_within_actor(state, username, &payload).await
+        let actor_is_admin = is_admin_user(state, username).await;
+        let bootstrap_admin_restores_manage_users = key == "admin"
+            && actor_is_admin
+            && payload.as_object().is_some_and(|updates| {
+                updates.len() == 1
+                    && updates.get("manage_users").and_then(Value::as_bool) == Some(true)
+            });
+        if (key == "admin" && !actor_is_admin)
+            || (!bootstrap_admin_restores_manage_users
+                && (!role_permissions_within_actor(state, username, &existing).await
+                    || !role_permissions_within_actor(state, username, &payload).await))
         {
             return error(
                 StatusCode::FORBIDDEN,
@@ -1454,7 +1502,14 @@ async fn entity_routes(
         if spec.collection == "roles" {
             let existing = match storage.find_one(spec.collection, &filter).await {
                 Ok(Some(role)) => role,
-                Ok(None) => return error(StatusCode::NOT_FOUND, spec.not_found_code, "Resource not found", request_id),
+                Ok(None) => {
+                    return error(
+                        StatusCode::NOT_FOUND,
+                        spec.not_found_code,
+                        "Resource not found",
+                        request_id,
+                    );
+                }
                 Err(_) => return unexpected(request_id),
             };
             if !role_permissions_within_actor(state, username, &existing).await {
@@ -1842,17 +1897,38 @@ async fn user_routes(
         );
     }
     if method == Method::PUT {
-        if active_user == target && !self_update_fields_are_safe(&payload) {
+        if target == "admin" && !bootstrap_admin_update_fields_are_safe(&payload) {
             return error(
                 StatusCode::FORBIDDEN,
-                "USR008",
-                "Users may only update their own email, password, or custom attributes",
+                "USR020",
+                "Super admin user cannot be modified",
                 request_id,
             );
         }
-        let existing = match storage.find_one("users", &json!({"username": target})).await {
+        if active_user == target
+            && !has_permission(state, active_user, "manage_users").await
+            && !self_update_fields_are_safe(&payload)
+        {
+            return error(
+                StatusCode::FORBIDDEN,
+                "USR023",
+                "Users without manage_users may not update restricted fields",
+                request_id,
+            );
+        }
+        let existing = match storage
+            .find_one("users", &json!({"username": target}))
+            .await
+        {
             Ok(Some(user)) => user,
-            Ok(None) => return error(StatusCode::NOT_FOUND, "USR002", "User not found", request_id),
+            Ok(None) => {
+                return error(
+                    StatusCode::NOT_FOUND,
+                    "USR002",
+                    "User not found",
+                    request_id,
+                );
+            }
             Err(_) => return unexpected(request_id),
         };
         if existing.get("role").and_then(Value::as_str) == Some("admin")
@@ -1867,7 +1943,10 @@ async fn user_routes(
         }
         if let Some(email) = payload.get("email").and_then(Value::as_str)
             && existing.get("email").and_then(Value::as_str) != Some(email)
-            && matches!(storage.find_one("users", &json!({"email": email})).await, Ok(Some(_)))
+            && matches!(
+                storage.find_one("users", &json!({"email": email})).await,
+                Ok(Some(_))
+            )
         {
             return error(
                 StatusCode::BAD_REQUEST,
@@ -1877,19 +1956,17 @@ async fn user_routes(
             );
         }
         if let Some(role_name) = payload.get("role").and_then(Value::as_str) {
-            if !has_permission(state, active_user, "manage_users").await
-                || !can_assign_role(state, active_user, role_name).await
-            {
+            if role_name == "admin" && !is_admin_user(state, active_user).await {
                 return error(
                     StatusCode::FORBIDDEN,
-                    "USR008",
-                    "You cannot assign a role with permissions you do not hold",
+                    "USR013",
+                    "Only an administrator can assign the administrator role",
                     request_id,
                 );
             }
         }
         if suffix.ends_with("/update-password") {
-            let Some(password) = payload.get("password").and_then(Value::as_str) else {
+            let Some(password) = payload.get("new_password").and_then(Value::as_str) else {
                 return error(
                     StatusCode::BAD_REQUEST,
                     "USR005",
@@ -1918,11 +1995,20 @@ async fn user_routes(
             payload["password"] =
                 json!(bcrypt::hash(password, bcrypt::DEFAULT_COST).unwrap_or_default());
         }
+        let password_update = suffix.ends_with("/update-password");
         return match storage
             .update_one("users", &json!({"username": target}), &payload)
             .await
         {
-            Ok(Some(_)) => message(StatusCode::OK, "User updated successfully", request_id),
+            Ok(Some(_)) => message(
+                StatusCode::OK,
+                if password_update {
+                    "Password updated successfully"
+                } else {
+                    "User updated successfully"
+                },
+                request_id,
+            ),
             Ok(None) => error(
                 StatusCode::NOT_FOUND,
                 "USR002",
@@ -1933,9 +2019,19 @@ async fn user_routes(
         };
     }
     if method == Method::DELETE {
-        let existing = match storage.find_one("users", &json!({"username": target})).await {
+        let existing = match storage
+            .find_one("users", &json!({"username": target}))
+            .await
+        {
             Ok(Some(user)) => user,
-            Ok(None) => return error(StatusCode::NOT_FOUND, "USR002", "User not found", request_id),
+            Ok(None) => {
+                return error(
+                    StatusCode::NOT_FOUND,
+                    "USR002",
+                    "User not found",
+                    request_id,
+                );
+            }
             Err(_) => return unexpected(request_id),
         };
         if existing.get("role").and_then(Value::as_str) == Some("admin")
@@ -2362,11 +2458,11 @@ async fn create_user(
         return unexpected(request_id);
     };
     if let (Some(actor), Some(role_name)) = (actor, payload.get("role").and_then(Value::as_str)) {
-        if !can_assign_role(state, actor, role_name).await {
+        if role_name == "admin" && !is_admin_user(state, actor).await {
             return error(
                 StatusCode::FORBIDDEN,
-                "USR006",
-                "You cannot assign a role with permissions you do not hold",
+                "USR015",
+                "Only an administrator can create users with the administrator role",
                 request_id,
             );
         }
@@ -2464,7 +2560,39 @@ async fn user_by(
             request_id,
         );
     }
-    success(StatusCode::OK, public_user(user), request_id)
+    let bandwidth_username = user
+        .get("username")
+        .and_then(Value::as_str)
+        .unwrap_or(value)
+        .to_owned();
+    let mut user = public_user(user);
+    let bandwidth_enabled =
+        user.get("bandwidth_limit_enabled").and_then(Value::as_bool) != Some(false);
+    let bandwidth_limit = user
+        .get("bandwidth_limit_bytes")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if bandwidth_enabled && bandwidth_limit > 0 {
+        let window_name = user
+            .get("bandwidth_limit_window")
+            .and_then(Value::as_str)
+            .unwrap_or("day");
+        let window = duration_to_seconds(window_name).max(1);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let bucket = (now / window) * window;
+        let usage = storage
+            .current_counter(&bandwidth_key(&bandwidth_username, window, bucket))
+            .await
+            .unwrap_or(0);
+        if let Some(object) = user.as_object_mut() {
+            object.insert("bandwidth_usage_bytes".to_owned(), json!(usage));
+            object.insert("bandwidth_resets_at".to_owned(), json!(bucket + window));
+        }
+    }
+    success(StatusCode::OK, user, request_id)
 }
 
 async fn authorization_routes(
@@ -2524,7 +2652,12 @@ async fn authorization_routes(
     if path == "/authorization/status" && method == Method::GET {
         return success(
             StatusCode::OK,
-            json!({"authenticated": true, "username": username, "role": claims.role}),
+            json!({
+                "message": "Token is valid",
+                "authenticated": true,
+                "username": username,
+                "role": claims.role
+            }),
             request_id,
         );
     }
@@ -2557,7 +2690,12 @@ async fn authorization_routes(
                 .ok()
                 .flatten()
             else {
-                return error(StatusCode::NOT_FOUND, "USR002", "User not found", request_id);
+                return error(
+                    StatusCode::NOT_FOUND,
+                    "USR002",
+                    "User not found",
+                    request_id,
+                );
             };
             let target_is_admin = target_user.get("role").and_then(Value::as_str) == Some("admin");
             if target_is_admin && !is_admin_user(state, username).await {
@@ -2714,20 +2852,48 @@ async fn platform_ip_filter(
         state.config.shared_storage.local_host_ip_bypass,
     ) {
         Ok(()) => None,
-        Err(failure) => Some(error(
-            StatusCode::FORBIDDEN,
-            if failure.error_code == "API011" {
-                "SEC011"
-            } else {
-                "SEC010"
-            },
-            if failure.error_code == "API011" {
-                "IP blocked"
-            } else {
-                "IP not allowed"
-            },
-            request_id,
-        )),
+        Err(failure) => {
+            let direct_ip = direct_addr.map(|addr| addr.ip());
+            let effective_ip = effective_client_ip_for_settings(
+                settings.as_ref(),
+                headers,
+                direct_ip,
+                settings
+                    .as_ref()
+                    .and_then(|value| value.get("trust_x_forwarded_for"))
+                    .and_then(Value::as_bool)
+                    .unwrap_or(state.config.shared_storage.trust_x_forwarded_for),
+            )
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|| "unknown".to_owned());
+            let source_ip = direct_ip.map(|ip| ip.to_string());
+            global_ip_deny(
+                &effective_ip,
+                if failure.error_code == "API011" {
+                    "blacklisted"
+                } else {
+                    "not_in_whitelist"
+                },
+                headers
+                    .get("x-forwarded-for")
+                    .and_then(|value| value.to_str().ok()),
+                source_ip.as_deref(),
+            );
+            Some(error(
+                StatusCode::FORBIDDEN,
+                if failure.error_code == "API011" {
+                    "SEC011"
+                } else {
+                    "SEC010"
+                },
+                if failure.error_code == "API011" {
+                    "IP blocked"
+                } else {
+                    "IP not allowed"
+                },
+                request_id,
+            ))
+        }
     }
 }
 
@@ -2897,20 +3063,6 @@ async fn role_permissions_within_actor(state: &AppState, username: &str, role: &
         }
     }
     true
-}
-
-async fn can_assign_role(state: &AppState, username: &str, role_name: &str) -> bool {
-    if role_name == "admin" {
-        return is_admin_user(state, username).await;
-    }
-    let Some(storage) = &state.storage else {
-        return false;
-    };
-    match storage.find_one("roles", &json!({"role_name": role_name})).await {
-        Ok(Some(role)) => role_permissions_within_actor(state, username, &role).await,
-        Ok(None) => role_name == "user",
-        Err(_) => false,
-    }
 }
 
 async fn memory_dump(
@@ -3164,34 +3316,133 @@ fn format_dashboard_count(value: u64) -> String {
 }
 
 async fn monitor_metrics(state: &AppState, request_id: &str) -> Response {
+    let analytics = global_analytics();
+    let series = analytics.get_timeseries();
+    let total_requests = series.iter().map(|point| point.requests).sum::<u64>();
+    let total_errors = series.iter().map(|point| point.errors).sum::<u64>();
+    let average_response_ms = if total_requests == 0 {
+        0.0
+    } else {
+        series
+            .iter()
+            .map(|point| point.latency_ms * point.requests as f64)
+            .sum::<f64>()
+            / total_requests as f64
+    };
     success(
         StatusCode::OK,
         json!({
             "uptime_seconds": state.runtime.started_at.elapsed().as_secs(),
             "active_requests": state.runtime.active_requests.load(std::sync::atomic::Ordering::Relaxed),
-            "total_requests": state.runtime.request_total.load(std::sync::atomic::Ordering::Relaxed)
+            "total_requests": total_requests,
+            "total_errors": total_errors,
+            "avg_response_ms": average_response_ms,
+            "status_counts": analytics.get_status_distribution(),
+            "series": series,
+            "top_apis": analytics.get_top_apis(10),
+            "total_bytes_in": state.runtime.total_bytes_in.load(std::sync::atomic::Ordering::Relaxed),
+            "total_bytes_out": state.runtime.total_bytes_out.load(std::sync::atomic::Ordering::Relaxed)
         }),
         request_id,
     )
 }
 
-async fn monitor_report(state: &AppState, request_id: &str) -> Response {
-    let storage_mode = state
-        .storage
-        .as_ref()
-        .map(|storage| {
-            if storage.is_memory() {
-                "memory_only"
-            } else {
-                "external"
-            }
-        })
-        .unwrap_or("unavailable");
-    success(
-        StatusCode::OK,
-        json!({"status": "healthy", "storage_mode": storage_mode, "uptime_seconds": state.runtime.started_at.elapsed().as_secs()}),
-        request_id,
+async fn monitor_report(
+    state: &AppState,
+    query: &HashMap<String, String>,
+    _request_id: &str,
+) -> Response {
+    let analytics = global_analytics();
+    let points = analytics.get_timeseries();
+    let total_requests = points.iter().map(|point| point.requests).sum::<u64>();
+    let total_errors = points.iter().map(|point| point.errors).sum::<u64>();
+    let total_ms = points
+        .iter()
+        .map(|point| point.latency_ms * point.requests as f64)
+        .sum::<f64>();
+    let average_ms = if total_requests == 0 {
+        0.0
+    } else {
+        total_ms / total_requests as f64
+    };
+    let successes = total_requests.saturating_sub(total_errors);
+    let success_rate = if total_requests == 0 {
+        0.0
+    } else {
+        successes as f64 * 100.0 / total_requests as f64
+    };
+    let start = query.get("start").map(String::as_str).unwrap_or("");
+    let end = query.get("end").map(String::as_str).unwrap_or("");
+    let mut csv = String::new();
+    let _ = writeln!(csv, "Report,From,{},To,{}", csv_cell(start), csv_cell(end));
+    csv.push_str("Overview\n");
+    let _ = writeln!(csv, "total_requests,{total_requests}");
+    let _ = writeln!(csv, "total_errors,{total_errors}");
+    let _ = writeln!(csv, "successes,{successes}");
+    let _ = writeln!(csv, "success_rate,{success_rate:.2}%");
+    let _ = writeln!(csv, "avg_response_ms,{average_ms:.2}");
+    csv.push_str("\nBandwidth Overview\n");
+    let bytes_in = state
+        .runtime
+        .total_bytes_in
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let bytes_out = state
+        .runtime
+        .total_bytes_out
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let _ = writeln!(csv, "total_bytes_in,{bytes_in}");
+    let _ = writeln!(csv, "total_bytes_out,{bytes_out}");
+    let _ = writeln!(csv, "total_bytes,{}", bytes_in.saturating_add(bytes_out));
+    csv.push_str("\nStatus Codes\nstatus,count\n");
+    let mut status_counts = analytics
+        .get_status_distribution()
+        .into_iter()
+        .collect::<Vec<_>>();
+    status_counts.sort_by_key(|(status, _)| status.parse::<u16>().unwrap_or(u16::MAX));
+    for (status, count) in status_counts {
+        let _ = writeln!(csv, "{},{}", csv_cell(&status), count);
+    }
+    csv.push_str("\nAPI Usage\napi,total,errors,successes,success_rate\n");
+    for api in analytics.get_top_apis(analytics.api_count()) {
+        let successes = api.count.saturating_sub(api.error_count);
+        let rate = if api.count == 0 {
+            0.0
+        } else {
+            successes as f64 * 100.0 / api.count as f64
+        };
+        let _ = writeln!(
+            csv,
+            "{},{},{},{},{rate:.2}%",
+            csv_cell(&api.name),
+            api.count,
+            api.error_count,
+            successes
+        );
+    }
+    csv.push_str("\nUser Usage\nusername,requests\n");
+    for user in analytics.get_top_users(analytics.user_count()) {
+        let _ = writeln!(csv, "{},{}", csv_cell(&user.name), user.count);
+    }
+
+    (
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=doorman_report.csv",
+            ),
+        ],
+        csv,
     )
+        .into_response()
+}
+
+fn csv_cell(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_owned()
+    }
 }
 fn analytics_denied(request_id: &str) -> Response {
     error(
@@ -3556,7 +3807,12 @@ async fn config_export(
         Some("groups") => "manage_groups",
         Some("routings") => "manage_routings",
         Some(_) => {
-            return error(StatusCode::NOT_FOUND, "CFG404", "Configuration export not found", request_id);
+            return error(
+                StatusCode::NOT_FOUND,
+                "CFG404",
+                "Configuration export not found",
+                request_id,
+            );
         }
     };
     if !has_permission(state, username, permission).await {
@@ -4738,18 +4994,26 @@ fn quota_status(name: &str, limit: u64) -> Value {
 }
 
 fn discovery_target(server: &str, path: &str) -> Result<String, String> {
-    let base = Url::parse(server).map_err(|_| "API server must be an absolute HTTP(S) URL".to_owned())?;
+    let base =
+        Url::parse(server).map_err(|_| "API server must be an absolute HTTP(S) URL".to_owned())?;
     if !matches!(base.scheme(), "http" | "https") || base.host_str().is_none() {
         return Err("API server must be an absolute HTTP(S) URL".to_owned());
     }
     if Url::parse(path).is_ok() || path.starts_with("//") || path.contains("://") {
         return Err("Discovery URL must be relative to the API server".to_owned());
     }
-    if let Some(allowlist) = env::var("DISCOVERY_ALLOWED_HOSTS").ok() {
+    if let Ok(allowlist) = env::var("DISCOVERY_ALLOWED_HOSTS") {
         let host = base.host_str().unwrap_or_default();
-        let allowed = allowlist.split(",").map(str::trim).filter(|entry| !entry.is_empty()).any(|entry| {
-            entry == host || entry.strip_prefix("*.").is_some_and(|suffix| host.ends_with(&format!(".{suffix}")))
-        });
+        let allowed = allowlist
+            .split(",")
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .any(|entry| {
+                entry == host
+                    || entry
+                        .strip_prefix("*.")
+                        .is_some_and(|suffix| host.ends_with(&format!(".{suffix}")))
+            });
         if !allowed {
             return Err("API server host is not in DISCOVERY_ALLOWED_HOSTS".to_owned());
         }
@@ -4829,7 +5093,9 @@ async fn api_discovery_routes(
                 .unwrap_or("/graphql");
             let target = match discovery_target(server, path) {
                 Ok(target) => target,
-                Err(message_text) => return error(StatusCode::BAD_REQUEST, "API003", &message_text, request_id),
+                Err(message_text) => {
+                    return error(StatusCode::BAD_REQUEST, "API003", &message_text, request_id);
+                }
             };
             let query = json!({"query": "query IntrospectionQuery { __schema { types { name kind } queryType { name } mutationType { name } } }"});
             return match state.proxy_client.post(target).json(&query).send().await {
@@ -4911,7 +5177,9 @@ async fn api_discovery_routes(
         };
         let target = match discovery_target(server, path) {
             Ok(target) => target,
-            Err(message_text) => return error(StatusCode::BAD_REQUEST, "API003", &message_text, request_id),
+            Err(message_text) => {
+                return error(StatusCode::BAD_REQUEST, "API003", &message_text, request_id);
+            }
         };
         return match state.proxy_client.get(target).send().await {
             Ok(response) if response.status().is_success() => match response.text().await {
@@ -5629,7 +5897,30 @@ fn self_update_fields_are_safe(payload: &Value) -> bool {
     matches!(
         payload.as_object(),
         Some(fields) if fields.keys().all(|field| {
-            matches!(field.as_str(), "email" | "password" | "custom_attributes")
+            !matches!(field.as_str(), "role" | "groups" | "active" | "username")
+        })
+    )
+}
+
+fn bootstrap_admin_update_fields_are_safe(payload: &Value) -> bool {
+    matches!(
+        payload.as_object(),
+        Some(fields) if fields.keys().all(|field| {
+            matches!(
+                field.as_str(),
+                "bandwidth_limit_bytes"
+                    | "bandwidth_limit_window"
+                    | "bandwidth_limit_enabled"
+                    | "rate_limit_duration"
+                    | "rate_limit_duration_type"
+                    | "rate_limit_enabled"
+                    | "throttle_duration"
+                    | "throttle_duration_type"
+                    | "throttle_wait_duration"
+                    | "throttle_wait_duration_type"
+                    | "throttle_queue_limit"
+                    | "throttle_enabled"
+            )
         })
     )
 }
@@ -5786,17 +6077,23 @@ async fn auth_ip_rate_limit(
         return None;
     }
     let storage = state.storage.as_ref()?;
-    let client_ip = state.config.shared_storage.trust_x_forwarded_for.then(|| ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]
-        .into_iter()
-        .find_map(|name| {
-            headers
-                .get(name)
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.split(',').next())
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_owned)
-        }))
+    let client_ip = state
+        .config
+        .shared_storage
+        .trust_x_forwarded_for
+        .then(|| {
+            ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]
+                .into_iter()
+                .find_map(|name| {
+                    headers
+                        .get(name)
+                        .and_then(|value| value.to_str().ok())
+                        .and_then(|value| value.split(',').next())
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_owned)
+                })
+        })
         .flatten()
         .or_else(|| direct_addr.map(|value| value.ip().to_string()))?;
     let limit = env::var(limit_name)
@@ -6085,11 +6382,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn self_updates_cannot_change_authorization_fields() {
-        assert!(self_update_fields_are_safe(&json!({"email": "user@example.com", "custom_attributes": {}})));
+    fn self_updates_without_user_management_cannot_change_authorization_fields() {
+        assert!(self_update_fields_are_safe(
+            &json!({"email": "user@example.com", "custom_attributes": {}, "rate_limit_duration": 1})
+        ));
         assert!(!self_update_fields_are_safe(&json!({"groups": ["admin"]})));
         assert!(!self_update_fields_are_safe(&json!({"role": "admin"})));
         assert!(!self_update_fields_are_safe(&json!({"active": true})));
+        assert!(!self_update_fields_are_safe(&json!({"username": "other"})));
+    }
+
+    #[test]
+    fn bootstrap_admin_updates_are_limited_to_operational_fields() {
+        assert!(bootstrap_admin_update_fields_are_safe(&json!({
+            "rate_limit_duration": 1,
+            "throttle_queue_limit": 1
+        })));
+        assert!(!bootstrap_admin_update_fields_are_safe(
+            &json!({"email": "admin@example.com"})
+        ));
     }
 
     #[test]

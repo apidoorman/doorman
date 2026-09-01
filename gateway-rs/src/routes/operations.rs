@@ -89,7 +89,11 @@ pub async fn caches(
 
     let origin = allowed_cache_origin(request.headers());
     if request.headers().contains_key(header::ORIGIN) && origin.is_none() {
-        return Ok(policy_error(StatusCode::FORBIDDEN, "GTW008", "Origin is not allowed"));
+        return Ok(policy_error(
+            StatusCode::FORBIDDEN,
+            "GTW008",
+            "Origin is not allowed",
+        ));
     }
     let username = match require_manage_gateway(
         &state,
@@ -245,21 +249,39 @@ fn cache_preflight(headers: &HeaderMap) -> Response {
     let mut response = StatusCode::NO_CONTENT.into_response();
     let response_headers = response.headers_mut();
     response_headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-    response_headers.insert(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, HeaderValue::from_static("true"));
-    response_headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("DELETE"));
-    response_headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Authorization, Content-Type, X-CSRF-Token"));
+    response_headers.insert(
+        header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+        HeaderValue::from_static("true"),
+    );
+    response_headers.insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("DELETE"),
+    );
+    response_headers.insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("Authorization, Content-Type, X-CSRF-Token"),
+    );
     response_headers.insert(header::VARY, HeaderValue::from_static("Origin"));
     response
 }
 
 fn allowed_cache_origin(headers: &HeaderMap) -> Option<HeaderValue> {
     let origin = headers.get(header::ORIGIN)?.to_str().ok()?;
-    let allowed = env::var("ALLOWED_ORIGINS").ok()?.split(',').map(str::trim).any(|value| value == origin);
-    allowed.then(|| HeaderValue::from_str(origin).ok()).flatten()
+    let allowed = env::var("ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:3000".to_owned())
+        .split(',')
+        .map(str::trim)
+        .any(|value| value == origin);
+    allowed
+        .then(|| HeaderValue::from_str(origin).ok())
+        .flatten()
 }
 
 async fn csrf_matches(headers: &HeaderMap, state: &AppState, username: &str) -> bool {
-    let Some(token) = headers.get("x-csrf-token").and_then(|value| value.to_str().ok()) else {
+    let Some(token) = headers
+        .get("x-csrf-token")
+        .and_then(|value| value.to_str().ok())
+    else {
         return false;
     };
     if cookie_value(headers, "csrf_token").as_deref() == Some(token) {
@@ -275,7 +297,13 @@ async fn csrf_matches(headers: &HeaderMap, state: &AppState, username: &str) -> 
 }
 
 fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
-    headers.get_all(header::COOKIE).iter().filter_map(|value| value.to_str().ok()).flat_map(|value| value.split(';')).filter_map(|cookie| cookie.trim().split_once('=')).find_map(|(key, value)| (key == name).then(|| value.to_owned()))
+    headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(';'))
+        .filter_map(|cookie| cookie.trim().split_once('='))
+        .find_map(|(key, value)| (key == name).then(|| value.to_owned()))
 }
 
 fn memory_usage() -> String {
@@ -291,7 +319,7 @@ fn memory_usage() -> String {
 
 fn proc_value_kib(path: &str, key: &str) -> Option<u64> {
     fs::read_to_string(path)
-        .ok()?
+        .unwrap_or_else(|_| "http://localhost:3000".to_owned())
         .lines()
         .find(|line| line.starts_with(key))?
         .split_whitespace()

@@ -31,7 +31,10 @@ async fn rust_matches_checked_in_wire_contracts() {
         "rest_route_precedence",
     ] {
         let fixture = load_fixture(name);
-        let expected = fixture.pointer("/expected/response").unwrap();
+        let expected = fixture
+            .pointer("/approved_rust_divergence/rust_response")
+            .or_else(|| fixture.pointer("/expected/response"))
+            .unwrap();
         let request_contract = fixture.get("request").unwrap();
         let method =
             Method::from_bytes(request_contract["method"].as_str().unwrap().as_bytes()).unwrap();

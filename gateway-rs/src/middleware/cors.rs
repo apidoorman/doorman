@@ -192,7 +192,13 @@ mod tests {
             ..Default::default()
         };
         let mut headers = HeaderMap::new();
-        apply(&mut headers, &config, Some("https://attacker.example"), None, None);
+        apply(
+            &mut headers,
+            &config,
+            Some("https://attacker.example"),
+            None,
+            None,
+        );
         assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
         assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
     }

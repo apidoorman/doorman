@@ -17,10 +17,12 @@ fn deserialize_audience<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, 
 where
     D: Deserializer<'de>,
 {
-    Ok(Option::<Audience>::deserialize(deserializer)?.map(|audience| match audience {
-        Audience::One(value) => vec![value],
-        Audience::Many(values) => values,
-    }))
+    Ok(
+        Option::<Audience>::deserialize(deserializer)?.map(|audience| match audience {
+            Audience::One(value) => vec![value],
+            Audience::Many(values) => values,
+        }),
+    )
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -191,8 +193,12 @@ mod tests {
 
     #[test]
     fn audience_deserializes_string_or_array() {
-        let one: AuthClaims = serde_json::from_value(serde_json::json!({"sub":"user","jti":"id","aud":"doorman"})).unwrap();
-        let many: AuthClaims = serde_json::from_value(serde_json::json!({"sub":"user","jti":"id","aud":["doorman"]})).unwrap();
+        let one: AuthClaims =
+            serde_json::from_value(serde_json::json!({"sub":"user","jti":"id","aud":"doorman"}))
+                .unwrap();
+        let many: AuthClaims =
+            serde_json::from_value(serde_json::json!({"sub":"user","jti":"id","aud":["doorman"]}))
+                .unwrap();
         assert_eq!(one.aud, Some(vec!["doorman".to_owned()]));
         assert_eq!(many.aud, Some(vec!["doorman".to_owned()]));
     }

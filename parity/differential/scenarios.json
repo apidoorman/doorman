@@ -17,7 +17,8 @@
       "Access-Control-Request-Headers": "authorization,content-type",
       "Access-Control-Request-Method": "DELETE",
       "Origin": "https://console.example"
-    }
+    },
+    "approved_rust_divergence": "MIG-068: Rust strictly rejects unallowlisted cache-preflight origins with GTW008."
   },
   {
     "name": "platform_liveness",

@@ -1,10 +1,45 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, atomic::Ordering};
 
 use axum::body::{Body, to_bytes};
-use doorman_gateway::{AppState, Config, build_router, storage::runtime::SharedStorage};
+use doorman_gateway::{
+    AppState, Config, build_router,
+    middleware::chaos::{
+        CHAOS_ENABLED, CHAOS_ERROR_BUDGET_BURN, CHAOS_ERROR_STATUS, CHAOS_EVENTS_COUNT,
+        CHAOS_LATENCY_MS, CHAOS_MONGO_OUTAGE, CHAOS_REDIS_OUTAGE,
+    },
+    storage::runtime::SharedStorage,
+};
 use http::{Request, StatusCode, header};
 use serde_json::{Value, json};
+use tokio::sync::Mutex;
 use tower::ServiceExt;
+
+static PARITY_SUITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn reset_chaos_state() {
+    CHAOS_ENABLED.store(false, Ordering::Relaxed);
+    CHAOS_LATENCY_MS.store(0, Ordering::Relaxed);
+    CHAOS_ERROR_STATUS.store(0, Ordering::Relaxed);
+    CHAOS_EVENTS_COUNT.store(0, Ordering::Relaxed);
+    CHAOS_ERROR_BUDGET_BURN.store(0, Ordering::Relaxed);
+    CHAOS_REDIS_OUTAGE.store(false, Ordering::Relaxed);
+    CHAOS_MONGO_OUTAGE.store(false, Ordering::Relaxed);
+}
+
+struct ChaosStateReset;
+
+impl ChaosStateReset {
+    fn new() -> Self {
+        reset_chaos_state();
+        Self
+    }
+}
+
+impl Drop for ChaosStateReset {
+    fn drop(&mut self) {
+        reset_chaos_state();
+    }
+}
 
 async fn test_app_state() -> AppState {
     let mut config = Config::for_test("removed-internal-backend".to_owned());
@@ -87,6 +122,10 @@ async fn login(app: &axum::Router) -> String {
 
 #[tokio::test]
 async fn parity_test_user_onboarding_and_auth_flows() {
+    let _suite_lock = PARITY_SUITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .await;
     let state = test_app_state().await;
     let app = build_router(state);
     let token = login(&app).await;
@@ -140,6 +179,10 @@ async fn parity_test_user_onboarding_and_auth_flows() {
 
 #[tokio::test]
 async fn parity_test_graphql_validation_and_introspection_policy() {
+    let _suite_lock = PARITY_SUITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .await;
     let state = test_app_state().await;
     let app = build_router(state);
 
@@ -165,6 +208,11 @@ async fn parity_test_graphql_validation_and_introspection_policy() {
 
 #[tokio::test]
 async fn parity_test_developer_tools_chaos_and_simulator() {
+    let _suite_lock = PARITY_SUITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .await;
+    let _chaos_reset = ChaosStateReset::new();
     let state = test_app_state().await;
     let app = build_router(state);
     let token = login(&app).await;
@@ -238,6 +286,10 @@ async fn parity_test_developer_tools_chaos_and_simulator() {
 
 #[tokio::test]
 async fn parity_test_analytics_timeseries_endpoints() {
+    let _suite_lock = PARITY_SUITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .await;
     let state = test_app_state().await;
     let app = build_router(state);
     let token = login(&app).await;

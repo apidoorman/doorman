@@ -54,4 +54,36 @@ mod tests {
         let counter = WindowCounter::default();
         assert!(enforce_pre_request_limit("alice", &user, &counter, 1, 101).is_err());
     }
+
+    #[test]
+    fn python_bandwidth_limit_blocks_after_usage_reaches_limit() {
+        let user = json!({
+            "bandwidth_limit_enabled": true,
+            "bandwidth_limit_bytes": 1,
+            "bandwidth_limit_window": "second",
+        });
+        let counter = WindowCounter::default();
+        assert!(enforce_pre_request_limit("admin", &user, &counter, 100, 0).is_ok());
+        let key = bandwidth_key("admin", 1, 100);
+        assert_eq!(counter.incr(&key, 1, 100), 1);
+
+        let failure = enforce_pre_request_limit("admin", &user, &counter, 100, 0).unwrap_err();
+        assert_eq!(failure.status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(failure.error_message, "Bandwidth limit exceeded");
+    }
+
+    #[test]
+    fn python_bandwidth_limit_resets_in_the_next_window() {
+        let user = json!({
+            "bandwidth_limit_enabled": true,
+            "bandwidth_limit_bytes": 1,
+            "bandwidth_limit_window": "second",
+        });
+        let counter = WindowCounter::default();
+        let key = bandwidth_key("admin", 1, 100);
+        assert_eq!(counter.incr(&key, 1, 100), 1);
+        assert!(enforce_pre_request_limit("admin", &user, &counter, 100, 0).is_err());
+
+        assert!(enforce_pre_request_limit("admin", &user, &counter, 101, 0).is_ok());
+    }
 }

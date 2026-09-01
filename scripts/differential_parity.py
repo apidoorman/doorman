@@ -110,12 +110,14 @@ def main() -> int:
     for case in scenarios:
         python_result = request(args.python_url, case)
         rust_result = request(args.rust_url, case)
+        approved_divergence = case.get("approved_rust_divergence")
         results.append(
             {
                 "name": case["name"],
                 "match": python_result == rust_result,
                 "python": python_result,
                 "rust": rust_result,
+                "approved_divergence": approved_divergence,
             }
         )
 
@@ -136,18 +138,22 @@ def main() -> int:
 
     report = {
         "schema_version": 1,
-        "differences": sum(not result["match"] for result in results),
+        "differences": sum(not result["match"] and not result.get("approved_divergence") for result in results),
+        "approved_differences": sum(not result["match"] and bool(result.get("approved_divergence")) for result in results),
         "results": results,
     }
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     for result in results:
-        print(f"{'PASS' if result['match'] else 'FAIL'} {result['name']}")
+        label = "PASS" if result["match"] else "APPROVED" if result.get("approved_divergence") else "FAIL"
+        print(f"{label} {result['name']}")
         if not result["match"]:
+            if result.get("approved_divergence"):
+                print("  approved:", result["approved_divergence"])
             print("  python:", json.dumps(result["python"], sort_keys=True))
             print("  rust:  ", json.dumps(result["rust"], sort_keys=True))
-    print(f"differences={report['differences']}")
+    print(f"differences={report['differences']} approved_differences={report['approved_differences']}")
     return 1 if report["differences"] else 0
 
 

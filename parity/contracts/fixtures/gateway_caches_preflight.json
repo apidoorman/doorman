@@ -1,5 +1,5 @@
 {
-  "description": "Cache-clear preflight is accepted without authentication.",
+  "description": "Python accepts an unauthenticated cache-clear preflight; Rust retains strict CORS and permits only configured origins.",
   "expected": {
     "decisions": {
       "auth": "not_required",
@@ -17,6 +17,25 @@
     },
     "state_changes": {},
     "upstream_requests": []
+  },
+  "approved_rust_divergence": {
+    "id": "MIG-068",
+    "approved_on": "2026-08-17",
+    "reason": "Approved strict-CORS policy: an allowed origin receives explicit CORS headers; an unallowlisted origin is rejected with GTW008.",
+    "rust_response": {
+      "body": "",
+      "content_type": "",
+      "headers": {
+        "access-control-allow-credentials": "true",
+        "access-control-allow-headers": "Authorization, Content-Type, X-CSRF-Token",
+        "access-control-allow-methods": "DELETE",
+        "access-control-allow-origin": "http://localhost:3000",
+        "request_id": "<request-id>",
+        "vary": "origin",
+        "x-request-id": "<request-id>"
+      },
+      "status": 204
+    }
   },
   "name": "gateway_caches_preflight",
   "request": {

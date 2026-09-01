@@ -1,10 +1,19 @@
-use std::sync::Arc;
+use std::{
+    io::{self, Write},
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
-use axum::body::{Body, to_bytes};
+use axum::{
+    body::{Body, to_bytes},
+    extract::ConnectInfo,
+};
 use doorman_gateway::{AppState, Config, build_router, storage::runtime::SharedStorage};
-use http::{Request, StatusCode, header};
+use http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
+use tracing::instrument::WithSubscriber;
+use tracing_subscriber::fmt::MakeWriter;
 
 async fn memory_state(https_only: bool) -> AppState {
     let mut config = Config::for_test("removed-internal-backend".to_owned());
@@ -97,11 +106,503 @@ async fn login_as(app: &axum::Router, email: &str, password: &str) -> (String, S
     (cookies.join("; "), csrf)
 }
 
+async fn state_with_security_settings(settings: Value) -> AppState {
+    let state = memory_state(false).await;
+    state
+        .storage
+        .as_ref()
+        .unwrap()
+        .insert_one("settings", settings)
+        .await
+        .unwrap();
+    state
+}
+
+fn platform_liveness_request(peer_ip: &str, forwarded_ip: Option<&str>) -> Request<Body> {
+    let peer = SocketAddr::new(peer_ip.parse().unwrap(), 41000);
+    let mut builder = Request::builder()
+        .uri("/platform/monitor/liveness")
+        .extension(ConnectInfo(peer));
+    if let Some(forwarded_ip) = forwarded_ip {
+        builder = builder.header("x-forwarded-for", forwarded_ip);
+    }
+    builder.body(Body::empty()).unwrap()
+}
+
+async fn response_json(response: axum::response::Response) -> Value {
+    serde_json::from_slice(&to_bytes(response.into_body(), 16 * 1024).await.unwrap()).unwrap()
+}
+
+async fn platform_request(
+    app: &axum::Router,
+    method: Method,
+    path: &str,
+    cookie: Option<&str>,
+    csrf: Option<&str>,
+    payload: Option<Value>,
+) -> axum::response::Response {
+    let mut builder = Request::builder().method(method).uri(path);
+    if let Some(cookie) = cookie {
+        builder = builder.header(header::COOKIE, cookie);
+    }
+    if let Some(csrf) = csrf {
+        builder = builder.header("x-csrf-token", csrf);
+    }
+    let body = if let Some(payload) = payload {
+        builder = builder.header(header::CONTENT_TYPE, "application/json");
+        Body::from(payload.to_string())
+    } else {
+        Body::empty()
+    };
+    app.clone()
+        .oneshot(builder.body(body).unwrap())
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn authorization_login_status_invalid_and_guards_match_python() {
+    let app = build_router(memory_state(false).await);
+
+    let invalid = platform_request(
+        &app,
+        Method::POST,
+        "/platform/authorization",
+        None,
+        None,
+        Some(json!({"email": "unknown@example.com", "password": "bad"})),
+    )
+    .await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    for (method, path) in [
+        (Method::GET, "/platform/user/me"),
+        (Method::POST, "/platform/authorization/refresh"),
+    ] {
+        let response = platform_request(&app, method, path, None, None, None).await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
+    }
+
+    let response = platform_request(
+        &app,
+        Method::POST,
+        "/platform/authorization",
+        None,
+        None,
+        Some(json!({
+            "email": "admin@doorman.dev",
+            "password": "AdminPassword123!"
+        })),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let cookies = response
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|value| value.to_str().unwrap().split(';').next().unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("access_token_cookie="))
+    );
+    let cookie = cookies.join("; ");
+
+    let status = platform_request(
+        &app,
+        Method::GET,
+        "/platform/authorization/status",
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status.status(), StatusCode::OK);
+    assert_eq!(response_json(status).await["message"], "Token is valid");
+}
+
+#[tokio::test]
+async fn authorization_refresh_and_invalidate_match_python() {
+    let app = build_router(memory_state(false).await);
+    let (cookie, _) = login(&app).await;
+
+    let refresh = platform_request(
+        &app,
+        Method::POST,
+        "/platform/authorization/refresh",
+        Some(&cookie),
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(refresh.status(), StatusCode::OK);
+    let refreshed_cookie = refresh
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|value| value.to_str().unwrap().split(';').next().unwrap())
+        .collect::<Vec<_>>()
+        .join("; ");
+    assert!(
+        refreshed_cookie
+            .split("; ")
+            .any(|cookie| cookie.starts_with("access_token_cookie="))
+    );
+
+    let status = platform_request(
+        &app,
+        Method::GET,
+        "/platform/authorization/status",
+        Some(&refreshed_cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status.status(), StatusCode::OK);
+
+    let invalidate = platform_request(
+        &app,
+        Method::POST,
+        "/platform/authorization/invalidate",
+        Some(&refreshed_cookie),
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(invalidate.status(), StatusCode::OK);
+
+    let rejected = platform_request(
+        &app,
+        Method::GET,
+        "/platform/user/me",
+        Some(&refreshed_cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn authorization_admin_lifecycle_and_revoke_match_python() {
+    let app = build_router(memory_state(false).await);
+    let (admin_cookie, _) = login(&app).await;
+    let username = "qa-auth";
+    let email = "qa-auth@example.com";
+    let password = "VerySecurePassword!123";
+
+    let create = platform_request(
+        &app,
+        Method::POST,
+        "/platform/user",
+        Some(&admin_cookie),
+        None,
+        Some(json!({
+            "username": username,
+            "email": email,
+            "password": password,
+            "role": "admin",
+            "groups": ["ALL"],
+            "active": true
+        })),
+    )
+    .await;
+    assert_eq!(create.status(), StatusCode::CREATED);
+    let (user_cookie, _) = login_as(&app, email, password).await;
+
+    let status_path = format!("/platform/authorization/admin/status/{username}");
+    let status = platform_request(
+        &app,
+        Method::GET,
+        &status_path,
+        Some(&admin_cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status.status(), StatusCode::OK);
+    let status = response_json(status).await;
+    assert_eq!(status["active"], true);
+    assert_eq!(status["revoked"], false);
+
+    let revoke_path = format!("/platform/authorization/admin/revoke/{username}");
+    let revoke = platform_request(
+        &app,
+        Method::POST,
+        &revoke_path,
+        Some(&admin_cookie),
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(revoke.status(), StatusCode::OK);
+    let rejected = platform_request(
+        &app,
+        Method::GET,
+        "/platform/user/me",
+        Some(&user_cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+
+    let disable_path = format!("/platform/authorization/admin/disable/{username}");
+    let disable = platform_request(
+        &app,
+        Method::POST,
+        &disable_path,
+        Some(&admin_cookie),
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(disable.status(), StatusCode::OK);
+    let status = platform_request(
+        &app,
+        Method::GET,
+        &status_path,
+        Some(&admin_cookie),
+        None,
+        None,
+    )
+    .await;
+    let status = response_json(status).await;
+    assert_eq!(status["active"], false);
+    assert_eq!(status["revoked"], true);
+
+    let enable_path = format!("/platform/authorization/admin/enable/{username}");
+    let enable = platform_request(
+        &app,
+        Method::POST,
+        &enable_path,
+        Some(&admin_cookie),
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(enable.status(), StatusCode::OK);
+    let unrevoke_path = format!("/platform/authorization/admin/unrevoke/{username}");
+    let unrevoke = platform_request(
+        &app,
+        Method::POST,
+        &unrevoke_path,
+        Some(&admin_cookie),
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(unrevoke.status(), StatusCode::OK);
+    let status = platform_request(
+        &app,
+        Method::GET,
+        &status_path,
+        Some(&admin_cookie),
+        None,
+        None,
+    )
+    .await;
+    let status = response_json(status).await;
+    assert_eq!(status["active"], true);
+    assert_eq!(status["revoked"], false);
+}
+
+#[derive(Clone, Default)]
+struct CapturedTrace(Arc<Mutex<Vec<u8>>>);
+
+impl Write for CapturedTrace {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'writer> MakeWriter<'writer> for CapturedTrace {
+    type Writer = Self;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        self.clone()
+    }
+}
+
+impl CapturedTrace {
+    fn text(&self) -> String {
+        String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+    }
+}
+
+#[tokio::test]
+async fn global_whitelist_blocks_non_whitelisted_with_trusted_proxy() {
+    let app = build_router(
+        state_with_security_settings(json!({
+            "trust_x_forwarded_for": true,
+            "xff_trusted_proxies": ["127.0.0.1"],
+            "ip_whitelist": ["198.51.100.10"],
+            "ip_blacklist": [],
+            "allow_localhost_bypass": false,
+        }))
+        .await,
+    );
+    let response = app
+        .oneshot(platform_liveness_request("127.0.0.1", Some("203.0.113.10")))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response_json(response).await["error_code"], "SEC010");
+}
+
+#[tokio::test]
+async fn global_blacklist_blocks_with_trusted_proxy() {
+    let app = build_router(
+        state_with_security_settings(json!({
+            "trust_x_forwarded_for": true,
+            "xff_trusted_proxies": ["127.0.0.1"],
+            "ip_whitelist": [],
+            "ip_blacklist": ["203.0.113.10"],
+            "allow_localhost_bypass": false,
+        }))
+        .await,
+    );
+    let response = app
+        .oneshot(platform_liveness_request("127.0.0.1", Some("203.0.113.10")))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response_json(response).await["error_code"], "SEC011");
+}
+
+#[tokio::test]
+async fn global_xff_is_ignored_when_the_direct_proxy_is_not_trusted() {
+    let app = build_router(
+        state_with_security_settings(json!({
+            "trust_x_forwarded_for": true,
+            "xff_trusted_proxies": ["10.0.0.1"],
+            "ip_whitelist": ["198.51.100.10"],
+            "ip_blacklist": [],
+            "allow_localhost_bypass": false,
+        }))
+        .await,
+    );
+    let response = app
+        .oneshot(platform_liveness_request(
+            "127.0.0.1",
+            Some("198.51.100.10"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response_json(response).await["error_code"], "SEC010");
+}
+
+#[tokio::test]
+async fn global_localhost_bypass_enabled_allows_without_forwarding_headers() {
+    let app = build_router(
+        state_with_security_settings(json!({
+            "trust_x_forwarded_for": false,
+            "ip_whitelist": ["198.51.100.10"],
+            "ip_blacklist": [],
+            "allow_localhost_bypass": true,
+        }))
+        .await,
+    );
+    let response = app
+        .oneshot(platform_liveness_request("127.0.0.1", None))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn global_localhost_bypass_disabled_blocks_without_forwarding_headers() {
+    let app = build_router(
+        state_with_security_settings(json!({
+            "trust_x_forwarded_for": false,
+            "ip_whitelist": ["198.51.100.10"],
+            "ip_blacklist": [],
+            "allow_localhost_bypass": false,
+        }))
+        .await,
+    );
+    let response = app
+        .clone()
+        .oneshot(platform_liveness_request("127.0.0.1", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response_json(response).await["error_code"], "SEC010");
+
+    let settings_response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/platform/security/settings")
+                .extension(ConnectInfo(SocketAddr::new(
+                    "127.0.0.1".parse().unwrap(),
+                    41000,
+                )))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(settings_response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn global_ip_denial_emits_the_python_audit_action() {
+    let app = build_router(
+        state_with_security_settings(json!({
+            "trust_x_forwarded_for": true,
+            "xff_trusted_proxies": ["127.0.0.1"],
+            "ip_whitelist": ["198.51.100.10"],
+            "ip_blacklist": [],
+            "allow_localhost_bypass": false,
+        }))
+        .await,
+    );
+    let capture = CapturedTrace::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .with_writer(capture.clone())
+        .finish();
+    let response = app
+        .oneshot(platform_liveness_request("127.0.0.1", Some("203.0.113.10")))
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let events = capture.text();
+    assert!(
+        events.contains("ip.global_deny"),
+        "captured events: {events}"
+    );
+    assert!(
+        events.contains("not_in_whitelist"),
+        "captured events: {events}"
+    );
+    assert!(events.contains("203.0.113.10"), "captured events: {events}");
+}
+
 #[tokio::test]
 async fn platform_documentation_and_registration_are_private_by_default() {
     let app = build_router(memory_state(false).await);
 
-    for path in ["/platform/openapi.json", "/platform/docs", "/platform/redoc"] {
+    for path in [
+        "/platform/openapi.json",
+        "/platform/docs",
+        "/platform/redoc",
+    ] {
         let response = app
             .clone()
             .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
@@ -117,10 +618,13 @@ async fn platform_documentation_and_registration_are_private_by_default() {
                 .method("POST")
                 .uri("/platform/authorization/register")
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(json!({
-                    "email": "public@example.com",
-                    "password": "PublicPassword123!"
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "email": "public@example.com",
+                        "password": "PublicPassword123!"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -131,7 +635,11 @@ async fn platform_documentation_and_registration_are_private_by_default() {
     assert_eq!(registration["error_code"], "AUTH006");
 
     let (admin_cookie, _) = login(&app).await;
-    for path in ["/platform/openapi.json", "/platform/docs", "/platform/redoc"] {
+    for path in [
+        "/platform/openapi.json",
+        "/platform/docs",
+        "/platform/redoc",
+    ] {
         let response = app
             .clone()
             .oneshot(
@@ -225,7 +733,11 @@ async fn platform_preflight_is_public_with_safe_defaults() {
         response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
         "http://localhost:3000"
     );
-    assert!(!response.headers().contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
+    assert!(
+        !response
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS)
+    );
     assert!(response.headers().contains_key("request_id"));
     assert!(response.headers().contains_key("x-request-id"));
 }
@@ -334,18 +846,40 @@ async fn https_mode_requires_matching_csrf_and_preserves_request_id() {
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(rejected.headers()["request_id"], "csrf-rejected");
 
-    let accepted = app
-        .oneshot(
-            Request::builder()
-                .uri("/platform/user/me")
-                .header(header::COOKIE, cookie)
-                .header("x-csrf-token", csrf)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let mismatched = platform_request(
+        &app,
+        Method::GET,
+        "/platform/user/me",
+        Some(&cookie),
+        Some("not-the-cookie"),
+        None,
+    )
+    .await;
+    assert_eq!(mismatched.status(), StatusCode::UNAUTHORIZED);
+
+    let accepted = platform_request(
+        &app,
+        Method::GET,
+        "/platform/user/me",
+        Some(&cookie),
+        Some(&csrf),
+        None,
+    )
+    .await;
     assert_eq!(accepted.status(), StatusCode::OK);
+
+    let http_app = build_router(memory_state(false).await);
+    let (http_cookie, _) = login(&http_app).await;
+    let accepted_without_csrf = platform_request(
+        &http_app,
+        Method::GET,
+        "/platform/user/me",
+        Some(&http_cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(accepted_without_csrf.status(), StatusCode::OK);
 }
 
 #[tokio::test]

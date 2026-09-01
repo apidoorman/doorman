@@ -64,7 +64,8 @@ impl SharedStorageConfig {
             jwt_keys_json: env_non_empty("JWT_KEYS"),
             jwt_secret: env_non_empty("JWT_SECRET_KEY"),
             jwt_issuer: env_non_empty("JWT_ISSUER").unwrap_or_else(|| "doorman-gateway".to_owned()),
-            jwt_audience: env_non_empty("JWT_AUDIENCE").unwrap_or_else(|| "doorman-gateway".to_owned()),
+            jwt_audience: env_non_empty("JWT_AUDIENCE")
+                .unwrap_or_else(|| "doorman-gateway".to_owned()),
             token_encryption_key: env_non_empty("TOKEN_ENCRYPTION_KEY")
                 .or_else(|| env_non_empty("MEM_ENCRYPTION_KEY")),
             trust_x_forwarded_for: env_bool("TRUST_X_FORWARDED_FOR", false),
@@ -260,9 +261,14 @@ fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), Con
         ));
     }
     let environment = env_non_empty("ENV").ok_or_else(|| {
-        ConfigError::InvalidConfiguration("ENV must be explicitly set to development or production".to_owned())
+        ConfigError::InvalidConfiguration(
+            "ENV must be explicitly set to development or production".to_owned(),
+        )
     })?;
-    if !matches!(environment.to_ascii_lowercase().as_str(), "development" | "dev" | "production" | "prod") {
+    if !matches!(
+        environment.to_ascii_lowercase().as_str(),
+        "development" | "dev" | "production" | "prod"
+    ) {
         return Err(ConfigError::InvalidConfiguration(
             "ENV must be development or production".to_owned(),
         ));
@@ -281,7 +287,10 @@ fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), Con
             ));
         }
     }
-    if matches!(environment.to_ascii_lowercase().as_str(), "production" | "prod") {
+    if matches!(
+        environment.to_ascii_lowercase().as_str(),
+        "production" | "prod"
+    ) {
         validate_production_secrets(storage)?;
         if !env_bool("HTTPS_ONLY", false) {
             return Err(ConfigError::InvalidConfiguration(
@@ -293,7 +302,11 @@ fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), Con
                 "production requires explicit ALLOWED_ORIGINS".to_owned(),
             )
         })?;
-        if origins.split(',').map(str::trim).any(|origin| origin.is_empty() || origin == "*") {
+        if origins
+            .split(',')
+            .map(str::trim)
+            .any(|origin| origin.is_empty() || origin == "*")
+        {
             return Err(ConfigError::InvalidConfiguration(
                 "production ALLOWED_ORIGINS must not contain wildcard or empty origins".to_owned(),
             ));
@@ -331,29 +344,42 @@ fn validate_runtime_environment(storage: &SharedStorageConfig) -> Result<(), Con
 }
 
 fn validate_production_secrets(storage: &SharedStorageConfig) -> Result<(), ConfigError> {
-    for (name, value) in [("JWT_ISSUER", &storage.jwt_issuer), ("JWT_AUDIENCE", &storage.jwt_audience)] {
+    for (name, value) in [
+        ("JWT_ISSUER", &storage.jwt_issuer),
+        ("JWT_AUDIENCE", &storage.jwt_audience),
+    ] {
         if value.trim().is_empty() || value == "doorman-gateway" {
-            return Err(ConfigError::InvalidConfiguration(format!("production requires an explicit, unique {name}")));
+            return Err(ConfigError::InvalidConfiguration(format!(
+                "production requires an explicit, unique {name}"
+            )));
         }
     }
     if storage.storage_mode.eq_ignore_ascii_case("MEM") {
         let key = env_non_empty("MEM_ENCRYPTION_KEY").ok_or_else(|| {
-            ConfigError::InvalidConfiguration("production MEM mode requires MEM_ENCRYPTION_KEY".to_owned())
+            ConfigError::InvalidConfiguration(
+                "production MEM mode requires MEM_ENCRYPTION_KEY".to_owned(),
+            )
         })?;
-        if key.len() < 32 || ["change-me-in-prod", "please-change-me", "changeme"].contains(&key.as_str()) {
+        if key.len() < 32
+            || ["change-me-in-prod", "please-change-me", "changeme"].contains(&key.as_str())
+        {
             return Err(ConfigError::InvalidConfiguration(
                 "MEM_ENCRYPTION_KEY must be a unique 32+ character secret in production".to_owned(),
             ));
         }
     } else {
         let mongo_password = storage.mongo_password.as_deref().unwrap_or_default();
-        if mongo_password.len() < 16 || ["changeme", "password", "please-change-me"].contains(&mongo_password) {
+        if mongo_password.len() < 16
+            || ["changeme", "password", "please-change-me"].contains(&mongo_password)
+        {
             return Err(ConfigError::InvalidConfiguration(
                 "production external storage requires a unique MongoDB password of at least 16 characters".to_owned(),
             ));
         }
         let redis_password = storage.redis_password.as_deref().unwrap_or_default();
-        if redis_password.len() < 16 || ["changeme", "password", "please-change-me"].contains(&redis_password) {
+        if redis_password.len() < 16
+            || ["changeme", "password", "please-change-me"].contains(&redis_password)
+        {
             return Err(ConfigError::InvalidConfiguration(
                 "production external storage requires a unique Redis password of at least 16 characters".to_owned(),
             ));
@@ -372,14 +398,30 @@ fn has_strong_jwt_key(raw: &str) -> bool {
         .cloned()
         .or_else(|| value.as_array().cloned())
         .unwrap_or_else(|| vec![value]);
-    entries.into_iter().filter(|entry| entry.get("active").and_then(Value::as_bool) != Some(false)).any(|entry| {
-        let algorithm = entry.get("algorithm").and_then(Value::as_str).unwrap_or("HS256");
-        if algorithm.eq_ignore_ascii_case("RS256") {
-            entry.get("private_key").or_else(|| entry.get("public_key")).or_else(|| entry.get("verification_key")).and_then(Value::as_str).is_some_and(|key| key.len() >= 128)
-        } else {
-            entry.get("secret").or_else(|| entry.get("key")).or_else(|| entry.get("verification_key")).and_then(Value::as_str).is_some_and(|key| key.len() >= 32)
-        }
-    })
+    entries
+        .into_iter()
+        .filter(|entry| entry.get("active").and_then(Value::as_bool) != Some(false))
+        .any(|entry| {
+            let algorithm = entry
+                .get("algorithm")
+                .and_then(Value::as_str)
+                .unwrap_or("HS256");
+            if algorithm.eq_ignore_ascii_case("RS256") {
+                entry
+                    .get("private_key")
+                    .or_else(|| entry.get("public_key"))
+                    .or_else(|| entry.get("verification_key"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|key| key.len() >= 128)
+            } else {
+                entry
+                    .get("secret")
+                    .or_else(|| entry.get("key"))
+                    .or_else(|| entry.get("verification_key"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|key| key.len() >= 32)
+            }
+        })
 }
 
 fn env_bool(name: &str, default: bool) -> bool {
@@ -473,5 +515,39 @@ mod tests {
             "mongodb://doorman:secret@mongo-a:27017,mongo-b:27017/doorman?replicaSet=rs0&authSource=admin"
         );
         assert_eq!(storage.redis_url(), "redis://:redis-secret@redis:6380/2");
+    }
+
+    #[test]
+    fn jwt_configuration_presence_matches_python() {
+        let mut storage = SharedStorageConfig {
+            storage_mode: "MEM".to_owned(),
+            mongo_uri_override: None,
+            mongo_hosts: "localhost:27017".to_owned(),
+            mongo_replica_set: None,
+            mongo_user: None,
+            mongo_password: None,
+            mongo_database: "doorman".to_owned(),
+            mongo_auth_source: None,
+            redis_host: "localhost".to_owned(),
+            redis_port: 6379,
+            redis_db: 0,
+            redis_password: None,
+            jwt_keys_json: None,
+            jwt_secret: Some("abc123".to_owned()),
+            jwt_issuer: "doorman-test".to_owned(),
+            jwt_audience: "doorman-test-api".to_owned(),
+            token_encryption_key: None,
+            trust_x_forwarded_for: false,
+            local_host_ip_bypass: false,
+            policy_cache_ttl_seconds: 1,
+            skip_tier_rate_limit: false,
+        };
+
+        assert!(storage.validate_required().is_ok());
+        storage.jwt_secret = None;
+        assert!(matches!(
+            storage.validate_required(),
+            Err(ConfigError::MissingEnv("JWT_SECRET_KEY or JWT_KEYS"))
+        ));
     }
 }

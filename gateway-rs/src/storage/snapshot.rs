@@ -161,7 +161,10 @@ fn request_path(path_hint: Option<&str>) -> Result<PathBuf, SnapshotError> {
     if hint.is_absolute()
         || component_count > 1
         || hint.components().any(|component| {
-            matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
         })
     {
         return Err(SnapshotError::InvalidPath);
@@ -220,7 +223,10 @@ fn resolve_restore_path(path_hint: Option<&str>) -> Result<Option<PathBuf>, Snap
         .filter_map(Result::ok)
         .filter(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
-            entry.file_type().map(|kind| kind.is_file()).unwrap_or(false)
+            entry
+                .file_type()
+                .map(|kind| kind.is_file())
+                .unwrap_or(false)
                 && name.ends_with(".bin")
                 && stem
                     .as_ref()
@@ -268,7 +274,10 @@ mod tests {
             PathBuf::from("generated/backup.bin")
         );
         for path in ["../backup.bin", "/tmp/backup.bin", "nested/backup.bin"] {
-            assert!(matches!(request_path(Some(path)), Err(SnapshotError::InvalidPath)));
+            assert!(matches!(
+                request_path(Some(path)),
+                Err(SnapshotError::InvalidPath)
+            ));
         }
     }
 

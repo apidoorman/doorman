@@ -1,0 +1,161 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Pinned Python-to-Rust test coverage ledger",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "schema_version",
+        "reference",
+        "generation",
+        "summary",
+        "entries"
+    ],
+    "properties": {
+        "schema_version": {
+            "const": 1
+        },
+        "reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "git_ref",
+                "commit"
+            ],
+            "properties": {
+                "git_ref": {
+                    "type": "string"
+                },
+                "commit": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                }
+            }
+        },
+        "generation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "command",
+                "status_values"
+            ],
+            "properties": {
+                "command": {
+                    "type": "string"
+                },
+                "status_values": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "enum": [
+                            "covered",
+                            "approved_changed",
+                            "approved_obsolete",
+                            "missing"
+                        ]
+                    }
+                }
+            }
+        },
+        "summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "total_test_cases",
+                "status_counts",
+                "domain_status_counts"
+            ],
+            "properties": {
+                "total_test_cases": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "status_counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                    }
+                },
+                "domain_status_counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                }
+            }
+        },
+        "entries": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "source",
+                    "domain",
+                    "status",
+                    "rust_tests",
+                    "notes"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "pattern": "^backend-services/(tests|live-tests)/.+\\.py::.+$"
+                    },
+                    "source": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "path",
+                            "line",
+                            "suite"
+                        ],
+                        "properties": {
+                            "path": {
+                                "type": "string"
+                            },
+                            "line": {
+                                "type": "integer",
+                                "minimum": 1
+                            },
+                            "suite": {
+                                "enum": [
+                                    "unit",
+                                    "live"
+                                ]
+                            }
+                        }
+                    },
+                    "domain": {
+                        "type": "string",
+                        "pattern": "^(unit|live)/"
+                    },
+                    "status": {
+                        "enum": [
+                            "covered",
+                            "approved_changed",
+                            "approved_obsolete",
+                            "missing"
+                        ]
+                    },
+                    "rust_tests": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "notes": {
+                        "type": "string"
+                    },
+                    "rationale": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
+}

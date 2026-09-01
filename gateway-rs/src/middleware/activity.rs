@@ -110,6 +110,14 @@ pub async fn track_active_requests(
     let effective_api = context.api.as_deref().or(fallback_api.as_deref());
 
     if record_analytics {
+        state
+            .runtime
+            .total_bytes_in
+            .fetch_add(bytes_in, Ordering::Relaxed);
+        state
+            .runtime
+            .total_bytes_out
+            .fetch_add(bytes_out, Ordering::Relaxed);
         if !is_test {
             global_analytics().record_request(
                 effective_api,

@@ -6,7 +6,7 @@ use axum::{
 };
 use doorman_gateway::storage::models::PolicyDocuments;
 use doorman_gateway::{AppState, Config, build_router};
-use http::{Request, StatusCode};
+use http::{Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
@@ -268,7 +268,47 @@ async fn rust_serves_caches_preflight_from_rust() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
     assert!(response.headers().contains_key("x-request-id"));
     assert!(response.headers().contains_key("request_id"));
+    assert_eq!(
+        response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        "http://localhost:3000"
+    );
+    assert_eq!(
+        response.headers()[header::ACCESS_CONTROL_ALLOW_CREDENTIALS],
+        "true"
+    );
+    assert_eq!(
+        response.headers()[header::ACCESS_CONTROL_ALLOW_METHODS],
+        "DELETE"
+    );
     assert_eq!(to_bytes(response.into_body(), 1024).await.unwrap(), "");
+}
+
+#[tokio::test]
+async fn rust_rejects_unallowlisted_cache_preflight() {
+    let config = Config::for_test("http://127.0.0.1:9".to_owned());
+    let app = build_router(AppState::new(config).unwrap());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::OPTIONS)
+                .uri("/api/caches")
+                .header("origin", "https://console.example")
+                .header("access-control-request-method", "DELETE")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert!(
+        !response
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+    );
+    let body = to_bytes(response.into_body(), 1024).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["error_code"], "GTW008");
 }
 
 #[tokio::test]

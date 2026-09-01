@@ -68,6 +68,19 @@
           "type": "object"
         }
       }
+    },
+    "approved_rust_divergence": {
+      "type": "object",
+      "required": ["id", "approved_on", "reason", "rust_response"],
+      "properties": {
+        "id": {"type": "string"},
+        "approved_on": {"type": "string"},
+        "reason": {"type": "string"},
+        "rust_response": {
+          "type": "object",
+          "required": ["status", "content_type", "headers", "body"]
+        }
+      }
     }
   }
 }

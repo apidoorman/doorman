@@ -217,10 +217,17 @@ fn normalize_api_fields(payload: &Value, update: bool) -> Result<Value, Vec<Valu
 }
 
 fn validate_credentialed_cors(output: &Map<String, Value>, errors: &mut Vec<Value>) {
-    if output.get("api_cors_allow_credentials").and_then(Value::as_bool) != Some(true) {
+    if output
+        .get("api_cors_allow_credentials")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
         return;
     }
-    let Some(origins) = output.get("api_cors_allow_origins").and_then(Value::as_array) else {
+    let Some(origins) = output
+        .get("api_cors_allow_origins")
+        .and_then(Value::as_array)
+    else {
         errors.push(json!({
             "loc": ["body", "api_cors_allow_origins"],
             "msg": "credentialed CORS requires a non-empty explicit origin allowlist",
@@ -228,7 +235,13 @@ fn validate_credentialed_cors(output: &Map<String, Value>, errors: &mut Vec<Valu
         }));
         return;
     };
-    if origins.is_empty() || origins.iter().any(|origin| origin.as_str().is_none_or(|origin| origin.trim().is_empty() || origin.trim() == "*")) {
+    if origins.is_empty()
+        || origins.iter().any(|origin| {
+            origin
+                .as_str()
+                .is_none_or(|origin| origin.trim().is_empty() || origin.trim() == "*")
+        })
+    {
         errors.push(json!({
             "loc": ["body", "api_cors_allow_origins"],
             "msg": "credentialed CORS must not use wildcard or empty origins",

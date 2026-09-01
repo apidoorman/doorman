@@ -6,14 +6,17 @@ ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' .env 2>/dev/null | cut
 BASE_URL ?= http://localhost:$(PORT)
 GATEWAY_LOAD_BASE_URL ?= http://localhost:3001
 
-.PHONY: check test unit unitq rust-test rust-clippy rust-fmt-check web-build parity parity-reference parity-contracts parity-differential parity-performance smoke preflight live liveq gateway-load clean clean-deep
+.PHONY: check test unit unitq rust-test rust-clippy rust-fmt-check web-build parity parity-reference parity-ledger parity-contracts parity-differential parity-performance smoke preflight live liveq gateway-load clean clean-deep
 
 check: rust-fmt-check rust-clippy test
 
-parity: parity-reference parity-contracts
+parity: parity-reference parity-ledger parity-contracts
 
 parity-reference:
 	python3 scripts/check_parity_reference.py
+
+parity-ledger:
+	python3 scripts/generate_test_coverage_ledger.py --check
 
 parity-contracts:
 	cargo test --manifest-path gateway-rs/Cargo.toml --locked --test parity_contracts --test openapi_parity --test auth_rate_parity
