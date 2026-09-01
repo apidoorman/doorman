@@ -1,12 +1,34 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { SERVER_URL } from '@/utils/config'
 import { postJson, getJson } from '@/utils/api'
 
-export default function LoginPage() {
+const DEFAULT_AUTH_REDIRECT = '/dashboard'
+
+function getSafeNextPath(nextValue: string | null): string {
+  const candidate = nextValue
+    ? (() => {
+      try {
+        return decodeURIComponent(nextValue)
+      } catch {
+        return nextValue
+      }
+    })()
+    : ''
+
+  if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) {
+    return DEFAULT_AUTH_REDIRECT
+  }
+  if (candidate === '/login' || candidate.startsWith('/login?')) {
+    return DEFAULT_AUTH_REDIRECT
+  }
+  return candidate
+}
+
+function LoginPageContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -18,7 +40,7 @@ export default function LoginPage() {
 
   useEffect(() => { document.documentElement.classList.remove('dark') }, [])
   useEffect(() => {
-    if (isAuthenticated && hasUIAccess) router.push('/dashboard')
+    if (isAuthenticated && hasUIAccess) router.push(nextPath)
     else if (isAuthenticated) {
       setErrorMessage('Your account does not have UI access. Contact an administrator.')
       try { void postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch { }
@@ -44,11 +66,19 @@ export default function LoginPage() {
         try { await postJson(`${SERVER_URL}/platform/authorization/invalidate`, {}) } catch { }
         return
       }
-      await checkAuth(); router.push('/dashboard')
+      await checkAuth(); router.push(nextPath)
     } catch (error) {
       console.error('Login error:', error); setErrorMessage('Network error. Please try again.')
     } finally { setIsLoading(false) }
   }
 
   return <main className="login-signal min-h-screen"><section className="login-signal__panel"><header className="login-signal__header"><a href="https://doorman.dev" className="login-signal__brand" aria-label="Doorman"><span className="login-signal__mark" aria-hidden="true"><img src="/doorman-mark.svg" alt="" /></span><span><strong>Doorman</strong><small>API + AI Gateway</small></span></a><p className="signal-kicker">Gateway access</p><h1>Sign in.</h1><p>Use your Doorman account to manage gateway configuration, traffic, and access control.</p></header><form onSubmit={handleLogin} className="login-signal__form"><div><label htmlFor="email">Email</label><input id="email" type="email" value={email} onChange={event => setEmail(event.target.value)} required autoComplete="email" placeholder="you@company.com" className="input" disabled={isLoading} /></div><div><label htmlFor="password">Password</label><input id="password" type="password" value={password} onChange={event => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password" className="input" disabled={isLoading} /></div>{errorMessage && <div className="login-signal__error">{errorMessage}</div>}<button type="submit" disabled={isLoading} className="signal-button signal-button--primary w-full">{isLoading ? 'Signing in…' : 'Sign in'}</button></form><footer>By signing in, you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</footer></section></main>
+}
+
+export default function LoginPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <LoginPageContent />
+    </React.Suspense>
+  )
 }
