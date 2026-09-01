@@ -31,10 +31,7 @@ export default function UserCreditsDetailPage() {
     try {
       const items = await fetchAllPaginated<any>(
         (page, size) => `${SERVER_URL}/platform/credit/defs?page=${page}&page_size=${size}`,
-        (data) => (data?.items || data?.response?.items || []),
-        undefined,
-        undefined,
-        'cache:credit_defs:all'
+        (data) => (Array.isArray(data) ? data : (data?.items || data?.response?.items || []))
       )
       const map: Record<string, { [tier: string]: TierMeta }> = {}
       for (const it of items) {

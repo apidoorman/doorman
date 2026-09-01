@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
+import { SignalRecordIcon } from '@/components/signal/Signal'
 
 interface Routing {
   routing_name: string
@@ -190,11 +191,7 @@ const RoutingsPage = () => {
                     >
                       <td>
                         <div className="flex items-center">
-                          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mr-3">
-                            <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-                            </svg>
-                          </div>
+                          <SignalRecordIcon kind="routing" className="mr-3" />
                           <div>
                             <p className="font-medium text-gray-900 dark:text-white">{routing.routing_name}</p>
                           </div>

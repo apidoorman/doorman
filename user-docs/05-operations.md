@@ -109,7 +109,9 @@ version: '3.8'
 
 services:
   backend:
-    build: ./backend-services
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       ENV: production
       HTTPS_ONLY: "true"
@@ -456,8 +458,8 @@ Export metrics to Prometheus for alerting and dashboards:
 
 ### Log Files
 
-- **Main log:** `backend-services/logs/doorman.log`
-- **Audit trail:** `backend-services/logs/doorman-trail.log`
+- **Main log:** `logs/doorman.log`
+- **Audit trail:** `logs/doorman-trail.log`
 
 ### Log Formats
 
@@ -526,7 +528,7 @@ LOG_LEVEL=INFO
 ```bash
 MEM_OR_EXTERNAL=MEM
 MEM_ENCRYPTION_KEY=<32-char-secret>
-MEM_DUMP_PATH=backend-services/generated/memory_dump.bin
+MEM_DUMP_PATH=data/memory_dump.bin
 THREADS=1  # REQUIRED - only 1 worker in memory mode
 ```
 
@@ -583,7 +585,7 @@ THREADS=4  # Can use multiple workers
 
 2. **Trigger memory dump (if memory mode):**
    ```bash
-   python doorman.py stop  # Writes dump automatically
+   docker compose stop  # Writes dump automatically
    ```
 
 3. **Restart service:**
@@ -595,7 +597,7 @@ THREADS=4  # Can use multiple workers
    sudo systemctl restart doorman
 
    # Direct
-   python doorman.py start
+   docker compose up -d
    ```
 
 4. **Verify startup:**
@@ -901,7 +903,7 @@ PUT /platform/security/settings
 - Location: `$MEM_DUMP_PATH-YYYYMMDDTHHMMSSZ.bin`
 
 **Restore:**
-- Place latest dump in `backend-services/generated/` directory
+- Place latest dump in `data/` directory
 - Rename to match `MEM_DUMP_PATH` without timestamp
 - Start gateway (auto-loads dump)
 

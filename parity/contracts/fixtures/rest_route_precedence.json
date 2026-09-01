@@ -1,0 +1,88 @@
+{
+  "description": "Client-key routing takes precedence over endpoint servers.",
+  "expected": {
+    "decisions": {
+      "retry_count": 0,
+      "route_source": "client_key",
+      "selected_upstream": "http://route-a/ping"
+    },
+    "response": {
+      "body": {
+        "body": null,
+        "headers": {
+          "x-request-id": "<request-id>"
+        },
+        "method": "GET",
+        "ok": true,
+        "params": {},
+        "url": "http://route-a/ping"
+      },
+      "content_type": "application/json",
+      "headers": {
+        "content-encoding": "gzip",
+        "content-type": "application/json",
+        "request_id": "<request-id>",
+        "vary": "accept-encoding",
+        "x-request-id": "<request-id>"
+      },
+      "status": 200
+    },
+    "state_changes": {
+      "selected_urls": [
+        "http://route-a/ping"
+      ]
+    },
+    "upstream_requests": [
+      {
+        "body": null,
+        "headers": {
+          "x-request-id": "<request-id>"
+        },
+        "method": "GET",
+        "params": {},
+        "url": "http://route-a/ping"
+      }
+    ]
+  },
+  "name": "rest_route_precedence",
+  "request": {
+    "body": null,
+    "headers": {
+      "accept-encoding": "gzip",
+      "client-key": "contract-client"
+    },
+    "method": "GET",
+    "path": "/api/rest/parityroute/v1/ping",
+    "query": {}
+  },
+  "schema_version": 1,
+  "setup": {
+    "api": {
+      "name": "parityroute",
+      "version": "v1"
+    },
+    "endpoint": {
+      "method": "GET",
+      "servers": [
+        "http://ep-a",
+        "http://ep-b"
+      ],
+      "uri": "/ping"
+    },
+    "routing": {
+      "client_key": "contract-client",
+      "servers": [
+        "http://route-a",
+        "http://route-b"
+      ]
+    },
+    "subscription": {
+      "username": "admin"
+    }
+  },
+  "tags": [
+    "rest",
+    "routing",
+    "upstream"
+  ]
+}

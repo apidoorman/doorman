@@ -1,0 +1,81 @@
+{
+  "description": "Request IDs are preserved in the client response and forwarded upstream.",
+  "expected": {
+    "decisions": {
+      "auth": "authenticated",
+      "protocol": "rest",
+      "request_id": "preserved",
+      "retry_count": 0
+    },
+    "response": {
+      "body": {
+        "body": null,
+        "headers": {
+          "x-request-id": "<request-id>"
+        },
+        "method": "GET",
+        "ok": true,
+        "params": {},
+        "url": "http://upstream.test/echo"
+      },
+      "content_type": "application/json",
+      "headers": {
+        "content-encoding": "gzip",
+        "content-type": "application/json",
+        "request_id": "<request-id>",
+        "vary": "accept-encoding",
+        "x-request-id": "<request-id>",
+        "x-upstream-request-id": "<request-id>"
+      },
+      "status": 200
+    },
+    "state_changes": {},
+    "upstream_requests": [
+      {
+        "body": null,
+        "headers": {
+          "x-request-id": "<request-id>"
+        },
+        "method": "GET",
+        "params": {},
+        "url": "http://upstream.test/echo"
+      }
+    ]
+  },
+  "name": "rest_request_id",
+  "request": {
+    "body": null,
+    "headers": {
+      "X-Request-ID": "client-contract-request",
+      "accept-encoding": "gzip"
+    },
+    "method": "GET",
+    "path": "/api/rest/parityrid/v1/echo",
+    "query": {}
+  },
+  "schema_version": 1,
+  "setup": {
+    "api": {
+      "allowed_headers": [
+        "X-Upstream-Request-ID"
+      ],
+      "name": "parityrid",
+      "version": "v1"
+    },
+    "endpoint": {
+      "method": "GET",
+      "servers": [
+        "http://upstream.test"
+      ],
+      "uri": "/echo"
+    },
+    "subscription": {
+      "username": "admin"
+    }
+  },
+  "tags": [
+    "rest",
+    "headers",
+    "upstream"
+  ]
+}

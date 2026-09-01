@@ -28,7 +28,7 @@ except Exception:
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pid", type=int, help="PID of the target process")
-    ap.add_argument("--pidfile", type=str, default="backend-services/doorman.pid",
+    ap.add_argument("--pidfile", type=str, default="doorman.pid",
                     help="Path to PID file (used if --pid not provided)")
     ap.add_argument("--output", type=str, default="load-tests/perf-stats.json",
                     help="Output JSON path")
@@ -49,7 +49,13 @@ def read_pid(pid: int | None, pidfile: str) -> int | None:
     except Exception:
         return None
 
-async def sample_cpu(proc: "psutil.Process", interval: float, stop: asyncio.Event, samples: list[float]):
+async def sample_process(
+    proc: "psutil.Process",
+    interval: float,
+    stop: asyncio.Event,
+    cpu_samples: list[float],
+    rss_samples: list[int],
+):
     try:
         proc.cpu_percent(None)
     except Exception:
@@ -57,7 +63,8 @@ async def sample_cpu(proc: "psutil.Process", interval: float, stop: asyncio.Even
     while not stop.is_set():
         try:
             val = await asyncio.to_thread(proc.cpu_percent, interval)
-            samples.append(float(val))
+            cpu_samples.append(float(val))
+            rss_samples.append(int(proc.memory_info().rss))
         except Exception:
             await asyncio.sleep(interval)
             continue
@@ -108,10 +115,11 @@ async def main() -> int:
             pass
 
     cpu_samples: list[float] = []
+    rss_samples: list[int] = []
     lag_samples_ms: list[float] = []
 
     tasks = [
-        asyncio.create_task(sample_cpu(proc, args.cpu_interval, stop, cpu_samples)),
+        asyncio.create_task(sample_process(proc, args.cpu_interval, stop, cpu_samples, rss_samples)),
         asyncio.create_task(sample_loop_lag(args.lag_interval, stop, lag_samples_ms)),
     ]
 
@@ -135,6 +143,7 @@ async def main() -> int:
         "cpu_percent_avg": round(statistics.fmean(cpu_samples), 2) if cpu_samples else 0.0,
         "cpu_percent_p95": round(percentile(cpu_samples, 95), 2) if cpu_samples else 0.0,
         "cpu_samples": len(cpu_samples),
+        "peak_rss_bytes": max(rss_samples, default=0),
         "loop_lag_ms_p95": round(percentile(lag_samples_ms, 95), 2) if lag_samples_ms else 0.0,
         "loop_lag_samples": len(lag_samples_ms),
     }
@@ -153,4 +162,3 @@ async def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))
-

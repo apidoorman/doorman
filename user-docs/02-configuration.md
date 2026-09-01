@@ -34,6 +34,7 @@ localStorage.setItem('API_URL', 'https://api.doorman.example.com')
 |----------|-------------|
 | `DOORMAN_ADMIN_EMAIL` | Admin email (auto-created in MEM mode) |
 | `DOORMAN_ADMIN_PASSWORD` | Admin password (min 12 chars) |
+| `DOORMAN_ALLOW_PUBLIC_REGISTRATION` | Enables unauthenticated account registration; disabled by default |
 
 ## Cache & Database
 
@@ -41,7 +42,7 @@ localStorage.setItem('API_URL', 'https://api.doorman.example.com')
 |----------|---------|-------------|
 | `MEM_OR_EXTERNAL` | `MEM` | `MEM` (in-memory) or `REDIS` (production) |
 | `MEM_ENCRYPTION_KEY` | - | 32+ char secret for memory dumps (required for dumps) |
-| `MEM_DUMP_PATH` | `generated/memory_dump.bin` | Memory dump file path. Relative paths are resolved under `backend-services/` so `generated/...` maps to the Docker volume mount (`/app/backend-services/generated`). |
+| `MEM_DUMP_PATH` | `generated/memory_dump.bin` | Memory dump file path. Relative paths are resolved from the service working directory; the container default maps to the `/app/data` volume. |
 | `REDIS_HOST` | `localhost` | Redis hostname |
 | `REDIS_PORT` | `6379` | Redis port |
 | `REDIS_DB` | `0` | Redis database number |

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
 import { SERVER_URL } from '@/utils/config'
+import { SignalRecordIcon } from '@/components/signal/Signal'
 
 interface User {
   username: string
@@ -201,9 +202,7 @@ const UsersPage = () => {
                     >
                       <td>
                         <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-medium">
-                            {user.username.charAt(0).toUpperCase()}
-                          </div>
+                          <SignalRecordIcon kind="user" />
                           <div className="ml-3">
                             <p className="font-medium text-gray-900 dark:text-white">
                               {user.username}

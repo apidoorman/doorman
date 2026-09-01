@@ -28,12 +28,6 @@ generated/
 data/
 **/data/
 
-# Local-only demo seeders
-backend-services/scripts/seed_demo_data.py
-
-# Uploaded protos & generated gRPC
-backend-services/proto/
-
 # PIDs & OS/editor noise
 *.pid
 **/*.pid
@@ -54,30 +48,22 @@ env/
 **/.venv/
 **/venv/
 **/env/
-backend-services/platform-logs/doorman.log
-
-# Local helper scripts (never commit)
-scripts/cleanup_inline_comments.py
-scripts/style_unify_python.py
-scripts/add_route_docblocks.py
-scripts/dedupe_docblocks.py
 # Logs and runtime artifacts
 *.log
 **/*.log
-pytest_backend_verbose.log
-backend-services/platform-logs/
 **/platform-logs/
-backend-services/platform-logs/doorman.log
 
 # Generated code and dumps
-backend-services/generated/
 **/generated/
-backend-services/proto/*.bin
-backend-services/proto/*
-backend-services/routes/proto/*
 **/*memory_dump*.bin
 **/*.bin
 .production.env
-.coverage
-coverage_html/
 doorman.code-workspace
+
+# Rust build artifacts
+target/
+**/target/
+
+# Codex workspace metadata
+.codex/
+**/.codex/

@@ -1,109 +1,105 @@
-![Logo](https://i.ibb.co/VpDyBMnk/doorman-gateway-logo.png)
+<img src="web-client/public/doorman-logo.svg?v=white-wordmark" alt="Doorman logo" width="336">
 
 ![api-gateway](https://img.shields.io/badge/API-Gateway-blue)
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Rust](https://img.shields.io/badge/Rust-1.88-orange)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
-![Release](https://img.shields.io/badge/release-v1.0.0-brightgreen)
 ![Last Commit](https://img.shields.io/github/last-commit/apidoorman/doorman)
 ![GitHub issues](https://img.shields.io/github/issues/apidoorman/doorman)
 
 # Doorman API Gateway
 
-Lightweight Python API gateway for REST, SOAP, GraphQL, gRPC, and AI APIs.
+A Rust API gateway and control plane for REST, SOAP, GraphQL, gRPC, gRPC-Web, and AI APIs.
 
-![Example](https://i.ibb.co/jkwPWdnm/Image-9-26-25-at-10-12-PM.png)
+Get started: [Quick Demo](#get-started-quick-demo) or [Self-Hosting](#get-started-self-hosting).
 
-## Key Features
+## Key features
 
-- **Multi-Protocol Support**: REST, SOAP, GraphQL, gRPC, and AI APIs
-- **Security**: User management, authentication, authorization, roles & groups
-- **Traffic Control**: Rate limiting, throttling, dynamic routing, credits
-- **Caching & Storage**: Redis caching, MongoDB integration, or in memory
-- **Validation**: Request payload validation and logging
+- Multi-protocol gateway: REST, SOAP, GraphQL, native gRPC, and gRPC-Web
+- Native control plane: authentication, users, APIs, endpoints, roles, groups, routing, subscriptions, credits, tiers, quotas, security, discovery, and monitoring
+- Traffic policy: rate limits, throttling, bandwidth limits, routing, retries, circuit breaking, credits, and schema validation
+- Dual storage: a self-contained in-memory mode or shared MongoDB and Redis
+- Encrypted in-memory snapshots compatible with the former DMP1 dump format
+- Next.js management UI served alongside the Rust service
 
-## Quick Demo
+## Control plane
 
-Run a local demo instance in seconds.
+The built-in control plane centralizes gateway configuration, access management, traffic controls, and operations in one self-hosted interface.
+
+![Doorman API catalog](docs/images/api-catalog.png)
+
+- **API lifecycle:** catalog and visual builder, protocol and endpoint configuration, schema validation, and API discovery.
+- **Access and consumption:** authentication, users, roles, groups, subscriptions, credits, tiers, and quotas.
+- **Traffic management:** routing, rate limits, throttling, bandwidth limits, retries, and circuit breaking.
+- **Operations and security:** analytics, request logs, monitoring, audit and security controls, and configuration import/export.
+
+## Get Started: Quick Demo
 
 ```bash
-# Clone and launch instantly
-cp .env.example .env
+cp .env.demo .env
 docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
 ```
 
-- **Web UI**: [http://localhost:3000](http://localhost:3000)
-- **Admin**: `demo@doorman.dev` / `DemoPassword123!`
-- **Mode**: Memory mode (no external DB)
+- Web UI: [http://localhost:3000](http://localhost:3000)
+- Gateway and platform API: [http://localhost:3001](http://localhost:3001)
+- Admin: `demo@doorman.dev` / `DemoPassword123!`
+- Storage: in memory; MongoDB and Redis are not required
 
----
+## Get Started: Self-Hosting
 
-## Self-Hosting
+Copy the template, then replace its deliberately invalid administrator credentials
+and JWT secret before launching. The development defaults are configured for the
+bundled HTTP dashboard at `http://localhost:3000`; set your TLS, CORS, issuer,
+audience, and discovery values before switching to `ENV=production`.
 
-Deploy with Docker. Production mode requires Redis and MongoDB.
-
-### 1. Environment Configuration
-Copy the template and set your secrets.
 ```bash
 cp .env.example .env
-# Set: DOORMAN_ADMIN_EMAIL, DOORMAN_ADMIN_PASSWORD, JWT_SECRET_KEY
+docker compose up -d --build
 ```
 
-### 2. Choose Storage
-- Memory (default): development and tests.
-- Redis + MongoDB: production.
+The default is `MEM_OR_EXTERNAL=MEM`. For a shared, multi-instance deployment:
 
-### 3. Launch
 ```bash
-# Standard launch
-docker compose up -d
-
-# Production launch (Redis + MongoDB)
-docker compose --profile production up -d
+MEM_OR_EXTERNAL=REDIS docker compose --profile external up -d --build
 ```
 
----
+Shared mode uses MongoDB for durable configuration and Redis for caches, counters, revocations, routing state, and analytics.
 
-## Configuration
+### Configuration
 
-### Core Environment Variables
 | Variable | Required | Description |
 | :--- | :--- | :--- |
 | `DOORMAN_ADMIN_EMAIL` | Yes | Initial administrator email |
-| `DOORMAN_ADMIN_PASSWORD` | Yes | Admin password (min 12 chars) |
-| `JWT_SECRET_KEY` | Yes | Secret for signing access tokens |
-| `NEXT_PUBLIC_GATEWAY_URL` | No | Frontend API target (Defaults to same origin) |
+| `DOORMAN_ADMIN_PASSWORD` | Yes | Initial administrator password |
+| `JWT_SECRET_KEY` or `JWT_KEYS` | Yes | Access-token signing configuration |
+| `MEM_OR_EXTERNAL` | No | `MEM` (default) or `REDIS` for MongoDB plus Redis |
+| `MEM_ENCRYPTION_KEY` | In memory mode | Encrypts automatic and manual DMP1 snapshots |
+| `MEM_DUMP_PATH` | No | Snapshot path hint; defaults to `data/memory_dump.bin` |
+| `NEXT_PUBLIC_GATEWAY_URL` | No | Browser gateway target; same-origin by default |
+| `DOORMAN_ALLOW_PUBLIC_REGISTRATION` | No | Enables unauthenticated account registration; defaults to `false` |
 
-### Persistence & Performance
-- Redis: set `MEM_OR_EXTERNAL=REDIS` to enable caching/rate limiting.
-- MongoDB: set `MONGO_DB_HOSTS=mongo:27017` (and credentials) to persist configurations and users.
-- Volumes: Docker-managed volumes (`doorman-generated`, `doorman-logs`). Use `docker compose down -v` to reset.
+Public protocol URLs and platform API request/response contracts remain unchanged. There is no legacy-process proxy or fallback in the runtime image.
 
----
-
-## Repository Structure
+## Repository structure
 
 ```text
 doorman/
-├── backend-services/    # Python Gateway Engine (FastAPI)
-├── web-client/         # Next.js Dashboard
-├── user-docs/          # Technical Guides & Runbooks
-├── scripts/            # Build & Maintenance tools
-└── ops/                # Infrastructure & Docker config
+├── gateway-rs/             # Rust gateway and control plane
+├── web-client/             # Next.js dashboard
+├── parity/                 # Frozen pre-Rust public contract fixtures
+├── user-docs/              # Guides and runbooks
+├── scripts/                # Build and operational helpers
+└── ops/                    # Infrastructure configuration
 ```
 
 ## Documentation
 
-Deep-dive into our guides for advanced setups:
-- [Getting Started Guide](user-docs/01-getting-started.md)
-- [Security & Hardening](user-docs/03-security.md)
-- [API Workflows (gRPC/SOAP)](user-docs/04-api-workflows.md)
+- [Getting Started](user-docs/01-getting-started.md)
+- [Configuration](user-docs/02-configuration.md)
+- [Security and Hardening](user-docs/03-security.md)
+- [API Workflows](user-docs/04-api-workflows.md)
 - [Production Operations](user-docs/05-operations.md)
-
----
+- [Testing](user-docs/TESTS.md)
 
 ## License
 
-**Copyright © Doorman Dev, LLC**
-Licensed under the **Apache License 2.0**.
-
-Review the [Security Hardening Guide](user-docs/03-security.md) before production deployment.
+Copyright © Doorman Dev, LLC. Licensed under the Apache License 2.0.

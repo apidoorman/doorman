@@ -9,6 +9,7 @@ import { ChangeEvent } from 'react'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
+import { SignalPageHeader } from '@/components/signal/Signal'
 
 interface Log {
   timestamp: string
@@ -53,6 +54,49 @@ interface GroupedLogs {
   response_time?: string
   has_error: boolean
   expanded_logs?: Log[]
+}
+
+
+const logString = (value: unknown): string | undefined => {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return String(value)
+  return undefined
+}
+
+const normalizeLog = (entry: unknown, index: number): Log => {
+  let value = entry
+  if (typeof entry === 'string') {
+    try { value = JSON.parse(entry) } catch {
+      return {
+        timestamp: new Date(0).toISOString(),
+        level: 'INFO',
+        message: entry,
+        source: 'gateway',
+        request_id: 'unstructured-' + index
+      }
+    }
+  }
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  return {
+    timestamp: logString(record.timestamp) || logString(record.time) || new Date(0).toISOString(),
+    request_id: logString(record.request_id),
+    level: logString(record.level) || 'INFO',
+    message: logString(record.message) || JSON.stringify(record),
+    source: logString(record.source) || logString(record.name) || 'gateway',
+    user: logString(record.user),
+    endpoint: logString(record.endpoint),
+    method: logString(record.method),
+    ip_address: logString(record.ip_address),
+    response_time: logString(record.response_time),
+    status_code: logString(record.status_code),
+    api: logString(record.api),
+    protocol: logString(record.protocol)
+  }
+}
+
+const logsFromResponse = (data: any): Log[] => {
+  const entries = data?.response?.logs || data?.logs || []
+  return Array.isArray(entries) ? entries.map(normalizeLog) : []
 }
 
 type OverrideKey = string
@@ -203,7 +247,7 @@ export default function LogsPage() {
       }
 
       const data = await response.json()
-      const logList = data.response?.logs || data.logs || []
+      const logList = logsFromResponse(data)
       const hasMore = (data.response?.has_more ?? data.has_more) ?? (Array.isArray(logList) && logList.length === logsPageSize)
       setLogs(logList)
       setLogsHasNext(!!hasMore)
@@ -232,7 +276,7 @@ export default function LogsPage() {
 
       const { fetchJson } = await import('@/utils/http')
       const data: any = await fetchJson(`${SERVER_URL}/platform/logging/logs?${queryParams}`)
-      const allLogsForRequest = data.logs || []
+      const allLogsForRequest = logsFromResponse(data)
 
       setGroupedLogs(prev => prev.map(group => {
         if (group.request_id === requestId) {
@@ -468,16 +512,12 @@ export default function LogsPage() {
   return (
     <ProtectedRoute requiredPermission="view_logs">
       <Layout>
-        <div className="space-y-6">
-          <div className="page-header">
-            <div>
-              <h1 className="page-title">Logs</h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
-                View and analyze system logs and API requests
-              </p>
-            </div>
-            <div className="flex gap-2" />
-          </div>
+        <div className="signal-logs-workspace space-y-6">
+          <SignalPageHeader
+            kicker="Request operations"
+            title={<>Request<br className="sm:hidden" /> Logs.</>}
+            description="View and analyze system logs and API requests."
+          />
 
           <div className="card">
             <div className="card-header">

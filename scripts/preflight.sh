@@ -62,9 +62,9 @@ ts() { date +%s; }
 
 # Helper to create minimal API and endpoint and subscribe admin
 create_api_and_endpoint() {
-  local api_name=$1 ver=$2 method=$3 uri=$4 upstream=$5
+  local api_name=$1 ver=$2 method=$3 uri=$4 upstream=$5 api_type=${6:-REST}
   curl -fsS -b "$COOKIE_JAR" -H 'Content-Type: application/json' -X POST \
-    -d "{\"api_name\":\"$api_name\",\"api_version\":\"$ver\",\"api_description\":\"pf\",\"api_allowed_roles\":[\"admin\"],\"api_allowed_groups\":[\"ALL\"],\"api_servers\":[\"$upstream\"],\"api_type\":\"REST\",\"api_allowed_retry_count\":0}" \
+    -d "{\"api_name\":\"$api_name\",\"api_version\":\"$ver\",\"api_description\":\"pf\",\"api_allowed_roles\":[\"admin\"],\"api_allowed_groups\":[\"ALL\"],\"api_servers\":[\"$upstream\"],\"api_type\":\"$api_type\",\"api_allowed_retry_count\":0}" \
     "$BASE_URL/platform/api" >/dev/null
   curl -fsS -b "$COOKIE_JAR" -H 'Content-Type: application/json' -X POST \
     -d "{\"api_name\":\"$api_name\",\"api_version\":\"$ver\",\"endpoint_method\":\"$method\",\"endpoint_uri\":\"$uri\",\"endpoint_description\":\"pf\"}" \
@@ -99,7 +99,7 @@ fi
 if [[ -n "$GQL_UP" ]]; then
   echo "[6/8] GraphQL gateway smoke"
   name="pfgql-$(ts)" ; ver="v1"
-  create_api_and_endpoint "$name" "$ver" POST "/graphql" "$GQL_UP"
+  create_api_and_endpoint "$name" "$ver" POST "/graphql" "$GQL_UP" GRAPHQL
   curl -fsS -b "$COOKIE_JAR" -H 'Content-Type: application/json' \
     -d '{"query":"{ __typename }"}' \
     -H "X-API-Version: $ver" \
@@ -113,7 +113,7 @@ fi
 if [[ -n "$SOAP_UP" ]]; then
   echo "[7/8] SOAP gateway smoke"
   name="pfsoap-$(ts)" ; ver="v1"
-  create_api_and_endpoint "$name" "$ver" POST "/post" "$SOAP_UP"
+  create_api_and_endpoint "$name" "$ver" POST "/post" "$SOAP_UP" SOAP
   envelope='<?xml version="1.0" encoding="UTF-8"?><Envelope><Body><Ping/></Body></Envelope>'
   curl -fsS -b "$COOKIE_JAR" -H 'Content-Type: application/xml' \
     -d "$envelope" \

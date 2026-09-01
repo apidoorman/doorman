@@ -1,110 +1,74 @@
 SHELL := /bin/bash
 
-# Read configuration from .env files
-PORT ?= $(shell grep '^PORT=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^PORT=' .env 2>/dev/null | cut -d'=' -f2 || echo 3001)
-HTTPS_ONLY ?= $(shell grep '^HTTPS_ONLY=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^HTTPS_ONLY=' .env 2>/dev/null | cut -d'=' -f2 || echo false)
-ADMIN_EMAIL ?= $(shell grep '^DOORMAN_ADMIN_EMAIL=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^DOORMAN_ADMIN_EMAIL=' .env 2>/dev/null | cut -d'=' -f2)
-ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' backend-services/.env 2>/dev/null | cut -d'=' -f2 || grep '^DOORMAN_ADMIN_PASSWORD=' .env 2>/dev/null | cut -d'=' -f2)
+PORT ?= $(shell grep '^PORT=' .env 2>/dev/null | cut -d'=' -f2 || echo 3001)
+ADMIN_EMAIL ?= $(shell grep '^DOORMAN_ADMIN_EMAIL=' .env 2>/dev/null | cut -d'=' -f2)
+ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' .env 2>/dev/null | cut -d'=' -f2)
+BASE_URL ?= http://localhost:$(PORT)
+GATEWAY_LOAD_BASE_URL ?= http://localhost:3001
 
-# Construct BASE_URL from PORT and HTTPS_ONLY (can still override on CLI)
-PROTOCOL := $(shell [ "$(HTTPS_ONLY)" = "true" ] && echo "https" || echo "http")
-BASE_URL ?= $(PROTOCOL)://localhost:$(PORT)
+.PHONY: check test unit unitq rust-test rust-clippy rust-fmt-check web-build parity parity-reference parity-ledger parity-contracts parity-differential parity-performance smoke preflight live liveq gateway-load clean clean-deep
 
-# Set to 1 when running tests against Doorman in Docker (affects test server host references)
-DOORMAN_IN_DOCKER ?= 0
+check: rust-fmt-check rust-clippy test
 
-.PHONY: unit unitq live liveq live-docker liveq-docker smoke soak preflight
+parity: parity-reference parity-ledger parity-contracts
 
-unit:
-	cd backend-services && pytest
+parity-reference:
+	python3 scripts/check_parity_reference.py
 
-unitq:
-	cd backend-services && pytest -q
+parity-ledger:
+	python3 scripts/generate_test_coverage_ledger.py --check
 
-live:
-	cd backend-services/live-tests && \
-	  DOORMAN_BASE_URL=$(BASE_URL) \
-	  DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
-	  DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
-	  DOORMAN_IN_DOCKER=$(DOORMAN_IN_DOCKER) \
-	  pytest
+parity-contracts:
+	cargo test --manifest-path gateway-rs/Cargo.toml --locked --test parity_contracts --test openapi_parity --test auth_rate_parity
 
-liveq:
-	cd backend-services/live-tests && \
-	  DOORMAN_BASE_URL=$(BASE_URL) \
-	  DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
-	  DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
-	  DOORMAN_IN_DOCKER=$(DOORMAN_IN_DOCKER) \
-	  pytest -q
+parity-differential:
+	python3 scripts/differential_parity.py \
+		--python-url "$${PYTHON_PARITY_URL:-http://127.0.0.1:3102}" \
+		--rust-url "$${RUST_PARITY_URL:-http://127.0.0.1:3101}" \
+		--report "$${PARITY_REPORT:-parity-report.json}"
 
-# Run live tests against Doorman running in Docker
-live-docker:
-	cd backend-services/live-tests && \
-	  DOORMAN_BASE_URL=$(BASE_URL) \
-	  DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
-	  DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
-	  DOORMAN_IN_DOCKER=1 \
-	  pytest
+parity-performance:
+	python3 scripts/benchmark_parity.py \
+		--python-pid "$${PYTHON_PARITY_PID:?set PYTHON_PARITY_PID}" \
+		--rust-pid "$${RUST_PARITY_PID:?set RUST_PARITY_PID}" \
+		--report "$${PARITY_PERF_REPORT:-parity-performance.json}"
 
-liveq-docker:
-	cd backend-services/live-tests && \
-	  DOORMAN_BASE_URL=$(BASE_URL) \
-	  DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
-	  DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
-	  DOORMAN_IN_DOCKER=1 \
-	  pytest -q
+test unit unitq rust-test:
+	cargo test --manifest-path gateway-rs/Cargo.toml --locked
 
-# Lightweight readiness + platform smoke (optionally gateway if SMOKE_UPSTREAM_URL provided)
-smoke preflight:
+rust-clippy:
+	cargo clippy --manifest-path gateway-rs/Cargo.toml --locked --all-targets --all-features -- -D warnings
+
+rust-fmt-check:
+	cargo fmt --manifest-path gateway-rs/Cargo.toml --all -- --check
+
+web-build:
+	npm --prefix web-client ci
+	npm --prefix web-client run build
+
+smoke preflight live liveq:
 	BASE_URL=$(BASE_URL) \
 	DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
 	DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
-	 bash scripts/preflight.sh
+	bash scripts/preflight.sh
 
-# Placeholder: requires k6/locust. Provide your own script path via SOAK_SCRIPT.
-soak:
-	@echo "Define SOAK_SCRIPT and ARGS to run your soak tool, e.g.:" ; \
-	 echo "  SOAK_SCRIPT=scripts/k6-rest-smoke.js ARGS='-d 1h -u 200' make soak" ; \
-	 if [[ -n "$(SOAK_SCRIPT)" ]]; then \
-	   k6 run $(ARGS) $(SOAK_SCRIPT) ; \
-	 else \
-	   echo "No SOAK_SCRIPT provided" ; \
-	 fi
+test-live-tcp:
+	PATH="$(HOME)/.cargo/bin:$(PATH)" \
+	LIVE_SERVER_URL=$(BASE_URL) \
+	DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) \
+	DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
+	cargo test --test live_tcp_port_3001 --manifest-path gateway-rs/Cargo.toml -- --ignored --nocapture
 
-.PHONY: coverage-unit coverage-html coverage-all
+gateway-load:
+	BASE_URL=$(GATEWAY_LOAD_BASE_URL) bash scripts/run_perf_check.sh
 
-coverage-unit:
-	cd backend-services && \
-	  coverage run -m pytest && \
-	  coverage report -m
-
-coverage-html:
-	cd backend-services && \
-	  coverage run -m pytest && \
-	  coverage html -d coverage_html && \
-	  echo "HTML report at backend-services/coverage_html/index.html"
-
-# Runs server under coverage (parallel mode), executes live-tests, then combines
-coverage-all:
-	BASE_URL=$(BASE_URL) DOORMAN_ADMIN_EMAIL=$(ADMIN_EMAIL) DOORMAN_ADMIN_PASSWORD=$(ADMIN_PASSWORD) \
-	 bash scripts/coverage_all.sh
-
-.PHONY: clean clean-deep
-
-# Remove common local build/test artifacts without touching dependencies
 clean:
-	@echo "Cleaning caches and runtime artifacts..."
-	@find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
-	@find . -type d -name ".pytest_cache" -prune -exec rm -rf {} + || true
-	@find . -type f -name "*.py[co]" -delete || true
-	@find . -type f -name ".DS_Store" -delete || true
-	@rm -rf backend-services/platform-logs/*.log backend-services/doorman.pid doorman.pid uvicorn.pid || true
-	@rm -rf web-client/.next || true
-	@rm -f pytest_backend_verbose.log || true
+	@echo "Cleaning Rust, web, and runtime artifacts..."
+	@rm -rf gateway-rs/target web-client/.next
+	@rm -f doorman.pid
 	@echo "Done."
 
-# Deeper cleanup that also removes generated dev artifacts
 clean-deep: clean
-	@echo "Removing generated dev artifacts..."
-	@rm -rf generated backend-services/generated || true
+	@echo "Removing generated runtime data..."
+	@rm -rf data logs
 	@echo "Done."

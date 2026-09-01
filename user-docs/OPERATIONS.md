@@ -57,7 +57,7 @@ Hot Reload (SIGHUP)
 -------------------
 - Purpose: Reload hot-reloadable configuration without restarting the process.
 - Signal-based reload:
-  - Prereq: Doorman started via `python backend-services/doorman.py start` to create `doorman.pid`.
+  - Prereq: Doorman is running and the Rust gateway PID is available when process metrics are required.
   - Command:
     - kill -HUP $(cat doorman.pid)
   - Expected outcome:

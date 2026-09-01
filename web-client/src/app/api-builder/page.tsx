@@ -404,19 +404,26 @@ const ApiBuilderPage = () => {
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Builder</h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Create one CRUD API across multiple tables with table-specific field selection.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/api-builder/tables" className="btn btn-secondary">Manage Tables</Link>
-            <button onClick={handleSubmit} disabled={loading} className="btn btn-primary">
-              {loading ? 'Publishing...' : 'Publish API'}
-            </button>
+      <div className="flex h-[calc(100vh-100px)] gap-6">
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col space-y-6 overflow-hidden">
+          <div className="flex items-center justify-between shrink-0">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">API Builder</h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">Design your API schema and endpoints</p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="btn btn-primary"
+              >
+                {loading ? (
+                  <> <div className="spinner mr-2"></div> Publishing... </>
+                ) : 'Publish API'}
+              </button>
+              <p className="builder-existing-api-note">Adding an existing API? <Link href="/apis">Go to the APIs page</Link>.</p>
+            </div>
           </div>
         </div>
 

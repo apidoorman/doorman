@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "git_ref": "python-parity-reference",
+  "commit": "10699820f50abe3940134536a98c955deab6959f",
+  "python_version": "3.12",
+  "requirements_sha256": "01fc46b9a6324c2a498fc6dba63295f74f00e8616465a1d0d7bb1007ba414174",
+  "surface": {
+    "unit_test_files": 151,
+    "live_test_files": 53,
+    "openapi_paths": 136,
+    "openapi_operations": 178,
+    "openapi_schemas": 60,
+    "openapi_parameters": 216,
+    "frozen_contracts": 8
+  },
+  "policy": {
+    "unexplained_differences_allowed": 0,
+    "performance_regression_tolerance_percent": 5
+  }
+}

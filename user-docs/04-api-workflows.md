@@ -406,8 +406,8 @@ curl -s -b "$COOKIE" "$BASE/platform/logging/export?start_date=2024-01-01"
 ```
 
 **Log files:**
-- `backend-services/logs/doorman.log` - Main application log
-- `backend-services/logs/doorman-trail.log` - Audit trail
+- `logs/doorman.log` - Main application log
+- `logs/doorman-trail.log` - Audit trail
 
 ---
 

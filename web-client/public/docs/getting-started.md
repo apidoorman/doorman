@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Docker and Docker Compose OR Python 3.11+ and Node 20+
+- Docker and Docker Compose, or Rust 1.88 and Node 20+
 - Optional: Redis and MongoDB (production)
 
 ## Quick Start

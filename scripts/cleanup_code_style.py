@@ -142,7 +142,6 @@ def process_file(path: Path) -> bool:
 
 def gather_targets() -> list[Path]:
     patterns = [
-        ('backend-services', ('.py',)),
         ('web-client/src', ('.ts', '.tsx', '.js', '.jsx')),
     ]
     files: list[Path] = []

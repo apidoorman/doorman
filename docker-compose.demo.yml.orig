@@ -1,0 +1,35 @@
+name: doorman-demo
+
+services:
+  doorman:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_PROTECTED_USERS: demo@doorman.dev
+        NEXT_PUBLIC_GATEWAY_URL: ""
+    image: doorman-demo:latest
+    container_name: doorman-demo
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DOORMAN_ADMIN_EMAIL: demo@doorman.dev
+      DOORMAN_ADMIN_PASSWORD: DemoPassword123!
+      DOORMAN_IN_DOCKER: "1"
+      JWT_SECRET_KEY: demo-secret-change-me-please-32-bytes-min
+      MEM_ENCRYPTION_KEY: demo-memory-key-change-me
+      MEM_OR_EXTERNAL: MEM
+      MEM_AUTO_SAVE_ENABLED: "false"
+      MEM_DUMP_PATH: /tmp/demo_memory_dump.bin
+      HTTPS_ONLY: "false"
+      COOKIE_SAMESITE: Lax
+      DEMO_MODE: "true"
+      DEMO_SEED: "true"
+      ALLOWED_ORIGINS: http://localhost:3000
+      ALLOW_METHODS: GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD
+      ALLOW_HEADERS: "*"
+      ALLOW_CREDENTIALS: "true"
+      PORT: 3001
+      WEB_PORT: 3000
+    restart: "no"
+    volumes: []

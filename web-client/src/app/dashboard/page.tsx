@@ -1,247 +1,60 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { fetchJson } from '@/utils/http'
+import React, { useEffect, useState } from 'react'
 import Layout from '@/components/Layout'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { SERVER_URL } from '@/utils/config'
 import { useAuth } from '@/contexts/AuthContext'
+import { SignalMetric, SignalPageHeader, SignalPanel, SignalSidebarRail, SignalStatusTag, SignalTable } from '@/components/signal/Signal'
 
 interface DashboardData {
   totalRequests: number
   activeUsers: number
   newApis: number
   monthlyUsage: Record<string, number>
-  activeUsersList: Array<{
-    username: string
-    requests: string
-    subscribers: number
-  }>
-  popularApis: Array<{
-    name: string
-    requests: string
-    subscribers: number
-  }>
+  activeUsersList: Array<{ username: string; requests: string; subscribers: number }>
+  popularApis: Array<{ name: string; requests: string; subscribers: number }>
 }
 
-const Dashboard = () => {
+const emptyDashboard: DashboardData = { totalRequests: 0, activeUsers: 0, newApis: 0, monthlyUsage: {}, activeUsersList: [], popularApis: [] }
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function Dashboard() {
   const { isAuthenticated, hasUIAccess } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [dashboardData, setDashboardData] = useState<DashboardData>({
-    totalRequests: 0,
-    activeUsers: 0,
-    newApis: 0,
-    monthlyUsage: {},
-    activeUsersList: [],
-    popularApis: []
-  })
-
-  useEffect(() => {
-    if (isAuthenticated && hasUIAccess) {
-      fetchData()
-    }
-  }, [isAuthenticated, hasUIAccess])
+  const [dashboardData, setDashboardData] = useState<DashboardData>(emptyDashboard)
 
   const fetchData = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true); setError(null)
       const { fetchJson } = await import('@/utils/http')
-      const data = await fetchJson<DashboardData>(`${SERVER_URL}/platform/dashboard`)
-      setDashboardData(data as any)
+      setDashboardData(await fetchJson<DashboardData>(`${SERVER_URL}/platform/dashboard`))
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError('An unknown error occurred')
-      }
-    } finally {
-      setLoading(false)
-    }
+      setError(err instanceof Error ? err.message : 'An unknown error occurred')
+    } finally { setLoading(false) }
   }
 
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  useEffect(() => { if (isAuthenticated && hasUIAccess) fetchData() }, [isAuthenticated, hasUIAccess])
+  const values = months.map(month => dashboardData.monthlyUsage[month] || 0)
+  const maxValue = Math.max(...values, 1)
 
-  return (
-    <ProtectedRoute>
-      <Layout>
-        <div className="space-y-6">
-          <div className="page-header">
-            <div>
-              <h1 className="page-title">Dashboard</h1>
-              <p className="text-[13px] text-gray-600 dark:text-white/60 mt-1">
-                Overview of your API gateway performance and usage
-              </p>
-            </div>
-            <button
-              onClick={fetchData}
-              disabled={loading}
-              className="btn btn-secondary"
-            >
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {loading ? 'Refreshing...' : 'Refresh'}
-            </button>
-          </div>
-
-          {error && (
-            <div className="rounded-sm bg-error-50 border border-error-500/40 p-3 dark:bg-error-500/10 dark:border-error-500/40">
-              <div className="flex">
-                <svg className="h-4 w-4 text-error-500 dark:text-error-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="ml-3">
-                  <p className="text-[13px] text-error-700 dark:text-error-300">{error}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="stats-card">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="stats-label">Total Monthly Requests</p>
-                  <p className="stats-value">{dashboardData.totalRequests.toLocaleString()}</p>
-                  <p className="stats-change positive">+17% this month</p>
-                </div>
-                <div className="h-12 w-12 rounded-lg bg-primary-100 dark:bg-primary-900/20 flex items-center justify-center">
-                  <svg className="h-6 w-6 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="stats-card">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="stats-label">Active Monthly Users</p>
-                  <p className="stats-value">{dashboardData.activeUsers}</p>
-                  <p className="stats-change positive">+4% this month</p>
-                </div>
-                <div className="h-12 w-12 rounded-lg bg-success-100 dark:bg-success-900/20 flex items-center justify-center">
-                  <svg className="h-6 w-6 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="stats-card">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="stats-label">New APIs This Month</p>
-                  <p className="stats-value">{dashboardData.newApis}</p>
-                  <p className="stats-change positive">+25% this month</p>
-                </div>
-                <div className="h-12 w-12 rounded-lg bg-warning-100 dark:bg-warning-900/20 flex items-center justify-center">
-                  <svg className="h-6 w-6 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 card">
-              <div className="card-header">
-                <h3 className="card-title">Monthly Usage</h3>
-              </div>
-              <div className="h-64 flex items-end justify-between gap-2 px-4 pb-8">
-                {(() => {
-                  const values = months.map(month => dashboardData.monthlyUsage[month] || 0)
-                  const maxValue = Math.max(...values, 1)
-                  const chartHeight = 200
-
-                  return months.map((month) => {
-                    const value = dashboardData.monthlyUsage[month] || 0
-                    const barHeight = maxValue > 0 ? (value / maxValue) * chartHeight : 4
-
-                    return (
-                      <div key={month} className="flex-1 flex flex-col items-center">
-                        <div
-                          className="w-full bg-gradient-to-t from-primary-500 to-primary-600 rounded-t-lg transition-all duration-300 hover:from-primary-600 hover:to-primary-700"
-                          style={{
-                            height: `${Math.max(barHeight, 4)}px`
-                          }}
-                        ></div>
-                        <span className="text-[11px] text-gray-600 dark:text-white/60 mt-2">{month}</span>
-                      </div>
-                    )
-                  })
-                })()}
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Most Active Users</h3>
-              </div>
-              <div className="space-y-4">
-                {dashboardData.activeUsersList.map((user, index) => (
-                  <div key={user.username} className="flex items-center space-x-3">
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-medium">
-                      {user.username.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-gray-900 dark:text-white truncate">
-                        {user.username}
-                      </p>
-                      <p className="text-[11px] text-gray-600 dark:text-white/60 truncate">
-                        Requests: {user.requests}
-                      </p>
-                      <p className="text-[11px] text-gray-600 dark:text-white/60 truncate">
-                        Subscribers: {user.subscribers}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Popular APIs This Month</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Requests</th>
-                    <th>Subscribers</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboardData.popularApis.map((api, index) => (
-                    <tr key={index}>
-                      <td className="font-medium">{api.name}</td>
-                      <td>{api.requests}</td>
-                      <td>{api.subscribers}</td>
-                      <td>
-                        <button className="btn btn-ghost btn-sm">
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </Layout>
-    </ProtectedRoute>
-  )
+  return <ProtectedRoute><Layout><div className="space-y-7">
+    <SignalPageHeader kicker="Gateway overview" title={<>API<br className="sm:hidden" /> Gateway.</>} description="Live configuration, traffic, and access-control signals from this Doorman deployment." actions={<button onClick={fetchData} disabled={loading} className="signal-button">{loading ? 'Refreshing' : 'Refresh data'}</button>} />
+    {error && <SignalPanel tone="terracotta" title="Gateway data unavailable"><p className="font-mono text-sm">{error}</p></SignalPanel>}
+    {loading ? <SignalPanel tone="blue" title="Reading gateway telemetry"><p className="font-mono text-sm">Loading live configuration and usage data…</p></SignalPanel> : <>
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_300px]">
+        <SignalPanel tone="white" title="API Gateway" kicker="Traffic health"><div className="grid gap-3 sm:grid-cols-2"><SignalMetric label="Total requests" value={dashboardData.totalRequests.toLocaleString()} tone="lime" detail="Reported by gateway dashboard" /><SignalMetric label="Active users" value={dashboardData.activeUsers.toLocaleString()} tone="blue" detail="Current reporting period" /></div><div className="mt-5 flex items-center justify-between border-t-2 border-signal-ink pt-4"><span className="font-mono text-xs uppercase tracking-wide">Route activity</span><SignalStatusTag status="healthy">Live data</SignalStatusTag></div></SignalPanel>
+        <SignalPanel tone="terracotta" title="AI service posture" kicker="Protocol capability"><div className="grid gap-3 sm:grid-cols-2"><SignalMetric label="New API definitions" value={dashboardData.newApis.toLocaleString()} tone="white" detail="Current reporting period" /><div className="border-[3px] border-signal-ink bg-white p-4"><p className="font-mono text-[11px] font-bold uppercase tracking-[.08em]">Configured traffic</p><p className="mt-5 text-2xl font-extrabold tracking-tight">REST · GraphQL<br />gRPC · SOAP</p><p className="mt-3 font-mono text-xs text-signal-mist">Use API configuration to govern supported service traffic.</p></div></div></SignalPanel>
+        <SignalSidebarRail title="System assurance"><h2 className="mt-2 text-2xl font-extrabold tracking-tight">Gateway ready.</h2><ul className="mt-4 list-none p-0"><li><SignalStatusTag status="healthy">Healthy</SignalStatusTag></li><li>Apache 2.0 licensed</li><li>Self-hosted control plane</li><li>Cloud or private network</li><li>Multi-protocol gateway</li><li>Built-in auth and policy</li></ul></SignalSidebarRail>
+      </section>
+      <section className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.8fr)]">
+        <SignalPanel tone="white" title="Request volume" kicker="Deployment summary"><div className="flex h-64 items-end gap-2 border-b-[3px] border-signal-ink px-2 pb-8">{months.map(month => { const value = dashboardData.monthlyUsage[month] || 0; return <div key={month} className="group flex h-full flex-1 flex-col justify-end"><div className="bg-signal-lime border-[2px] border-signal-ink transition-colors group-hover:bg-signal-terra" style={{ height: `${Math.max((value / maxValue) * 190, 4)}px` }} title={`${month}: ${value}`} /><span className="mt-2 text-center font-mono text-[10px] text-signal-mist">{month}</span></div> })}</div></SignalPanel>
+        <SignalPanel tone="blue" title="Active users" kicker="Access activity"><div className="divide-y-2 divide-signal-ink">{dashboardData.activeUsersList.length ? dashboardData.activeUsersList.map(user => <div className="py-3" key={user.username}><p className="font-bold">{user.username}</p><p className="mt-1 font-mono text-xs text-signal-mist">{user.requests} requests · {user.subscribers} subscribers</p></div>) : <p className="font-mono text-sm">No active-user records for this period.</p>}</div></SignalPanel>
+      </section>
+      <SignalPanel tone="white" title="Popular APIs" kicker="Route activity"><SignalTable><thead><tr><th>API</th><th>Requests</th><th>Subscribers</th></tr></thead><tbody>{dashboardData.popularApis.length ? dashboardData.popularApis.map(api => <tr key={api.name}><td data-label="API" className="font-bold">{api.name}</td><td data-label="Requests">{api.requests}</td><td data-label="Subscribers">{api.subscribers}</td></tr>) : <tr><td colSpan={3} className="text-center font-mono">No API activity for this period.</td></tr>}</tbody></SignalTable></SignalPanel>
+    </>}
+  </div></Layout></ProtectedRoute>
 }
 
 export default Dashboard

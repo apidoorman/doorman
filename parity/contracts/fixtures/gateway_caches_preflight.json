@@ -1,0 +1,62 @@
+{
+  "description": "Python accepts an unauthenticated cache-clear preflight; Rust retains strict CORS and permits only configured origins.",
+  "expected": {
+    "decisions": {
+      "auth": "not_required",
+      "route": "gateway.caches.options",
+      "upstream": "none"
+    },
+    "response": {
+      "body": "",
+      "content_type": "",
+      "headers": {
+        "request_id": "<request-id>",
+        "x-request-id": "<request-id>"
+      },
+      "status": 204
+    },
+    "state_changes": {},
+    "upstream_requests": []
+  },
+  "approved_rust_divergence": {
+    "id": "MIG-068",
+    "approved_on": "2026-08-17",
+    "reason": "Approved strict-CORS policy: an allowed origin receives explicit CORS headers; an unallowlisted origin is rejected with GTW008.",
+    "rust_response": {
+      "body": "",
+      "content_type": "",
+      "headers": {
+        "access-control-allow-credentials": "true",
+        "access-control-allow-headers": "Authorization, Content-Type, X-CSRF-Token",
+        "access-control-allow-methods": "DELETE",
+        "access-control-allow-origin": "http://localhost:3000",
+        "request_id": "<request-id>",
+        "vary": "origin",
+        "x-request-id": "<request-id>"
+      },
+      "status": 204
+    }
+  },
+  "name": "gateway_caches_preflight",
+  "request": {
+    "body": null,
+    "headers": {
+      "Access-Control-Request-Method": "DELETE",
+      "Origin": "http://localhost:3000",
+      "accept-encoding": "gzip"
+    },
+    "method": "OPTIONS",
+    "path": "/api/caches",
+    "query": {}
+  },
+  "schema_version": 1,
+  "setup": {
+    "auth": "none",
+    "state": "default memory test app"
+  },
+  "tags": [
+    "operations",
+    "cors",
+    "preflight"
+  ]
+}

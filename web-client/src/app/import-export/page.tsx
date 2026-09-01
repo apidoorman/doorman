@@ -116,7 +116,7 @@ export default function ImportExportPage() {
         <div className="card">
           <div className="card-header"><h3 className="card-title">Import</h3></div>
           <div className="p-6 space-y-3">
-            <input type="file" accept="application/json,.json" onChange={(e)=> onImportFile(e.target.files?.[0])} />
+            <input className="signal-file-picker" type="file" accept="application/json,.json" onChange={(e)=> onImportFile(e.target.files?.[0])} />
             <p className="text-xs text-gray-500 dark:text-gray-400">Upload a JSON containing any of: apis, endpoints, roles, groups, routings. Conflicting APIs will prompt you to keep system or replace with your upload.</p>
           </div>
         </div>

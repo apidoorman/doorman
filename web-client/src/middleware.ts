@@ -10,6 +10,9 @@ const PUBLIC_PATH_PREFIXES = [
   '/public',
   '/_next',
   '/api',
+  // Gateway routes authenticate themselves and must reach the same-origin
+  // proxy instead of being redirected by the page guard.
+  '/platform',
   // Common root-level static assets
   '/favicon.ico',
   '/favicon.png',

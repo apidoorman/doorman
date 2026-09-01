@@ -212,7 +212,7 @@ Validate that every endpoint with `validation_enabled=true` has a non‑empty `v
 
 ### How to Run
 
-- A test is included: `backend-services/tests/test_validation_audit.py`.
+- A test is included: the Rust validation and audit integration suite.
 - Run it with your test runner, or adapt the logic to a CI job to block merges when audits fail.
 
 ### What It Checks
@@ -496,7 +496,7 @@ Note: Requires `manage_gateway` permission.
 
 ### Application Logs
 
-**Location:** `backend-services/logs/doorman.log`
+**Location:** `logs/doorman.log`
 
 **Format:** Plain text or JSON (configured via `LOG_FORMAT`)
 
@@ -523,7 +523,7 @@ Note: Requires `manage_gateway` permission.
 
 ### Audit Trail
 
-**Location:** `backend-services/logs/doorman-trail.log`
+**Location:** `logs/doorman-trail.log`
 
 **Format:** Structured events for security and compliance
 
@@ -671,10 +671,10 @@ docker exec mongo mongosh --eval "db.adminCommand('ping')"
 
 ```bash
 # List memory dumps
-ls -lh backend-services/generated/memory_dump*.bin
+ls -lh data/memory_dump*.bin
 
 # Check encryption (should be binary/encrypted)
-file backend-services/generated/memory_dump-*.bin
+file data/memory_dump-*.bin
 ```
 
 ### Monitor Request Rate

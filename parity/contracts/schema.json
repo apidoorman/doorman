@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Doorman Gateway Parity Contract Fixture",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name",
+    "description",
+    "tags",
+    "request",
+    "setup",
+    "expected"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "request": {
+      "type": "object",
+      "required": [
+        "method",
+        "path",
+        "query",
+        "headers",
+        "body"
+      ]
+    },
+    "setup": {
+      "type": "object"
+    },
+    "expected": {
+      "type": "object",
+      "required": [
+        "response",
+        "upstream_requests",
+        "decisions",
+        "state_changes"
+      ],
+      "properties": {
+        "response": {
+          "type": "object",
+          "required": [
+            "status",
+            "content_type",
+            "headers",
+            "body"
+          ]
+        },
+        "upstream_requests": {
+          "type": "array"
+        },
+        "decisions": {
+          "type": "object"
+        },
+        "state_changes": {
+          "type": "object"
+        }
+      }
+    },
+    "approved_rust_divergence": {
+      "type": "object",
+      "required": ["id", "approved_on", "reason", "rust_response"],
+      "properties": {
+        "id": {"type": "string"},
+        "approved_on": {"type": "string"},
+        "reason": {"type": "string"},
+        "rust_response": {
+          "type": "object",
+          "required": ["status", "content_type", "headers", "body"]
+        }
+      }
+    }
+  }
+}

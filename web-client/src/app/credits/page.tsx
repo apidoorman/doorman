@@ -77,10 +77,7 @@ export default function CreditsPage() {
     try {
       const users = await fetchAllPaginated<any>(
         (page, size) => `${SERVER_URL}/platform/user/all?page=${page}&page_size=${size}`,
-        (data) => (data?.users || data?.response?.users || []),
-        undefined,
-        undefined,
-        'cache:users:all'
+        (data) => (Array.isArray(data) ? data : (data?.users || data?.response?.users || []))
       )
       return users.map((u: any) => u?.username).filter(Boolean)
     } catch (e) {
@@ -93,10 +90,7 @@ export default function CreditsPage() {
     try {
       const items = await fetchAllPaginated<any>(
         (page, size) => `${SERVER_URL}/platform/credit/defs?page=${page}&page_size=${size}`,
-        (data) => (data?.items || data?.response?.items || []),
-        undefined,
-        undefined,
-        'cache:credit_defs:all'
+        (data) => (Array.isArray(data) ? data : (data?.items || data?.response?.items || []))
       )
       const map: Record<string, { [tier: string]: TierMeta }> = {}
       for (const it of items) {
@@ -260,7 +254,7 @@ export default function CreditsPage() {
           <div className="card-header flex items-center justify-between">
             <h3 className="card-title">User Credits</h3>
             <button
-              onClick={() => setShowAssignModal(true)}
+              onClick={() => { void loadDefs(); setShowAssignModal(true) }}
               className="btn btn-primary btn-sm"
             >
               <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

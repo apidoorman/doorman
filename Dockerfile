@@ -1,60 +1,35 @@
-# Multi-service image: Python backend (Doorman) + Next.js web client
-# Supports env files via entrypoint; override envs at runtime as needed.
+FROM rust:1.88-slim-bookworm AS rust-builder
+WORKDIR /build/gateway-rs
+COPY gateway-rs/Cargo.toml gateway-rs/Cargo.lock gateway-rs/rust-toolchain.toml ./
+COPY gateway-rs/src ./src
+COPY parity/openapi/python-openapi.json.gz.b64 /build/parity/openapi/python-openapi.json.gz.b64
+RUN --mount=type=cache,id=doorman-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=doorman-cargo-target,target=/build/gateway-rs/target \
+    cargo build --locked --release \
+    && cp target/release/doorman-gateway /build/doorman-gateway
 
-FROM python:3.11-slim AS base
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
-
-# Install Node.js + npm and useful tools
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       nodejs npm curl ca-certificates git \
-    && npm i -g npm@^10 \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Backend dependencies first for better layer caching
-COPY backend-services/requirements.txt /app/backend-services/requirements.txt
-RUN python -m pip install --upgrade pip \
-    && pip install -r /app/backend-services/requirements.txt
-
-# Prepare web client dependencies separately for better caching
+FROM node:20-bookworm-slim AS web-builder
 WORKDIR /app/web-client
 COPY web-client/package*.json ./
 RUN npm ci --include=dev
-
-# Copy backend source only (avoid copying entire repo)
-WORKDIR /app
-COPY backend-services /app/backend-services
-
-# Copy web client sources (excluding node_modules via .dockerignore)
-WORKDIR /app/web-client
 COPY web-client/ .
-
-# Build web client (Next.js)
-# Build-time args for frontend env (baked into Next.js bundle)
 ARG NEXT_PUBLIC_PROTECTED_USERS=
 ARG NEXT_PUBLIC_GATEWAY_URL=
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN NEXT_PUBLIC_PROTECTED_USERS="$NEXT_PUBLIC_PROTECTED_USERS" \
+    NEXT_PUBLIC_GATEWAY_URL="$NEXT_PUBLIC_GATEWAY_URL" \
+    npm run build \
+    && npm prune --omit=dev
 
-# Build Next.js - domain agnostic, no hardcoded URLs
-RUN echo "export NEXT_PUBLIC_PROTECTED_USERS=${NEXT_PUBLIC_PROTECTED_USERS}" > /tmp/build-env.sh && \
-    echo "export NEXT_PUBLIC_GATEWAY_URL=${NEXT_PUBLIC_GATEWAY_URL}" >> /tmp/build-env.sh && \
-    echo "export NODE_ENV=production" >> /tmp/build-env.sh && \
-    echo "export NEXT_TELEMETRY_DISABLED=1" >> /tmp/build-env.sh && \
-    . /tmp/build-env.sh && \
-    npm run build && \
-    npm prune --omit=dev
-
-# Runtime configuration
+FROM node:20-bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl libprotobuf-dev protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-
-# Add entrypoint
+COPY --from=rust-builder /build/doorman-gateway /usr/local/bin/doorman-gateway
+COPY --from=web-builder /app/web-client /app/web-client
 COPY docker/entrypoint.sh /app/docker/entrypoint.sh
-RUN chmod +x /app/docker/entrypoint.sh
-
+RUN chmod +x /app/docker/entrypoint.sh && mkdir -p /app/data /app/logs && groupadd --gid 10001 doorman && useradd --uid 10001 --gid doorman --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin doorman && chown -R doorman:doorman /app /usr/local/bin/doorman-gateway
+USER doorman
 EXPOSE 3001 3000
-
 CMD ["/app/docker/entrypoint.sh"]

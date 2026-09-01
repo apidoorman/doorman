@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from 'react'
 import InfoTooltip from '@/components/InfoTooltip'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { SERVER_URL } from '@/utils/config'
 import { getJson } from '@/utils/api'
 import Layout from '@/components/Layout'
 import Pagination from '@/components/Pagination'
+import { SignalEmptyState, SignalPageHeader, SignalPanel, SignalPrimaryLink, SignalTable } from '@/components/signal/Signal'
 
 interface API {
   api_version: React.ReactNode
@@ -159,22 +159,9 @@ const APIsPage = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">APIs</h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Manage and monitor your API endpoints
-            </p>
-          </div>
-          <Link href="/apis/add" className="btn btn-primary">
-            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add API
-          </Link>
-        </div>
+        <SignalPageHeader kicker="Traffic policy" title={<>API<br className="sm:hidden" /> Gateway.</>} description="Configure, search, and monitor every gateway API without changing its live routing contract." actions={<SignalPrimaryLink href="/apis/add">Add API</SignalPrimaryLink>} />
 
-        <div className="card">
+        <SignalPanel tone="white" title="Search and ordering" kicker="Route registry">
           <div className="flex flex-col sm:flex-row gap-4">
             <form onSubmit={handleSearch} className="flex-1">
               <div className="relative">
@@ -212,7 +199,7 @@ const APIsPage = () => {
               </button>
             </div>
           </div>
-        </div>
+        </SignalPanel>
 
         {error && (
           <div className="rounded-lg bg-error-50 border border-error-200 p-4 dark:bg-error-900/20 dark:border-error-800">
@@ -238,9 +225,8 @@ const APIsPage = () => {
           </div>
         ) : (
           /* APIs Table */
-          <div className="card">
-            <div className="overflow-x-auto">
-              <table className="table">
+          <SignalPanel tone="white" title="Configured APIs" kicker="Gateway registry">
+              <SignalTable>
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -258,7 +244,7 @@ const APIsPage = () => {
                       onClick={() => handleApiClick(api)}
                       className="cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-surfaceHover transition-colors"
                     >
-                      <td>
+                      <td data-label="API">
                         <div className="flex items-center">
                           <div className="h-8 w-8 rounded-lg bg-primary-100 dark:bg-primary-900/20 flex items-center justify-center mr-3">
                             <svg className="h-4 w-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -289,10 +275,10 @@ const APIsPage = () => {
                           </div>
                         </div>
                       </td>
-                      <td>
+                      <td data-label="Version">
                         <span className="badge badge-primary">{api.api_version}</span>
                       </td>
-                      <td>
+                      <td data-label="Upstreams">
                         {Array.isArray((api as any).api_servers) && (api as any).api_servers.length > 0 ? (
                           <div className="text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate">
                             {(api as any).api_servers.slice(0, 3).join(', ')}
@@ -302,12 +288,12 @@ const APIsPage = () => {
                           <span className="text-gray-500 dark:text-gray-400 text-sm">None</span>
                         )}
                       </td>
-                      <td>
+                      <td data-label="Description">
                         <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
                           {api.api_description}
                         </p>
                       </td>
-                      <td>
+                      <td data-label="Protocol">
                         <span className={`badge ${(api.api_type as string)?.toLowerCase() === 'rest' ? 'badge-success' :
                           (api.api_type as string)?.toLowerCase() === 'graphql' ? 'badge-warning' :
                             (api.api_type as string)?.toLowerCase() === 'grpc' ? 'badge-error' :
@@ -316,7 +302,7 @@ const APIsPage = () => {
                           {api.api_type}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap">
+                      <td data-label="Actions" className="whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <button
                             className="btn btn-secondary btn-sm"
@@ -345,8 +331,7 @@ const APIsPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+              </SignalTable>
 
             <Pagination
               page={page}
@@ -357,26 +342,9 @@ const APIsPage = () => {
             />
 
             {apis.length === 0 && !loading && (
-              <div className="text-center py-12">
-                <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                  <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No APIs found</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  {searchTerm ? 'Try adjusting your search terms.' : 'Get started by creating your first API.'}
-                </p>
-                <Link href="/apis/add" className="btn btn-primary">
-                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add API
-                </Link>
-              </div>
+              <SignalEmptyState title="No APIs found" action={<SignalPrimaryLink href="/apis/add">Add API</SignalPrimaryLink>}>{searchTerm ? 'Try adjusting your search terms.' : 'Get started by creating your first API.'}</SignalEmptyState>
             )}
-          </div>
+          </SignalPanel>
         )}
       </div>
     </Layout>
