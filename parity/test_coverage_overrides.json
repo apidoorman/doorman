@@ -401,6 +401,66 @@
       "status": "covered",
       "rust_tests": ["gateway-rs/tests/live_tests_parity.rs::live_test_93_public_and_auth_optional_allow_unauthenticated"],
       "notes": "Rust creates a non-public REST API with api_auth_required false and asserts its unauthenticated GET reaches a real local upstream with status 200."
+    },
+    "backend-services/tests/test_user_endpoints.py::test_user_me_and_crud": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/user_lifecycle_parity.rs::python_test_user_me_and_crud"],
+      "notes": "Rust verifies /me plus create, update, pinned new_password update, and delete through the native platform router."
+    },
+    "backend-services/tests/test_user_permissions_negative.py::test_update_other_user_denied_without_permission": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/user_lifecycle_parity.rs::python_test_update_other_user_denied_without_permission"],
+      "notes": "Rust disables bootstrap admin manage_users, asserts another-user update returns 403, narrowly restores the permission, and asserts the update succeeds."
+    },
+    "backend-services/live-tests/test_82_role_matrix_negative.py::test_permission_matrix_block_then_allow": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/roles_groups_parity.rs::live_role_permission_matrix_blocks_then_allows_each_management_operation"],
+      "notes": "Rust verifies the pinned API, endpoint, user, group, and role management denials and that role updates take effect for the existing session."
+    },
+    "backend-services/tests/test_group_crud_permissions.py::test_group_crud_permissions": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/roles_groups_parity.rs::group_crud_requires_manage_groups_and_allows_group_manager"],
+      "notes": "Rust verifies limited users receive GRP008 while a group manager can create, read, update, and delete a group."
+    },
+    "backend-services/tests/test_group_role_not_found.py::test_group_and_role_not_found": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/roles_groups_parity.rs::missing_group_and_role_reads_and_deletes_return_not_found"],
+      "notes": "Rust asserts missing group and role reads and deletes return 404 with GRP002 and ROL002."
+    },
+    "backend-services/tests/test_role_admin_edge_cases.py::test_non_admin_cannot_create_admin_role": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/roles_groups_parity.rs::non_admin_role_manager_cannot_create_admin_role"],
+      "notes": "Rust asserts a non-admin role manager attempting to create the protected admin role receives 403 ROLE009."
+    },
+    "backend-services/live-tests/test_90_security_tools_logging.py::test_security_settings_get_put": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/security_settings_parity.rs::live_security_settings_get_put_matches_python"],
+      "notes": "Rust performs authenticated security settings GET/PUT and verifies the updated state persists through GET."
+    },
+    "backend-services/live-tests/test_90_security_tools_logging.py::test_tools_cors_check": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/security_settings_parity.rs::live_tools_cors_check_matches_python"],
+      "notes": "Rust calls the authenticated CORS checker and asserts the pinned successful response contract."
+    },
+    "backend-services/live-tests/test_90_security_tools_logging.py::test_clear_all_caches": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/security_settings_parity.rs::live_clear_all_caches_matches_python"],
+      "notes": "Rust calls the authenticated clear-all-caches operation and asserts the pinned success contract."
+    },
+    "backend-services/live-tests/test_90_security_tools_logging.py::test_logging_endpoints": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/security_settings_parity.rs::live_logging_endpoints_match_python"],
+      "notes": "Rust exercises the pinned authenticated logging endpoints and response contracts."
+    },
+    "backend-services/tests/test_security_permissions.py::test_security_settings_requires_permission": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/security_settings_parity.rs::security_settings_require_manage_security_permission"],
+      "notes": "Rust asserts a limited role receives 403 on security settings access and a manage_security role succeeds."
+    },
+    "backend-services/tests/test_security_settings_permissions.py::test_security_settings_get_put_permissions": {
+      "status": "covered",
+      "rust_tests": ["gateway-rs/tests/security_settings_parity.rs::security_settings_require_manage_security_permission"],
+      "notes": "Rust verifies both GET and PUT are forbidden without manage_security and allowed when that permission is present."
     }
   }
 }

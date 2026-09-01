@@ -541,14 +541,16 @@
     {
       "domain": "live/platform/role",
       "id": "backend-services/live-tests/test_82_role_matrix_negative.py::test_permission_matrix_block_then_allow",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies the pinned API, endpoint, user, group, and role management denials and that role updates take effect for the existing session.",
+      "rust_tests": [
+        "gateway-rs/tests/roles_groups_parity.rs::live_role_permission_matrix_blocks_then_allows_each_management_operation"
+      ],
       "source": {
         "line": 43,
         "path": "backend-services/live-tests/test_82_role_matrix_negative.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/other",
@@ -591,50 +593,58 @@
     {
       "domain": "live/platform/security",
       "id": "backend-services/live-tests/test_90_security_tools_logging.py::test_security_settings_get_put",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust performs authenticated security settings GET/PUT and verifies the updated state persists through GET.",
+      "rust_tests": [
+        "gateway-rs/tests/security_settings_parity.rs::live_security_settings_get_put_matches_python"
+      ],
       "source": {
         "line": 1,
         "path": "backend-services/live-tests/test_90_security_tools_logging.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/platform/security",
       "id": "backend-services/live-tests/test_90_security_tools_logging.py::test_tools_cors_check",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust calls the authenticated CORS checker and asserts the pinned successful response contract.",
+      "rust_tests": [
+        "gateway-rs/tests/security_settings_parity.rs::live_tools_cors_check_matches_python"
+      ],
       "source": {
         "line": 14,
         "path": "backend-services/live-tests/test_90_security_tools_logging.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/platform/security",
       "id": "backend-services/live-tests/test_90_security_tools_logging.py::test_clear_all_caches",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust calls the authenticated clear-all-caches operation and asserts the pinned success contract.",
+      "rust_tests": [
+        "gateway-rs/tests/security_settings_parity.rs::live_clear_all_caches_matches_python"
+      ],
       "source": {
         "line": 28,
         "path": "backend-services/live-tests/test_90_security_tools_logging.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/platform/security",
       "id": "backend-services/live-tests/test_90_security_tools_logging.py::test_logging_endpoints",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust exercises the pinned authenticated logging endpoints and response contracts.",
+      "rust_tests": [
+        "gateway-rs/tests/security_settings_parity.rs::live_logging_endpoints_match_python"
+      ],
       "source": {
         "line": 37,
         "path": "backend-services/live-tests/test_90_security_tools_logging.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/platform/memory",
@@ -3272,26 +3282,30 @@
     {
       "domain": "unit/platform/group",
       "id": "backend-services/tests/test_group_crud_permissions.py::test_group_crud_permissions",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies limited users receive GRP008 while a group manager can create, read, update, and delete a group.",
+      "rust_tests": [
+        "gateway-rs/tests/roles_groups_parity.rs::group_crud_requires_manage_groups_and_allows_group_manager"
+      ],
       "source": {
         "line": 7,
         "path": "backend-services/tests/test_group_crud_permissions.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/group",
       "id": "backend-services/tests/test_group_role_not_found.py::test_group_and_role_not_found",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts missing group and role reads and deletes return 404 with GRP002 and ROL002.",
+      "rust_tests": [
+        "gateway-rs/tests/roles_groups_parity.rs::missing_group_and_role_reads_and_deletes_return_not_found"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_group_role_not_found.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/grpc",
@@ -6392,14 +6406,16 @@
     {
       "domain": "unit/platform/role",
       "id": "backend-services/tests/test_role_admin_edge_cases.py::test_non_admin_cannot_create_admin_role",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts a non-admin role manager attempting to create the protected admin role receives 403 ROLE009.",
+      "rust_tests": [
+        "gateway-rs/tests/roles_groups_parity.rs::non_admin_role_manager_cannot_create_admin_role"
+      ],
       "source": {
         "line": 21,
         "path": "backend-services/tests/test_role_admin_edge_cases.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/other",
@@ -6680,26 +6696,30 @@
     {
       "domain": "unit/platform/security",
       "id": "backend-services/tests/test_security_permissions.py::test_security_settings_requires_permission",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts a limited role receives 403 on security settings access and a manage_security role succeeds.",
+      "rust_tests": [
+        "gateway-rs/tests/security_settings_parity.rs::security_settings_require_manage_security_permission"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_security_permissions.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/security",
       "id": "backend-services/tests/test_security_settings_permissions.py::test_security_settings_get_put_permissions",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies both GET and PUT are forbidden without manage_security and allowed when that permission is present.",
+      "rust_tests": [
+        "gateway-rs/tests/security_settings_parity.rs::security_settings_require_manage_security_permission"
+      ],
       "source": {
         "line": 7,
         "path": "backend-services/tests/test_security_settings_permissions.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/security",
@@ -7208,26 +7228,30 @@
     {
       "domain": "unit/platform/user",
       "id": "backend-services/tests/test_user_endpoints.py::test_user_me_and_crud",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies /me plus create, update, pinned new_password update, and delete through the native platform router.",
+      "rust_tests": [
+        "gateway-rs/tests/user_lifecycle_parity.rs::python_test_user_me_and_crud"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_user_endpoints.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/user",
       "id": "backend-services/tests/test_user_permissions_negative.py::test_update_other_user_denied_without_permission",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust disables bootstrap admin manage_users, asserts another-user update returns 403, narrowly restores the permission, and asserts the update succeeds.",
+      "rust_tests": [
+        "gateway-rs/tests/user_lifecycle_parity.rs::python_test_update_other_user_denied_without_permission"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_user_permissions_negative.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/validation",
@@ -7441,13 +7465,13 @@
         "covered": 1
       },
       "live/platform/role": {
-        "missing": 1
+        "covered": 1
       },
       "live/platform/routing": {
         "missing": 2
       },
       "live/platform/security": {
-        "missing": 4
+        "covered": 4
       },
       "live/platform/subscription": {
         "covered": 1,
@@ -7520,7 +7544,7 @@
         "missing": 8
       },
       "unit/platform/group": {
-        "missing": 2
+        "covered": 2
       },
       "unit/platform/logging": {
         "missing": 11
@@ -7532,13 +7556,14 @@
         "missing": 34
       },
       "unit/platform/role": {
-        "missing": 1
+        "covered": 1
       },
       "unit/platform/routing": {
         "missing": 6
       },
       "unit/platform/security": {
-        "missing": 22
+        "covered": 2,
+        "missing": 20
       },
       "unit/platform/subscription": {
         "missing": 7
@@ -7547,7 +7572,7 @@
         "missing": 13
       },
       "unit/platform/user": {
-        "missing": 2
+        "covered": 2
       },
       "unit/platform/vault": {
         "missing": 1
@@ -7555,8 +7580,8 @@
     },
     "status_counts": {
       "approved_changed": 1,
-      "covered": 79,
-      "missing": 520
+      "covered": 91,
+      "missing": 508
     },
     "total_test_cases": 600
   }
