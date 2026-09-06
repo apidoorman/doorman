@@ -124,4 +124,13 @@ mod tests {
         assert_eq!(counter.get("rate:a:1", 102), 2);
         assert_eq!(counter.get("rate:a:1", 161), 0);
     }
+    #[test]
+    fn python_test_inmemory_counter_increments_and_expires() {
+        let counter = WindowCounter::default();
+        assert_eq!(counter.incr("k1", 1, 0), 1);
+        assert_eq!(counter.incr("k1", 1, 0), 2);
+        assert_eq!(counter.incr("k1", 1, 0), 3);
+        assert_eq!(counter.incr("k1", 1, 2), 1);
+        assert_eq!(counter.incr("k1", 1, 2), 2);
+    }
 }

@@ -6,7 +6,7 @@ ADMIN_PASSWORD ?= $(shell grep '^DOORMAN_ADMIN_PASSWORD=' .env 2>/dev/null | cut
 BASE_URL ?= http://localhost:$(PORT)
 GATEWAY_LOAD_BASE_URL ?= http://localhost:3001
 
-.PHONY: check test unit unitq rust-test rust-clippy rust-fmt-check web-build parity parity-reference parity-ledger parity-contracts parity-differential parity-performance smoke preflight live liveq gateway-load clean clean-deep
+.PHONY: check test unit unitq rust-test rust-clippy rust-fmt-check web-build parity parity-reference parity-ledger parity-contracts parity-differential parity-performance release-check smoke preflight live liveq gateway-load external-storage-test clean clean-deep
 
 check: rust-fmt-check rust-clippy test
 
@@ -31,7 +31,11 @@ parity-performance:
 	python3 scripts/benchmark_parity.py \
 		--python-pid "$${PYTHON_PARITY_PID:?set PYTHON_PARITY_PID}" \
 		--rust-pid "$${RUST_PARITY_PID:?set RUST_PARITY_PID}" \
+		--scenarios "$${PARITY_PERF_SCENARIOS:?set PARITY_PERF_SCENARIOS}" \
 		--report "$${PARITY_PERF_REPORT:-parity-performance.json}"
+
+release-check:
+	python3 scripts/release_check.py
 
 test unit unitq rust-test:
 	cargo test --manifest-path gateway-rs/Cargo.toml --locked
@@ -67,6 +71,9 @@ clean:
 	@rm -rf gateway-rs/target web-client/.next
 	@rm -f doorman.pid
 	@echo "Done."
+external-storage-test:
+	bash scripts/run_external_storage_tests.sh
+
 
 clean-deep: clean
 	@echo "Removing generated runtime data..."

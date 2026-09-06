@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use crate::{
     error::GatewayError,
     gateway::circuit_breaker::reset as reset_circuits,
+    observability::audit,
     policy::{PolicyErrorBody, auth::verify_request_token, evaluator::is_revoked},
     state::AppState,
     storage::models::{PolicyDocuments, bool_field_default, string_field},
@@ -119,13 +120,7 @@ pub async fn caches(
         Some(storage) => match storage.clear_gateway_state().await {
             Ok(()) => {
                 reset_circuits(&state.runtime.circuits);
-                tracing::info!(
-                    actor = %username,
-                    action = "gateway.clear_caches",
-                    target = "all",
-                    status = "success",
-                    "gateway audit event"
-                );
+                audit::management_mutation(&username, "gateway.clear_caches", "all", "success");
                 Json(json!({ "message": "All caches cleared" })).into_response()
             }
             Err(error) => {

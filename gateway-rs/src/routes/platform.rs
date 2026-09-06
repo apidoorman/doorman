@@ -6,7 +6,7 @@ use std::{
     io::Read,
     net::SocketAddr,
     process::{Command, Stdio},
-    sync::OnceLock,
+    sync::{OnceLock, atomic::Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -39,7 +39,7 @@ use crate::{
     },
     observability::{
         analytics_aggregator::{AggregatedPoint, EntityCounter, global_analytics},
-        audit::global_ip_deny,
+        audit::{self, global_ip_deny},
     },
     platform_contract::{normalize_create_api, normalize_update_api},
     policy::{
@@ -48,7 +48,10 @@ use crate::{
         rate_limit::duration_to_seconds,
     },
     state::AppState,
-    storage::{models::strip_mongo_id, redis::bandwidth_key},
+    storage::{
+        models::{bool_field_default, strip_mongo_id},
+        redis::bandwidth_key,
+    },
 };
 
 #[derive(Serialize)]
@@ -127,11 +130,20 @@ pub async fn platform_dispatch(
             );
         }
     };
-    let payload = if body.is_empty() {
-        Value::Object(Map::new())
+    let parsed_payload = if body.is_empty() {
+        Ok(Value::Object(Map::new()))
     } else {
-        serde_json::from_slice(&body).unwrap_or(Value::Null)
+        serde_json::from_slice(&body)
     };
+    if path == "/authorization" && method == Method::POST && parsed_payload.is_err() {
+        return error(
+            StatusCode::BAD_REQUEST,
+            "AUTH004",
+            "Invalid JSON payload",
+            &request_id,
+        );
+    };
+    let payload = parsed_payload.unwrap_or(Value::Null);
 
     if path == "/authorization" && method == Method::POST {
         if let Some(response) = auth_account_rate_limit(
@@ -222,16 +234,18 @@ pub async fn platform_dispatch(
     let username = claims.sub.clone().unwrap_or_default();
 
     if path.starts_with("/authorization") {
-        return authorization_routes(
+        let response = authorization_routes(
             &state,
             &headers,
             path,
-            method,
+            method.clone(),
             payload,
             &claims,
             &request_id,
         )
         .await;
+        audit_management_request(&username, &method, path, &response);
+        return response;
     }
 
     if let Some(response) = dispatch_core_entities(
@@ -245,10 +259,11 @@ pub async fn platform_dispatch(
     )
     .await
     {
+        audit_management_request(&username, &method, path, &response);
         return response;
     }
 
-    match (method.clone(), path) {
+    let response = match (method.clone(), path) {
         (Method::GET, "/openapi.json") => {
             if !has_permission(&state, &username, "manage_apis").await {
                 error(
@@ -716,7 +731,39 @@ pub async fn platform_dispatch(
                 )
             }
         }
+    };
+    audit_management_request(&username, &method, path, &response);
+    response
+}
+
+/// Emit one payload-free audit record for every authenticated platform mutation.
+/// The target is only the route family: user-controlled identifiers and request
+/// bodies may contain credentials and must never be placed in the audit event.
+fn audit_management_request(actor: &str, method: &Method, path: &str, response: &Response) {
+    if method != Method::POST
+        && method != Method::PUT
+        && method != Method::PATCH
+        && method != Method::DELETE
+    {
+        return;
     }
+    let target = path
+        .trim_start_matches('/')
+        .split('/')
+        .next()
+        .filter(|target| !target.is_empty())
+        .unwrap_or("unknown");
+    let status = if response.status().is_success() {
+        "success"
+    } else {
+        "failure"
+    };
+    audit::management_mutation(
+        actor,
+        &format!("platform.{}", method.as_str().to_ascii_lowercase()),
+        target,
+        status,
+    );
 }
 
 async fn dispatch_core_entities(
@@ -1401,6 +1448,12 @@ async fn entity_routes(
         }
         return match storage.insert_one(spec.collection, payload).await {
             Ok(_) => message(StatusCode::CREATED, spec.created, request_id),
+            Err(duplicate_error) if duplicate_error.is_duplicate_key() => error(
+                StatusCode::BAD_REQUEST,
+                spec.duplicate_code,
+                "Resource already exists",
+                request_id,
+            ),
             Err(_) => unexpected(request_id),
         };
     }
@@ -1592,7 +1645,7 @@ async fn api_routes(
         return match storage.find_many("apis", &json!({})).await {
             Ok(items) => success(
                 StatusCode::OK,
-                paginate(items.into_iter().map(strip_internal).collect(), query),
+                paginate_apis(items.into_iter().map(strip_internal).collect(), query),
                 request_id,
             ),
             Err(_) => unexpected(request_id),
@@ -1669,6 +1722,9 @@ async fn api_routes(
                     json!({"api": strip_internal(api)}),
                     request_id,
                 )
+            }
+            Err(error) if error.is_duplicate_key() => {
+                message(StatusCode::OK, "API already exists", request_id)
             }
             Err(_) => unexpected(request_id),
         };
@@ -2405,7 +2461,7 @@ async fn login(
     cookie_headers.append(
         header::SET_COOKIE,
         HeaderValue::from_str(&format!(
-            "csrf_token={csrf}; Path=/; Max-Age=1800; SameSite={same_site}{}{}",
+            "csrf_token={csrf}; Path=/; Max-Age={expiry_seconds}; SameSite={same_site}{}{}",
             if secure { "; Secure" } else { "" },
             domain_attribute
         ))
@@ -2414,7 +2470,7 @@ async fn login(
     cookie_headers.append(
         header::SET_COOKIE,
         HeaderValue::from_str(&format!(
-            "access_token_cookie={token}; Path=/; Max-Age=1800; HttpOnly; SameSite={same_site}{}{}",
+            "access_token_cookie={token}; Path=/; Max-Age={expiry_seconds}; HttpOnly; SameSite={same_site}{}{}",
             if secure { "; Secure" } else { "" },
             domain_attribute
         ))
@@ -2477,11 +2533,18 @@ async fn create_user(
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_owned();
-    let password = payload
+    let Some(password) = payload
         .get("password")
         .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_owned();
+        .map(str::to_owned)
+    else {
+        return error(
+            StatusCode::BAD_REQUEST,
+            "USR005",
+            password_policy(),
+            request_id,
+        );
+    };
     if username.len() < 3 || email.len() < 3 || !secure_password(&password) {
         return error(
             StatusCode::BAD_REQUEST,
@@ -2607,10 +2670,25 @@ async fn authorization_routes(
     let username = claims.sub.as_deref().unwrap_or("");
     if path == "/authorization/refresh" && method == Method::POST {
         let now = unix_seconds() as usize;
+        let Some(storage) = &state.storage else {
+            return unexpected(request_id);
+        };
+        let user = match storage
+            .find_one("users", &json!({"username": username}))
+            .await
+        {
+            Ok(Some(user)) => user,
+            _ => return unexpected(request_id),
+        };
+        let current_role = user
+            .get("role")
+            .and_then(Value::as_str)
+            .unwrap_or("user")
+            .to_owned();
         let expiry_seconds = refresh_expiry_seconds();
         let token_claims = AccessClaims {
             sub: username.to_owned(),
-            role: claims.role.clone().unwrap_or_else(|| "user".to_owned()),
+            role: current_role,
             jti: Uuid::new_v4().to_string(),
             iat: now,
             exp: now + expiry_seconds,
@@ -2640,13 +2718,13 @@ async fn authorization_routes(
         response.headers_mut().append(
             header::SET_COOKIE,
             HeaderValue::from_str(&format!(
-                "csrf_token={csrf}; Path=/; Max-Age=604800; SameSite={same_site}{}{}",
+                "csrf_token={csrf}; Path=/; Max-Age={expiry_seconds}; SameSite={same_site}{}{}",
                 if secure { "; Secure" } else { "" },
                 domain_attribute
             ))
             .unwrap(),
         );
-        response.headers_mut().append(header::SET_COOKIE, HeaderValue::from_str(&format!("access_token_cookie={token}; Path=/; Max-Age=604800; HttpOnly; SameSite={same_site}{}{}", if secure {"; Secure"} else {""}, domain_attribute)).unwrap());
+        response.headers_mut().append(header::SET_COOKIE, HeaderValue::from_str(&format!("access_token_cookie={token}; Path=/; Max-Age={expiry_seconds}; HttpOnly; SameSite={same_site}{}{}", if secure {"; Secure"} else {""}, domain_attribute)).unwrap());
         return response;
     }
     if path == "/authorization/status" && method == Method::GET {
@@ -2874,9 +2952,6 @@ async fn platform_ip_filter(
                 } else {
                     "not_in_whitelist"
                 },
-                headers
-                    .get("x-forwarded-for")
-                    .and_then(|value| value.to_str().ok()),
                 source_ip.as_deref(),
             );
             Some(error(
@@ -2990,23 +3065,24 @@ async fn authorize(
             request_id,
         ));
     }
-    if let Some(jti) = claims.jti.as_deref()
-        && matches!(
-            storage
-                .find_one(
-                    "revocations",
-                    &json!({"type": "jti", "username": username, "jti": jti})
-                )
-                .await,
-            Ok(Some(_))
-        )
-    {
-        return Err(error(
-            StatusCode::UNAUTHORIZED,
-            "AUTH003",
-            "Token has been revoked",
-            request_id,
-        ));
+    if let Some(jti) = claims.jti.as_deref() {
+        let filter = json!({"type": "jti", "username": username, "jti": jti});
+        if let Ok(Some(revocation)) = storage.find_one("revocations", &filter).await {
+            let expired = revocation
+                .get("expires_at")
+                .and_then(Value::as_u64)
+                .is_some_and(|expires_at| expires_at <= unix_seconds());
+            if expired {
+                let _ = storage.delete_one("revocations", &filter).await;
+            } else {
+                return Err(error(
+                    StatusCode::UNAUTHORIZED,
+                    "AUTH003",
+                    "Token has been revoked",
+                    request_id,
+                ));
+            }
+        }
     }
     match storage
         .find_one("users", &json!({"username": username}))
@@ -3172,30 +3248,85 @@ async fn memory_restore(
 }
 
 async fn readiness(state: &AppState, privileged: bool, request_id: &str) -> Response {
-    let (mongo_ok, redis_ok, memory_only) = if let Some(storage) = &state.storage {
-        (
-            storage.mongo_healthy().await,
-            storage.redis_healthy().await,
-            storage.is_memory(),
-        )
-    } else {
-        (false, false, false)
-    };
-    let ready = mongo_ok && redis_ok;
+    let (mongo_ok, redis_ok, memory_only, missing_grpc_descriptors, grpc_descriptor_errors) =
+        if let Some(storage) = &state.storage {
+            let mongo_ok = storage.mongo_healthy().await;
+            let redis_ok = storage.redis_healthy().await;
+            let (missing, errors) = match storage.find_many("apis", &json!({})).await {
+                Ok(apis) => {
+                    let errors = apis
+                        .iter()
+                        .filter(|api| {
+                            api.get("api_type")
+                                .and_then(Value::as_str)
+                                .is_some_and(|kind| kind.eq_ignore_ascii_case("grpc"))
+                                && bool_field_default(api, "active", true)
+                                && !bool_field_default(api, "api_is_crud", false)
+                                && api
+                                    .get("api_grpc_descriptor_set")
+                                    .and_then(Value::as_str)
+                                    .map(|descriptor| descriptor.trim().is_empty())
+                                    .unwrap_or(true)
+                        })
+                        .map(|api| {
+                            json!({
+                                "api_name": api.get("api_name").cloned().unwrap_or(Value::Null),
+                                "api_version": api.get("api_version").cloned().unwrap_or(Value::Null),
+                                "error": "gRPC descriptor is missing"
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    (errors.len(), errors)
+                }
+                Err(_) => (
+                    1,
+                    vec![json!({"error": "unable to inspect gRPC descriptor state"})],
+                ),
+            };
+            (mongo_ok, redis_ok, storage.is_memory(), missing, errors)
+        } else {
+            (
+                false,
+                false,
+                false,
+                1,
+                vec![json!({"error": "storage is unavailable"})],
+            )
+        };
+    let memory_snapshot_healthy = state
+        .runtime
+        .memory_snapshot_healthy
+        .load(Ordering::Relaxed);
+    let metrics_persistence_healthy = state
+        .runtime
+        .metrics_persistence_healthy
+        .load(Ordering::Relaxed);
+    let ready = mongo_ok
+        && redis_ok
+        && missing_grpc_descriptors == 0
+        && memory_snapshot_healthy
+        && metrics_persistence_healthy;
     let status = if ready { "ready" } else { "degraded" };
+    let status_code = if ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
     if !privileged {
-        return success(StatusCode::OK, json!({"status": status}), request_id);
+        return success(status_code, json!({"status": status}), request_id);
     }
     success(
-        StatusCode::OK,
+        status_code,
         json!({
             "status": status,
             "mongodb": mongo_ok,
             "redis": redis_ok,
             "mode": if memory_only { "memory" } else { "mongodb" },
             "cache_backend": if memory_only { "memory" } else { "redis" },
-            "missing_grpc_descriptors": 0,
-            "grpc_descriptor_errors": []
+            "missing_grpc_descriptors": missing_grpc_descriptors,
+            "grpc_descriptor_errors": grpc_descriptor_errors,
+            "memory_snapshot_healthy": memory_snapshot_healthy,
+            "metrics_persistence_healthy": metrics_persistence_healthy
         }),
         request_id,
     )
@@ -3823,6 +3954,7 @@ async fn config_export(
             request_id,
         );
     }
+    audit::config_export(username, only);
     let Some(storage) = &state.storage else {
         return unexpected(request_id);
     };
@@ -3883,6 +4015,24 @@ async fn config_export(
     success(StatusCode::OK, Value::Object(output), request_id)
 }
 
+fn valid_config_import_entry(collection: &str, value: &Value) -> bool {
+    let fields: &[&str] = match collection {
+        "apis" => &["api_name", "api_version"],
+        "endpoints" => &["api_name", "api_version", "endpoint_method", "endpoint_uri"],
+        "roles" => &["role_name"],
+        "groups" => &["group_name"],
+        "routings" => &["client_key"],
+        _ => return false,
+    };
+    value.as_object().is_some_and(|_| {
+        fields.iter().all(|field| {
+            value
+                .get(field)
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty())
+        })
+    })
+}
 async fn config_import(
     state: &AppState,
     username: &str,
@@ -3912,35 +4062,35 @@ async fn config_import(
             ),
         );
     }
+    let mut imported = Map::new();
+    let mut replacements = Vec::new();
+    for collection in ["apis", "endpoints", "roles", "groups", "routings"] {
+        if let Some(values) = payload.get(collection).and_then(Value::as_array) {
+            let values = values
+                .iter()
+                .filter(|value| valid_config_import_entry(collection, value))
+                .cloned()
+                .collect::<Vec<_>>();
+            imported.insert(collection.to_owned(), json!(values.len()));
+            replacements.push((collection.to_owned(), values));
+        } else {
+            imported.insert(collection.to_owned(), json!(0));
+        }
+    }
     if storage
-        .insert_one(
-            "config_snapshots",
-            json!({
+        .replace_collections_atomically(
+            &replacements,
+            Some(json!({
                 "snapshot_id": Uuid::new_v4().to_string(),
                 "created_at": timestamp_now(),
                 "actor": username,
                 "data": previous
-            }),
+            })),
         )
         .await
         .is_err()
     {
         return unexpected(request_id);
-    }
-    let mut imported = Map::new();
-    for collection in ["apis", "endpoints", "roles", "groups", "routings"] {
-        if let Some(values) = payload.get(collection).and_then(Value::as_array) {
-            if storage
-                .replace_collection(collection, values.clone())
-                .await
-                .is_err()
-            {
-                return unexpected(request_id);
-            }
-            imported.insert(collection.to_owned(), json!(values.len()));
-        } else {
-            imported.insert(collection.to_owned(), json!(0));
-        }
     }
     success(StatusCode::OK, json!({"imported": imported}), request_id)
 }
@@ -3979,19 +4129,24 @@ async fn config_rollback(state: &AppState, username: &str, request_id: &str) -> 
             request_id,
         );
     };
-    for collection in ["apis", "endpoints", "roles", "groups", "routings"] {
-        let values = data
-            .get(collection)
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        if storage
-            .replace_collection(collection, values)
-            .await
-            .is_err()
-        {
-            return unexpected(request_id);
-        }
+    let replacements = ["apis", "endpoints", "roles", "groups", "routings"]
+        .into_iter()
+        .map(|collection| {
+            (
+                collection.to_owned(),
+                data.get(collection)
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default(),
+            )
+        })
+        .collect::<Vec<_>>();
+    if storage
+        .replace_collections_atomically(&replacements, None)
+        .await
+        .is_err()
+    {
+        return unexpected(request_id);
     }
     let restored_to = snapshot.get("created_at").cloned().unwrap_or(Value::Null);
     success(
@@ -4463,6 +4618,20 @@ async fn subscription_routes(
     )
 }
 
+fn public_credit_definition(mut value: Value) -> Value {
+    let key_present = value
+        .get("api_key")
+        .or_else(|| value.get("api_key_new"))
+        .and_then(Value::as_str)
+        .is_some_and(|key| !key.is_empty());
+    value["api_key_present"] = json!(key_present);
+    if let Some(value) = value.as_object_mut() {
+        value.remove("api_key");
+        value.remove("api_key_new");
+    }
+    strip_internal(value)
+}
+
 async fn credit_routes(
     state: &AppState,
     path: &str,
@@ -4513,7 +4682,7 @@ async fn credit_routes(
             .await
             .unwrap_or_default()
             .into_iter()
-            .map(strip_internal)
+            .map(public_credit_definition)
             .collect::<Vec<_>>();
         return success(StatusCode::OK, json!(values), request_id);
     }
@@ -4575,7 +4744,9 @@ async fn credit_routes(
         let filter = json!({"api_credit_group": group});
         if method == Method::GET {
             return match storage.find_one("credit_defs", &filter).await {
-                Ok(Some(value)) => success(StatusCode::OK, strip_internal(value), request_id),
+                Ok(Some(value)) => {
+                    success(StatusCode::OK, public_credit_definition(value), request_id)
+                }
                 _ => error(
                     StatusCode::NOT_FOUND,
                     "CRD002",
@@ -6221,6 +6392,27 @@ fn paginate(items: Vec<Value>, query: &HashMap<String, String>) -> Value {
             .collect::<Vec<_>>()
     })
 }
+fn paginate_apis(mut items: Vec<Value>, query: &HashMap<String, String>) -> Value {
+    items.sort_by_key(|value| value["api_name"].as_str().unwrap_or_default().to_owned());
+    let page = query
+        .get("page")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(1)
+        .max(1);
+    let page_size = query
+        .get("page_size")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(10)
+        .clamp(1, 200);
+    let start = (page - 1).saturating_mul(page_size);
+    let total = items.len();
+    let apis = items
+        .into_iter()
+        .skip(start)
+        .take(page_size)
+        .collect::<Vec<_>>();
+    json!({"apis": apis, "page": page, "page_size": page_size, "has_next": start.saturating_add(page_size) < total, "total": total})
+}
 
 fn strip_internal(mut value: Value) -> Value {
     strip_mongo_id(&mut value);
@@ -6405,9 +6597,32 @@ mod tests {
 
     #[test]
     fn enforces_the_python_password_policy() {
-        assert!(secure_password("SecurePassword@123"));
-        assert!(!secure_password("short"));
-        assert!(!secure_password("NoSpecialCharacter123"));
+        let valid = test_password();
+        assert!(secure_password(&valid));
+
+        let short = Uuid::new_v4()
+            .simple()
+            .to_string()
+            .chars()
+            .take(5)
+            .collect::<String>();
+        assert!(!secure_password(&short));
+
+        let without_special = format!(
+            "{}{}",
+            Uuid::new_v4().simple(),
+            Uuid::new_v4().simple().to_string().to_uppercase()
+        );
+        assert!(!secure_password(&without_special));
+    }
+
+    fn test_password() -> String {
+        let bytes = Uuid::new_v4().into_bytes();
+        let uppercase = char::from(bytes[0] % 26 + b'A');
+        let lowercase = char::from(bytes[1] % 26 + b'a');
+        let digit = char::from(bytes[2] % 10 + b'0');
+        let special = char::from(bytes[3] % 15 + b'!');
+        format!("{uppercase}{lowercase}{digit}{special}{}", Uuid::new_v4())
     }
 
     #[test]

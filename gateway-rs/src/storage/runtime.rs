@@ -5,8 +5,9 @@ use std::{
 
 use futures_util::TryStreamExt;
 use mongodb::{
-    Client, Database,
+    Client, Database, IndexModel,
     bson::{Document, doc},
+    options::IndexOptions,
 };
 use redis::{AsyncCommands, aio::ConnectionManager};
 use serde_json::Value;
@@ -46,6 +47,11 @@ pub enum StorageError {
     #[error("invalid stored document: {0}")]
     InvalidDocument(String),
 }
+impl StorageError {
+    pub fn is_duplicate_key(&self) -> bool {
+        matches!(self, Self::Mongo(error) if error.to_string().contains("E11000"))
+    }
+}
 
 pub struct GatewayMetric<'a> {
     pub minute_start: u64,
@@ -77,6 +83,7 @@ impl SharedStorage {
         let redis_client = redis::Client::open(config.redis_url())?;
         let mut redis = ConnectionManager::new(redis_client).await?;
         let _: String = redis::cmd("PING").query_async(&mut redis).await?;
+        Self::ensure_indexes(&mongo).await?;
         Ok(Self {
             mongo: Some(mongo),
             redis: Some(redis),
@@ -86,6 +93,45 @@ impl SharedStorage {
         })
     }
 
+    async fn ensure_indexes(database: &Database) -> Result<(), StorageError> {
+        let indexes = [
+            ("users", doc! {"username": 1}),
+            ("users", doc! {"email": 1}),
+            ("roles", doc! {"role_name": 1}),
+            ("groups", doc! {"group_name": 1}),
+            ("apis", doc! {"api_name": 1, "api_version": 1}),
+            (
+                "endpoints",
+                doc! {
+                    "api_name": 1,
+                    "api_version": 1,
+                    "endpoint_method": 1,
+                    "endpoint_uri": 1
+                },
+            ),
+            ("subscriptions", doc! {"username": 1}),
+            ("routings", doc! {"client_key": 1}),
+            ("credit_defs", doc! {"api_credit_group": 1}),
+            ("user_credits", doc! {"username": 1}),
+            ("tiers", doc! {"tier_name": 1}),
+            ("user_tier_assignments", doc! {"user_id": 1}),
+            ("vault_entries", doc! {"username": 1, "key_name": 1}),
+            ("config_snapshots", doc! {"snapshot_id": 1}),
+            ("revocations", doc! {"type": 1, "username": 1, "jti": 1}),
+        ];
+        for (collection, keys) in indexes {
+            database
+                .collection::<Document>(collection)
+                .create_index(
+                    IndexModel::builder()
+                        .keys(keys)
+                        .options(IndexOptions::builder().unique(true).build())
+                        .build(),
+                )
+                .await?;
+        }
+        Ok(())
+    }
     pub async fn initialize_core(&self) -> Result<(), StorageError> {
         let admin_role = serde_json::json!({
             "role_name": "admin", "role_description": "Administrator role",
@@ -733,6 +779,77 @@ impl SharedStorage {
                 .collect::<Result<Vec<_>, _>>()?;
             target.insert_many(documents).await?;
         }
+        self.bump_policy_revision().await?;
+        self.invalidate_policy_cache().await;
+        Ok(())
+    }
+
+    /// Replace a related set of collections as one configuration change.
+    ///
+    /// MongoDB deployments must provide transaction support (a replica set or
+    /// sharded cluster).  Failing that precondition is safer than partially
+    /// applying a configuration import or rollback.
+    pub async fn replace_collections_atomically(
+        &self,
+        replacements: &[(String, Vec<Value>)],
+        snapshot: Option<Value>,
+    ) -> Result<(), StorageError> {
+        if let Some(memory) = &self.memory {
+            let mut collections = memory.collections.write().await;
+            if let Some(snapshot) = snapshot {
+                collections
+                    .entry("config_snapshots".to_owned())
+                    .or_default()
+                    .push(snapshot);
+            }
+            for (collection, values) in replacements {
+                collections.insert(collection.clone(), values.clone());
+            }
+            memory.bump_revision();
+            self.invalidate_policy_cache().await;
+            return Ok(());
+        }
+
+        let database = self.mongo()?;
+        let documents = replacements
+            .iter()
+            .map(|(collection, values)| {
+                values
+                    .iter()
+                    .map(mongodb::bson::to_document)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|documents| (collection.as_str(), documents))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let snapshot = snapshot
+            .map(|value| mongodb::bson::to_document(&value))
+            .transpose()?;
+        let mut session = database.client().start_session().await?;
+        session.start_transaction().await?;
+
+        let result: Result<(), StorageError> = async {
+            if let Some(snapshot) = snapshot.as_ref() {
+                database
+                    .collection::<Document>("config_snapshots")
+                    .insert_one(snapshot)
+                    .session(&mut session)
+                    .await?;
+            }
+            for (collection, values) in &documents {
+                let target = database.collection::<Document>(collection);
+                target.delete_many(doc! {}).session(&mut session).await?;
+                if !values.is_empty() {
+                    target.insert_many(values).session(&mut session).await?;
+                }
+            }
+            Ok(())
+        }
+        .await;
+        if let Err(error) = result {
+            let _ = session.abort_transaction().await;
+            return Err(error);
+        }
+        session.commit_transaction().await?;
         self.bump_policy_revision().await?;
         self.invalidate_policy_cache().await;
         Ok(())

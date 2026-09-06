@@ -539,6 +539,20 @@ async fn execute_rest(
         status,
         decision.response_transform.as_ref(),
     );
+    // GraphQL clients expect execution failures in a valid `errors` envelope,
+    // even when an upstream incorrectly reports that envelope with a 5xx status.
+    // Preserve transport failures and malformed/non-GraphQL responses as errors.
+    let status = if protocol == DataPlaneProtocol::Graphql
+        && status.is_server_error()
+        && serde_json::from_slice::<Value>(&bytes)
+            .ok()
+            .and_then(|body| body.get("errors").and_then(Value::as_array).cloned())
+            .is_some_and(|errors| !errors.is_empty())
+    {
+        StatusCode::OK
+    } else {
+        status
+    };
     let is_json = upstream_headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())

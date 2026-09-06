@@ -1,17 +1,28 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use axum::body::{Body, to_bytes};
 use doorman_gateway::{AppState, Config, build_router, storage::runtime::SharedStorage};
 use http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
+use uuid::Uuid;
 
 const ADMIN_EMAIL: &str = "admin@doorman.dev";
-const ADMIN_PASSWORD: &str = "AdminPassword123!";
 const LIMITED_EMAIL: &str = "limited@doorman.dev";
-const LIMITED_PASSWORD: &str = "LimitedPassword123!";
 const MANAGER_EMAIL: &str = "security-manager@doorman.dev";
-const MANAGER_PASSWORD: &str = "SecurityManagerPassword123!";
+fn fixture_password() -> &'static str {
+    static PASSWORD: OnceLock<String> = OnceLock::new();
+    PASSWORD.get_or_init(random_password).as_str()
+}
+
+fn random_password() -> String {
+    let bytes = Uuid::new_v4().into_bytes();
+    let uppercase = char::from(bytes[0] % 26 + b'A');
+    let lowercase = char::from(bytes[1] % 26 + b'a');
+    let digit = char::from(bytes[2] % 10 + b'0');
+    let special = char::from(bytes[3] % 15 + b'!');
+    format!("{uppercase}{lowercase}{digit}{special}{}", Uuid::new_v4())
+}
 
 async fn parity_state() -> AppState {
     let mut config = Config::for_test("removed-internal-backend".to_owned());
@@ -47,12 +58,12 @@ async fn parity_state() -> AppState {
     }
 
     for (username, email, password, role) in [
-        ("admin", ADMIN_EMAIL, ADMIN_PASSWORD, "admin"),
-        ("limited", LIMITED_EMAIL, LIMITED_PASSWORD, "limited"),
+        ("admin", ADMIN_EMAIL, fixture_password(), "admin"),
+        ("limited", LIMITED_EMAIL, fixture_password(), "limited"),
         (
             "security-manager",
             MANAGER_EMAIL,
-            MANAGER_PASSWORD,
+            fixture_password(),
             "security-manager",
         ),
     ] {
@@ -137,7 +148,7 @@ async fn request(
 #[tokio::test]
 async fn live_security_settings_get_put_matches_python() {
     let app = build_router(parity_state().await);
-    let token = login(&app, ADMIN_EMAIL, ADMIN_PASSWORD).await;
+    let token = login(&app, ADMIN_EMAIL, fixture_password()).await;
 
     let get = request(
         &app,
@@ -190,7 +201,7 @@ async fn live_security_settings_get_put_matches_python() {
 #[tokio::test]
 async fn live_tools_cors_check_matches_python() {
     let app = build_router(parity_state().await);
-    let token = login(&app, ADMIN_EMAIL, ADMIN_PASSWORD).await;
+    let token = login(&app, ADMIN_EMAIL, fixture_password()).await;
     let response = request(
         &app,
         Method::POST,
@@ -215,7 +226,7 @@ async fn live_tools_cors_check_matches_python() {
 #[tokio::test]
 async fn live_logging_endpoints_match_python() {
     let app = build_router(parity_state().await);
-    let token = login(&app, ADMIN_EMAIL, ADMIN_PASSWORD).await;
+    let token = login(&app, ADMIN_EMAIL, fixture_password()).await;
 
     let logs = request(
         &app,
@@ -246,7 +257,7 @@ async fn live_logging_endpoints_match_python() {
 #[tokio::test]
 async fn live_clear_all_caches_matches_python() {
     let app = build_router(parity_state().await);
-    let token = login(&app, ADMIN_EMAIL, ADMIN_PASSWORD).await;
+    let token = login(&app, ADMIN_EMAIL, fixture_password()).await;
     let response = request(&app, Method::DELETE, "/api/caches", &token, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
@@ -267,8 +278,8 @@ async fn live_clear_all_caches_matches_python() {
 #[tokio::test]
 async fn security_settings_require_manage_security_permission() {
     let app = build_router(parity_state().await);
-    let limited = login(&app, LIMITED_EMAIL, LIMITED_PASSWORD).await;
-    let manager = login(&app, MANAGER_EMAIL, MANAGER_PASSWORD).await;
+    let limited = login(&app, LIMITED_EMAIL, fixture_password()).await;
+    let manager = login(&app, MANAGER_EMAIL, fixture_password()).await;
 
     for method in [Method::GET, Method::PUT] {
         let payload = (method == Method::PUT).then(|| json!({"trust_x_forwarded_for": true}));

@@ -1,10 +1,24 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use axum::body::{Body, to_bytes};
 use doorman_gateway::{AppState, Config, build_router, storage::runtime::SharedStorage};
 use http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
+use uuid::Uuid;
+fn fixture_password() -> &'static str {
+    static PASSWORD: OnceLock<String> = OnceLock::new();
+    PASSWORD.get_or_init(random_password).as_str()
+}
+
+fn random_password() -> String {
+    let bytes = Uuid::new_v4().into_bytes();
+    let uppercase = char::from(bytes[0] % 26 + b'A');
+    let lowercase = char::from(bytes[1] % 26 + b'a');
+    let digit = char::from(bytes[2] % 10 + b'0');
+    let special = char::from(bytes[3] % 15 + b'!');
+    format!("{uppercase}{lowercase}{digit}{special}{}", Uuid::new_v4())
+}
 
 async fn app() -> axum::Router {
     let config = Config::for_test("removed-internal-backend".to_owned());
@@ -31,7 +45,7 @@ async fn app() -> axum::Router {
             "users",
             json!({
                 "username": "admin", "email": "admin@doorman.dev",
-                "password": bcrypt::hash("AdminPassword123!", bcrypt::DEFAULT_COST).unwrap(),
+                "password": bcrypt::hash(fixture_password(), bcrypt::DEFAULT_COST).unwrap(),
                 "role": "admin", "groups": ["ALL", "admin"], "active": true, "ui_access": true
             }),
         )
@@ -110,7 +124,7 @@ async fn create_user(
     role: &str,
 ) -> (String, String) {
     let email = format!("{username}@example.com");
-    let password = "Strong!Passw0rd1234";
+    let password = fixture_password();
     let response = request(
         app,
         Method::POST,
@@ -156,7 +170,7 @@ async fn management_attempt(
             json!({
                 "username": format!("managed-user-{index}"),
                 "email": format!("managed-user-{index}@example.com"),
-                "password": "Strong!Passw0rd1234", "role": role,
+                "password": fixture_password(), "role": role,
                 "groups": ["ALL"], "ui_access": false
             }),
         ),
@@ -180,7 +194,7 @@ async fn management_attempt(
 #[tokio::test]
 async fn live_role_permission_matrix_blocks_then_allows_each_management_operation() {
     let app = app().await;
-    let admin = login(&app, "admin@doorman.dev", "AdminPassword123!").await;
+    let admin = login(&app, "admin@doorman.dev", fixture_password()).await;
     let api = request(
         &app,
         Method::POST,
@@ -247,7 +261,7 @@ async fn live_role_permission_matrix_blocks_then_allows_each_management_operatio
 #[tokio::test]
 async fn group_crud_requires_manage_groups_and_allows_group_manager() {
     let app = app().await;
-    let admin = login(&app, "admin@doorman.dev", "AdminPassword123!").await;
+    let admin = login(&app, "admin@doorman.dev", fixture_password()).await;
     for (role, manage_groups) in [("limited", false), ("group-manager", true)] {
         let response = request(
             &app,
@@ -321,7 +335,7 @@ async fn group_crud_requires_manage_groups_and_allows_group_manager() {
 #[tokio::test]
 async fn missing_group_and_role_reads_and_deletes_return_not_found() {
     let app = app().await;
-    let admin = login(&app, "admin@doorman.dev", "AdminPassword123!").await;
+    let admin = login(&app, "admin@doorman.dev", fixture_password()).await;
     for (method, path, code) in [
         (Method::GET, "/platform/group/not-a-group", "GRP002"),
         (Method::GET, "/platform/role/not-a-role", "ROL002"),
@@ -337,7 +351,7 @@ async fn missing_group_and_role_reads_and_deletes_return_not_found() {
 #[tokio::test]
 async fn non_admin_role_manager_cannot_create_admin_role() {
     let app = app().await;
-    let admin = login(&app, "admin@doorman.dev", "AdminPassword123!").await;
+    let admin = login(&app, "admin@doorman.dev", fixture_password()).await;
     let role = request(
         &app,
         Method::POST,

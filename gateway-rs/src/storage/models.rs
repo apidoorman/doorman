@@ -73,6 +73,14 @@ pub fn u64_field(value: &Value, field: &str) -> Option<u64> {
     }
 }
 
+pub fn f64_field(value: &Value, field: &str) -> Option<f64> {
+    match value.get(field) {
+        Some(Value::Number(number)) => number.as_f64(),
+        Some(Value::String(raw)) => raw.parse().ok(),
+        _ => None,
+    }
+}
+
 pub fn string_list_field(value: &Value, field: &str) -> Vec<String> {
     value
         .get(field)

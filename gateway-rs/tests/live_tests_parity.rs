@@ -1,11 +1,19 @@
 use std::{
     net::SocketAddr,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use axum::body::{Body, to_bytes};
-use axum::{Json, Router, extract::ConnectInfo, response::Response, routing::any};
+use axum::{
+    Json, Router,
+    extract::{ConnectInfo, State},
+    response::Response,
+    routing::{any, post},
+};
 use doorman_gateway::{
     AppState, Config, build_router,
     storage::{redis::bandwidth_key, runtime::SharedStorage},
@@ -177,6 +185,445 @@ async fn start_echo_upstream() -> (String, JoinHandle<()>) {
         .unwrap();
     });
     (format!("http://{address}"), server)
+}
+
+struct UpstreamStatusSequence {
+    statuses: Vec<StatusCode>,
+    attempts: AtomicUsize,
+}
+
+async fn rest_status_sequence_upstream(
+    State(sequence): State<Arc<UpstreamStatusSequence>>,
+) -> Response {
+    let attempt = sequence.attempts.fetch_add(1, Ordering::SeqCst);
+    let status = sequence
+        .statuses
+        .get(attempt)
+        .copied()
+        .unwrap_or_else(|| *sequence.statuses.last().expect("non-empty sequence"));
+    Response::builder()
+        .status(status)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({"ok": status.is_success(), "attempt": attempt + 1}).to_string(),
+        ))
+        .unwrap()
+}
+
+async fn start_rest_status_sequence_upstream(
+    statuses: Vec<StatusCode>,
+) -> (String, Arc<UpstreamStatusSequence>, JoinHandle<()>) {
+    assert!(!statuses.is_empty());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let sequence = Arc::new(UpstreamStatusSequence {
+        statuses,
+        attempts: AtomicUsize::new(0),
+    });
+    let server_sequence = sequence.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/r", any(rest_status_sequence_upstream))
+                .with_state(server_sequence),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("http://{address}"), sequence, server)
+}
+
+async fn rest_header_filter_upstream(headers: HeaderMap) -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-upstream", "allowed")
+        .header("x-secret", "blocked")
+        .body(Body::from(
+            json!({
+                "x_allowed": headers.get("x-allowed").and_then(|value| value.to_str().ok()),
+                "x_blocked": headers.get("x-blocked").and_then(|value| value.to_str().ok()),
+            })
+            .to_string(),
+        ))
+        .unwrap()
+}
+
+async fn start_rest_header_filter_upstream() -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route("/headers", any(rest_header_filter_upstream)),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("http://{address}"), server)
+}
+
+async fn marked_echo_upstream(State(marker): State<String>) -> Json<Value> {
+    Json(json!({"upstream": marker}))
+}
+
+async fn start_marked_echo_upstream(marker: &str) -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let marker = marker.to_owned();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/echo", any(marked_echo_upstream))
+                .route("/status", any(marked_echo_upstream))
+                .with_state(marker),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("http://{address}"), server)
+}
+
+#[tokio::test]
+async fn routing_precedence_and_round_robin_real_upstreams_parity() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let (api_a, api_a_server) = start_marked_echo_upstream("api-a").await;
+    let (api_b, api_b_server) = start_marked_echo_upstream("api-b").await;
+    let (endpoint_a, endpoint_a_server) = start_marked_echo_upstream("endpoint-a").await;
+    let (endpoint_b, endpoint_b_server) = start_marked_echo_upstream("endpoint-b").await;
+    let (client_a, client_a_server) = start_marked_echo_upstream("client-a").await;
+    let (client_b, client_b_server) = start_marked_echo_upstream("client-b").await;
+    let api_name = "routing-real";
+    let api_version = "v1";
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "routing precedence and round robin",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [api_a, api_b],
+            "api_type": "REST",
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "GET",
+                "endpoint_uri": "/echo",
+                "endpoint_description": "endpoint routing",
+                "endpoint_servers": [endpoint_a, endpoint_b]
+            }),
+        ),
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "GET",
+                "endpoint_uri": "/status",
+                "endpoint_description": "API routing fallback"
+            }),
+        ),
+        (
+            "/platform/routing",
+            json!({
+                "client_key": "routing-client",
+                "routing_name": "routing client override",
+                "routing_servers": [client_a, client_b],
+                "routing_description": "client route"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+
+    for (path, client_key, expected) in [
+        ("echo", Some("routing-client"), "client-a"),
+        ("echo", Some("routing-client"), "client-b"),
+        ("echo", None, "endpoint-a"),
+        ("echo", None, "endpoint-b"),
+        ("status", None, "api-a"),
+        ("status", None, "api-b"),
+        ("status", None, "api-a"),
+    ] {
+        let mut request = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/api/rest/{api_name}/{api_version}/{path}"))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"));
+        if let Some(client_key) = client_key {
+            request = request.header("client-key", client_key);
+        }
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let (status, body) = response_json(response).await;
+        assert_eq!(status, StatusCode::OK, "{path} via {expected}");
+        assert_eq!(body["upstream"], expected, "{path} via {expected}");
+    }
+
+    for server in [
+        api_a_server,
+        api_b_server,
+        endpoint_a_server,
+        endpoint_b_server,
+        client_a_server,
+        client_b_server,
+    ] {
+        server.abort();
+    }
+}
+
+#[tokio::test]
+async fn gateway_no_upstream_servers_has_stable_error_contract() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "routing-no-upstream";
+    let api_version = "v1";
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "no upstream response contract",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [],
+            "api_type": "REST",
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "GET",
+                "endpoint_uri": "/status",
+                "endpoint_description": "no upstream endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/rest/{api_name}/{api_version}/status"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = response_json(response).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error_code"], "GTW001");
+    assert_eq!(body["error_message"], "No upstream servers configured");
+}
+
+#[tokio::test]
+async fn rest_retries_real_upstream_status_sequences_parity() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let (retry_500_url, retry_500, retry_500_server) = start_rest_status_sequence_upstream(vec![
+        StatusCode::INTERNAL_SERVER_ERROR,
+        StatusCode::OK,
+    ])
+    .await;
+    let (retry_503_url, retry_503, retry_503_server) =
+        start_rest_status_sequence_upstream(vec![StatusCode::SERVICE_UNAVAILABLE, StatusCode::OK])
+            .await;
+    let (no_retry_url, no_retry, no_retry_server) = start_rest_status_sequence_upstream(vec![
+        StatusCode::INTERNAL_SERVER_ERROR,
+        StatusCode::INTERNAL_SERVER_ERROR,
+    ])
+    .await;
+
+    for (api_name, upstream_url, retry_count, expected_status, expected_attempts) in [
+        ("rest-retry-500", retry_500_url, 1, StatusCode::OK, 2),
+        ("rest-retry-503", retry_503_url, 1, StatusCode::OK, 2),
+        (
+            "rest-no-retry",
+            no_retry_url,
+            0,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1,
+        ),
+    ] {
+        let (status, _) = authed_json_response(
+            &app,
+            &token,
+            Method::POST,
+            "/platform/api",
+            json!({
+                "api_name": api_name,
+                "api_version": "v1",
+                "api_description": "REST retry status sequence",
+                "api_allowed_roles": ["admin"],
+                "api_allowed_groups": ["ALL"],
+                "api_servers": [upstream_url],
+                "api_type": "REST",
+                "api_allowed_retry_count": retry_count,
+                "active": true
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{api_name}");
+        let (status, _) = authed_json_response(
+            &app,
+            &token,
+            Method::POST,
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": "v1",
+                "endpoint_method": "GET",
+                "endpoint_uri": "/r",
+                "endpoint_description": "retry endpoint"
+            }),
+        )
+        .await;
+        assert!(status.is_success(), "endpoint {api_name}: {status}");
+        let (status, _) = authed_json_response(
+            &app,
+            &token,
+            Method::POST,
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": "v1"}),
+        )
+        .await;
+        assert!(status.is_success(), "subscription {api_name}: {status}");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(format!("/api/rest/{api_name}/v1/r"))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected_status, "{api_name}");
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["ok"], expected_status.is_success(), "{api_name}");
+        let attempts = match api_name {
+            "rest-retry-500" => retry_500.attempts.load(Ordering::SeqCst),
+            "rest-retry-503" => retry_503.attempts.load(Ordering::SeqCst),
+            "rest-no-retry" => no_retry.attempts.load(Ordering::SeqCst),
+            _ => unreachable!(),
+        };
+        assert_eq!(attempts, expected_attempts, "{api_name}");
+    }
+    retry_500_server.abort();
+    retry_503_server.abort();
+    no_retry_server.abort();
+}
+
+#[tokio::test]
+async fn rest_request_and_response_header_allowlists_real_upstream_parity() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let (upstream_url, upstream) = start_rest_header_filter_upstream().await;
+    let api_name = "rest-header-allowlist";
+    let api_version = "v1";
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "REST header allowlists",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "REST",
+            "api_allowed_headers": ["x-allowed", "x-upstream"],
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "GET",
+                "endpoint_uri": "/headers",
+                "endpoint_description": "header allowlist endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/rest/{api_name}/{api_version}/headers"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-allowed", "yes")
+                .header("x-blocked", "no")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["x-upstream"], "allowed");
+    assert!(!response.headers().contains_key("x-secret"));
+    let (_, body) = response_json(response).await;
+    assert_eq!(body["x_allowed"], "yes");
+    assert!(body["x_blocked"].is_null());
+    upstream.abort();
 }
 
 async fn configure_ip_gateway(
@@ -1805,6 +2252,7 @@ async fn live_test_33_rate_limiting_blocks_excess_requests_parity() {
         .await;
 
     tokio::time::sleep(std::time::Duration::from_millis(1_100)).await;
+    wait_for_stable_rate_second().await;
     // First request -> processed by gateway evaluation
     let response1 = app
         .clone()
@@ -1952,6 +2400,31 @@ async fn tier_gateway_request(app: &axum::Router, token: &str, api_name: &str) -
     .await;
     status
 }
+
+async fn wait_for_stable_tier_minute() {
+    let second = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        % 60;
+    if second >= 55 {
+        tokio::time::sleep(Duration::from_secs(61 - second)).await;
+    }
+}
+
+async fn wait_for_stable_rate_second() {
+    let remainder = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        % 1_000;
+    // The two immediate requests below must use the same fixed one-second
+    // window. Start early in a fresh window when the current one is nearly over.
+    if remainder >= 400 {
+        tokio::time::sleep(Duration::from_millis((1_000 - remainder + 25) as u64)).await;
+    }
+}
+
 #[tokio::test]
 async fn live_test_34_tier_rate_limiting_strict_local_parity() {
     let app = build_router(test_app_state().await);
@@ -1968,6 +2441,7 @@ async fn live_test_34_tier_rate_limiting_strict_local_parity() {
     )
     .await;
 
+    wait_for_stable_tier_minute().await;
     assert_eq!(
         tier_gateway_request(&app, &token, "tier-rate-strict-34").await,
         StatusCode::OK
@@ -1995,6 +2469,7 @@ async fn live_test_34_tier_vs_user_limits_priority_parity() {
     )
     .await;
 
+    wait_for_stable_tier_minute().await;
     // The helper sets a 1,000,000-request user limit; the tier must win at one request.
     assert_eq!(
         tier_gateway_request(&app, &token, "tier-rate-priority-34").await,
@@ -2367,6 +2842,9 @@ async fn live_test_90_security_tools_and_config_export_import_parity() {
         .await
         .unwrap();
     assert!(response.status().is_success());
+    let config_import: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert!(config_import["imported"].is_object());
 }
 
 async fn public_gateway_status(
@@ -2518,6 +2996,35 @@ async fn start_bulk_soap_upstream() -> (String, JoinHandle<()>) {
     (format!("http://{address}"), server)
 }
 
+async fn soap_retry_upstream(State(attempts): State<Arc<AtomicUsize>>) -> Response {
+    if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+        return Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .header(header::CONTENT_TYPE, "text/xml")
+            .body(Body::from("<fault/>"))
+            .unwrap();
+    }
+    bulk_soap_echo().await
+}
+
+async fn start_soap_retry_upstream() -> (String, Arc<AtomicUsize>, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let server_attempts = attempts.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/soap", post(soap_retry_upstream))
+                .with_state(server_attempts),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("http://{address}"), attempts, server)
+}
+
 async fn graphql_hello(Json(payload): Json<Value>) -> Json<Value> {
     assert_eq!(payload["query"], "{ hello(name:\"Doorman\") }");
     Json(json!({"data": {"hello": "Hello, Doorman!"}}))
@@ -2558,6 +3065,1236 @@ async fn start_graphql_validation_upstream() -> (String, JoinHandle<()>) {
         .unwrap();
     });
     (format!("http://{address}"), server)
+}
+
+async fn graphql_error_upstream() -> Response {
+    Response::builder()
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({"errors": [{"message": "upstream boom", "status": 500}]}).to_string(),
+        ))
+        .unwrap()
+}
+
+async fn start_graphql_error_upstream() -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route("/graphql", post(graphql_error_upstream)),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("http://{address}"), server)
+}
+
+async fn grpc_hello_upstream(request: axum::extract::Request) -> Response {
+    assert_eq!(request.version(), http::Version::HTTP_2);
+    let body = to_bytes(request.into_body(), 1024).await.unwrap();
+    assert!(body.len() >= 5, "gRPC request must contain a data frame");
+    assert_eq!(body[0], 0, "compressed gRPC requests are not expected");
+    let length = u32::from_be_bytes(body[1..5].try_into().unwrap()) as usize;
+    assert_eq!(body.len(), length + 5);
+    let message = &body[5..];
+    assert_eq!(message[0], 0x0a, "HelloRequest.name field");
+    assert_eq!(message[1] as usize, "Doorman".len());
+    assert_eq!(&message[2..], b"Doorman");
+
+    let reply = b"Hello, Doorman!";
+    let mut framed = vec![0, 0, 0, 0, (reply.len() + 2) as u8, 0x0a, reply.len() as u8];
+    framed.extend_from_slice(reply);
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/grpc")
+        .header("grpc-status", "0")
+        .body(Body::from(framed))
+        .unwrap()
+}
+
+async fn start_grpc_hello_upstream() -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route("/grpcdemo_v1.Greeter/Hello", post(grpc_hello_upstream)),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("grpc://{address}"), server)
+}
+
+async fn grpc_metadata_upstream(request: axum::extract::Request) -> Response {
+    assert_eq!(
+        request
+            .headers()
+            .get("x-meta-one")
+            .and_then(|value| value.to_str().ok()),
+        Some("alpha")
+    );
+    assert!(
+        request.headers().contains_key("grpc-timeout"),
+        "gRPC deadline must be forwarded as grpc-timeout"
+    );
+    grpc_hello_upstream(request).await
+}
+
+async fn start_grpc_metadata_upstream() -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route("/grpcmeta_v1.Greeter/Hello", post(grpc_metadata_upstream)),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("grpc://{address}"), server)
+}
+
+async fn grpc_status_upstream(request: axum::extract::Request) -> Response {
+    assert_eq!(request.version(), http::Version::HTTP_2);
+    let grpc_status = request
+        .headers()
+        .get("x-test-grpc-status")
+        .and_then(|value| value.to_str().ok())
+        .expect("allowlisted test status metadata")
+        .parse::<u16>()
+        .unwrap();
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/grpc")
+        .header("grpc-status", grpc_status.to_string())
+        .header("grpc-message", "pinned%20upstream%20status")
+        .body(Body::empty())
+        .unwrap()
+}
+
+async fn start_grpc_status_upstream() -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route("/grpcstatus_v1.Greeter/Hello", post(grpc_status_upstream)),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("grpc://{address}"), server)
+}
+
+async fn grpc_server_stream_upstream(request: axum::extract::Request) -> Response {
+    assert_eq!(request.version(), http::Version::HTTP_2);
+    let body = to_bytes(request.into_body(), 1024).await.unwrap();
+    assert_eq!(&body[5..], b"\x0a\x07Doorman");
+    let mut framed = Vec::new();
+    for reply in [b"\x0a\x03one".as_slice(), b"\x0a\x03two".as_slice()] {
+        framed.extend_from_slice(&[0, 0, 0, 0, reply.len() as u8]);
+        framed.extend_from_slice(reply);
+    }
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/grpc")
+        .header("grpc-status", "0")
+        .body(Body::from(framed))
+        .unwrap()
+}
+
+async fn start_grpc_server_stream_upstream() -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route(
+                "/grpcstream_v1.Greeter/Watch",
+                post(grpc_server_stream_upstream),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("grpc://{address}"), server)
+}
+
+async fn grpc_stream_modes_upstream(request: axum::extract::Request) -> Response {
+    assert_eq!(request.version(), http::Version::HTTP_2);
+    let path = request.uri().path().to_owned();
+    let body = to_bytes(request.into_body(), 1024).await.unwrap();
+    let mut values = Vec::new();
+    let mut offset = 0;
+    while offset < body.len() {
+        assert_eq!(body[offset], 0, "compressed gRPC requests are not expected");
+        let length = u32::from_be_bytes(body[offset + 1..offset + 5].try_into().unwrap()) as usize;
+        let payload = &body[offset + 5..offset + 5 + length];
+        assert_eq!(payload.len(), 2);
+        assert_eq!(payload[0], 0x08, "Number.val field");
+        values.push(payload[1]);
+        offset += 5 + length;
+    }
+
+    let replies: Vec<Vec<u8>> = match path.as_str() {
+        "/grpcmodes_v1.Streams/Sum" => {
+            assert_eq!(values, vec![1, 2, 3]);
+            vec![vec![
+                0x08,
+                values.iter().map(|value| *value as u16).sum::<u16>() as u8,
+            ]]
+        }
+        "/grpcmodes_v1.Streams/Echo" => {
+            assert_eq!(values, vec![7, 8]);
+            values.into_iter().map(|value| vec![0x08, value]).collect()
+        }
+        unexpected => panic!("unexpected streaming gRPC path: {unexpected}"),
+    };
+    let mut framed = Vec::new();
+    for reply in replies {
+        framed.extend_from_slice(&[0, 0, 0, 0, reply.len() as u8]);
+        framed.extend_from_slice(&reply);
+    }
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/grpc")
+        .header("grpc-status", "0")
+        .body(Body::from(framed))
+        .unwrap()
+}
+
+async fn start_grpc_stream_modes_upstream() -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route(
+                    "/grpcmodes_v1.Streams/Sum",
+                    post(grpc_stream_modes_upstream),
+                )
+                .route(
+                    "/grpcmodes_v1.Streams/Echo",
+                    post(grpc_stream_modes_upstream),
+                ),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("grpc://{address}"), server)
+}
+
+async fn grpc_resource_upstream(request: axum::extract::Request) -> Response {
+    assert_eq!(request.version(), http::Version::HTTP_2);
+    let path = request.uri().path().to_owned();
+    let body = to_bytes(request.into_body(), 1024).await.unwrap();
+    assert!(body.len() >= 5, "gRPC request must contain a data frame");
+    assert_eq!(body[0], 0, "compressed gRPC requests are not expected");
+    let length = u32::from_be_bytes(body[1..5].try_into().unwrap()) as usize;
+    assert_eq!(body.len(), length + 5);
+    let message = &body[5..];
+
+    let reply = match path.as_str() {
+        "/grpcpublic_v1.Resource/Create" => {
+            assert_eq!(message, b"\x0a\x01A");
+            b"\x0a\x09created A".to_vec()
+        }
+        "/grpcpublic_v1.Resource/Read" => {
+            assert_eq!(message, b"\x08\x01");
+            b"\x0a\x06read 1".to_vec()
+        }
+        "/grpcpublic_v1.Resource/Update" => {
+            assert_eq!(message, b"\x08\x01\x12\x01B");
+            b"\x0a\x0bupdated 1:B".to_vec()
+        }
+        "/grpcpublic_v1.Resource/Delete" => {
+            assert_eq!(message, b"\x08\x01");
+            b"\x08\x01".to_vec()
+        }
+        unexpected => panic!("unexpected gRPC resource path: {unexpected}"),
+    };
+    let mut framed = vec![0, 0, 0, 0, reply.len() as u8];
+    framed.extend_from_slice(&reply);
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/grpc")
+        .header("grpc-status", "0")
+        .body(Body::from(framed))
+        .unwrap()
+}
+
+async fn start_grpc_resource_upstream() -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route(
+                    "/grpcpublic_v1.Resource/Create",
+                    post(grpc_resource_upstream),
+                )
+                .route("/grpcpublic_v1.Resource/Read", post(grpc_resource_upstream))
+                .route(
+                    "/grpcpublic_v1.Resource/Update",
+                    post(grpc_resource_upstream),
+                )
+                .route(
+                    "/grpcpublic_v1.Resource/Delete",
+                    post(grpc_resource_upstream),
+                ),
+        )
+        .await
+        .unwrap();
+    });
+    (format!("grpc://{address}"), server)
+}
+
+#[tokio::test]
+async fn live_test_36_public_grpc_with_proto_upload_parity() {
+    let (upstream_url, upstream) = start_grpc_resource_upstream().await;
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpcpublic";
+    let api_version = "v1";
+    let proto = r#"
+syntax = "proto3";
+package grpcpublic_v1;
+service Resource {
+  rpc Create (CreateRequest) returns (CreateReply) {}
+  rpc Read (ReadRequest) returns (ReadReply) {}
+  rpc Update (UpdateRequest) returns (UpdateReply) {}
+  rpc Delete (DeleteRequest) returns (DeleteReply) {}
+}
+message CreateRequest { string name = 1; }
+message CreateReply { string message = 1; }
+message ReadRequest { int32 id = 1; }
+message ReadReply { string message = 1; }
+message UpdateRequest { int32 id = 1; string name = 2; }
+message UpdateReply { string message = 1; }
+message DeleteRequest { int32 id = 1; }
+message DeleteReply { bool ok = 1; }
+"#;
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "public gRPC with uploaded proto",
+            "api_allowed_roles": [],
+            "api_allowed_groups": [],
+            "api_servers": [upstream_url],
+            "api_type": "GRPC",
+            "api_allowed_retry_count": 0,
+            "api_grpc_package": "grpcpublic_v1",
+            "api_public": true,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/platform/proto/{api_name}/{api_version}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(proto))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/endpoint",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "endpoint_method": "POST",
+            "endpoint_uri": "/grpc",
+            "endpoint_description": "public gRPC endpoint"
+        }),
+    )
+    .await;
+    assert!(status.is_success());
+
+    for (request, expected) in [
+        (
+            json!({"method": "Resource.Create", "message": {"name": "A"}}),
+            json!({"message": "created A"}),
+        ),
+        (
+            json!({"method": "Resource.Read", "message": {"id": 1}}),
+            json!({"message": "read 1"}),
+        ),
+        (
+            json!({"method": "Resource.Update", "message": {"id": 1, "name": "B"}}),
+            json!({"message": "updated 1:B"}),
+        ),
+        (
+            json!({"method": "Resource.Delete", "message": {"id": 1}}),
+            json!({"ok": true}),
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/grpc/{api_name}"))
+                    .header("x-api-version", api_version)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, body) = response_json(response).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, expected);
+    }
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn grpc_gateway_forwards_allowlisted_metadata_and_deadline() {
+    let (upstream_url, upstream) = start_grpc_metadata_upstream().await;
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpcmeta";
+    let api_version = "v1";
+    let proto = r#"
+syntax = "proto3";
+package grpcmeta_v1;
+service Greeter { rpc Hello (HelloRequest) returns (HelloReply) {} }
+message HelloRequest { string name = 1; }
+message HelloReply { string message = 1; }
+"#;
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "gRPC metadata and deadline",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "GRPC",
+            "api_allowed_headers": ["X-Meta-One"],
+            "api_read_timeout": 2,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/platform/proto/{api_name}/{api_version}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(proto))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "POST",
+                "endpoint_uri": "/grpc",
+                "endpoint_description": "gRPC endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/grpc/{api_name}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-api-version", api_version)
+                .header("x-meta-one", "alpha")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"method": "Greeter.Hello", "message": {"name": "Doorman"}}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = response_json(response).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({"message": "Hello, Doorman!"}));
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn grpc_gateway_maps_upstream_statuses_parity() {
+    let (upstream_url, upstream) = start_grpc_status_upstream().await;
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpcstatus";
+    let api_version = "v1";
+    let proto = r#"
+syntax = "proto3";
+package grpcstatus_v1;
+service Greeter { rpc Hello (HelloRequest) returns (HelloReply) {} }
+message HelloRequest { string name = 1; }
+message HelloReply { string message = 1; }
+"#;
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "gRPC status mappings",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "GRPC",
+            "api_allowed_headers": ["X-Test-Grpc-Status"],
+            "api_allowed_retry_count": 0,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/platform/proto/{api_name}/{api_version}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(proto))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "POST",
+                "endpoint_uri": "/grpc",
+                "endpoint_description": "gRPC endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+
+    for (grpc_status, expected_status) in [
+        ("16", StatusCode::UNAUTHORIZED),
+        ("7", StatusCode::FORBIDDEN),
+        ("5", StatusCode::NOT_FOUND),
+        ("8", StatusCode::TOO_MANY_REQUESTS),
+        ("12", StatusCode::NOT_IMPLEMENTED),
+        ("14", StatusCode::SERVICE_UNAVAILABLE),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/grpc/{api_name}"))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header("x-api-version", api_version)
+                    .header("x-test-grpc-status", grpc_status)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({"method": "Greeter.Hello", "message": {"name": "Doorman"}})
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, body) = response_json(response).await;
+        assert_eq!(status, expected_status, "gRPC status {grpc_status}");
+        assert_eq!(body["error_code"], "GTW006");
+    }
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn grpc_gateway_server_streaming_parity() {
+    let (upstream_url, upstream) = start_grpc_server_stream_upstream().await;
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpcstream";
+    let api_version = "v1";
+    let proto = r#"
+syntax = "proto3";
+package grpcstream_v1;
+service Greeter { rpc Watch (WatchRequest) returns (stream WatchReply) {} }
+message WatchRequest { string name = 1; }
+message WatchReply { string message = 1; }
+"#;
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "gRPC server streaming",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "GRPC",
+            "api_allowed_retry_count": 0,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/platform/proto/{api_name}/{api_version}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(proto))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "POST",
+                "endpoint_uri": "/grpc",
+                "endpoint_description": "gRPC endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/grpc/{api_name}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-api-version", api_version)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "method": "Greeter.Watch",
+                        "message": {"name": "Doorman"},
+                        "stream": "server",
+                        "max_items": 2
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = response_json(response).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body,
+        json!({"items": [{"message": "one"}, {"message": "two"}]})
+    );
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn grpc_gateway_client_and_bidi_streaming_parity() {
+    let (upstream_url, upstream) = start_grpc_stream_modes_upstream().await;
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpcmodes";
+    let api_version = "v1";
+    let proto = r#"
+syntax = "proto3";
+package grpcmodes_v1;
+service Streams {
+  rpc Sum (stream Number) returns (SumReply) {}
+  rpc Echo (stream Number) returns (stream Number) {}
+}
+message Number { int32 val = 1; }
+message SumReply { int32 sum = 1; }
+"#;
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "gRPC client and bidi streaming",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "GRPC",
+            "api_allowed_retry_count": 0,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/platform/proto/{api_name}/{api_version}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(proto))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "POST",
+                "endpoint_uri": "/grpc",
+                "endpoint_description": "gRPC endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+
+    for (request, expected) in [
+        (
+            json!({
+                "method": "Streams.Sum",
+                "message": {},
+                "stream": "client",
+                "messages": [{"val": 1}, {"val": 2}, {"val": 3}]
+            }),
+            json!({"sum": 6}),
+        ),
+        (
+            json!({
+                "method": "Streams.Echo",
+                "message": {},
+                "stream": "bidi",
+                "messages": [{"val": 7}, {"val": 8}],
+                "max_items": 10
+            }),
+            json!({"items": [{"val": 7}, {"val": 8}]}),
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/grpc/{api_name}"))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header("x-api-version", api_version)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, body) = response_json(response).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, expected);
+    }
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn live_test_grpc_reflection_no_proto_parity() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpc-reflection";
+    let api_version = "v1";
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "gRPC reflection fallback",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": ["grpc://127.0.0.1:9"],
+            "api_type": "GRPC",
+            "api_allowed_retry_count": 0,
+            "api_grpc_package": "grpcbin",
+            "api_public": true,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/endpoint",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "endpoint_method": "POST",
+            "endpoint_uri": "/grpc",
+            "endpoint_description": "gRPC reflection endpoint"
+        }),
+    )
+    .await;
+    assert!(status.is_success());
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/grpc/{api_name}"))
+                .header("x-api-version", api_version)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"method": "GRPCBin.Empty", "message": {}}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = response_json(response).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error_code"], "GTW012");
+}
+
+#[tokio::test]
+async fn live_test_59_grpc_invalid_method_parity() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpcbad";
+    let api_version = "v1";
+    let proto = r#"
+syntax = "proto3";
+package grpcbad_v1;
+service Greeter {}
+"#;
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "gRPC invalid method",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": ["grpc://127.0.0.1:9"],
+            "api_type": "GRPC",
+            "api_allowed_retry_count": 0,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/platform/proto/{api_name}/{api_version}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(proto))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "POST",
+                "endpoint_uri": "/grpc",
+                "endpoint_description": "gRPC endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+
+    let (status, body) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        format!("/api/grpc/{api_name}"),
+        json!({"method": "Nope.Do", "message": {}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(body["error_code"], "GTW006");
+}
+
+#[tokio::test]
+async fn live_test_60_grpc_gateway_basic_flow_parity() {
+    let (upstream_url, upstream) = start_grpc_hello_upstream().await;
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpcdemo";
+    let api_version = "v1";
+    let proto = r#"
+syntax = "proto3";
+package grpcdemo_v1;
+service Greeter { rpc Hello (HelloRequest) returns (HelloReply) {} }
+message HelloRequest { string name = 1; }
+message HelloReply { string message = 1; }
+"#;
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "gRPC demo",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "GRPC",
+            "api_allowed_retry_count": 0,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/platform/proto/{api_name}/{api_version}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(proto))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "POST",
+                "endpoint_uri": "/grpc",
+                "endpoint_description": "gRPC endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/grpc/{api_name}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-api-version", api_version)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"method": "Greeter.Hello", "message": {"name": "Doorman"}}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = response_json(response).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({"message": "Hello, Doorman!"}));
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn grpc_web_unary_cors_and_streaming_policy_parity() {
+    let (upstream_url, upstream) = start_grpc_hello_upstream().await;
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let api_name = "grpcweb";
+    let api_version = "v1";
+    let proto = r#"
+syntax = "proto3";
+package grpcdemo_v1;
+service Greeter { rpc Hello (HelloRequest) returns (HelloReply) {} }
+service Streams { rpc Sum (stream Number) returns (SumReply) {} }
+message HelloRequest { string name = 1; }
+message HelloReply { string message = 1; }
+message Number { int32 val = 1; }
+message SumReply { int32 sum = 1; }
+"#;
+
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "gRPC-Web browser gateway",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "GRPC",
+            "api_grpc_web_enabled": true,
+            "api_cors_allow_origins": ["https://console.doorman.dev"],
+            "api_cors_allow_methods": ["POST"],
+            "api_cors_allow_headers": ["Authorization", "Content-Type", "X-Api-Version", "X-Grpc-Web"],
+            "api_cors_expose_headers": ["grpc-status", "grpc-message"],
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/platform/proto/{api_name}/{api_version}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(proto))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "POST",
+                "endpoint_uri": "/grpc",
+                "endpoint_description": "gRPC-Web endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+
+    let preflight = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::OPTIONS)
+                .uri(format!("/grpc-web/{api_name}/Greeter/Hello"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::ORIGIN, "https://console.doorman.dev")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(
+                    header::ACCESS_CONTROL_REQUEST_HEADERS,
+                    "Authorization, Content-Type, X-Api-Version, X-Grpc-Web",
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preflight.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        preflight.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        "https://console.doorman.dev"
+    );
+    assert!(
+        preflight.headers()[header::ACCESS_CONTROL_ALLOW_METHODS]
+            .to_str()
+            .unwrap()
+            .contains("POST")
+    );
+    assert!(
+        preflight.headers()[header::ACCESS_CONTROL_ALLOW_HEADERS]
+            .to_str()
+            .unwrap()
+            .contains("X-Grpc-Web")
+    );
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/grpc-web/{api_name}/Greeter/Hello"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-api-version", api_version)
+                .header(header::ORIGIN, "https://console.doorman.dev")
+                .header(header::CONTENT_TYPE, "application/grpc-web+proto")
+                .header("x-grpc-web", "1")
+                .body(Body::from(b"\x00\x00\x00\x00\x09\x0a\x07Doorman".to_vec()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "application/grpc-web+proto"
+    );
+    assert_eq!(response.headers()["x-grpc-web"], "1");
+    assert_eq!(
+        response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        "https://console.doorman.dev"
+    );
+    assert!(
+        response.headers()[header::ACCESS_CONTROL_EXPOSE_HEADERS]
+            .to_str()
+            .unwrap()
+            .contains("grpc-status")
+    );
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert!(body.starts_with(b"\x00\x00\x00\x00\x11\x0a\x0fHello, Doorman!"));
+    assert!(body.ends_with(b"grpc-status: 0\r\ngrpc-message: \r\n"));
+
+    let rejected_stream = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/grpc-web/{api_name}/Streams/Sum"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-api-version", api_version)
+                .header(header::CONTENT_TYPE, "application/grpc-web+proto")
+                .body(Body::from(b"\x00\x00\x00\x00\x00".to_vec()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_stream.status(), StatusCode::OK);
+    let body = to_bytes(rejected_stream.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body[0], 0x80, "gRPC-Web errors are trailer frames");
+    let trailer_length = u32::from_be_bytes(body[1..5].try_into().unwrap()) as usize;
+    assert_eq!(body.len(), trailer_length + 5);
+    let trailer = std::str::from_utf8(&body[5..]).unwrap();
+    assert!(trailer.contains("grpc-status: 12\r\n"));
+    assert!(trailer.contains("does not support client or bidirectional streaming"));
+    upstream.abort();
 }
 
 #[tokio::test]
@@ -2643,6 +4380,72 @@ async fn live_test_40_soap_gateway_basic_flow_parity() {
 }
 
 #[tokio::test]
+async fn soap_content_types_and_retry_real_upstream_parity() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let (upstream_url, attempts, upstream) = start_soap_retry_upstream().await;
+    let api_name = "soap-retry-content";
+    let api_version = "v1";
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "SOAP content types and retry",
+            "api_allowed_roles": ["admin"],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "SOAP",
+            "api_allowed_retry_count": 1,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    for (path, payload) in [
+        (
+            "/platform/endpoint",
+            json!({
+                "api_name": api_name,
+                "api_version": api_version,
+                "endpoint_method": "POST",
+                "endpoint_uri": "/soap",
+                "endpoint_description": "SOAP retry endpoint"
+            }),
+        ),
+        (
+            "/platform/subscription/subscribe",
+            json!({"username": "admin", "api_name": api_name, "api_version": api_version}),
+        ),
+    ] {
+        let (status, _) = authed_json_response(&app, &token, Method::POST, path, payload).await;
+        assert!(status.is_success(), "{path}: {status}");
+    }
+    let envelope = "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><Ping/></soap:Body></soap:Envelope>";
+    for content_type in ["application/xml", "text/xml"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/soap/{api_name}/{api_version}/soap"))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, content_type)
+                    .body(Body::from(envelope))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{content_type}");
+    }
+    assert_eq!(attempts.load(Ordering::SeqCst), 3, "503 was retried once");
+    upstream.abort();
+}
+
+#[tokio::test]
 async fn live_test_50_graphql_gateway_basic_flow_parity() {
     let app = build_router(test_app_state().await);
     let token = login_admin(&app).await;
@@ -2724,6 +4527,90 @@ async fn live_test_50_graphql_gateway_basic_flow_parity() {
     .await;
     assert!(status.is_success());
     upstream.abort();
+}
+
+#[tokio::test]
+async fn graphql_public_error_envelope_normalizes_upstream_status_parity() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let (upstream_url, upstream) = start_graphql_error_upstream().await;
+    let api_name = "graphql-error-envelope";
+    let api_version = "v1";
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/api",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "api_description": "public GraphQL error envelope",
+            "api_allowed_roles": [],
+            "api_allowed_groups": ["ALL"],
+            "api_servers": [upstream_url],
+            "api_type": "GRAPHQL",
+            "api_public": true,
+            "api_auth_required": false,
+            "active": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/endpoint",
+        json!({
+            "api_name": api_name,
+            "api_version": api_version,
+            "endpoint_method": "POST",
+            "endpoint_uri": "/graphql",
+            "endpoint_description": "public GraphQL endpoint"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/graphql/{api_name}"))
+                .header("x-api-version", api_version)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"query": "{ broken }", "variables": {}}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = response_json(response).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["errors"][0]["message"], "upstream boom");
+    assert_eq!(body["errors"][0]["status"], 500);
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn live_test_66_graphql_missing_version_header_parity() {
+    let app = build_router(test_app_state().await);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/graphql/version-required")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json!({"query": "{ ok }"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = response_json(response).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error_code"], "X-API-Version header is required");
 }
 
 #[tokio::test]
@@ -2823,5 +4710,44 @@ async fn live_test_52_graphql_validation_blocks_invalid_variables_parity() {
     let (status, body) = response_json(response).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["hello"], "Hello, Alan!");
+    upstream.abort();
+}
+#[tokio::test]
+async fn python_gateway_patch_support_forwards_to_upstream() {
+    let app = build_router(test_app_state().await);
+    let token = login_admin(&app).await;
+    let (upstream_url, upstream) = start_echo_upstream().await;
+    let api_name = "patch-api";
+    let api_version = "v1";
+    let (status, _) = authed_json_response(&app, &token, Method::POST, "/platform/api", json!({"api_name": api_name, "api_version": api_version, "api_description": "PATCH gateway parity", "api_allowed_roles": ["admin"], "api_allowed_groups": ["ALL"], "api_servers": [upstream_url], "api_type": "REST", "active": true})).await;
+    assert!(status.is_success());
+    let (status, _) = authed_json_response(&app, &token, Method::POST, "/platform/endpoint", json!({"api_name": api_name, "api_version": api_version, "endpoint_method": "PATCH", "endpoint_uri": "/items", "endpoint_description": "PATCH item"})).await;
+    assert!(status.is_success());
+    let (status, _) = authed_json_response(
+        &app,
+        &token,
+        Method::POST,
+        "/platform/subscription/subscribe",
+        json!({"api_name": api_name, "api_version": api_version, "username": "admin"}),
+    )
+    .await;
+    assert!(status.is_success());
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PATCH)
+                .uri(format!("/api/rest/{api_name}/{api_version}/items"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json!({"name": "patched"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = response_json(response).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["method"], "PATCH");
+    assert_eq!(body["path"], "/items");
     upstream.abort();
 }

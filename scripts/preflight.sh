@@ -33,7 +33,7 @@ note_warn(){ echo "  WARN: $1" >&2; WARN=$((WARN+1)); }
 
 echo "[1/8] Liveness/readiness"
 if curl -fsS "$BASE_URL/platform/monitor/liveness" | jq -e '.status=="alive"' >/dev/null; then note_pass; else note_fail "liveness"; fi
-if curl -fsS "$BASE_URL/platform/monitor/readiness" | jq -e '.status=="ready" or .status=="degraded"' >/dev/null; then note_pass; else note_fail "readiness"; fi
+if curl -fsS "$BASE_URL/platform/monitor/readiness" | jq -e '.status=="ready"' >/dev/null; then note_pass; else note_fail "readiness"; fi
 
 echo "[2/8] Login as admin"
 COOKIE_JAR="$(mktemp)" ; trap 'rm -f "$COOKIE_JAR"' EXIT

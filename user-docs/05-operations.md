@@ -376,6 +376,13 @@ GET /platform/monitor/readiness
 }
 ```
 
+Readiness returns HTTP 200 only when the gateway is ready. A missing dependency
+or active gRPC API without a usable descriptor returns HTTP 503 with
+`"status": "degraded"`, so load balancers and Kubernetes stop sending traffic
+to the instance. Privileged readiness also exposes the current memory-snapshot
+and metrics-persistence task health; a failed background persistence task
+returns HTTP 503 until its next successful run.
+
 **Gateway Status** (public):
 ```bash
 GET /api/health  # public probe
@@ -537,6 +544,8 @@ THREADS=1  # REQUIRED - only 1 worker in memory mode
 - Can be triggered manually via `/platform/security/settings`
 - Encrypted with `MEM_ENCRYPTION_KEY`
 - Restored automatically on startup
+- A corrupt, unauthenticated, or unsupported snapshot stops startup rather than
+  silently starting with empty state; a missing snapshot is treated as first boot
 
 **Manual dump trigger:**
 ```bash
@@ -844,7 +853,14 @@ Thresholds embedded in the script will fail the run if unmet. A JUnit report (`j
 
 ## Logging Redaction
 
-Redaction is applied at the logger/filter layer, so sensitive data such as Authorization headers (Bearer/Basic), `X-API-Key`, Set‑Cookie/Cookie values, JWT‑like strings, and common secret fields are masked before logs are written or shipped.
+Gateway activity logs intentionally omit request headers and bodies. Structured
+management-audit callers use the gateway redaction helper, which masks
+Authorization/Proxy-Authorization, Cookie/Set-Cookie, API-key, password,
+secret, token, and credential fields before an event is emitted. Do not add
+raw request headers, bodies, or secret-bearing configuration values to log
+fields; use the redaction helper when a diagnostic field is necessary. IP-denial
+events record only the parsed effective and direct IP addresses, never the raw
+forwarded-header value.
 
 ## Pagination Defaults and Caps
 

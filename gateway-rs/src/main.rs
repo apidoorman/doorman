@@ -1,8 +1,14 @@
-use std::{env, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    env,
+    path::PathBuf,
+    sync::{Arc, atomic::Ordering},
+    time::Duration,
+};
 
 use doorman_gateway::{
     AppState, Config, build_router,
     observability::analytics_aggregator::global_analytics,
+    state::GatewayRuntime,
     storage::{runtime::SharedStorage, snapshot},
 };
 use tokio::net::TcpListener;
@@ -12,12 +18,12 @@ use tracing::{error, info, warn};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     doorman_gateway::observability::init();
     restore_metrics();
-    spawn_metrics_autosave();
 
     let config = Config::from_env()?;
     let bind_addr = config.bind_addr();
     let state = AppState::from_config(config).await?;
     let storage = state.storage.clone();
+    spawn_metrics_autosave(state.runtime.clone());
 
     if let Some(storage) = storage.as_ref().filter(|storage| storage.is_memory()) {
         match snapshot::restore(storage, None).await {
@@ -30,9 +36,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(snapshot::SnapshotError::MissingKey) => {
                 warn!("MEM_ENCRYPTION_KEY is not configured; restore and autosave are disabled")
             }
-            Err(error_value) => error!(error = %error_value, "memory snapshot restore failed"),
+            Err(error_value) => {
+                error!(error = %error_value, "memory snapshot restore failed; refusing to start with empty state");
+                return Err(error_value.into());
+            }
         }
-        spawn_memory_autosave(storage.clone());
+        spawn_memory_autosave(storage.clone(), state.runtime.clone());
         spawn_sigusr1_dump(storage.clone());
     }
 
@@ -49,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn spawn_memory_autosave(storage: Arc<SharedStorage>) {
+fn spawn_memory_autosave(storage: Arc<SharedStorage>, runtime: Arc<GatewayRuntime>) {
     if !env_bool("MEM_AUTO_SAVE_ENABLED", true) || env::var("MEM_ENCRYPTION_KEY").is_err() {
         return;
     }
@@ -64,8 +73,18 @@ fn spawn_memory_autosave(storage: Arc<SharedStorage>) {
         loop {
             interval.tick().await;
             match snapshot::dump(&storage, None).await {
-                Ok(path) => info!(path = %path.display(), "memory autosave completed"),
-                Err(error_value) => error!(error = %error_value, "memory autosave failed"),
+                Ok(path) => {
+                    runtime
+                        .memory_snapshot_healthy
+                        .store(true, Ordering::Relaxed);
+                    info!(path = %path.display(), "memory autosave completed");
+                }
+                Err(error_value) => {
+                    runtime
+                        .memory_snapshot_healthy
+                        .store(false, Ordering::Relaxed);
+                    error!(error = %error_value, "memory autosave failed");
+                }
             }
         }
     });
@@ -154,15 +173,18 @@ fn restore_metrics() {
     }
 }
 
-fn persist_metrics() {
+fn persist_metrics() -> bool {
+    let mut persisted = true;
     for path in metrics_paths() {
         if let Err(error_value) = global_analytics().save_to_file(&path) {
+            persisted = false;
             warn!(path = %path.display(), error = %error_value, "gateway metrics persistence failed");
         }
     }
+    persisted
 }
 
-fn spawn_metrics_autosave() {
+fn spawn_metrics_autosave(runtime: Arc<GatewayRuntime>) {
     let seconds = env::var("METRICS_SAVE_INTERVAL")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
@@ -173,7 +195,9 @@ fn spawn_metrics_autosave() {
         interval.tick().await;
         loop {
             interval.tick().await;
-            persist_metrics();
+            runtime
+                .metrics_persistence_healthy
+                .store(persist_metrics(), Ordering::Relaxed);
         }
     });
 }

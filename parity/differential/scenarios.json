@@ -47,6 +47,12 @@
     "json": {}
   },
   {
+    "name": "platform_openapi_private",
+    "method": "GET",
+    "path": "/platform/openapi.json",
+    "approved_rust_divergence": "MIG-074: Rust requires authentication for the OpenAPI/documentation surface to avoid anonymous management-surface enumeration."
+  },
+  {
     "name": "unknown_route",
     "method": "GET",
     "path": "/not-a-doorman-route"

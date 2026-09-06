@@ -4,7 +4,7 @@ use serde_json::Value;
 use super::{PolicyFailure, PolicyStage, rate_limit::duration_to_seconds};
 use crate::storage::{
     cache::WindowCounter,
-    models::{bool_field_default, string_field, u64_field},
+    models::{bool_field_default, f64_field, string_field, u64_field},
     redis::throttle_key,
 };
 
@@ -45,11 +45,7 @@ pub fn enforce_throttle(
         return Err(queue_limit_exceeded());
     }
     if count > throttle_limit {
-        let wait = u64_field(user, "throttle_wait_duration")
-            .unwrap_or(1)
-            .max(1);
-        let wait_unit = string_field(user, "throttle_wait_duration_type").unwrap_or("second");
-        let delay_ms = wait * duration_to_seconds(wait_unit) * 1000 * excess.max(1);
+        let delay_ms = throttle_wait_millis(user, excess);
         return Ok(ThrottleOutcome {
             delay_ms: Some(delay_ms),
         });
@@ -57,6 +53,13 @@ pub fn enforce_throttle(
     Ok(ThrottleOutcome::default())
 }
 
+pub fn throttle_wait_millis(user: &Value, excess: u64) -> u64 {
+    let wait = f64_field(user, "throttle_wait_duration")
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .unwrap_or(0.5);
+    let wait_unit = string_field(user, "throttle_wait_duration_type").unwrap_or("second");
+    (wait * duration_to_seconds(wait_unit) as f64 * 1_000.0 * excess.max(1) as f64).round() as u64
+}
 fn queue_limit_exceeded() -> PolicyFailure {
     PolicyFailure::new(
         PolicyStage::Throttle,
@@ -93,6 +96,38 @@ mod tests {
                 .unwrap()
                 .delay_ms,
             Some(1000)
+        );
+    }
+    #[test]
+    fn python_test_throttle_queue_limit_exceeded_returns_429() {
+        let user = json!({"throttle_duration": 1, "throttle_duration_type": "second", "throttle_queue_limit": 1});
+        let counter = WindowCounter::default();
+        assert_eq!(
+            enforce_throttle("admin", &user, &counter, 1_000)
+                .unwrap()
+                .delay_ms,
+            None
+        );
+        let failure = enforce_throttle("admin", &user, &counter, 1_001).unwrap_err();
+        assert_eq!(failure.stage, PolicyStage::Throttle);
+        assert_eq!(failure.status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(failure.error_message, "Throttle queue limit exceeded");
+    }
+    #[test]
+    fn python_test_throttle_dynamic_wait_uses_fractional_seconds() {
+        let user = json!({"throttle_duration": 1, "throttle_duration_type": "second", "throttle_queue_limit": 10, "throttle_wait_duration": 0.1, "throttle_wait_duration_type": "second"});
+        let counter = WindowCounter::default();
+        assert_eq!(
+            enforce_throttle("admin", &user, &counter, 1_000)
+                .unwrap()
+                .delay_ms,
+            None
+        );
+        assert_eq!(
+            enforce_throttle("admin", &user, &counter, 1_001)
+                .unwrap()
+                .delay_ms,
+            Some(100)
         );
     }
 }

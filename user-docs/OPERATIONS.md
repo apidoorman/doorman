@@ -87,3 +87,42 @@ Notes
 - Request IDs: Many admin endpoints include an `X-Request-ID` response header for traceability; some utility endpoints (e.g., cache flush) may omit it.
 - Permissions: Cache flush requires `manage_gateway`. Revoke endpoints require `manage_auth`. Config routes require `manage_gateway`.
 - Cookies: Browser and curl examples rely on `access_token_cookie`; alternatively, platform APIs may return an `access_token` field usable in Authorization headers where supported.
+
+Release Candidate Runbook
+-------------------------
+- Scope: Run this against the exact immutable image digest proposed for release,
+  a production-like MongoDB replica set, and a separate Redis instance. Keep
+  the generated artifacts under `release-evidence/` and do not overwrite a
+  prior candidate's directory.
+- Image smoke:
+  - Start the candidate with the production environment, then run:
+    - `BASE_URL=https://candidate.example.com DOORMAN_ADMIN_EMAIL=<admin> DOORMAN_ADMIN_PASSWORD=<password> bash scripts/smoke.sh`
+  - Record the image digest, UTC timestamp, target URL, and a successful result
+    in `release-evidence/operations.json` under `image_smoke`.
+- Restore rehearsal:
+  - Restore a scrubbed MongoDB backup into an isolated candidate database and
+    restore the matching Redis snapshot/keyspace. Start a fresh candidate,
+    run the smoke command above, and verify a known API, endpoint, role, and
+    subscription are present.
+  - Record the backup identifier and successful result under `restore_rehearsal`.
+- Canary:
+  - Send a small, observable portion of traffic to the candidate. Keep the
+    canary long enough to cover authentication, REST, GraphQL, SOAP, and gRPC
+    requests plus background policy writes. Watch readiness, error rate,
+    p95 latency, upstream timeouts, and retry rate against the existing
+    deployment's baseline.
+  - Abort the canary on any security error, a sustained 5xx increase, or an
+    SLO breach; record the traffic percentage, duration, dashboard links, and
+    successful result under `canary`.
+- Rollback:
+  - Revert traffic to the prior immutable image, verify readiness and the
+    smoke command, then prove the restored configuration remains available.
+    Do not delete candidate databases or evidence until incident review is
+    complete.
+  - Record the prior digest, UTC timestamp, smoke result, and successful
+    result under `rollback`.
+- Final evidence:
+  - Write a schema-version-1 `release-evidence/operations.json` such as:
+    - `{"schema_version":1,"image_smoke":{"passed":true},"restore_rehearsal":{"passed":true},"canary":{"passed":true},"rollback":{"passed":true}}`
+  - Run `make release-check` with all report variables from `user-docs/TESTS.md`.
+    It fails closed if any operational rehearsal is absent, failed, or stale.

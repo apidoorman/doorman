@@ -1,5 +1,6 @@
 use http::StatusCode;
 use serde_json::Value;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use super::{PolicyFailure, PolicyStage};
 use crate::storage::models::{bool_field_default, object_field, string_field, u64_field};
@@ -12,6 +13,24 @@ pub struct CreditDecision {
     pub user_header_value: Option<String>,
 }
 
+pub fn credit_header_values(
+    definition: &Value,
+    now: OffsetDateTime,
+) -> Option<(String, Vec<String>)> {
+    let header = string_field(definition, "api_key_header")?.to_owned();
+    let old = string_field(definition, "api_key").map(str::to_owned);
+    let new = string_field(definition, "api_key_new").map(str::to_owned);
+    let expires = string_field(definition, "api_key_rotation_expires")
+        .and_then(|value| OffsetDateTime::parse(value, &Rfc3339).ok());
+    let values = match (old, new, expires) {
+        (Some(old), Some(new), Some(expires)) if now < expires => vec![old, new],
+        (_, Some(new), Some(expires)) if now >= expires => vec![new],
+        (Some(old), _, _) => vec![old],
+        (_, Some(new), _) => vec![new],
+        _ => return None,
+    };
+    Some((header, values))
+}
 pub fn evaluate_credits(
     api: &Value,
     username: Option<&str>,
@@ -57,12 +76,9 @@ pub fn evaluate_credits(
     let credit_def = credit_defs
         .iter()
         .find(|doc| string_field(doc, "api_credit_group") == Some(group));
-    let header_name = credit_def
-        .and_then(|doc| string_field(doc, "api_key_header"))
-        .map(str::to_owned);
-    let header_value = credit_def
-        .and_then(|doc| string_field(doc, "api_key_new").or_else(|| string_field(doc, "api_key")))
-        .map(str::to_owned);
+    let header = credit_def.and_then(|doc| credit_header_values(doc, OffsetDateTime::now_utc()));
+    let header_name = header.as_ref().map(|(name, _)| name.clone());
+    let header_value = header.and_then(|(_, mut values)| values.pop());
     let user_header_value = user_credit
         .and_then(|doc| object_field(doc, "users_credits"))
         .and_then(|credits| credits.get(group))
@@ -121,4 +137,28 @@ mod tests {
         assert_eq!(decision.header_value, Some("system-key".to_owned()));
         assert_eq!(decision.user_header_value, Some("user-key".to_owned()));
     }
+}
+
+#[test]
+fn credit_key_rotation_returns_both_keys_before_expiry_and_new_key_after() {
+    let definition = serde_json::json!({
+        "api_credit_group": "rotgrp",
+        "api_key_header": "x-api-key",
+        "api_key": "old-key",
+        "api_key_new": "new-key",
+        "api_key_rotation_expires": "2030-01-01T01:00:00Z"
+    });
+    let before = OffsetDateTime::parse("2030-01-01T00:00:00Z", &Rfc3339).unwrap();
+    assert_eq!(
+        credit_header_values(&definition, before),
+        Some((
+            "x-api-key".to_owned(),
+            vec!["old-key".to_owned(), "new-key".to_owned()]
+        ))
+    );
+    let after = OffsetDateTime::parse("2030-01-01T02:00:00Z", &Rfc3339).unwrap();
+    assert_eq!(
+        credit_header_values(&definition, after),
+        Some(("x-api-key".to_owned(), vec!["new-key".to_owned()]))
+    );
 }

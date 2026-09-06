@@ -4,10 +4,16 @@ use http::{HeaderMap, Method, StatusCode};
 use serde_json::Value;
 
 use super::{
-    PolicyDecision, PolicyFailure, PolicyStage, auth::verify_request_token,
-    bandwidth::enforce_pre_request_limit, credits::evaluate_credits, groups::enforce_group_access,
-    ip::enforce_api_ip_policy, rate_limit::enforce_rate_limit, roles::enforce_allowed_roles,
-    subscription::enforce_subscription, throttle::enforce_throttle,
+    PolicyDecision, PolicyFailure, PolicyStage,
+    auth::verify_request_token,
+    bandwidth::enforce_pre_request_limit,
+    credits::evaluate_credits,
+    groups::enforce_group_access,
+    ip::enforce_api_ip_policy,
+    rate_limit::enforce_rate_limit,
+    roles::enforce_allowed_roles,
+    subscription::enforce_subscription,
+    throttle::{enforce_throttle, throttle_wait_millis},
 };
 use crate::{
     config::SharedStorageConfig,
@@ -73,6 +79,25 @@ pub fn evaluate_rest_policy(
         storage_config.local_host_ip_bypass,
     )?;
 
+    if request
+        .headers
+        .contains_key(http::header::ACCESS_CONTROL_REQUEST_METHOD)
+    {
+        return Ok(Some(PolicyDecision {
+            route: Some("gateway.rest.preflight".to_owned()),
+            api_id: string_field(&api, "api_id").map(str::to_owned),
+            api_name: string_field(&api, "api_name").map(str::to_owned),
+            cors_allow_origins: optional_string_list(&api, "api_cors_allow_origins"),
+            cors_allow_methods: optional_string_list(&api, "api_cors_allow_methods"),
+            cors_allow_headers: optional_string_list(&api, "api_cors_allow_headers"),
+            cors_allow_credentials: bool_field_default(&api, "api_cors_allow_credentials", false),
+            cors_expose_headers: crate::storage::models::string_list_field(
+                &api,
+                "api_cors_expose_headers",
+            ),
+            ..Default::default()
+        }));
+    }
     let method = if request.method == Method::HEAD {
         "GET"
     } else {
@@ -356,13 +381,7 @@ pub async fn evaluate_shared_effects(
                 ));
             }
             if count > limit {
-                let wait = u64_field(user, "throttle_wait_duration")
-                    .unwrap_or(1)
-                    .max(1);
-                let wait_seconds = super::rate_limit::duration_to_seconds(
-                    string_field(user, "throttle_wait_duration_type").unwrap_or("second"),
-                );
-                decision.throttle_delay_ms = Some(wait * wait_seconds * 1000 * excess.max(1));
+                decision.throttle_delay_ms = Some(throttle_wait_millis(user, excess));
             }
         }
 

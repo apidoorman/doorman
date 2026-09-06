@@ -1,0 +1,27 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${DOORMAN_TEST_REDIS_PORT:-16379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  mongo:
+    image: mongo:7
+    command: ["mongod", "--port", "27018", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:${DOORMAN_TEST_MONGO_PORT:-27018}:27018"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --port 27018 --eval 'try { rs.status().ok } catch (error) {
+          rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27018"}]}).ok }'
+          | grep -qx 1
+      interval: 2s
+      timeout: 3s
+      retries: 20

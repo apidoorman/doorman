@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import urllib.error
@@ -105,7 +106,16 @@ def main() -> int:
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
 
-    scenarios = json.loads(args.scenarios.read_text())
+    scenario_bytes = args.scenarios.read_bytes()
+    scenarios = json.loads(scenario_bytes)
+    if not isinstance(scenarios, list) or not all(
+        isinstance(case, dict) and isinstance(case.get("name"), str) and case["name"]
+        for case in scenarios
+    ):
+        raise ValueError("scenario manifest must be a list of named objects")
+    scenario_names = [case["name"] for case in scenarios]
+    if len(set(scenario_names)) != len(scenario_names):
+        raise ValueError("scenario manifest contains duplicate names")
     results: list[dict[str, Any]] = []
     for case in scenarios:
         python_result = request(args.python_url, case)
@@ -121,6 +131,15 @@ def main() -> int:
             }
         )
 
+    openapi_case = next(
+        (
+            case
+            for case in scenarios
+            if case.get("method", "GET") == "GET"
+            and case.get("path") == "/platform/openapi.json"
+        ),
+        {},
+    )
     python_openapi = request(
         args.python_url, {"name": "openapi", "path": "/platform/openapi.json"}
     )
@@ -133,11 +152,13 @@ def main() -> int:
             "match": python_openapi == rust_openapi,
             "python": python_openapi,
             "rust": rust_openapi,
+            "approved_divergence": openapi_case.get("approved_rust_divergence"),
         }
     )
 
     report = {
         "schema_version": 1,
+        "scenario_manifest_sha256": hashlib.sha256(scenario_bytes).hexdigest(),
         "differences": sum(not result["match"] and not result.get("approved_divergence") for result in results),
         "approved_differences": sum(not result["match"] and bool(result.get("approved_divergence")) for result in results),
         "results": results,

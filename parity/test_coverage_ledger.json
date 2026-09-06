@@ -237,14 +237,16 @@
     {
       "domain": "live/gateway/grpc",
       "id": "backend-services/live-tests/test_36_public_grpc_proto.py::test_public_grpc_with_proto_upload",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust uploads the pinned public Resource descriptor, configures a public API, and verifies unauthenticated Create, Read, Update, and Delete JSON gateway calls against a local HTTP/2 gRPC-wire upstream.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_36_public_grpc_with_proto_upload_parity"
+      ],
       "source": {
         "line": 46,
         "path": "backend-services/live-tests/test_36_public_grpc_proto.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/other",
@@ -429,38 +431,44 @@
     {
       "domain": "live/gateway/graphql",
       "id": "backend-services/live-tests/test_53_graphql_public_live.py::test_graphql_public_local_via_gateway",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust provisions a public, authentication-optional GraphQL API and verifies an unauthenticated gateway request reaches a real local upstream.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::graphql_public_error_envelope_normalizes_upstream_status_parity"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/live-tests/test_53_graphql_public_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/grpc",
       "id": "backend-services/live-tests/test_59_grpc_invalid_method.py::test_grpc_invalid_method_returns_error",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust provisions the pinned empty Greeter service and confirms an authenticated unknown method is rejected with the gateway's stable GTW006 contract before an upstream connection is attempted.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_59_grpc_invalid_method_parity"
+      ],
       "source": {
         "line": 9,
         "path": "backend-services/live-tests/test_59_grpc_invalid_method.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/grpc",
       "id": "backend-services/live-tests/test_60_grpc_gateway.py::test_grpc_gateway_basic_flow",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust uploads the pinned Greeter proto, provisions an authenticated gRPC API, endpoint, and subscription, then sends Greeter.Hello through the JSON-to-gRPC gateway to a local HTTP/2 gRPC-wire upstream and verifies the exact response.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_60_grpc_gateway_basic_flow_parity"
+      ],
       "source": {
         "line": 42,
         "path": "backend-services/live-tests/test_60_grpc_gateway.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/ip-policy",
@@ -493,14 +501,16 @@
     {
       "domain": "live/gateway/graphql",
       "id": "backend-services/live-tests/test_66_graphql_missing_version_header.py::test_graphql_missing_version_header_returns_400",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust sends a GraphQL gateway request without X-API-Version and verifies the pinned HTTP 400 header-required contract.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_66_graphql_missing_version_header_parity"
+      ],
       "source": {
         "line": 9,
         "path": "backend-services/live-tests/test_66_graphql_missing_version_header.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/other",
@@ -717,14 +727,16 @@
     {
       "domain": "live/platform/routing",
       "id": "backend-services/live-tests/test_94_routing_and_header_swap.py::test_client_routing_overrides_api_servers",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust sends authenticated gateway traffic through distinct real TCP upstreams and proves client-key routing wins over endpoint and API server lists.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::routing_precedence_and_round_robin_real_upstreams_parity"
+      ],
       "source": {
         "line": 6,
         "path": "backend-services/live-tests/test_94_routing_and_header_swap.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/platform/routing",
@@ -741,14 +753,16 @@
     {
       "domain": "live/platform/api",
       "id": "backend-services/live-tests/test_95_api_export_import_roundtrip.py::test_single_api_export_import_roundtrip",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust creates an API and endpoint, exports the named API payload, deletes both artifacts, imports that payload, and verifies both lookups are restored.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_single_api_export_import_roundtrip"
+      ],
       "source": {
         "line": 4,
         "path": "backend-services/live-tests/test_95_api_export_import_roundtrip.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/other",
@@ -777,14 +791,16 @@
     {
       "domain": "live/platform/config",
       "id": "backend-services/live-tests/test_96_config_import_export.py::test_config_export_import_roundtrip",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust exports the complete configuration, imports that exact payload, and asserts the import result contains its imported-section report.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_90_security_tools_and_config_export_import_parity"
+      ],
       "source": {
         "line": 1,
         "path": "backend-services/live-tests/test_96_config_import_export.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/operations/monitor",
@@ -846,14 +862,17 @@
     {
       "domain": "live/platform/api",
       "id": "backend-services/live-tests/test_api_cors_headers_matrix_live.py::test_api_cors_allow_origins_allow_methods_headers_credentials_expose_live",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies an authenticated local-upstream REST request preserves the configured CORS origin and credentials, while the native matrix proves preflight methods, headers, and exposed-header behavior.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_98_api_cors_preflight_and_actual_response_headers_parity",
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 11,
         "path": "backend-services/live-tests/test_api_cors_headers_matrix_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/bandwidth",
@@ -872,38 +891,44 @@
     {
       "domain": "live/gateway/graphql",
       "id": "backend-services/live-tests/test_graphql_fallback_live.py::test_graphql_json_proxy_ok",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust sends an authenticated GraphQL JSON request through the gateway to a real local JSON upstream and verifies the unwrapped JSON data response.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_50_graphql_gateway_basic_flow_parity"
+      ],
       "source": {
         "line": 35,
         "path": "backend-services/live-tests/test_graphql_fallback_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/graphql",
       "id": "backend-services/live-tests/test_graphql_fallback_live.py::test_graphql_errors_array_passthrough",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies a real upstream GraphQL errors array is returned without envelope loss.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::graphql_public_error_envelope_normalizes_upstream_status_parity"
+      ],
       "source": {
         "line": 51,
         "path": "backend-services/live-tests/test_graphql_fallback_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/grpc",
       "id": "backend-services/live-tests/test_grpc_reflection_live.py::test_grpc_reflection_no_proto",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust defines the no-descriptor reflection policy explicitly: a public gRPC request without an uploaded descriptor is rejected before upstream connection with 404/GTW012, satisfying the pinned non-auth failure contract.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_grpc_reflection_no_proto_parity"
+      ],
       "source": {
         "line": 9,
         "path": "backend-services/live-tests/test_grpc_reflection_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/platform/memory",
@@ -960,86 +985,100 @@
     {
       "domain": "live/gateway/rest",
       "id": "backend-services/live-tests/test_rest_header_forwarding_live.py::test_forward_allowed_headers_only",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies a real upstream receives X-Allowed but not X-Blocked from an authenticated gateway request.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::rest_request_and_response_header_allowlists_real_upstream_parity"
+      ],
       "source": {
         "line": 7,
         "path": "backend-services/live-tests/test_rest_header_forwarding_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/rest",
       "id": "backend-services/live-tests/test_rest_header_forwarding_live.py::test_response_headers_filtered_by_allowlist",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies an allowlisted X-Upstream response header reaches the client while X-Secret is filtered.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::rest_request_and_response_header_allowlists_real_upstream_parity"
+      ],
       "source": {
         "line": 42,
         "path": "backend-services/live-tests/test_rest_header_forwarding_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/rest",
       "id": "backend-services/live-tests/test_rest_retries_live.py::test_rest_retries_on_500_then_success",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies a real upstream 500 is retried once and the second 200 response reaches the client.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::rest_retries_real_upstream_status_sequences_parity"
+      ],
       "source": {
         "line": 7,
         "path": "backend-services/live-tests/test_rest_retries_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/rest",
       "id": "backend-services/live-tests/test_rest_retries_live.py::test_rest_retries_on_503_then_success",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies a real upstream 503 is retried once and the second 200 response reaches the client.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::rest_retries_real_upstream_status_sequences_parity"
+      ],
       "source": {
         "line": 32,
         "path": "backend-services/live-tests/test_rest_retries_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/rest",
       "id": "backend-services/live-tests/test_rest_retries_live.py::test_rest_no_retry_when_retry_count_zero",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies retry_count=0 returns the first upstream 500 and makes exactly one upstream request.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::rest_retries_real_upstream_status_sequences_parity"
+      ],
       "source": {
         "line": 54,
         "path": "backend-services/live-tests/test_rest_retries_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/soap",
       "id": "backend-services/live-tests/test_soap_content_type_and_retries_live.py::test_soap_content_types_matrix",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust sends authenticated SOAP envelopes with application/xml and text/xml to a real local upstream and verifies both succeed.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::soap_content_types_and_retry_real_upstream_parity"
+      ],
       "source": {
         "line": 7,
         "path": "backend-services/live-tests/test_soap_content_type_and_retries_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/gateway/soap",
       "id": "backend-services/live-tests/test_soap_content_type_and_retries_live.py::test_soap_retries_then_success",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust configures one retry and verifies a real upstream 503 is retried exactly once before a successful SOAP response.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::soap_content_types_and_retry_real_upstream_parity"
+      ],
       "source": {
         "line": 28,
         "path": "backend-services/live-tests/test_soap_content_type_and_retries_live.py",
         "suite": "live"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "live/other",
@@ -1164,218 +1203,254 @@
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_active_and_patch.py::test_api_disabled_rest_blocks",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust configures and disables an API through the platform router, then verifies the REST dispatch returns 403 with GTW012.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_disabled_blocks_rest_graphql_grpc_and_soap"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_api_active_and_patch.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_active_and_patch.py::test_api_disabled_graphql_blocks",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust configures and disables an API through the platform router, then verifies the GraphQL dispatch returns 403 with GTW012.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_disabled_blocks_rest_graphql_grpc_and_soap"
+      ],
       "source": {
         "line": 51,
         "path": "backend-services/tests/test_api_active_and_patch.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_active_and_patch.py::test_api_disabled_grpc_blocks",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust configures and disables an API through the platform router, then verifies the gRPC dispatch returns 403 with GTW012.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_disabled_blocks_rest_graphql_grpc_and_soap"
+      ],
       "source": {
         "line": 88,
         "path": "backend-services/tests/test_api_active_and_patch.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_active_and_patch.py::test_api_disabled_soap_blocks",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust configures and disables an API through the platform router, then verifies the SOAP dispatch returns 403 with GTW012.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_disabled_blocks_rest_graphql_grpc_and_soap"
+      ],
       "source": {
         "line": 125,
         "path": "backend-services/tests/test_api_active_and_patch.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_active_and_patch.py::test_gateway_patch_support",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust creates a REST PATCH endpoint and subscription through the platform router, forwards an authenticated PATCH request to a local upstream, and asserts the upstream receives PATCH /items.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::python_gateway_patch_support_forwards_to_upstream"
+      ],
       "source": {
         "line": 172,
         "path": "backend-services/tests/test_api_active_and_patch.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_and_endpoint_crud.py::test_api_crud_flow",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust exercises authenticated API create/get/list/update/delete plus endpoint create/get/list/update/delete, asserting the pinned lookup identities and response contracts.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_and_endpoint_crud_lookup_and_missing_contracts"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_api_and_endpoint_crud.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_control.py::test_rest_preflight_per_api_cors_allows_blocks",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies REST CORS preflight allows the configured origin and headers, then returns 204 without an allow-origin header for a blocked origin.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_api_cors_control.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_control.py::test_graphql_preflight_per_api_cors_allows",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies GraphQL preflight resolves API CORS before endpoint/auth enforcement and returns the configured origin, methods, headers, and credentials.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_graphql_and_soap_cors_preflight"
+      ],
       "source": {
         "line": 54,
         "path": "backend-services/tests/test_api_cors_control.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_control.py::test_soap_preflight_per_api_cors_allows",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies SOAP preflight resolves API CORS before endpoint/auth enforcement and returns the configured origin, methods, and headers without credentials.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_graphql_and_soap_cors_preflight"
+      ],
       "source": {
         "line": 89,
         "path": "backend-services/tests/test_api_cors_control.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_headers_matrix.py::test_api_cors_allow_origins_exact_match_allowed",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts exact origin echoing and Vary: Origin.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 35,
         "path": "backend-services/tests/test_api_cors_headers_matrix.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_headers_matrix.py::test_api_cors_allow_origins_wildcard_allowed",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts wildcard configuration echoes an arbitrary requesting origin.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 61,
         "path": "backend-services/tests/test_api_cors_headers_matrix.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_headers_matrix.py::test_api_cors_allow_methods_contains_options_appended",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts configured methods have OPTIONS appended to the preflight response.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 82,
         "path": "backend-services/tests/test_api_cors_headers_matrix.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_headers_matrix.py::test_api_cors_allow_headers_asterisk_allows_any",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts wildcard request headers are returned for an arbitrary requested header.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 108,
         "path": "backend-services/tests/test_api_cors_headers_matrix.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_headers_matrix.py::test_api_cors_allow_headers_specific_disallows_others",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts an unconfigured request header suppresses allow-origin and is not added to allow-headers.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 134,
         "path": "backend-services/tests/test_api_cors_headers_matrix.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_headers_matrix.py::test_api_cors_allow_credentials_true_sets_header",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts a credentialed explicit origin emits Access-Control-Allow-Credentials: true.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 160,
         "path": "backend-services/tests/test_api_cors_headers_matrix.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_cors_headers_matrix.py::test_api_cors_expose_headers_propagated",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts configured exposed headers are propagated to the preflight response.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_rest_cors_origin_and_header_matrix"
+      ],
       "source": {
         "line": 182,
         "path": "backend-services/tests/test_api_cors_headers_matrix.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_crud_failures.py::test_update_delete_nonexistent_api",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies the pinned accepted error statuses for update and delete of a nonexistent API.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_and_endpoint_crud_lookup_and_missing_contracts"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_api_crud_failures.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/api",
       "id": "backend-services/tests/test_api_get_by_name_version.py::test_api_get_by_name_version_returns_200",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies API retrieval by name/version returns the requested identifiers without the internal storage identifier.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_api_and_endpoint_crud_lookup_and_missing_contracts"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_api_get_by_name_version.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/other",
@@ -1440,50 +1515,54 @@
     {
       "domain": "unit/platform/endpoint",
       "id": "backend-services/tests/test_async_endpoints.py::test_sync_performance",
-      "notes": "Unreviewed.",
+      "notes": "Pinned source defines this only inside an unmounted /test/async diagnostic router; the production Python app does not include that router.",
+      "rationale": "The pinned production app does not mount this diagnostic router.",
       "rust_tests": [],
       "source": {
         "line": 48,
         "path": "backend-services/tests/test_async_endpoints.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "approved_obsolete"
     },
     {
       "domain": "unit/platform/endpoint",
       "id": "backend-services/tests/test_async_endpoints.py::test_async_performance",
-      "notes": "Unreviewed.",
+      "notes": "Pinned source defines this only inside an unmounted /test/async diagnostic router; the production Python app does not include that router.",
+      "rationale": "The pinned production app does not mount this diagnostic router.",
       "rust_tests": [],
       "source": {
         "line": 74,
         "path": "backend-services/tests/test_async_endpoints.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "approved_obsolete"
     },
     {
       "domain": "unit/platform/endpoint",
       "id": "backend-services/tests/test_async_endpoints.py::test_parallel_performance",
-      "notes": "Unreviewed.",
+      "notes": "Pinned source defines this only inside an unmounted /test/async diagnostic router; the production Python app does not include that router.",
+      "rationale": "The pinned production app does not mount this diagnostic router.",
       "rust_tests": [],
       "source": {
         "line": 105,
         "path": "backend-services/tests/test_async_endpoints.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "approved_obsolete"
     },
     {
       "domain": "unit/platform/endpoint",
       "id": "backend-services/tests/test_async_endpoints.py::test_cache_operations",
-      "notes": "Unreviewed.",
+      "notes": "Pinned source defines this only inside an unmounted /test/async diagnostic router; the production Python app does not include that router.",
+      "rationale": "The pinned production app does not mount this diagnostic router.",
       "rust_tests": [],
       "source": {
         "line": 138,
         "path": "backend-services/tests/test_async_endpoints.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "approved_obsolete"
     },
     {
       "domain": "unit/other",
@@ -2166,170 +2245,198 @@
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_import_export_extended.py::test_export_all_basic",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts export-all returns array sections for APIs, roles, groups, routings, and endpoints.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_export_sections_and_import_variants"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_config_import_export_extended.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_import_export_extended.py::test_export_lists",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts every pinned individual configuration export path succeeds.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_export_sections_and_import_variants"
+      ],
       "source": {
         "line": 27,
         "path": "backend-services/tests/test_config_import_export_extended.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_import_export_extended.py::test_export_single_api_with_endpoints",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust exports a named API with its endpoint collection and asserts both payload sections.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_single_api_export_import_roundtrip"
+      ],
       "source": {
         "line": 33,
         "path": "backend-services/tests/test_config_import_export_extended.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_import_export_extended.py::test_export_endpoints_filter",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust filters endpoint export by API name/version and asserts the expected endpoint is present.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_export_sections_and_import_variants"
+      ],
       "source": {
         "line": 70,
         "path": "backend-services/tests/test_config_import_export_extended.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_import_export_extended.py::test_import_various_sections",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust runs every pinned independent import-section variant against a fresh authorized state.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_export_sections_and_import_variants"
+      ],
       "source": {
         "line": 119,
         "path": "backend-services/tests/test_config_import_export_extended.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_import_export_extended.py::test_security_restart_pid_missing",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts a permitted restart with no PID target returns the pinned allowed 409/SEC004 contract.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::management_permissions_readiness_tools_and_restart_preserve_contract"
+      ],
       "source": {
         "line": 125,
         "path": "backend-services/tests/test_config_import_export_extended.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_import_export_extended.py::test_audit_called_on_export",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust captures the authorized export audit event with config.export action and section target.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_export_emits_audit_event"
+      ],
       "source": {
         "line": 131,
         "path": "backend-services/tests/test_config_import_export_extended.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_import_tolerates_malformed.py::test_config_import_ignores_malformed_entries",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust ignores malformed API, endpoint, role, group, and routing entries during import.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_import_ignores_malformed_entries"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_config_import_tolerates_malformed.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_permission_specific.py::test_export_apis_allowed_but_roles_forbidden",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies manage_apis exports APIs but receives CFG001 on roles.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_permissions_granular_export_and_gateway_import_contracts"
+      ],
       "source": {
         "line": 19,
         "path": "backend-services/tests/test_config_permission_specific.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_permission_specific_more.py::test_export_roles_allowed_manage_roles_only",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies manage_roles exports roles but not APIs.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_permissions_granular_export_and_gateway_import_contracts"
+      ],
       "source": {
         "line": 21,
         "path": "backend-services/tests/test_config_permission_specific_more.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_permission_specific_more.py::test_export_groups_allowed_manage_groups_only",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies manage_groups exports groups but not roles.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_permissions_granular_export_and_gateway_import_contracts"
+      ],
       "source": {
         "line": 54,
         "path": "backend-services/tests/test_config_permission_specific_more.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_permission_specific_more.py::test_export_routings_allowed_manage_routings_only",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies manage_routings exports routings but not endpoints.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_permissions_granular_export_and_gateway_import_contracts"
+      ],
       "source": {
         "line": 83,
         "path": "backend-services/tests/test_config_permission_specific_more.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_permission_specific_more.py::test_export_all_and_import_allowed_manage_gateway",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies manage_gateway permits export-all and configuration import.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_permissions_granular_export_and_gateway_import_contracts"
+      ],
       "source": {
         "line": 112,
         "path": "backend-services/tests/test_config_permission_specific_more.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/config",
       "id": "backend-services/tests/test_config_permissions_matrix.py::test_config_export_import_forbidden_for_non_admin",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies a user with no matching permission is forbidden from export and import.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_config_permissions_granular_export_and_gateway_import_contracts"
+      ],
       "source": {
         "line": 19,
         "path": "backend-services/tests/test_config_permissions_matrix.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/other",
@@ -2382,26 +2489,30 @@
     {
       "domain": "unit/platform/credit",
       "id": "backend-services/tests/test_credit_definition_masking.py::test_credit_definition_masking",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies definition reads preserve the group/header and api_key_present flag without returning api_key.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_credit_definition_masks_secret_key_material"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_credit_definition_masking.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/credit",
       "id": "backend-services/tests/test_credit_key_rotation.py::test_credit_key_rotation_logic_resolves_header_and_keys",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies the header resolver returns old/new before the RFC3339 expiry and new only after it.",
+      "rust_tests": [
+        "gateway-rs/src/policy/credits.rs::credit_key_rotation_returns_both_keys_before_expiry_and_new_key_after"
+      ],
       "source": {
         "line": 7,
         "path": "backend-services/tests/test_credit_key_rotation.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/other",
@@ -2478,50 +2589,58 @@
     {
       "domain": "unit/platform/endpoint",
       "id": "backend-services/tests/test_endpoint_crud_failures.py::test_endpoint_create_requires_fields",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts incomplete endpoint creation returns one of the pinned client-error statuses.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_endpoint_failure_and_validation_crud_contracts"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_endpoint_crud_failures.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/endpoint",
       "id": "backend-services/tests/test_endpoint_crud_failures.py::test_endpoint_get_nonexistent",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts missing endpoint lookup returns one of the pinned not-found client-error statuses.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_endpoint_failure_and_validation_crud_contracts"
+      ],
       "source": {
         "line": 11,
         "path": "backend-services/tests/test_endpoint_crud_failures.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/endpoint",
       "id": "backend-services/tests/test_endpoint_validation.py::test_endpoint_validation_crud",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust creates an endpoint, resolves its ID, and verifies validation create/get/update/delete.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_endpoint_failure_and_validation_crud_contracts"
+      ],
       "source": {
         "line": 36,
         "path": "backend-services/tests/test_endpoint_validation.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/endpoint",
       "id": "backend-services/tests/test_endpoint_validation_crud.py::test_endpoint_validation_crud",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust creates an endpoint, resolves its ID, and verifies validation create/get/update/delete.",
+      "rust_tests": [
+        "gateway-rs/tests/platform_native.rs::python_endpoint_failure_and_validation_crud_contracts"
+      ],
       "source": {
         "line": 7,
         "path": "backend-services/tests/test_endpoint_validation_crud.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/general",
@@ -2718,38 +2837,44 @@
     {
       "domain": "unit/gateway/general",
       "id": "backend-services/tests/test_gateway_routing_limits.py::test_routing_precedence_and_round_robin",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies client routing takes precedence and that endpoint servers rotate when no client route applies.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::routing_precedence_and_round_robin_real_upstreams_parity"
+      ],
       "source": {
         "line": 130,
         "path": "backend-services/tests/test_gateway_routing_limits.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/general",
       "id": "backend-services/tests/test_gateway_routing_limits.py::test_client_routing_round_robin",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies two successive client-key gateway calls reach the two configured client-routing upstreams in order.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::routing_precedence_and_round_robin_real_upstreams_parity"
+      ],
       "source": {
         "line": 176,
         "path": "backend-services/tests/test_gateway_routing_limits.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/general",
       "id": "backend-services/tests/test_gateway_routing_limits.py::test_api_level_round_robin_when_no_endpoint_servers",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies an endpoint without endpoint_servers falls back to API servers and rotates api-a, api-b, api-a.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::routing_precedence_and_round_robin_real_upstreams_parity"
+      ],
       "source": {
         "line": 203,
         "path": "backend-services/tests/test_gateway_routing_limits.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/general",
@@ -3090,14 +3215,16 @@
     {
       "domain": "unit/gateway/graphql",
       "id": "backend-services/tests/test_graphql_client_and_envelope.py::test_graphql_errors_returned_in_errors_array",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust returns the upstream GraphQL errors array as the gateway response body.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::graphql_public_error_envelope_normalizes_upstream_status_parity"
+      ],
       "source": {
         "line": 132,
         "path": "backend-services/tests/test_graphql_client_and_envelope.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/graphql",
@@ -3126,26 +3253,30 @@
     {
       "domain": "unit/gateway/graphql",
       "id": "backend-services/tests/test_graphql_error_flow_and_status.py::test_graphql_upstream_error_returns_errors_array_200",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust normalizes a valid GraphQL errors envelope from a real upstream to HTTP 200.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::graphql_public_error_envelope_normalizes_upstream_status_parity"
+      ],
       "source": {
         "line": 33,
         "path": "backend-services/tests/test_graphql_error_flow_and_status.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/graphql",
       "id": "backend-services/tests/test_graphql_error_flow_and_status.py::test_graphql_upstream_http_error_maps_to_errors_with_status",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust preserves the upstream error status field in the GraphQL errors array while normalizing the gateway status to HTTP 200.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::graphql_public_error_envelope_normalizes_upstream_status_parity"
+      ],
       "source": {
         "line": 74,
         "path": "backend-services/tests/test_graphql_error_flow_and_status.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/graphql",
@@ -3358,62 +3489,72 @@
     {
       "domain": "unit/gateway/grpc",
       "id": "backend-services/tests/test_grpc_client_and_bidi_streaming.py::test_grpc_client_streaming",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust sends a finite JSON messages array through a descriptor-declared client-streaming RPC and verifies the local HTTP/2 upstream receives all three frames.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::grpc_gateway_client_and_bidi_streaming_parity"
+      ],
       "source": {
         "line": 64,
         "path": "backend-services/tests/test_grpc_client_and_bidi_streaming.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/grpc",
       "id": "backend-services/tests/test_grpc_client_and_bidi_streaming.py::test_grpc_client_streaming_field_mapping",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies three client-streamed Number.val fields reach the upstream and the unary SumReply is decoded as sum=6.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::grpc_gateway_client_and_bidi_streaming_parity"
+      ],
       "source": {
         "line": 107,
         "path": "backend-services/tests/test_grpc_client_and_bidi_streaming.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/grpc",
       "id": "backend-services/tests/test_grpc_client_and_bidi_streaming.py::test_grpc_bidi_streaming",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust exercises the descriptor-declared bidirectional streaming path with a bounded JSON messages array and collects the returned item frames.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::grpc_gateway_client_and_bidi_streaming_parity"
+      ],
       "source": {
         "line": 158,
         "path": "backend-services/tests/test_grpc_client_and_bidi_streaming.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/grpc",
       "id": "backend-services/tests/test_grpc_client_and_bidi_streaming.py::test_grpc_bidi_streaming_field_echo",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies two bidirectional Number.val frames reach the upstream and are decoded back as items with values 7 and 8.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::grpc_gateway_client_and_bidi_streaming_parity"
+      ],
       "source": {
         "line": 206,
         "path": "backend-services/tests/test_grpc_client_and_bidi_streaming.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/grpc",
       "id": "backend-services/tests/test_grpc_errors_and_retries.py::test_grpc_status_mappings_basic",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust sends each pinned gRPC status from a local HTTP/2 upstream through the JSON gateway and verifies Unauthenticated, PermissionDenied, NotFound, ResourceExhausted, Unimplemented, and Unavailable map to 401, 403, 404, 429, 501, and 503 with GTW006.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::grpc_gateway_maps_upstream_statuses_parity"
+      ],
       "source": {
         "line": 134,
         "path": "backend-services/tests/test_grpc_errors_and_retries.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/grpc",
@@ -3586,26 +3727,30 @@
     {
       "domain": "unit/gateway/grpc",
       "id": "backend-services/tests/test_grpc_streaming_and_metadata.py::test_grpc_server_streaming",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust uploads a server-streaming descriptor and verifies two real local HTTP/2 gRPC frames are collected through the JSON gateway with stream=server and max_items=2.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::grpc_gateway_server_streaming_parity"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_grpc_streaming_and_metadata.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/grpc",
       "id": "backend-services/tests/test_grpc_streaming_and_metadata.py::test_grpc_metadata_pass_through",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust provisions a descriptor-backed gRPC API with an allowlisted metadata header and read timeout, then a local HTTP/2 upstream verifies both X-Meta-One forwarding and tonic's grpc-timeout deadline header.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::grpc_gateway_forwards_allowlisted_metadata_and_deadline"
+      ],
       "source": {
         "line": 100,
         "path": "backend-services/tests/test_grpc_streaming_and_metadata.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/gateway/grpc",
@@ -5302,62 +5447,72 @@
     {
       "domain": "unit/platform/rate-limits",
       "id": "backend-services/tests/test_rate_limit_and_throttle_combination.py::test_rate_limit_blocks_second_request_in_window",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust configures the pinned one-request-per-second user limit through the platform API, then asserts the first local-upstream gateway request is 200 and the immediate second request is 429.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_33_rate_limiting_blocks_excess_requests_parity"
+      ],
       "source": {
         "line": 9,
         "path": "backend-services/tests/test_rate_limit_and_throttle_combination.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/rate-limits",
       "id": "backend-services/tests/test_rate_limit_and_throttle_combination.py::test_throttle_queue_limit_exceeded_returns_429",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust applies the pinned throttle limit and queue limit, then asserts the second request fails at the Throttle stage with 429 and the pinned queue-limit message.",
+      "rust_tests": [
+        "gateway-rs/src/policy/throttle.rs::tests::python_test_throttle_queue_limit_exceeded_returns_429"
+      ],
       "source": {
         "line": 36,
         "path": "backend-services/tests/test_rate_limit_and_throttle_combination.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/rate-limits",
       "id": "backend-services/tests/test_rate_limit_and_throttle_combination.py::test_throttle_dynamic_wait_increases_latency",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust preserves the pinned 0.1-second fractional throttle wait as a 100 ms gateway delay after the first allowed request.",
+      "rust_tests": [
+        "gateway-rs/src/policy/throttle.rs::tests::python_test_throttle_dynamic_wait_uses_fractional_seconds"
+      ],
       "source": {
         "line": 71,
         "path": "backend-services/tests/test_rate_limit_and_throttle_combination.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/rate-limits",
       "id": "backend-services/tests/test_rate_limit_and_throttle_combination.py::test_rate_limit_window_rollover_allows_requests",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts the pinned first-200, second-429 sequence and a 200 request after the one-second window rolls over through a local upstream.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::live_test_33_rate_limiting_blocks_excess_requests_parity"
+      ],
       "source": {
         "line": 123,
         "path": "backend-services/tests/test_rate_limit_and_throttle_combination.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/rate-limits",
       "id": "backend-services/tests/test_rate_limit_fallback.py::test_inmemory_counter_increments_and_expires",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust asserts the in-memory counter increments 1, 2, 3, expires, and restarts at 1 then 2 with a deterministic clock.",
+      "rust_tests": [
+        "gateway-rs/src/storage/cache.rs::tests::python_test_inmemory_counter_increments_and_expires"
+      ],
       "source": {
         "line": 18,
         "path": "backend-services/tests/test_rate_limit_fallback.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/rate-limits",
@@ -6480,50 +6635,58 @@
     {
       "domain": "unit/platform/routing",
       "id": "backend-services/tests/test_routing_precedence_and_round_robin.py::test_routing_endpoint_servers_take_precedence_over_api_servers",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust proves endpoint-a and endpoint-b are selected before API-level upstreams for the matching endpoint.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::routing_precedence_and_round_robin_real_upstreams_parity"
+      ],
       "source": {
         "line": 5,
         "path": "backend-services/tests/test_routing_precedence_and_round_robin.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/routing",
       "id": "backend-services/tests/test_routing_precedence_and_round_robin.py::test_routing_client_specific_routing_over_endpoint_and_api",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust proves client-a and client-b override both endpoint and API upstreams for the configured client key.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::routing_precedence_and_round_robin_real_upstreams_parity"
+      ],
       "source": {
         "line": 48,
         "path": "backend-services/tests/test_routing_precedence_and_round_robin.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/routing",
       "id": "backend-services/tests/test_routing_precedence_and_round_robin.py::test_routing_round_robin_api_servers_rotates",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies API-server fallback rotates api-a, api-b, api-a through real HTTP requests.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::routing_precedence_and_round_robin_real_upstreams_parity"
+      ],
       "source": {
         "line": 94,
         "path": "backend-services/tests/test_routing_precedence_and_round_robin.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/routing",
       "id": "backend-services/tests/test_routing_precedence_and_round_robin.py::test_routing_round_robin_endpoint_servers_rotates",
-      "notes": "Unreviewed.",
-      "rust_tests": [],
+      "notes": "Rust verifies endpoint-server selection rotates endpoint-a then endpoint-b through real HTTP requests.",
+      "rust_tests": [
+        "gateway-rs/tests/live_tests_parity.rs::routing_precedence_and_round_robin_real_upstreams_parity"
+      ],
       "source": {
         "line": 134,
         "path": "backend-services/tests/test_routing_precedence_and_round_robin.py",
         "suite": "unit"
       },
-      "status": "missing"
+      "status": "covered"
     },
     {
       "domain": "unit/platform/routing",
@@ -7413,22 +7576,19 @@
         "covered": 1
       },
       "live/gateway/graphql": {
-        "covered": 2,
-        "missing": 4
+        "covered": 6
       },
       "live/gateway/grpc": {
-        "missing": 4
+        "covered": 4
       },
       "live/gateway/ip-policy": {
         "covered": 2
       },
       "live/gateway/rest": {
-        "covered": 2,
-        "missing": 5
+        "covered": 7
       },
       "live/gateway/soap": {
-        "covered": 3,
-        "missing": 2
+        "covered": 5
       },
       "live/gateway/validation": {
         "missing": 1
@@ -7444,13 +7604,13 @@
         "missing": 17
       },
       "live/platform/api": {
-        "missing": 2
+        "covered": 2
       },
       "live/platform/authorization": {
         "covered": 4
       },
       "live/platform/config": {
-        "missing": 1
+        "covered": 1
       },
       "live/platform/credit": {
         "covered": 1
@@ -7468,7 +7628,8 @@
         "covered": 1
       },
       "live/platform/routing": {
-        "missing": 2
+        "covered": 1,
+        "missing": 1
       },
       "live/platform/security": {
         "covered": 4
@@ -7496,13 +7657,16 @@
         "covered": 6
       },
       "unit/gateway/general": {
-        "missing": 36
+        "covered": 3,
+        "missing": 33
       },
       "unit/gateway/graphql": {
-        "missing": 18
+        "covered": 3,
+        "missing": 15
       },
       "unit/gateway/grpc": {
-        "missing": 29
+        "covered": 7,
+        "missing": 22
       },
       "unit/gateway/ip-policy": {
         "covered": 13
@@ -7529,19 +7693,20 @@
         "missing": 125
       },
       "unit/platform/api": {
-        "missing": 18
+        "covered": 18
       },
       "unit/platform/authorization": {
         "covered": 12
       },
       "unit/platform/config": {
-        "missing": 14
+        "covered": 14
       },
       "unit/platform/credit": {
-        "missing": 2
+        "covered": 2
       },
       "unit/platform/endpoint": {
-        "missing": 8
+        "approved_obsolete": 4,
+        "covered": 4
       },
       "unit/platform/group": {
         "covered": 2
@@ -7553,13 +7718,15 @@
         "missing": 24
       },
       "unit/platform/rate-limits": {
-        "missing": 34
+        "covered": 5,
+        "missing": 29
       },
       "unit/platform/role": {
         "covered": 1
       },
       "unit/platform/routing": {
-        "missing": 6
+        "covered": 4,
+        "missing": 2
       },
       "unit/platform/security": {
         "covered": 2,
@@ -7580,8 +7747,9 @@
     },
     "status_counts": {
       "approved_changed": 1,
-      "covered": 91,
-      "missing": 508
+      "approved_obsolete": 4,
+      "covered": 170,
+      "missing": 425
     },
     "total_test_cases": 600
   }

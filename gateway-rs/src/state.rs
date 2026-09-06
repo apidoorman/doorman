@@ -1,6 +1,9 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::{Arc, Mutex, atomic::AtomicU64},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64},
+    },
     time::Instant,
 };
 
@@ -49,6 +52,8 @@ pub struct GatewayRuntime {
     pub circuits: Mutex<HashMap<String, CircuitEntry>>,
     pub retries_total: AtomicU64,
     pub upstream_timeouts_total: AtomicU64,
+    pub memory_snapshot_healthy: AtomicBool,
+    pub metrics_persistence_healthy: AtomicBool,
 }
 
 impl Default for GatewayRuntime {
@@ -65,6 +70,8 @@ impl Default for GatewayRuntime {
             circuits: Mutex::new(HashMap::new()),
             retries_total: AtomicU64::new(0),
             upstream_timeouts_total: AtomicU64::new(0),
+            memory_snapshot_healthy: AtomicBool::new(true),
+            metrics_persistence_healthy: AtomicBool::new(true),
         }
     }
 }

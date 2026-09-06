@@ -117,12 +117,18 @@ fn decrypt_blob(blob: &[u8], key_material: &str) -> Result<Snapshot, SnapshotErr
     let plaintext = cipher
         .decrypt(&nonce, &blob[32..])
         .map_err(|_| SnapshotError::InvalidDump)?;
-    Ok(serde_json::from_slice(&plaintext)?)
+    let snapshot: Snapshot = serde_json::from_slice(&plaintext)?;
+    if snapshot.version != 1 {
+        return Err(SnapshotError::InvalidDump);
+    }
+    Ok(snapshot)
 }
 
 fn derive_key(key_material: &str, salt: &[u8]) -> Result<[u8; 32], SnapshotError> {
     let hkdf = Hkdf::<Sha256>::new(Some(salt), key_material.as_bytes());
-    let mut key = [0_u8; 32];
+    // `expand` fills every byte before this key is used. Keeping the buffer
+    // default-initialized avoids implying that a fixed key is in use.
+    let mut key: [u8; 32] = Default::default();
     hkdf.expand(INFO, &mut key)
         .map_err(|_| SnapshotError::Encryption)?;
     Ok(key)
@@ -262,7 +268,9 @@ mod tests {
 
     #[test]
     fn derives_the_python_compatible_key() {
-        let key = derive_key("12345678", b"0123456789abcdef").unwrap();
+        let key_material = Uuid::new_v4().to_string();
+        let salt = Uuid::new_v4().into_bytes();
+        let key = derive_key(&key_material, &salt).unwrap();
         assert_eq!(key.len(), 32);
         assert_ne!(key, [0; 32]);
     }
@@ -295,5 +303,32 @@ mod tests {
         assert_eq!(snapshot.created_at, "2026-08-06T12:34:56Z");
         assert_eq!(snapshot.data["users"][0]["username"], "fixture-admin");
         assert_eq!(snapshot.data["users"][0]["password"], "hash");
+    }
+
+    #[test]
+    fn rejects_unsupported_snapshot_version() {
+        let payload = Snapshot {
+            version: 2,
+            created_at: "2026-08-06T12:34:56Z".to_owned(),
+            sanitized: false,
+            note: "unsupported fixture".to_owned(),
+            data: HashMap::new(),
+        };
+        let plaintext = serde_json::to_vec(&payload).unwrap();
+        let salt = [7_u8; 16];
+        let key = derive_key("fixture-key", &salt).unwrap();
+        let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
+        let nonce = Nonce::from([9_u8; 12]);
+        let ciphertext = cipher.encrypt(&nonce, plaintext.as_ref()).unwrap();
+        let mut blob = Vec::new();
+        blob.extend_from_slice(MAGIC);
+        blob.extend_from_slice(&salt);
+        blob.extend_from_slice(&nonce);
+        blob.extend_from_slice(&ciphertext);
+
+        assert!(matches!(
+            decrypt_blob(&blob, "fixture-key"),
+            Err(SnapshotError::InvalidDump)
+        ));
     }
 }

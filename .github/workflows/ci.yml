@@ -8,6 +8,9 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 jobs:
   rust:
@@ -33,6 +36,8 @@ jobs:
           python3 scripts/check_parity_reference.py
       - name: Verify Python-to-Rust test coverage ledger
         run: python3 scripts/generate_test_coverage_ledger.py --check
+      - name: Test release-evidence checker
+        run: python3 -m unittest scripts/test_release_check.py scripts/test_benchmark_parity.py
       - name: Run Clippy
         run: cargo clippy --manifest-path gateway-rs/Cargo.toml --locked --all-targets --all-features -- -D warnings
       - name: Run tests
@@ -66,3 +71,24 @@ jobs:
         uses: actions/checkout@v4
       - name: Build Rust-only image
         run: docker build --tag doorman:ci .
+
+  external-storage:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+      - name: Run isolated MongoDB and Redis integration suite
+        env:
+          DOORMAN_EXTERNAL_STORAGE_LOG_DIR: external-storage-logs
+        run: bash scripts/run_external_storage_tests.sh
+      - name: Retain external-service logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-storage-logs
+          path: external-storage-logs
+          if-no-files-found: error
+          retention-days: 14
